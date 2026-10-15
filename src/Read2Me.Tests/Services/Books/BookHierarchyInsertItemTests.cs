@@ -3,6 +3,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Books;
+using Read2Me.Services.Mutations;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Books
@@ -49,13 +50,21 @@ namespace Read2Me.Tests.Services.Books
             return (h, pg1, i1, i2, pg2, i3);
         }
 
-        private static ParagraphItem Added(HierarchyMutation? mutation)
+        private static ParagraphItem Added(HierarchyPlan plan, Guid paragraphId)
         {
-            Assert.NotNull(mutation);
-            Assert.Single(mutation!.ToAdd);
-            Assert.Empty(mutation.ToDelete);
-            Assert.Empty(mutation.ToUpdate);
-            return (ParagraphItem)mutation.ToAdd[0];
+            var planned = Assert.IsType<HierarchyPlan.Planned>(plan);
+            Assert.Empty(planned.Mutation.ToDelete);
+            Assert.Empty(planned.Mutation.ToUpdate);
+            var item = Assert.IsType<ParagraphItem>(Assert.Single(planned.Mutation.ToAdd));
+            Assert.Equal(new CreatedNode(NodeKind.ParagraphItem, item.Id, NodeKind.Paragraph, paragraphId), planned.Created);
+            return item;
+        }
+
+        private static void Refused(HierarchyPlan plan, BookMutationRejection rejection, string reason)
+        {
+            var refused = Assert.IsType<HierarchyPlan.Refused>(plan);
+            Assert.Equal(rejection, refused.Rejection);
+            Assert.Contains(reason, refused.Reason);
         }
 
         [Fact]
@@ -63,33 +72,29 @@ namespace Read2Me.Tests.Services.Books
         {
             var (h, pg1, i1, _, _, _) = MakeChapter();
 
-            var added = Added(h.PlanInsertParagraphItem(i1.Id, InsertPosition.Before, "New line."));
+            var added = Added(h.PlanInsertParagraphItem(i1.Id, InsertPosition.Before, "New line."), pg1.Id);
 
-            Assert.Equal(pg1.Id, added.ParagraphId);
             Assert.True(Before(added.Order, i1.Order));
         }
 
         [Fact]
         public void After_LastItem_LandsLastInTheSameParagraph()
         {
-            var (h, pg1, _, i2, pg2, i3) = MakeChapter();
+            var (h, pg1, _, i2, _, _) = MakeChapter();
 
-            var added = Added(h.PlanInsertParagraphItem(i2.Id, InsertPosition.After, "New line."));
+            // Never crosses into the next Paragraph: the created item's parent is the anchor's own,
+            // and ordering is judged only against its own siblings.
+            var added = Added(h.PlanInsertParagraphItem(i2.Id, InsertPosition.After, "New line."), pg1.Id);
 
-            // Never crosses into the next Paragraph: same parent, and ordering is judged only
-            // against its own siblings, so pg2's keys are free to compare either way.
-            Assert.Equal(pg1.Id, added.ParagraphId);
-            Assert.NotEqual(pg2.Id, added.ParagraphId);
             Assert.True(Before(i2.Order, added.Order));
-            Assert.NotEqual(i3.ParagraphId, added.ParagraphId);
         }
 
         [Fact]
         public void After_FirstOfTwo_LandsBetweenTheSiblings()
         {
-            var (h, _, i1, i2, _, _) = MakeChapter();
+            var (h, pg1, i1, i2, _, _) = MakeChapter();
 
-            var added = Added(h.PlanInsertParagraphItem(i1.Id, InsertPosition.After, "Wedged in."));
+            var added = Added(h.PlanInsertParagraphItem(i1.Id, InsertPosition.After, "Wedged in."), pg1.Id);
 
             Assert.True(Before(i1.Order, added.Order));
             Assert.True(Before(added.Order, i2.Order));
@@ -98,9 +103,9 @@ namespace Read2Me.Tests.Services.Books
         [Fact]
         public void Before_SecondOfTwo_LandsBetweenTheSiblings()
         {
-            var (h, _, i1, i2, _, _) = MakeChapter();
+            var (h, pg1, i1, i2, _, _) = MakeChapter();
 
-            var added = Added(h.PlanInsertParagraphItem(i2.Id, InsertPosition.Before, "Wedged in."));
+            var added = Added(h.PlanInsertParagraphItem(i2.Id, InsertPosition.Before, "Wedged in."), pg1.Id);
 
             Assert.True(Before(i1.Order, added.Order));
             Assert.True(Before(added.Order, i2.Order));
@@ -109,9 +114,9 @@ namespace Read2Me.Tests.Services.Books
         [Fact]
         public void NewItem_IsSpeech_Unattributed_AndTrimmed()
         {
-            var (h, _, i1, _, _, _) = MakeChapter();
+            var (h, pg1, i1, _, _, _) = MakeChapter();
 
-            var added = Added(h.PlanInsertParagraphItem(i1.Id, InsertPosition.After, "  And who might you be?  "));
+            var added = Added(h.PlanInsertParagraphItem(i1.Id, InsertPosition.After, "  And who might you be?  "), pg1.Id);
 
             Assert.Equal(ParagraphItemType.Speech, added.ItemType);
             Assert.Equal("And who might you be?", added.Text);
@@ -123,32 +128,40 @@ namespace Read2Me.Tests.Services.Books
         [Fact]
         public void AnchorWithASpeaker_DoesNotLendItToTheNewItem()
         {
-            var (h, _, i1, _, _, _) = MakeChapter();
+            var (h, pg1, i1, _, _, _) = MakeChapter();
             i1.CharacterId = Guid.NewGuid();
             i1.VoiceInstructions = "wry";
             i1.AudioFileName = "anchor.wav";
 
-            var added = Added(h.PlanInsertParagraphItem(i1.Id, InsertPosition.After, "Her reply."));
+            var added = Added(h.PlanInsertParagraphItem(i1.Id, InsertPosition.After, "Her reply."), pg1.Id);
 
             Assert.Null(added.CharacterId);
             Assert.Null(added.VoiceInstructions);
             Assert.Null(added.AudioFileName);
         }
 
+        // ── refusals ────────────────────────────────────────────────────────────
+
         [Theory]
+        [InlineData(null)]
         [InlineData("")]
         [InlineData("   ")]
         [InlineData("\t\n ")]
-        public void WhitespaceOnlyText_IsRefused(string text)
+        public void BlankText_IsRefusedAsValidation(string? text)
         {
             var (h, _, i1, _, _, _) = MakeChapter();
 
-            Assert.Null(h.PlanInsertParagraphItem(i1.Id, InsertPosition.After, text));
+            Refused(h.PlanInsertParagraphItem(i1.Id, InsertPosition.After, text),
+                BookMutationRejection.Validation, "needs text");
         }
 
-        [Fact]
-        public void PauseAnchor_IsRefused()
+        [Theory]
+        [InlineData(InsertPosition.Before)]
+        [InlineData(InsertPosition.After)]
+        public void PauseAnchor_IsRefusedAsValidation(InsertPosition position)
         {
+            // The same answer InsertNode gives at a pause paragraph's start or end: one invalid
+            // request, one refusal, whichever item route asked.
             var (h, _, _, _, pg2, _) = MakeChapter();
             var pause = new ParagraphItem
             {
@@ -159,16 +172,18 @@ namespace Read2Me.Tests.Services.Books
             };
             h.Items[pg2.Id] = [pause];
 
-            Assert.Null(h.PlanInsertParagraphItem(pause.Id, InsertPosition.Before, "Text."));
-            Assert.Null(h.PlanInsertParagraphItem(pause.Id, InsertPosition.After, "Text."));
+            Refused(h.PlanInsertParagraphItem(pause.Id, position, "Text."),
+                BookMutationRejection.Validation, "A pause holds no speech");
         }
 
         [Fact]
-        public void UnknownAnchor_IsRefused()
+        public void UnknownAnchor_IsRefusedAsNotFound()
         {
             var (h, _, _, _, _, _) = MakeChapter();
+            var missing = Guid.NewGuid();
 
-            Assert.Null(h.PlanInsertParagraphItem(Guid.NewGuid(), InsertPosition.After, "Text."));
+            Refused(h.PlanInsertParagraphItem(missing, InsertPosition.After, "Text."),
+                BookMutationRejection.NotFound, $"No paragraph item {missing}");
         }
     }
 }

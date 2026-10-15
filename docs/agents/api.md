@@ -438,6 +438,10 @@ commands it rejects rather than no-ops: blank paragraph or item text, an item at
 paragraph's start or end, a combination that makes no node (any `ParagraphItem` anchor
 included — use `InsertParagraphItem`), or an unknown anchor is **422**.
 
+`InsertParagraphItem` (`anchorItemId`, `position` `Before` / `After`, `text`) follows the same
+**Item insertion** rules as `InsertNode` at a paragraph's start or end: blank `text`, or an anchor
+that is a pause item, is **422** — one invalid request, one refusal, whichever route asked.
+
 ```bash
 # An empty part at the end of a volume, then its first chapter
 curl -s -X POST http://localhost:5000/api/projects/{folder}/commands \

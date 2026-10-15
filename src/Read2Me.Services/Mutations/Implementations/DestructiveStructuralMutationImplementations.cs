@@ -182,16 +182,10 @@ public sealed class DeleteVolumeMutationImplementation : IBookMutationImplementa
     public async Task<BookMutationEffects> ApplyAsync(
         DeleteVolumeMutation mutation, ProjectDbContext db, CancellationToken ct)
     {
-        var volume = await db.Volumes.FirstOrDefaultAsync(v => v.Id == mutation.VolumeId, ct)
-            ?? throw DestructiveEffects.NotFound("volume", mutation.VolumeId);
-
-        // A book always keeps one Volume, so there is always a node to insert from.
-        if (!await db.Volumes.AnyAsync(v => v.Id != volume.Id, ct))
-            throw new BookMutationRejectedException(
-                BookMutationRejection.Validation, "A book must keep at least one volume.");
-
-        db.Volumes.Remove(volume);
-        return DestructiveEffects.Removed;
+        // The Book Hierarchy keeps the last Volume, so there is always a node to insert from.
+        var hierarchy = await BookMutationApplier.LoadBookHierarchyAsync(db);
+        return BookMutationApplier.ApplyPlan(
+            db, hierarchy.PlanDeleteVolume(mutation.VolumeId), _ => DestructiveEffects.Removed);
     }
 }
 

@@ -215,13 +215,15 @@ public class BookMutationsTests : ProjectDbTestBase
         Assert.Equal(1L, elsewhere.Revision);
     }
 
-    // ── no change ────────────────────────────────────────────────────────────
+    // ── expected uncommitted outcomes ────────────────────────────────────────
+    // The refusal matrix lives in the BookHierarchy*Tests; here one refusal per mutation proves the
+    // plan's rejection reaches the caller and commits nothing.
 
     [Fact]
-    public async Task Insert_AgainstAPauseAnchor_IsNoChange_AndConsumesNoRevisionOrReceipt()
+    public async Task Insert_AgainstAPauseAnchor_IsRejectedAsValidation_AndConsumesNoRevisionOrReceipt()
     {
-        // A legal request that the Book refuses to act on: Speech inside a pause Paragraph is a
-        // structure every reader assumes cannot exist.
+        // Speech inside a pause Paragraph is a structure every reader assumes cannot exist, so the
+        // Book refuses it — the same answer InsertNode gives at a pause paragraph's start or end.
         var b = new BookHierarchyBuilder(OpenDbAsync);
         await b.AddVolume("vol", v => v.AddChapter("ch", c => c
             .AddParagraph("para", p => p.AddPause("pause", ParagraphItemType.ParagraphPause))
@@ -240,7 +242,9 @@ public class BookMutationsTests : ProjectDbTestBase
         }
         finally { _receipts.Event -= OnReceipt; }
 
-        Assert.IsType<BookMutationOutcome.NoChange>(outcome);
+        var rejected = Assert.IsType<BookMutationOutcome.Rejected>(outcome);
+        Assert.Equal(BookMutationRejection.Validation, rejected.Reason);
+        Assert.Contains("A pause holds no speech", rejected.Message);
         Assert.Empty(published);
         await using var verify = await OpenDbAsync();
         Assert.Equal(1, await verify.ParagraphItems.CountAsync(i => i.ParagraphId == b.ParagraphId("para")));
@@ -248,38 +252,6 @@ public class BookMutationsTests : ProjectDbTestBase
         // No revision was consumed: the project's first *committed* mutation is still revision 1.
         var committed = await CommitInsertAsync(caller, _folder, b.ItemId("item"), "First real write.");
         Assert.Equal(1L, committed.Revision);
-    }
-
-    // ── expected uncommitted outcomes ────────────────────────────────────────
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    public async Task Insert_WithWhitespaceOnlyText_IsRejectedAsValidation(string text)
-    {
-        var b = await SeedOneItemAsync();
-        await using var caller = NewCaller();
-
-        var outcome = await caller.Mutations.CommitAsync(
-            new InsertParagraphItemMutation(_folder, b.ItemId("item"), InsertPosition.After, text));
-
-        var rejected = Assert.IsType<BookMutationOutcome.Rejected>(outcome);
-        Assert.Equal(BookMutationRejection.Validation, rejected.Reason);
-        await using var verify = await OpenDbAsync();
-        Assert.Equal(1, await verify.ParagraphItems.CountAsync(i => i.ParagraphId == b.ParagraphId("para")));
-    }
-
-    [Fact]
-    public async Task Insert_AgainstAnUnknownAnchor_IsRejectedAsNotFound()
-    {
-        await SeedOneItemAsync();
-        await using var caller = NewCaller();
-
-        var outcome = await caller.Mutations.CommitAsync(
-            new InsertParagraphItemMutation(_folder, Guid.NewGuid(), InsertPosition.After, "Nowhere."));
-
-        Assert.Equal(BookMutationRejection.NotFound,
-            Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
     }
 
     // ── node insertion ───────────────────────────────────────────────────────
@@ -347,23 +319,6 @@ public class BookMutationsTests : ProjectDbTestBase
     }
 
     [Theory]
-    [InlineData(null)]
-    [InlineData("   ")]
-    public async Task InsertNode_ParagraphWithBlankText_IsRejectedAsValidation(string? text)
-    {
-        var b = await SeedOneItemAsync();
-        await using var caller = NewCaller();
-
-        var outcome = await caller.Mutations.CommitAsync(new InsertNodeMutation(
-            _folder, NodeKind.Paragraph, b.ParagraphId("para"), Placement.After, null, text));
-
-        Assert.Equal(BookMutationRejection.Validation,
-            Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
-        await using var verify = await OpenDbAsync();
-        Assert.Equal(1, await verify.Paragraphs.CountAsync());
-    }
-
-    [Theory]
     [InlineData(Placement.AtStart)]
     [InlineData(Placement.AtEnd)]
     public async Task InsertNode_ItemAtAParagraphsEnd_PassesItsPause_AndTheReceiptNamesIt(Placement placement)
@@ -407,85 +362,18 @@ public class BookMutationsTests : ProjectDbTestBase
         Assert.Equal(1, await counter.CountUnattributedCharacterItemsAsync(_folder, b.ParagraphId("para")));
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("   ")]
-    public async Task InsertNode_ItemWithBlankText_IsRejectedAsValidation(string? text)
-    {
-        var b = await SeedOneItemAsync();
-        await using var caller = NewCaller();
-
-        var outcome = await caller.Mutations.CommitAsync(new InsertNodeMutation(
-            _folder, NodeKind.Paragraph, b.ParagraphId("para"), Placement.AtEnd, null, text));
-
-        Assert.Equal(BookMutationRejection.Validation,
-            Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
-        await using var verify = await OpenDbAsync();
-        Assert.Equal(1, await verify.ParagraphItems.CountAsync());
-    }
-
     [Fact]
-    public async Task InsertNode_ItemAtAPauseParagraphsEnd_IsRejectedAsValidation()
-    {
-        var b = new BookHierarchyBuilder(OpenDbAsync);
-        await b.AddVolume("vol", v => v.AddChapter("ch", c => c
-            .AddParagraph("pause", p => p.AddPause("only", ParagraphItemType.ParagraphPause))))
-            .BuildAsync();
-        await using var caller = NewCaller();
-
-        var outcome = await caller.Mutations.CommitAsync(new InsertNodeMutation(
-            _folder, NodeKind.Paragraph, b.ParagraphId("pause"), Placement.AtEnd, null, "Text."));
-
-        Assert.Equal(BookMutationRejection.Validation,
-            Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
-        await using var verify = await OpenDbAsync();
-        Assert.Equal(1, await verify.ParagraphItems.CountAsync());
-    }
-
-    [Theory]
-    [InlineData(NodeKind.ParagraphItem, Placement.After)]   // an item anchor creates nothing
-    [InlineData(NodeKind.ParagraphItem, Placement.Before)]  // item inserts stay on InsertParagraphItem
-    [InlineData(NodeKind.ParagraphItem, Placement.AtStart)]
-    [InlineData(NodeKind.ParagraphItem, Placement.AtEnd)]
-    public async Task InsertNode_ACombinationThatMakesNoNode_IsRejectedAsValidation(
-        NodeKind anchorKind, Placement placement)
-    {
-        var b = await SeedOneItemAsync();
-        var anchorId = anchorKind switch
-        {
-            NodeKind.Volume => b.VolumeId("vol"),
-            NodeKind.Chapter => b.ChapterId("ch"),
-            NodeKind.Paragraph => b.ParagraphId("para"),
-            _ => b.ItemId("item"),
-        };
-        await using var caller = NewCaller();
-
-        var outcome = await caller.Mutations.CommitAsync(new InsertNodeMutation(
-            _folder, anchorKind, anchorId, placement, "Title", "Text."));
-
-        Assert.Equal(BookMutationRejection.Validation,
-            Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
-    }
-
-    [Theory]
-    [InlineData(NodeKind.Paragraph, Placement.Before)]
-    [InlineData(NodeKind.Paragraph, Placement.AtStart)]
-    [InlineData(NodeKind.Chapter, Placement.AtEnd)]
-    [InlineData(NodeKind.Chapter, Placement.Before)]
-    [InlineData(NodeKind.Part, Placement.After)]
-    [InlineData(NodeKind.Part, Placement.AtStart)]
-    [InlineData(NodeKind.Volume, Placement.Before)]
-    [InlineData(NodeKind.Volume, Placement.AtEnd)]
-    public async Task InsertNode_AgainstAnUnknownAnchor_IsRejectedAsNotFound(NodeKind anchorKind, Placement placement)
+    public async Task InsertNode_AgainstAnUnknownAnchor_IsRejectedAsNotFound()
     {
         await SeedOneItemAsync();
         await using var caller = NewCaller();
 
         var outcome = await caller.Mutations.CommitAsync(new InsertNodeMutation(
-            _folder, anchorKind, Guid.NewGuid(), placement, null, "Nowhere."));
+            _folder, NodeKind.Chapter, Guid.NewGuid(), Placement.AtEnd, null, "Nowhere."));
 
-        Assert.Equal(BookMutationRejection.NotFound,
-            Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
+        var rejected = Assert.IsType<BookMutationOutcome.Rejected>(outcome);
+        Assert.Equal(BookMutationRejection.NotFound, rejected.Reason);
+        Assert.Contains("No chapter", rejected.Message);
     }
 
     [Fact]

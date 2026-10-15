@@ -602,17 +602,21 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task InsertParagraphItemCommand_PauseAnchor_InsertsNothing()
+        public async Task InsertParagraphItemCommand_PauseAnchor_IsRefusedAndInsertsNothing()
         {
+            // The same 422 InsertNode gives at a pause paragraph's start or end: one invalid
+            // request, one answer, whichever item command asked.
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter("ch", c => c
                 .AddParagraph("para", p => p.AddPause("pause", ParagraphItemType.ParagraphPause))))
                 .BuildAsync();
 
-            var newId = await ExecuteAsync(new InsertParagraphItemCommand(
+            var outcome = await DispatchAsync(new InsertParagraphItemCommand(
                 _folder, b.ItemId("pause"), InsertPosition.After, "Text."));
 
-            Assert.Null(newId);
+            Assert.Equal(
+                BookMutationRejection.Validation,
+                Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
             await using var verify = await OpenDbAsync();
             Assert.Equal(1, await verify.ParagraphItems.CountAsync(i => i.ParagraphId == b.ParagraphId("para")));
         }

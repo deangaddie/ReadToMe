@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Services.Books;
+using Read2Me.Services.Mutations;
 
 namespace Read2Me.Services.Commands;
 
@@ -22,6 +23,26 @@ internal static class BookMutationApplier
             Paragraphs = paragraphs.GroupBy(p => p.ChapterId).ToDictionary(g => g.Key, g => g.ToList()),
             Items = items.GroupBy(i => i.ParagraphId).ToDictionary(g => g.Key, g => g.ToList()),
         };
+    }
+
+    /// <summary>
+    /// Maps a Book Hierarchy plan onto a mutation's answer: Refused throws the rejection it names,
+    /// NoChange is <see cref="BookMutationEffects.Nothing"/>, and Planned is staged and reported by
+    /// <paramref name="effects"/>.
+    /// </summary>
+    internal static BookMutationEffects ApplyPlan(
+        ProjectDbContext db, HierarchyPlan plan, Func<HierarchyPlan.Planned, BookMutationEffects> effects)
+    {
+        switch (plan)
+        {
+            case HierarchyPlan.Refused refused:
+                throw new BookMutationRejectedException(refused.Rejection, refused.Reason);
+            case HierarchyPlan.Planned planned:
+                StageMutation(db, planned.Mutation);
+                return effects(planned);
+            default:
+                return BookMutationEffects.Nothing;
+        }
     }
 
     /// <summary>
