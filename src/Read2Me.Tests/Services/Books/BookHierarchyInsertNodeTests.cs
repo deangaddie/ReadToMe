@@ -3,6 +3,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Books;
+using Read2Me.Services.Mutations;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Books
@@ -55,17 +56,28 @@ namespace Read2Me.Tests.Services.Books
         private static ParagraphItem Speech(Paragraph p, string text) =>
             new() { Id = Guid.NewGuid(), ParagraphId = p.Id, Order = Key(), ItemType = ParagraphItemType.Speech, Text = text };
 
-        /// <summary>The plan's new Paragraph, after asserting the plan adds it and its one item and nothing else.</summary>
-        private static Paragraph AddedParagraph(HierarchyMutation? mutation)
+        /// <summary>
+        /// The plan's new Paragraph, after asserting the plan adds it and its one item and nothing
+        /// else, and names it as created under its chapter.
+        /// </summary>
+        private static Paragraph AddedParagraph(HierarchyPlan plan)
         {
-            Assert.NotNull(mutation);
-            Assert.Empty(mutation!.ToDelete);
-            Assert.Empty(mutation.ToUpdate);
-            Assert.Equal(2, mutation.ToAdd.Count);
-            var paragraph = Assert.IsType<Paragraph>(mutation.ToAdd[0]);
-            var item = Assert.IsType<ParagraphItem>(mutation.ToAdd[1]);
+            var planned = Assert.IsType<HierarchyPlan.Planned>(plan);
+            Assert.Empty(planned.Mutation.ToDelete);
+            Assert.Empty(planned.Mutation.ToUpdate);
+            Assert.Equal(2, planned.Mutation.ToAdd.Count);
+            var paragraph = Assert.Single(planned.Mutation.ToAdd.OfType<Paragraph>());
+            var item = Assert.Single(planned.Mutation.ToAdd.OfType<ParagraphItem>());
             Assert.Equal(paragraph.Id, item.ParagraphId);
+            Assert.Equal(new CreatedNode(NodeKind.Paragraph, paragraph.Id, NodeKind.Chapter, paragraph.ChapterId), planned.Created);
             return paragraph;
+        }
+
+        private static void Refused(HierarchyPlan plan, BookMutationRejection rejection, string reason)
+        {
+            var refused = Assert.IsType<HierarchyPlan.Refused>(plan);
+            Assert.Equal(rejection, refused.Rejection);
+            Assert.Contains(reason, refused.Reason);
         }
 
         // ── where a new paragraph lands ─────────────────────────────────────────
@@ -164,7 +176,7 @@ namespace Read2Me.Tests.Services.Books
             var plan = b.H.PlanInsertNode(NodeKind.Paragraph, b.First.Id, Placement.After, null, "  A restored line.  ");
 
             AddedParagraph(plan);
-            var item = (ParagraphItem)plan!.ToAdd[1];
+            var item = Assert.Single(((HierarchyPlan.Planned)plan).Mutation.ToAdd.OfType<ParagraphItem>());
             Assert.Equal(ParagraphItemType.Speech, item.ItemType);
             Assert.Equal("A restored line.", item.Text);
             Assert.Null(item.CharacterId);
@@ -180,31 +192,31 @@ namespace Read2Me.Tests.Services.Books
         [InlineData("")]
         [InlineData("   ")]
         [InlineData("\t\n ")]
-        public void BlankText_IsRefused(string? text)
+        public void BlankText_IsRefusedAsValidation(string? text)
         {
             var b = MakeBook();
 
-            Assert.Null(b.H.PlanInsertNode(NodeKind.Paragraph, b.First.Id, Placement.After, null, text));
-            Assert.Null(b.H.PlanInsertNode(NodeKind.Chapter, b.Empty.Id, Placement.AtStart, null, text));
+            Refused(b.H.PlanInsertNode(NodeKind.Paragraph, b.First.Id, Placement.After, null, text), BookMutationRejection.Validation, "needs text");
+            Refused(b.H.PlanInsertNode(NodeKind.Chapter, b.Empty.Id, Placement.AtStart, null, text), BookMutationRejection.Validation, "needs text");
         }
 
         [Fact]
-        public void AnUnknownAnchor_IsRefused()
+        public void AnUnknownAnchor_IsRefusedAsNotFound()
         {
             var b = MakeBook();
 
-            Assert.Null(b.H.PlanInsertNode(NodeKind.Paragraph, Guid.NewGuid(), Placement.After, null, "New."));
-            Assert.Null(b.H.PlanInsertNode(NodeKind.Chapter, Guid.NewGuid(), Placement.AtEnd, null, "New."));
+            Refused(b.H.PlanInsertNode(NodeKind.Paragraph, Guid.NewGuid(), Placement.After, null, "New."), BookMutationRejection.NotFound, "to insert against");
+            Refused(b.H.PlanInsertNode(NodeKind.Chapter, Guid.NewGuid(), Placement.AtEnd, null, "New."), BookMutationRejection.NotFound, "to insert against");
         }
 
         [Fact]
-        public void AnAnchorOfTheWrongKind_IsRefused()
+        public void AnAnchorOfTheWrongKind_IsRefusedAsNotFound()
         {
             var b = MakeBook();
 
             // A chapter's id named as a paragraph is not a paragraph, whatever else it is.
-            Assert.Null(b.H.PlanInsertNode(NodeKind.Paragraph, b.Full.Id, Placement.After, null, "New."));
-            Assert.Null(b.H.PlanInsertNode(NodeKind.Chapter, b.First.Id, Placement.AtEnd, null, "New."));
+            Refused(b.H.PlanInsertNode(NodeKind.Paragraph, b.Full.Id, Placement.After, null, "New."), BookMutationRejection.NotFound, "to insert against");
+            Refused(b.H.PlanInsertNode(NodeKind.Chapter, b.First.Id, Placement.AtEnd, null, "New."), BookMutationRejection.NotFound, "to insert against");
         }
 
         // ── a speech item at a paragraph's start or end ─────────────────────────
@@ -266,33 +278,33 @@ namespace Read2Me.Tests.Services.Books
         [InlineData(null)]
         [InlineData("")]
         [InlineData("   ")]
-        public void ItemAtAnEnd_WithBlankText_IsRefused(string? text)
+        public void ItemAtAnEnd_WithBlankText_IsRefusedAsValidation(string? text)
         {
             var b = MakeBook();
 
-            Assert.Null(b.H.PlanInsertNode(NodeKind.Paragraph, b.Last.Id, Placement.AtStart, null, text));
-            Assert.Null(b.H.PlanInsertNode(NodeKind.Paragraph, b.Last.Id, Placement.AtEnd, null, text));
+            Refused(b.H.PlanInsertNode(NodeKind.Paragraph, b.Last.Id, Placement.AtStart, null, text), BookMutationRejection.Validation, "needs text");
+            Refused(b.H.PlanInsertNode(NodeKind.Paragraph, b.Last.Id, Placement.AtEnd, null, text), BookMutationRejection.Validation, "needs text");
         }
 
         [Theory]
         [InlineData(Placement.AtStart)]
         [InlineData(Placement.AtEnd)]
-        public void APauseParagraph_TakesNoItem(Placement placement)
+        public void APauseParagraph_TakesNoItem_RefusedAsValidation(Placement placement)
         {
             // Speech inside a pause paragraph is a structure the readers assume cannot exist; its
             // inserts are Paragraph before/after.
             var b = MakeBook();
 
-            Assert.Null(b.H.PlanInsertNode(NodeKind.Paragraph, b.Pause.Id, placement, null, "New."));
+            Refused(b.H.PlanInsertNode(NodeKind.Paragraph, b.Pause.Id, placement, null, "New."), BookMutationRejection.Validation, "A pause holds no speech");
         }
 
         [Fact]
-        public void ItemAtAnEnd_OfAnUnknownParagraph_IsRefused()
+        public void ItemAtAnEnd_OfAnUnknownParagraph_IsRefusedAsNotFound()
         {
             var b = MakeBook();
 
-            Assert.Null(b.H.PlanInsertNode(NodeKind.Paragraph, Guid.NewGuid(), Placement.AtEnd, null, "New."));
-            Assert.Null(b.H.PlanInsertNode(NodeKind.Paragraph, b.Full.Id, Placement.AtStart, null, "New."));
+            Refused(b.H.PlanInsertNode(NodeKind.Paragraph, Guid.NewGuid(), Placement.AtEnd, null, "New."), BookMutationRejection.NotFound, "to insert against");
+            Refused(b.H.PlanInsertNode(NodeKind.Paragraph, b.Full.Id, Placement.AtStart, null, "New."), BookMutationRejection.NotFound, "to insert against");
         }
 
         // ── volumes, parts and chapters ─────────────────────────────────────────
@@ -322,13 +334,26 @@ namespace Read2Me.Tests.Services.Books
             return new Shelf(h, first, emptyVolume, full, emptyPart, opening, closing);
         }
 
-        /// <summary>The plan's one new node, after asserting it adds that node and nothing else — born empty.</summary>
-        private static T AddedNode<T>(HierarchyMutation? mutation)
+        /// <summary>
+        /// The plan's one new node, after asserting it adds that node and nothing else — born empty —
+        /// and names it as created under the parent the node itself records.
+        /// </summary>
+        private static T AddedNode<T>(HierarchyPlan plan)
         {
-            Assert.NotNull(mutation);
-            Assert.Empty(mutation!.ToDelete);
-            Assert.Empty(mutation.ToUpdate);
-            return Assert.IsType<T>(Assert.Single(mutation.ToAdd));
+            var planned = Assert.IsType<HierarchyPlan.Planned>(plan);
+            Assert.Empty(planned.Mutation.ToDelete);
+            Assert.Empty(planned.Mutation.ToUpdate);
+            var node = Assert.IsType<T>(Assert.Single(planned.Mutation.ToAdd));
+            CreatedNode expected = node switch
+            {
+                Volume v => new(NodeKind.Volume, v.Id, null, null),
+                Part p => new(NodeKind.Part, p.Id, NodeKind.Volume, p.VolumeId),
+                Chapter c => new(NodeKind.Chapter, c.Id, NodeKind.Part, c.PartId),
+                ParagraphItem i => new(NodeKind.ParagraphItem, i.Id, NodeKind.Paragraph, i.ParagraphId),
+                _ => throw new InvalidOperationException($"Unexpected {typeof(T).Name}."),
+            };
+            Assert.Equal(expected, planned.Created);
+            return node;
         }
 
         [Fact]
@@ -509,21 +534,21 @@ namespace Read2Me.Tests.Services.Books
         [InlineData(NodeKind.Part, Placement.After)]
         [InlineData(NodeKind.Part, Placement.AtEnd)]
         [InlineData(NodeKind.Chapter, Placement.Before)]
-        public void AnUnknownContainerAnchor_IsRefused(NodeKind anchor, Placement placement)
+        public void AnUnknownContainerAnchor_IsRefusedAsNotFound(NodeKind anchor, Placement placement)
         {
             var s = MakeShelf();
 
-            Assert.Null(s.H.PlanInsertNode(anchor, Guid.NewGuid(), placement, null, null));
+            Refused(s.H.PlanInsertNode(anchor, Guid.NewGuid(), placement, null, null), BookMutationRejection.NotFound, "to insert against");
         }
 
         [Fact]
-        public void AContainerAnchorOfTheWrongKind_IsRefused()
+        public void AContainerAnchorOfTheWrongKind_IsRefusedAsNotFound()
         {
             var s = MakeShelf();
 
-            Assert.Null(s.H.PlanInsertNode(NodeKind.Volume, s.Full.Id, Placement.After, null, null));
-            Assert.Null(s.H.PlanInsertNode(NodeKind.Part, s.First.Id, Placement.AtStart, null, null));
-            Assert.Null(s.H.PlanInsertNode(NodeKind.Chapter, s.Full.Id, Placement.Before, null, null));
+            Refused(s.H.PlanInsertNode(NodeKind.Volume, s.Full.Id, Placement.After, null, null), BookMutationRejection.NotFound, "to insert against");
+            Refused(s.H.PlanInsertNode(NodeKind.Part, s.First.Id, Placement.AtStart, null, null), BookMutationRejection.NotFound, "to insert against");
+            Refused(s.H.PlanInsertNode(NodeKind.Chapter, s.Full.Id, Placement.Before, null, null), BookMutationRejection.NotFound, "to insert against");
         }
 
         // ── which kind a combination creates ─────────────────────────────────────
@@ -553,6 +578,21 @@ namespace Read2Me.Tests.Services.Books
         {
             // Before/After an item is the existing item insert; an item has no children.
             Assert.Null(BookHierarchy.InsertedKind(NodeKind.ParagraphItem, placement));
+        }
+
+        [Theory]
+        [InlineData(Placement.Before)]
+        [InlineData(Placement.After)]
+        [InlineData(Placement.AtStart)]
+        [InlineData(Placement.AtEnd)]
+        public void AnItemAnchor_IsRefusedAsValidation(Placement placement)
+        {
+            // Refused even for an item the Book holds: the placement, not the anchor, is wrong.
+            var b = MakeBook();
+            var item = b.H.Items[b.First.Id][0];
+
+            Refused(b.H.PlanInsertNode(NodeKind.ParagraphItem, item.Id, placement, "Title", "Text."),
+                BookMutationRejection.Validation, "use InsertParagraphItem");
         }
     }
 }
