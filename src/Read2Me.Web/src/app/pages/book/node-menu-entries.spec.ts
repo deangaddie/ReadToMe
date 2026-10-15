@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  type MenuBook,
   type MenuEntryId,
   type NodeMenuKind,
   type NodeMenuTarget,
@@ -8,12 +9,16 @@ import {
   nodeInsertOf,
   pauseInsertOf,
 } from './node-menu-entries';
+import { STRUCTURE_RULES, rule } from '../../../testing/structure-rules';
 
 function target(kind: NodeMenuKind, overrides: Partial<NodeMenuTarget> = {}): NodeMenuTarget {
   return { kind, id: 'x', text: null, isFirst: false, isLast: false, ...overrides };
 }
 
-const ids = (t: NodeMenuTarget): MenuEntryId[] => menuEntries(t).map((e) => e.id);
+/** The usual book: the host's rules, and two volumes, so a volume's Delete is on offer. */
+const BOOK: MenuBook = { rules: STRUCTURE_RULES, volumeCount: 2 };
+const entriesOf = (t: NodeMenuTarget, book: MenuBook = BOOK) => menuEntries(t, book);
+const ids = (t: NodeMenuTarget): MenuEntryId[] => entriesOf(t).map((e) => e.id);
 const PAUSES = ['Pause', 'ParagraphPause', 'ChapterPause', 'PartPause', 'VolumePause'];
 const NODE_INSERT_IDS: MenuEntryId[] = [
   'insert-node:Before',
@@ -37,7 +42,7 @@ describe('menuEntries matrix', () => {
   });
 
   it('part: edit title, split volume, merges, insert part before/after and chapter at start/end, delete', () => {
-    const entries = menuEntries(target('part'));
+    const entries = entriesOf(target('part'));
     expect(entries.map((e) => e.id)).toEqual([
       'edit-title',
       'split',
@@ -51,7 +56,7 @@ describe('menuEntries matrix', () => {
   });
 
   it('chapter: edit title, split part, merges, insert chapter before/after and paragraph at start/end, delete', () => {
-    const entries = menuEntries(target('chapter'));
+    const entries = entriesOf(target('chapter'));
     expect(entries.map((e) => e.id)).toEqual([
       'edit-title',
       'split',
@@ -64,7 +69,7 @@ describe('menuEntries matrix', () => {
   });
 
   it('paragraph: no edit; split chapter, merges, insert paragraph before/after and item at start/end, delete', () => {
-    const entries = menuEntries(target('paragraph'));
+    const entries = entriesOf(target('paragraph'));
     expect(entries.map((e) => e.id)).toEqual([
       'split',
       'merge-previous',
@@ -77,7 +82,7 @@ describe('menuEntries matrix', () => {
 
   it('node inserts sit in one flat Insert group: own level beside, one level down inside, never two', () => {
     const inserts = (t: NodeMenuTarget) =>
-      menuEntries(t)
+      entriesOf(t)
         .filter((e) => e.group === 'insert')
         .map((e) => e.label);
     expect(inserts(target('volume'))).toEqual([
@@ -112,7 +117,7 @@ describe('menuEntries matrix', () => {
   });
 
   it('item: edit text, add cue, split paragraph, merges, insert item before/after, five pauses each way, delete', () => {
-    const entries = menuEntries(target('item'));
+    const entries = entriesOf(target('item'));
     expect(entries.map((e) => e.id)).toEqual([
       'edit-text',
       'add-cue',
@@ -143,14 +148,14 @@ describe('menuEntries matrix', () => {
   });
 
   it('item without a cue offers Add delivery cue…', () => {
-    const entries = menuEntries(target('item', { cue: null }));
+    const entries = entriesOf(target('item', { cue: null }));
     expect(entries.filter((e) => e.id.endsWith('-cue')).map((e) => [e.id, e.label, e.group])).toEqual([
       ['add-cue', 'Add delivery cue…', 'edit'],
     ]);
   });
 
   it('item with a cue offers Edit delivery cue… and Remove delivery cue instead', () => {
-    const entries = menuEntries(target('item', { cue: 'whispered' }));
+    const entries = entriesOf(target('item', { cue: 'whispered' }));
     expect(entries.filter((e) => e.group === 'edit').map((e) => [e.id, e.label])).toEqual([
       ['edit-text', 'Edit text'],
       ['edit-cue', 'Edit delivery cue…'],
@@ -168,14 +173,14 @@ describe('menuEntries matrix', () => {
   });
 
   it('pause paragraph: insert paragraph before/after, delete pause', () => {
-    const entries = menuEntries(target('pause-paragraph'));
+    const entries = entriesOf(target('pause-paragraph'));
     expect(entries.map((e) => e.id)).toEqual(['insert-node:Before', 'insert-node:After', 'delete']);
     expect(entries.at(-1)!.label).toBe('Delete pause');
   });
 
   it('only delete is destructive', () => {
     for (const kind of ['volume', 'part', 'chapter', 'paragraph', 'item', 'pause-paragraph'] as const) {
-      const destructive = menuEntries(target(kind)).filter((e) => e.destructive);
+      const destructive = entriesOf(target(kind)).filter((e) => e.destructive);
       expect(destructive.map((e) => e.id)).toEqual(['delete']);
     }
   });
@@ -196,11 +201,12 @@ describe('menuEntries position', () => {
     expect(list).not.toContain('merge-next');
   });
 
-  it('a lone volume has no Delete but keeps its inserts: a book keeps at least one volume', () => {
-    expect(ids(target('volume', { isFirst: true, isLast: true }))).toEqual([
-      'edit-title',
-      ...NODE_INSERT_IDS,
-    ]);
+  it("a lone volume has no Delete but keeps its inserts: the count is at the table's minimum", () => {
+    const lone = entriesOf(target('volume', { isFirst: true, isLast: true }), {
+      ...BOOK,
+      volumeCount: 1,
+    });
+    expect(lone.map((e) => e.id)).toEqual(['edit-title', ...NODE_INSERT_IDS]);
   });
 
   it.each([
@@ -219,6 +225,58 @@ describe('menuEntries position', () => {
     const list = ids(target(kind, { isFirst: true, isLast: true }));
     expect(list).not.toContain('merge-previous');
     expect(list).not.toContain('merge-next');
+  });
+});
+
+/** The Insert group and the volume Delete come from whatever table the book sends. */
+describe('menuEntries from the Structure rules', () => {
+  const inserts = (t: NodeMenuTarget, book: MenuBook) =>
+    entriesOf(t, book)
+      .filter((e) => e.group === 'insert')
+      .map((e) => [e.id, e.label]);
+
+  it("renders an anchor's inserts from its rule's placements, in the table's order", () => {
+    const rules = [
+      rule('Part', 'Part', [
+        ['AtEnd', 'Chapter', false],
+        ['Before', 'Part', false],
+      ]),
+    ];
+    expect(inserts(target('part'), { rules, volumeCount: 2 })).toEqual([
+      ['insert-node:AtEnd', 'Insert chapter at end'],
+      ['insert-node:Before', 'Insert part before'],
+    ]);
+  });
+
+  it('labels an insert with the kind the table says it creates', () => {
+    const rules = [rule('Chapter', 'Chapter', [['AtStart', 'ParagraphItem', true]])];
+    expect(inserts(target('chapter'), { rules, volumeCount: 2 })).toEqual([
+      ['insert-node:AtStart', 'Insert item at start'],
+    ]);
+  });
+
+  it("renders an item's inserts as the item insert entries", () => {
+    const rules = [rule('ParagraphItem', 'ParagraphItem', [['After', 'ParagraphItem', true]])];
+    expect(inserts(target('item'), { rules, volumeCount: 2 })).toEqual([
+      ['insert-after', 'Insert item after'],
+    ]);
+  });
+
+  it('offers no inserts for a kind the table has no placements for, or before it is loaded', () => {
+    const rules = [rule('PauseParagraph', 'Paragraph', [])];
+    expect(inserts(target('pause-paragraph'), { rules, volumeCount: 2 })).toEqual([]);
+    expect(inserts(target('paragraph'), { rules: [], volumeCount: 2 })).toEqual([]);
+  });
+
+  it("hides a volume's Delete while the volume count is at the table's minimum", () => {
+    const rules = [rule('Volume', 'Volume', [], 2)];
+    expect(ids(target('volume'))).toContain('delete');
+    expect(entriesOf(target('volume'), { rules, volumeCount: 2 }).map((e) => e.id)).not.toContain(
+      'delete',
+    );
+    expect(entriesOf(target('volume'), { rules, volumeCount: 3 }).map((e) => e.id)).toContain(
+      'delete',
+    );
   });
 });
 
@@ -248,7 +306,7 @@ describe('entry decoding', () => {
 describe('menuEntries selection shortcuts (tickets 12 + 13)', () => {
   it('a tree node in a paragraph selection leads with Select unprocessed and Attribute unprocessed', () => {
     for (const kind of ['volume', 'part', 'chapter'] as const) {
-      const entries = menuEntries(target(kind, { selection: 'paragraphs' }));
+      const entries = entriesOf(target(kind, { selection: 'paragraphs' }));
       expect(entries.slice(0, 2).map((e) => [e.id, e.group])).toEqual([
         ['select-unprocessed', 'select'],
         ['attribute-node', 'select'],
@@ -259,7 +317,7 @@ describe('menuEntries selection shortcuts (tickets 12 + 13)', () => {
 
   it('a tree node in an item selection leads with Select needs audio and Generate audio', () => {
     for (const kind of ['volume', 'part', 'chapter'] as const) {
-      const entries = menuEntries(target(kind, { selection: 'items' }));
+      const entries = entriesOf(target(kind, { selection: 'items' }));
       expect(entries.slice(0, 2).map((e) => [e.id, e.group])).toEqual([
         ['select-needs-audio', 'select'],
         ['generate-audio-node', 'select'],
@@ -271,7 +329,7 @@ describe('menuEntries selection shortcuts (tickets 12 + 13)', () => {
 
   it('a part or chapter in a paragraph selection offers Release narration after the shortcuts', () => {
     for (const kind of ['part', 'chapter'] as const) {
-      const entries = menuEntries(target(kind, { selection: 'paragraphs' }));
+      const entries = entriesOf(target(kind, { selection: 'paragraphs' }));
       const release = entries[2]!;
       expect([release.id, release.label, release.group]).toEqual([
         'release-narration',
@@ -295,7 +353,7 @@ describe('menuEntries selection shortcuts (tickets 12 + 13)', () => {
   });
 
   it('a narration-only paragraph offers Release narration first; other rows never do', () => {
-    const entries = menuEntries(target('paragraph', { narrationOnly: true }));
+    const entries = entriesOf(target('paragraph', { narrationOnly: true }));
     expect(entries.map((e) => [e.id, e.group])).toEqual([
       ['release-narration', 'release'],
       ['split', 'structure'],

@@ -6,6 +6,7 @@ import { signal } from '@app/core/signals';
 import type { LiveSnapshot, Receipt } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast';
+import { STRUCTURE_RULES } from '../../../testing/structure-rules';
 import { FakeApi, problem } from '../../../testing/fake-api';
 import type { ProjectStore } from '../project/project-store';
 import { BookStore, RECEIPT_BATCH_MS, WINDOW_CAP } from './book-store';
@@ -24,6 +25,7 @@ const OVERVIEW: BookOverviewDto = {
   totalParts: 2,
   totalChapters: 3,
   revision: 5,
+  structureRules: STRUCTURE_RULES,
 };
 
 function paragraphs(...ids: string[]): { paragraphs: ParagraphDto[] } {

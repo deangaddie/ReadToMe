@@ -551,34 +551,7 @@ namespace Read2Me.Tests.Services.Books
             Refused(s.H.PlanInsertNode(NodeKind.Chapter, s.Full.Id, Placement.Before, null, null), BookMutationRejection.NotFound, "to insert against");
         }
 
-        // ── which kind a combination creates ─────────────────────────────────────
-
-        [Theory]
-        [InlineData(NodeKind.Volume, Placement.Before, NodeKind.Volume)]
-        [InlineData(NodeKind.Volume, Placement.After, NodeKind.Volume)]
-        [InlineData(NodeKind.Volume, Placement.AtStart, NodeKind.Part)]
-        [InlineData(NodeKind.Volume, Placement.AtEnd, NodeKind.Part)]
-        [InlineData(NodeKind.Part, Placement.Before, NodeKind.Part)]
-        [InlineData(NodeKind.Part, Placement.AtEnd, NodeKind.Chapter)]
-        [InlineData(NodeKind.Chapter, Placement.After, NodeKind.Chapter)]
-        [InlineData(NodeKind.Chapter, Placement.AtStart, NodeKind.Paragraph)]
-        [InlineData(NodeKind.Paragraph, Placement.Before, NodeKind.Paragraph)]
-        [InlineData(NodeKind.Paragraph, Placement.AtEnd, NodeKind.ParagraphItem)]
-        public void TheNewKind_FollowsFromTheAnchorAndThePlacement(NodeKind anchor, Placement placement, NodeKind expected)
-        {
-            Assert.Equal(expected, BookHierarchy.InsertedKind(anchor, placement));
-        }
-
-        [Theory]
-        [InlineData(Placement.Before)]
-        [InlineData(Placement.After)]
-        [InlineData(Placement.AtStart)]
-        [InlineData(Placement.AtEnd)]
-        public void AnItemAnchor_CreatesNothing(Placement placement)
-        {
-            // Before/After an item is the existing item insert; an item has no children.
-            Assert.Null(BookHierarchy.InsertedKind(NodeKind.ParagraphItem, placement));
-        }
+        // ── an item anchor ───────────────────────────────────────────────────────
 
         [Theory]
         [InlineData(Placement.Before)]
