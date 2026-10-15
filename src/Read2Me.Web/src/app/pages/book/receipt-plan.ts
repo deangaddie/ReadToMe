@@ -30,6 +30,11 @@ export interface ReceiptPlan {
   toast: boolean;
   /** The receipt skipped at least one revision. */
   gap: boolean;
+  /**
+   * A chapter outside the window to open and scroll to: it holds a paragraph this view just
+   * created, which no loaded chapter can show.
+   */
+  revealChapter: string | null;
 }
 
 /** Facets that change what a paragraph row shows. */
@@ -66,6 +71,7 @@ export function planReceipt(receipt: Receipt, context: ReceiptContext): ReceiptP
     dropOtherChapters: gap,
     toast: false,
     gap,
+    revealChapter: null,
   };
 
   const reload = new Set<string>();
@@ -78,12 +84,21 @@ export function planReceipt(receipt: Receipt, context: ReceiptContext): ReceiptP
         plan.dropOtherChapters = true;
       } else {
         const affected = affectedChapters(receipt, context.loaded);
+        // A paragraph this view created is named only by its own id, which nothing loaded holds;
+        // the receipt says which chapter it went into, so that chapter is read again or opened.
+        const createdIn = ownCreatedParagraphChapter(receipt);
+        if (createdIn && context.loaded.some((c) => c.chapterId === createdIn)) {
+          affected.push(createdIn);
+        } else if (createdIn) {
+          plan.revealChapter = createdIn;
+        }
         for (const chapter of affected) reload.add(chapter);
         // A structural change whose ids name nothing loaded is usually a node that did not exist
         // when this chapter was read (an inserted pause paragraph names only itself). The reader
         // cannot place it, so it rereads what is on screen rather than miss it.
         if (
           affected.length === 0 &&
+          !plan.revealChapter &&
           hasFacet(effects.facets, 'Structure') &&
           context.visibleChapterId
         ) {
@@ -115,7 +130,18 @@ export function gapPlan(visibleChapterId: string | null): ReceiptPlan {
     dropOtherChapters: true,
     toast: false,
     gap: true,
+    revealChapter: null,
   };
+}
+
+/**
+ * The chapter holding a Paragraph this view's own commit created, or null. A created item names its
+ * Paragraph, which the reader already rereads in place, so it is never revealed.
+ */
+function ownCreatedParagraphChapter(receipt: Receipt): string | null {
+  const { createdId, createdParentId, paragraphIds } = receipt.effects;
+  if (!receipt.isOwn || !createdId || !createdParentId) return null;
+  return paragraphIds.includes(createdId) ? createdParentId : null;
 }
 
 function affectedChapters(receipt: Receipt, loaded: readonly LoadedChapter[]): string[] {

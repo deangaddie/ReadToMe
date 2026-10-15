@@ -217,6 +217,8 @@ export interface BookMutationEffects {
   scope: BookMutationScope;
   facets: BookFacetsValue;
   createdId?: Guid | null;
+  /** The node holding `createdId` (a new paragraph's chapter); null for a Volume or when unreported. */
+  createdParentId?: Guid | null;
   nodeIds: Guid[];
   paragraphIds: Guid[];
   paragraphItemIds: Guid[];

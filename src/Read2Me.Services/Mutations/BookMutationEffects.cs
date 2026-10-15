@@ -74,6 +74,14 @@ public sealed record BookMutationEffects
     /// <summary>The identity created by this mutation, when it created exactly one thing.</summary>
     public Guid? CreatedId { get; init; }
 
+    /// <summary>
+    /// The node that holds <see cref="CreatedId"/> — a created Paragraph's Chapter, a created item's
+    /// Paragraph — so a reader can place what was created without rederiving where it went. Null
+    /// when nothing was created, when the created node has no parent node (a Volume), or when the
+    /// producer does not report it.
+    /// </summary>
+    public Guid? CreatedParentId { get; init; }
+
     // One list per kind of identifier a migrated family actually reports. Each producer family adds
     // the list it needs as it lands; an empty list means "this mutation touched none", which is why
     // a family that cannot enumerate its effects says so through Scope instead of leaving them bare.

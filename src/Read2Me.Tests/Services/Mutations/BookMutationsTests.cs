@@ -66,6 +66,7 @@ public class BookMutationsTests : ProjectDbTestBase
         Assert.Equal(BookFacets.Structure, receipt.Effects.Facets);
         Assert.Equal(b.ParagraphId("para"), Assert.Single(receipt.Effects.ParagraphIds));
         Assert.Equal(receipt.Effects.CreatedId!.Value, Assert.Single(receipt.Effects.ParagraphItemIds));
+        Assert.Equal(b.ParagraphId("para"), receipt.Effects.CreatedParentId);
         Assert.Empty(receipt.Effects.Structural);
 
         await using var verify = await OpenDbAsync();
@@ -275,6 +276,7 @@ public class BookMutationsTests : ProjectDbTestBase
         Assert.Equal(BookMutationScope.Exact, receipt.Effects.Scope);
         Assert.Equal(BookFacets.Structure, receipt.Effects.Facets);
         Assert.Equal(created, Assert.Single(receipt.Effects.ParagraphIds));
+        Assert.Equal(b.ChapterId("ch"), receipt.Effects.CreatedParentId);
 
         await using var verify = await OpenDbAsync();
         var paragraphs = await verify.Paragraphs
@@ -340,6 +342,7 @@ public class BookMutationsTests : ProjectDbTestBase
         Assert.Equal(BookFacets.Structure, receipt.Effects.Facets);
         Assert.Equal(b.ParagraphId("para"), Assert.Single(receipt.Effects.ParagraphIds));
         Assert.Equal(created, Assert.Single(receipt.Effects.ParagraphItemIds));
+        Assert.Equal(b.ParagraphId("para"), receipt.Effects.CreatedParentId);
 
         await using var verify = await OpenDbAsync();
         var items = await verify.ParagraphItems
@@ -398,6 +401,7 @@ public class BookMutationsTests : ProjectDbTestBase
         await using var verify = await OpenDbAsync();
         var chapter = await verify.Chapters.FindAsync(created);
         Assert.Equal("Interlude", chapter!.Title);
+        Assert.Equal(chapter.PartId, receipt.Effects.CreatedParentId);
         var chapters = await verify.Chapters
             .Where(c => c.PartId == chapter.PartId)
             .OrderBy(c => c.Order)
@@ -416,7 +420,9 @@ public class BookMutationsTests : ProjectDbTestBase
         var outcome = await caller.Mutations.CommitAsync(new InsertNodeMutation(
             _folder, NodeKind.Volume, b.VolumeId("vol"), Placement.Before, "   ", null));
 
-        var created = Assert.IsType<BookMutationOutcome.Committed>(outcome).Receipt.Effects.CreatedId!.Value;
+        var effects = Assert.IsType<BookMutationOutcome.Committed>(outcome).Receipt.Effects;
+        var created = effects.CreatedId!.Value;
+        Assert.Null(effects.CreatedParentId);
         await using var verify = await OpenDbAsync();
         var volumes = await verify.Volumes.OrderBy(v => v.Order).ToListAsync();
         Assert.Equal([created, b.VolumeId("vol")], volumes.Select(v => v.Id));

@@ -138,6 +138,49 @@ describe('planReceipt', () => {
     });
   });
 
+  describe('a paragraph this view created', () => {
+    const created = (parent: string, isOwn = true) =>
+      receipt({
+        facets: 'Structure',
+        createdId: 'p-new',
+        createdParentId: parent,
+        paragraphIds: ['p-new'],
+        isOwn,
+      });
+
+    it('in a chapter outside the window is revealed, without reading the visible chapter again', () => {
+      const plan = planReceipt(created('c9'), ctx());
+      expect(plan.revealChapter).toBe('c9');
+      expect(plan.reloadChapters).toEqual([]);
+    });
+
+    it('in a loaded chapter rereads that chapter in place', () => {
+      const plan = planReceipt(created('c2'), ctx());
+      expect(plan.revealChapter).toBeNull();
+      expect(plan.reloadChapters).toEqual(['c2']);
+    });
+
+    it("by another view is not revealed", () => {
+      expect(planReceipt(created('c9', false), ctx()).revealChapter).toBeNull();
+    });
+
+    it('a created item is not revealed: its paragraph is reread in place', () => {
+      const plan = planReceipt(
+        receipt({
+          facets: 'Structure',
+          createdId: 'i-new',
+          createdParentId: 'p3',
+          paragraphIds: ['p3'],
+          paragraphItemIds: ['i-new'],
+          isOwn: true,
+        }),
+        ctx(),
+      );
+      expect(plan.revealChapter).toBeNull();
+      expect(plan.reloadChapters).toEqual(['c2']);
+    });
+  });
+
   describe('revision gap', () => {
     it('a skipped revision reloads the overview, reviews and the visible chapter', () => {
       const plan = planReceipt(receipt({ revision: 8, facets: 'None' }), ctx());

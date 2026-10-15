@@ -21,6 +21,7 @@ internal static class InsertionEffects
                 Scope = BookMutationScope.Exact,
                 Facets = BookFacets.Structure,
                 CreatedId = created.Id,
+                CreatedParentId = created.ParentId,
                 ParagraphIds = [created.ParentId!.Value],
                 ParagraphItemIds = [created.Id],
             },
@@ -32,6 +33,7 @@ internal static class InsertionEffects
                 Scope = BookMutationScope.Exact,
                 Facets = BookFacets.Structure,
                 CreatedId = created.Id,
+                CreatedParentId = created.ParentId,
                 ParagraphIds = [created.Id],
                 ParagraphItemIds = [.. planned.Mutation.ToAdd.OfType<ParagraphItem>().Select(i => i.Id)],
             },
@@ -42,6 +44,7 @@ internal static class InsertionEffects
                 Scope = BookMutationScope.Exact,
                 Facets = BookFacets.Structure,
                 CreatedId = created.Id,
+                CreatedParentId = created.ParentId,
                 NodeIds = [created.Id],
             },
         };

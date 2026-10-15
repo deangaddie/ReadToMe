@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { ApiError, BookApi, type NodeKind, type Placement, ProjectsApi } from '@app/api';
+import { ApiError, BookApi, ProjectsApi } from '@app/api';
 import { override, resetServices } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { ToastService } from '@app/ui/toast';
@@ -17,11 +17,6 @@ class FakeStore {
   expectOwnReceipt() {
     const settled = new Promise<boolean>((resolve) => this.waiters.push(resolve));
     return { settled, cancel: () => this.cancelled++ };
-  }
-
-  revealed: unknown[] = [];
-  async revealInsertedParagraph(anchor: unknown) {
-    this.revealed.push(anchor);
   }
 
   async refresh() {
@@ -167,64 +162,5 @@ describe('BookEditor', () => {
     store.settle(false);
     expect(await manual).toBe(true);
     expect(store.refreshed).toBe(1);
-  });
-});
-
-describe('BookEditor node insertion', () => {
-  let store: FakeStore;
-  let editor: BookEditor;
-  let answer: { newEntityId: string | null } | Error;
-
-  beforeEach(() => {
-    resetServices();
-    store = new FakeStore();
-    answer = { newEntityId: 'new-p' };
-    override(BookApi, {
-      execute: async () => {
-        if (answer instanceof Error) throw answer;
-        return answer;
-      },
-    } as unknown as BookApi);
-    override(ToastService, { problem: () => {} } as unknown as ToastService);
-    editor = new BookEditor(store as unknown as BookStore);
-  });
-
-  const insert = (anchorKind: NodeKind, anchorId: string, placement: Placement = 'AtEnd') =>
-    ({ type: 'InsertNode', anchorKind, anchorId, placement, text: 'New.' }) as const;
-
-  it.each([
-    ['Chapter', 'AtEnd', 'c2', { kind: 'chapter', id: 'c2' }],
-    ['Paragraph', 'After', 'p1', { kind: 'paragraph', id: 'p1' }],
-  ] as const)('a committed paragraph insert against a %s reveals it in the reader', async (kind, placement, id, anchor) => {
-    const run = editor.run(insert(kind, id, placement));
-    await new Promise((r) => setTimeout(r, 0));
-    store.settle(true);
-    expect(await run).toBe(true);
-    expect(store.revealed).toEqual([anchor]);
-  });
-
-  it.each([
-    ['Volume', 'Before'],
-    ['Volume', 'AtEnd'],
-    ['Part', 'AtStart'],
-    ['Chapter', 'After'],
-  ] as const)('a committed %s %s insert makes an empty container, so there is no paragraph to reveal', async (kind, placement) => {
-    const run = editor.run({ type: 'InsertNode', anchorKind: kind, anchorId: 'n1', placement, title: null });
-    await new Promise((r) => setTimeout(r, 0));
-    store.settle(true);
-    expect(await run).toBe(true);
-    expect(store.revealed).toEqual([]);
-  });
-
-  it('a refused insert reveals nothing, and nor does any other command', async () => {
-    answer = new ApiError(422, 'No.');
-    expect(await editor.run(insert('Chapter', 'c2'))).toBe(false);
-
-    answer = { newEntityId: null };
-    const run = editor.run({ type: 'AddPauses' });
-    await new Promise((r) => setTimeout(r, 0));
-    store.settle(true);
-    await run;
-    expect(store.revealed).toEqual([]);
   });
 });

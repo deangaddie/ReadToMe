@@ -582,13 +582,23 @@ describe('BookStore', () => {
     });
   });
 
-  describe('revealing an inserted paragraph (Node insertion)', () => {
-    it('a chapter not in the window is opened and scrolled to', async () => {
+  describe('revealing a paragraph this view created (own receipt)', () => {
+    /** The receipt a Node insertion commits for a new paragraph `id` in `chapter`. */
+    const created = (id: string, chapter: string, isOwn = true) =>
+      receipt(
+        6,
+        'Structure',
+        { createdId: id, createdParentId: chapter, paragraphIds: [id], paragraphItemIds: [`${id}-i`] },
+        isOwn,
+      );
+
+    it('a chapter outside the loaded window is opened and scrolled to', async () => {
       await store.open('dune');
       await store.openFirstChapter();
       api.on('GET', `${BASE}/nodes/chapter/c3/children`, paragraphs('new'));
 
-      await store.revealInsertedParagraph({ kind: 'chapter', id: 'c3' });
+      live.receiptStream.emit(created('new', 'c3'));
+      await settle(RECEIPT_BATCH_MS + 20);
 
       expect(store.window()).toEqual(['c3']);
       expect(store.scrollRequest()).toMatchObject({ chapterId: 'c3' });
@@ -602,22 +612,45 @@ describe('BookStore', () => {
       const scroll = store.scrollRequest();
       api.on('GET', `${BASE}/nodes/chapter/c2/children`, paragraphs('c', 'new'));
 
-      await store.revealInsertedParagraph({ kind: 'paragraph', id: 'c' });
+      live.receiptStream.emit(created('new', 'c2'));
+      await settle(RECEIPT_BATCH_MS + 20);
 
       expect(store.window()).toEqual(['c1', 'c2']);
       expect(store.scrollRequest()).toBe(scroll);
       expect(store.chapters()[1]?.paragraphs.map((p) => p.id)).toEqual(['c', 'new']);
     });
 
-    it('a paragraph anchor the reader does not hold reveals nothing', async () => {
+    it("another view's receipt does not reveal it", async () => {
       await store.open('dune');
       await store.openFirstChapter();
-      const before = calls('/nodes/chapter/c1/children');
+      const before = calls('/nodes/chapter/c3/children');
 
-      await store.revealInsertedParagraph({ kind: 'paragraph', id: 'elsewhere' });
+      live.receiptStream.emit(created('new', 'c3', false));
+      await settle(RECEIPT_BATCH_MS + 20);
 
       expect(store.window()).toEqual(['c1']);
-      expect(calls('/nodes/chapter/c1/children')).toBe(before);
+      expect(calls('/nodes/chapter/c3/children')).toBe(before);
+    });
+
+    it('a created item is reread in place, not revealed', async () => {
+      await store.open('dune');
+      await store.openFirstChapter();
+      const scroll = store.scrollRequest();
+      const before = calls('/nodes/chapter/c1/children');
+
+      live.receiptStream.emit(
+        receipt(
+          6,
+          'Structure',
+          { createdId: 'a-new', createdParentId: 'a', paragraphIds: ['a'], paragraphItemIds: ['a-new'] },
+          true,
+        ),
+      );
+      await settle(RECEIPT_BATCH_MS + 20);
+
+      expect(store.window()).toEqual(['c1']);
+      expect(store.scrollRequest()).toBe(scroll);
+      expect(calls('/nodes/chapter/c1/children')).toBe(before + 1);
     });
   });
 });
