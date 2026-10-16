@@ -1,6 +1,31 @@
-# Base-image DIGEST bumps only. A tag move is a compatibility decision (spec §6.1) and
-# stays human-driven via Infra/scripts/refresh-pins.ps1 — so ignore every semver-major and
-# semver-minor update; Dependabot then only proposes new digests within the pinned tag.
+# Version updates are PATCH-ONLY for every ecosystem: every entry ignores semver-major and
+# semver-minor. A minor or major bump is a compatibility decision, made by hand on its own
+# branch (.scratch/dependency-upgrades). The ignore rules filter security updates too, so a
+# fix that needs a minor bump arrives only as an alert, never as a PR.
+#
+# Each entry groups its version updates into one weekly PR, and its security updates (opened
+# when an advisory lands, not on the schedule) into one more.
+#
+# Docker: base-image DIGEST bumps only. A tag move stays human-driven via
+# Infra/scripts/refresh-pins.ps1 (spec §6.1); Dependabot only proposes new digests within
+# the pinned tag. Dependabot raises no security updates for images, so docker has no
+# security group.
+#
+# Playwright is ignored outright in the three entries that pin it (Microsoft.Playwright,
+# playwright-core, @playwright/test). tools/browse drives the browsers the E2E tests install,
+# so the three move together by hand (.scratch/dependency-upgrades/issues/05).
+#
+# Not covered, on purpose:
+# - pip (Infra/*/requirements.txt): Infra/scripts/lock.ps1 compiles each lock inside the
+#   digest-pinned base image and proves it installs there; Dependabot can't. Alerts, once
+#   on, still read those locks.
+# - docker-compose (the audio.cpp image digest in Infra/docker-compose.yml): bumped by hand,
+#   checking each TTS model still generates (Infra/README.md, audio.cpp section).
+# - github-actions (.github/workflows): Actions are off.
+#
+# With Actions off these PRs get no CI. Whoever merges one runs the gate for its entry:
+# nuget and bun /src/Read2Me.Web → pwsh scripts/check.ps1; bun /tools/browse → bun test there;
+# npm → npm run check in Infra/ContainerHealth; docker → docker compose build in Infra.
 version: 2
 updates:
   - package-ecosystem: docker
@@ -12,6 +37,9 @@ updates:
         update-types:
           - version-update:semver-major
           - version-update:semver-minor
+    groups:
+      infra-images:
+        patterns: ["*"]
   - package-ecosystem: npm
     directory: /Infra/ContainerHealth
     schedule:
@@ -21,3 +49,57 @@ updates:
         update-types:
           - version-update:semver-major
           - version-update:semver-minor
+      - dependency-name: "@playwright/test"
+    groups:
+      container-health:
+        patterns: ["*"]
+      container-health-security:
+        applies-to: security-updates
+        patterns: ["*"]
+  - package-ecosystem: nuget
+    directory: /src
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+      - dependency-name: Microsoft.Playwright
+    groups:
+      dotnet:
+        patterns: ["*"]
+      dotnet-security:
+        applies-to: security-updates
+        patterns: ["*"]
+  - package-ecosystem: bun
+    directory: /src/Read2Me.Web
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+    groups:
+      web:
+        patterns: ["*"]
+      web-security:
+        applies-to: security-updates
+        patterns: ["*"]
+  - package-ecosystem: bun
+    directory: /tools/browse
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+      - dependency-name: playwright-core
+    groups:
+      browse:
+        patterns: ["*"]
+      browse-security:
+        applies-to: security-updates
+        patterns: ["*"]
