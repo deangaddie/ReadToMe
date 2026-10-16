@@ -34,9 +34,9 @@ export interface NodeMenuTarget {
   /** Items only: the item has audio, which a cue edit discards, so the edit asks first. */
   hasAudio?: boolean;
   /**
-   * Tree nodes only: which selection the reader is in, so the shortcuts on offer are the
-   * paragraph ones (ticket 12: select unprocessed, attribute) or the item ones (ticket 13: select
-   * needs audio, generate audio). Absent when nothing is selectable.
+   * Volumes, parts and chapters only: which selection the reader is in, so the shortcuts on offer
+   * are the paragraph ones (ticket 12: select unprocessed, attribute) or the item ones (ticket 13:
+   * select needs audio, generate audio). Absent when nothing is selectable.
    */
   selection?: SelectionKind;
   /**
