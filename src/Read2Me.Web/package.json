@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "21.0.2",
-    "@types/bun": "1.4.2",
+    "@types/bun": "1.4.3",
     "@typescript/typescript6": "6.0.2",
     "eslint-plugin-lit": "2.3.1",
     "openapi-typescript": "7.13.0",
