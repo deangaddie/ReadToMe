@@ -84,7 +84,12 @@ export class NewProjectDialog extends R2mElement {
         <div class="new-project__file">
           ${
             draft.file
-              ? statusChip({ status: 'ok', icon: 'description', label: draft.file.name, compact: true })
+              ? statusChip({
+                  status: 'ok',
+                  icon: 'description',
+                  label: draft.file.name,
+                  compact: true,
+                })
               : nothing
           }
           ${

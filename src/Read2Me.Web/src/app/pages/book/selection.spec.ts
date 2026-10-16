@@ -59,9 +59,9 @@ describe('isNarrationOnlyParagraph', () => {
     const pause = item({ itemType: 'Pause', isPause: true });
     expect(isNarrationOnlyParagraph(paragraph('p', narration))).toBe(true);
     expect(isNarrationOnlyParagraph(paragraph('p', narration, pause))).toBe(true);
-    expect(isNarrationOnlyParagraph(paragraph('p', narration, item({ itemType: 'Character' })))).toBe(
-      false,
-    );
+    expect(
+      isNarrationOnlyParagraph(paragraph('p', narration, item({ itemType: 'Character' }))),
+    ).toBe(false);
     expect(
       isNarrationOnlyParagraph(paragraph('p', item({ itemType: 'Character', characterId: 'h' }))),
     ).toBe(false);

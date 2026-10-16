@@ -590,7 +590,12 @@ describe('BookStore', () => {
       receipt(
         6,
         'Structure',
-        { createdId: id, createdParentId: chapter, paragraphIds: [id], paragraphItemIds: [`${id}-i`] },
+        {
+          createdId: id,
+          createdParentId: chapter,
+          paragraphIds: [id],
+          paragraphItemIds: [`${id}-i`],
+        },
         isOwn,
       );
 
@@ -644,7 +649,12 @@ describe('BookStore', () => {
         receipt(
           6,
           'Structure',
-          { createdId: 'a-new', createdParentId: 'a', paragraphIds: ['a'], paragraphItemIds: ['a-new'] },
+          {
+            createdId: 'a-new',
+            createdParentId: 'a',
+            paragraphIds: ['a'],
+            paragraphItemIds: ['a-new'],
+          },
           true,
         ),
       );

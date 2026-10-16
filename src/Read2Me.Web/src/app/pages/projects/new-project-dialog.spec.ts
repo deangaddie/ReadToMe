@@ -69,7 +69,9 @@ describe('r2m-new-project-dialog', () => {
 
   it('posts the multipart form and closes with the new folder', async () => {
     const { result, dialog, type, createButton } = await open();
-    api.on('POST', '/api/projects', { folderName: 'Dune-audiobook' }).on('GET', '/api/projects', []);
+    api
+      .on('POST', '/api/projects', { folderName: 'Dune-audiobook' })
+      .on('GET', '/api/projects', []);
     await type('bookTitle', 'Dune');
     await type('title', 'Dune (audiobook)');
     await type('author', 'Frank Herbert');

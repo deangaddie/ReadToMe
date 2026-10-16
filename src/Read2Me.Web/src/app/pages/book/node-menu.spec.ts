@@ -84,7 +84,13 @@ async function open(trigger: HTMLButtonElement) {
   await settle();
 }
 
-const CHAPTER: NodeMenuTarget = { kind: 'chapter', id: 'c1', text: 'One', isFirst: true, isLast: false };
+const CHAPTER: NodeMenuTarget = {
+  kind: 'chapter',
+  id: 'c1',
+  text: 'One',
+  isFirst: true,
+  isLast: false,
+};
 const ITEM: NodeMenuTarget = { kind: 'item', id: 'i1', text: 'Line', isFirst: false, isLast: true };
 
 describe('r2m-node-menu', () => {
@@ -147,7 +153,13 @@ describe('r2m-node-menu', () => {
 
   it('a declined delete posts nothing', async () => {
     confirmAnswer = false;
-    const trigger = await mount({ kind: 'paragraph', id: 'p1', text: null, isFirst: true, isLast: true });
+    const trigger = await mount({
+      kind: 'paragraph',
+      id: 'p1',
+      text: null,
+      isFirst: true,
+      isLast: true,
+    });
     await open(trigger);
     entry('delete').click();
     await settle();
@@ -168,7 +180,13 @@ describe('r2m-node-menu', () => {
   });
 
   it('is disabled for a busy row and refuses to open while the editor is locked', async () => {
-    const target: NodeMenuTarget = { kind: 'volume', id: 'v', text: 'V', isFirst: true, isLast: true };
+    const target: NodeMenuTarget = {
+      kind: 'volume',
+      id: 'v',
+      text: 'V',
+      isFirst: true,
+      isLast: true,
+    };
     expect((await mount(target, true)).disabled).toBe(true);
 
     const trigger = await mount(target);
@@ -178,13 +196,25 @@ describe('r2m-node-menu', () => {
     expect(entries()).toEqual([]);
     locked.set(false);
     await open(trigger);
-    expect(entries()).toEqual(['edit-title', 'insert-node:Before', 'insert-node:After', 'insert-node:AtStart', 'insert-node:AtEnd']);
+    expect(entries()).toEqual([
+      'edit-title',
+      'insert-node:Before',
+      'insert-node:After',
+      'insert-node:AtStart',
+      'insert-node:AtEnd',
+    ]);
   });
 
   describe('the shared instance (risk 2)', () => {
     it('re-anchors to the trigger of each open and names only the new anchor', async () => {
       const first = await mount(CHAPTER);
-      const second = await mount({ kind: 'chapter', id: 'c2', text: 'Two', isFirst: false, isLast: true });
+      const second = await mount({
+        kind: 'chapter',
+        id: 'c2',
+        text: 'Two',
+        isFirst: false,
+        isLast: true,
+      });
       await open(first);
       expect(first.style.getPropertyValue('anchor-name')).toBe('--r2m-node-menu');
       expect(first.getAttribute('aria-expanded')).toBe('true');

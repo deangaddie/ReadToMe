@@ -79,8 +79,7 @@ export class BookEditor {
 
   async rereadManually(request: ManualImportRequest): Promise<boolean> {
     return (
-      (await this.settle((folder) => this.projects.importManually(folder, request)))?.error ===
-      null
+      (await this.settle((folder) => this.projects.importManually(folder, request)))?.error === null
     );
   }
 

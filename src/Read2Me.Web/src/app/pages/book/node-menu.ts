@@ -141,7 +141,9 @@ export class NodeMenu extends R2mElement {
   readonly #main = computed(() =>
     this.#entries().filter((e) => !e.group.startsWith('pause-') && e.group !== 'delete'),
   );
-  readonly #pausesBefore = computed(() => this.#entries().filter((e) => e.group === 'pause-before'));
+  readonly #pausesBefore = computed(() =>
+    this.#entries().filter((e) => e.group === 'pause-before'),
+  );
   readonly #pausesAfter = computed(() => this.#entries().filter((e) => e.group === 'pause-after'));
   readonly #deleteEntry = computed(() => this.#entries().find((e) => e.group === 'delete') ?? null);
 
@@ -211,8 +213,8 @@ export class NodeMenu extends R2mElement {
             ${
               pausesBefore.length
                 ? html`<hr class="r2m-menu__divider" />
-                  ${this.#subMenu('before', 'Insert pause before', pausesBefore)}
-                  ${this.#subMenu('after', 'Insert pause after', pausesAfter)}`
+                    ${this.#subMenu('before', 'Insert pause before', pausesBefore)}
+                    ${this.#subMenu('after', 'Insert pause after', pausesAfter)}`
                 : nothing
             }
             ${deleteEntry ? this.#entry(deleteEntry, true) : nothing}`
@@ -295,7 +297,9 @@ export class NodeMenu extends R2mElement {
   #openSub(side: PauseSide, trigger: HTMLElement): void {
     if (this.#sub() === side) return;
     this.#hide(this.#subPanel());
-    this.querySelector<HTMLElement>(`[style*="${SUB_ANCHOR}"]`)?.style.removeProperty('anchor-name');
+    this.querySelector<HTMLElement>(`[style*="${SUB_ANCHOR}"]`)?.style.removeProperty(
+      'anchor-name',
+    );
     trigger.style.setProperty('anchor-name', SUB_ANCHOR);
     this.#sub.set(side);
     void this.rendered().then(() => {

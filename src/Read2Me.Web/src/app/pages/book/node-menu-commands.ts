@@ -38,7 +38,8 @@ const WORD: Record<NodeMenuKind, string> = {
 const NAME_LIMIT = 60;
 
 /** Which TTS models act on a delivery cue (spec story 16); static, not tied to the active provider. */
-export const CUE_HINT = 'Followed by Breeze; VoxCPM2 only loosely; ignored by Chatterbox and Qwen3.';
+export const CUE_HINT =
+  'Followed by Breeze; VoxCPM2 only loosely; ignored by Chatterbox and Qwen3.';
 
 /**
  * Turns a chosen menu entry into the command to post, asking whatever the entry needs first
@@ -249,7 +250,11 @@ function titleCommand(kind: NodeMenuKind, id: string, title: string): BookComman
   }
 }
 
-function mergeCommand(kind: NodeMenuKind, id: string, direction: MergeDirection): BookCommand | null {
+function mergeCommand(
+  kind: NodeMenuKind,
+  id: string,
+  direction: MergeDirection,
+): BookCommand | null {
   switch (kind) {
     case 'volume':
       return { type: 'MergeVolume', volumeId: id, direction };

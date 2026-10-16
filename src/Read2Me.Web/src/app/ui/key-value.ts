@@ -16,9 +16,7 @@ export function keyValue(rows: readonly KeyValueRow[], options: { dense?: boolea
         ${
           empty
             ? html`<dd class="r2m-key-value__value r2m-key-value__value--empty">—</dd>`
-            : html`<dd
-                class="r2m-key-value__value ${row.mono ? 'r2m-key-value__value--mono' : ''}"
-              >
+            : html`<dd class="r2m-key-value__value ${row.mono ? 'r2m-key-value__value--mono' : ''}">
                 ${row.value}
               </dd>`
         }`;

@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { render } from 'lit-html';
 import type { ParagraphItemDto } from '@app/api';
 import { provide } from '@app/core/services';
-import { type ConfirmOptions, ConfirmService, PromptService, type TextPromptOptions } from '@app/ui/dialogs';
+import {
+  type ConfirmOptions,
+  ConfirmService,
+  PromptService,
+  type TextPromptOptions,
+} from '@app/ui/dialogs';
 import { AudioGenerator } from './audio-generator';
 import { BookEditor } from './book-editor';
 import { BookStore } from './book-store';
@@ -293,7 +298,12 @@ describe('itemRow (speakers)', () => {
         opened.push((e as CustomEvent<NodeMenuRequest>).detail),
       );
       el.querySelector<HTMLButtonElement>('.r2m-node-menu__trigger')!.click();
-      expect(opened[0]!.target).toMatchObject({ kind: 'item', id: 'c', cue: 'whispered', hasAudio: false });
+      expect(opened[0]!.target).toMatchObject({
+        kind: 'item',
+        id: 'c',
+        cue: 'whispered',
+        hasAudio: false,
+      });
     });
 
     it('clicking the cue of an item with audio asks before discarding it (delivery-cue-editing 04)', async () => {

@@ -505,7 +505,9 @@ describe('r2m-book-page', () => {
 
       page.querySelector<HTMLButtonElement>('[data-node-id=c1] .r2m-node-menu__trigger')!.click();
       await page.rendered();
-      page.querySelector<HTMLButtonElement>('[role="menu"] [data-entry=release-narration]')!.click();
+      page
+        .querySelector<HTMLButtonElement>('[role="menu"] [data-entry=release-narration]')!
+        .click();
       for (let i = 0; i < 4; i++) await settle();
 
       expect(release).toHaveBeenCalledWith('Chapter', 'c1', 'The Encyclopedists');
@@ -525,7 +527,9 @@ describe('r2m-book-page', () => {
 
       page.querySelector<HTMLButtonElement>('[data-node-id=c1] .r2m-node-menu__trigger')!.click();
       await page.rendered();
-      page.querySelector<HTMLButtonElement>('[role="menu"] [data-entry=release-narration]')!.click();
+      page
+        .querySelector<HTMLButtonElement>('[role="menu"] [data-entry=release-narration]')!
+        .click();
       for (let i = 0; i < 4; i++) await settle();
 
       expect(selection.count()).toBe(1);
@@ -550,7 +554,9 @@ describe('r2m-book-page', () => {
         .querySelector<HTMLButtonElement>('[data-paragraph-id=q1] .r2m-paragraph__menu button')!
         .click();
       await page.rendered();
-      page.querySelector<HTMLButtonElement>('[role="menu"] [data-entry=release-narration]')!.click();
+      page
+        .querySelector<HTMLButtonElement>('[role="menu"] [data-entry=release-narration]')!
+        .click();
       for (let i = 0; i < 4; i++) await settle();
 
       expect(release).toHaveBeenCalledWith('Paragraph', 'q1', 'Q: Your name?');
