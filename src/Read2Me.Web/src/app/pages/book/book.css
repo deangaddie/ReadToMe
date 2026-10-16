@@ -94,7 +94,9 @@
     display: flex;
     align-items: center;
     gap: var(--r2m-space-2);
-    padding: var(--r2m-space-2) 0 var(--r2m-space-2) var(--r2m-space-8);
+    padding: var(--r2m-space-2) var(--r2m-space-1) var(--r2m-space-2) var(--r2m-space-8);
+    border-radius: var(--r2m-radius-md);
+    transition: box-shadow 120ms;
     color: var(--r2m-text-muted);
     font-size: var(--r2m-text-xs);
   }
@@ -140,8 +142,10 @@
     display: flex;
     align-items: stretch;
     gap: var(--r2m-space-2);
-    padding: var(--r2m-space-1) 0;
-    border-radius: var(--r2m-radius-sm);
+    /* Inline padding keeps the hover frame off the text without shifting the row. */
+    padding: var(--r2m-space-1);
+    border-radius: var(--r2m-radius-md);
+    transition: box-shadow 120ms;
     --r2m-speaker-fg: light-dark(
       hsl(var(--r2m-speaker-hue) 55% 36%),
       hsl(var(--r2m-speaker-hue) 60% 74%)
@@ -237,9 +241,33 @@
   }
   .r2m-paragraph:hover > .r2m-paragraph__status .r2m-paragraph__menu,
   .r2m-paragraph:focus-within > .r2m-paragraph__status .r2m-paragraph__menu,
+  .r2m-paragraph:has(> .r2m-paragraph__status [aria-expanded='true']) .r2m-paragraph__menu,
   .r2m-item:hover .r2m-item__menu,
-  .r2m-item:focus-within .r2m-item__menu {
+  .r2m-item:focus-within .r2m-item__menu,
+  .r2m-item:has([aria-expanded='true']) .r2m-item__menu {
     opacity: 1;
+  }
+  /*
+   * The row the user is on: the paragraph framed (its trigger outlined to match), the item within
+   * it washed with an accent bar, so each trigger reads as its row's. A row holding an open menu's
+   * trigger stays on after the pointer and focus leave for the popover. Shadows are inset — the
+   * viewport clips at the paragraph's left edge — and the item wash is an image layer, so the
+   * selected and unknown tints still show beneath.
+   */
+  .r2m-paragraph:is(:hover, :focus-within, :has([aria-expanded='true'])),
+  .book__pause:is(:hover, :focus-within, :has([aria-expanded='true'])) {
+    box-shadow: inset 0 0 0 1px var(--r2m-outline);
+  }
+  .r2m-paragraph:is(:hover, :focus-within, :has([aria-expanded='true']))
+    > .r2m-paragraph__status
+    .r2m-node-menu__trigger {
+    box-shadow: 0 0 0 1px var(--r2m-outline);
+    border-radius: var(--r2m-radius-sm);
+  }
+  .r2m-item:is(:hover, :focus-within, :has([aria-expanded='true'])) {
+    --_wash: color-mix(in srgb, var(--r2m-text-muted) 12%, transparent);
+    background-image: linear-gradient(var(--_wash), var(--_wash));
+    box-shadow: inset 3px 0 0 var(--r2m-accent);
   }
 
   /* ---- item row --------------------------------------------------------------------------- */
@@ -247,6 +275,7 @@
     display: block;
     padding: 2px var(--r2m-space-2);
     border-radius: var(--r2m-radius-sm);
+    transition: box-shadow 120ms;
   }
   .r2m-item--unknown {
     background: var(--r2m-status-warn-soft);
