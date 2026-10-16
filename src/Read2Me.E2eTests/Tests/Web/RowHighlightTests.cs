@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Microsoft.Playwright;
 using Read2Me.E2eTests.Infrastructure;
 
 namespace Read2Me.E2eTests.Tests.Web;
@@ -12,6 +13,9 @@ public class RowHighlightTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTes
 {
     private static readonly Regex Frame = new(@"0px 0px 0px 1px inset");
     private static readonly Regex AccentBar = new(@"3px 0px 0px 0px inset");
+
+    private const string FocusInMenu = "() => !!document.activeElement?.closest('[role=\"menu\"]')";
+    private const string BlurFocus = "() => document.activeElement?.blur()";
 
     [Fact]
     public async Task An_item_and_its_paragraph_stay_highlighted_while_the_item_menu_is_open()
@@ -32,13 +36,14 @@ public class RowHighlightTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTes
         await Expect(item).ToHaveCSSAsync("box-shadow", AccentBar);
         await Expect(sibling).ToHaveCSSAsync("box-shadow", "none");
 
-        await item.Locator(".r2m-item__menu button").ClickAsync();
-        var menu = Page.Locator("#r2m-node-menu-panel");
+        var actions = "Actions for “Only me,” came the reply.";
+        await item.GetByRole(AriaRole.Button, new() { Name = actions }).ClickAsync();
+        var menu = Page.GetByRole(AriaRole.Menu, new() { Name = actions });
         await Expect(menu).ToBeVisibleAsync();
         // Pointer and focus both leave the row for the popover: only the open menu holds it now.
-        await menu.Locator("[data-entry]").Last.HoverAsync();
+        await menu.GetByRole(AriaRole.Menuitem).Last.HoverAsync();
         await Page.Keyboard.PressAsync("ArrowDown");
-        Assert.True(await Page.EvaluateAsync<bool>("() => !!document.activeElement?.closest('#r2m-node-menu-panel')"));
+        Assert.True(await Page.EvaluateAsync<bool>(FocusInMenu));
 
         await Expect(item).ToHaveCSSAsync("box-shadow", AccentBar);
         await Expect(paragraph).ToHaveCSSAsync("box-shadow", Frame);
@@ -50,7 +55,7 @@ public class RowHighlightTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTes
         await Page.Mouse.MoveAsync(0, 0);
         await Expect(item).ToHaveCSSAsync("box-shadow", AccentBar);
 
-        await Page.EvaluateAsync("() => document.activeElement?.blur()");
+        await Page.EvaluateAsync(BlurFocus);
         await Expect(item).ToHaveCSSAsync("box-shadow", "none");
         await Expect(paragraph).ToHaveCSSAsync("box-shadow", "none");
     }
