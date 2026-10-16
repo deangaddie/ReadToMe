@@ -8,8 +8,9 @@ import { countBadge, icon, statusChip } from '@app/ui/partials';
 import { TypeAhead, typeAheadTarget } from '@app/ui/roving';
 import { type TreeNode, placeholderTitleClass } from './book-tree';
 import { NODE_MENU_OPEN, type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
-import type { ActionEntryId, NodeMenuTarget, SelectionKind } from './node-menu-entries';
+import type { ActionEntryId, SelectionKind } from './node-menu-entries';
 import type { TriState } from './selection';
+import { structureNodeMenu } from './structure-node-menu';
 import structureTreeCss from './structure-tree.css' with { type: 'text' };
 
 adoptStyles(structureTreeCss);
@@ -163,7 +164,7 @@ export class StructureTree extends R2mElement {
           const isOpen = node.expandable && expanded.has(node.id);
           const isCurrent = node.id === current;
           const status = statuses[node.id] ?? null;
-          const busy = !!status && (status.attributionProcessing || status.attributionQueued > 0);
+          const menu = structureNodeMenu({ node, position: node, selection, status, locked });
           return html`<div
             role="treeitem"
             class="tree__node ${isCurrent ? 'tree__node--current' : ''}"
@@ -220,7 +221,7 @@ export class StructureTree extends R2mElement {
             }
             ${status ? badges(status) : nothing}
             <span class="tree__menu">
-              ${nodeMenuTrigger(targetOf(node, selection), { disabled: busy || locked, tabIndex: -1 })}
+              ${nodeMenuTrigger(menu.target, { disabled: menu.disabled, tabIndex: -1 })}
             </span>
           </div>`;
         },
@@ -351,18 +352,6 @@ export class StructureTree extends R2mElement {
     request.returnTo = item;
     request.onAction = (action: ActionEntryId) => this.emit('node-action', { node, action });
   };
-}
-
-function targetOf(node: TreeNode, selection: SelectionKind | null): NodeMenuTarget {
-  const target: NodeMenuTarget = {
-    kind: node.level,
-    id: node.id,
-    text: node.rawTitle,
-    isFirst: node.isFirst,
-    isLast: node.isLast,
-  };
-  // (A TreeNode is not a RowPosition, so the two flags are named rather than spread.)
-  return selection ? { ...target, selection } : target;
 }
 
 function badges(s: NodeStatusSummary) {
