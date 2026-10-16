@@ -1564,6 +1564,8 @@ progress {
     outline: none;
   }
 }
+/* Placeholder text: an untitled node's placeholder title, an empty inline edit's placeholder. */
+.r2m-placeholder-title,
 .r2m-inline-edit__display--empty .r2m-inline-edit__text {
   color: var(--r2m-text-muted);
   font-style: italic;

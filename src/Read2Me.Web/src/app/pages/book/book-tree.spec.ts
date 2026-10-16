@@ -53,14 +53,23 @@ describe('buildTree', () => {
     expect(tree[0]!.loadTarget).toEqual({ level: 'part', id: 'p1' });
   });
 
-  it('untitled nodes are numbered by position', () => {
+  it('untitled nodes carry a placeholder title numbered by position', () => {
     const tree = buildTree([node('v1'), node('v2', '  ')], {
       v2: [node('p1'), node('p2')],
       p2: [node('c1'), node('c2')],
     });
-    expect(tree.map((n) => n.title)).toEqual(['Volume 1', 'Volume 2']);
-    expect(tree[1]!.children.map((n) => n.title)).toEqual(['Part 1', 'Part 2']);
-    expect(tree[1]!.children[1]!.children.map((n) => n.title)).toEqual(['Chapter 1', 'Chapter 2']);
+    expect(tree.map((n) => n.title)).toEqual(['Untitled volume 1', 'Untitled volume 2']);
+    expect(tree[1]!.children.map((n) => n.title)).toEqual(['Untitled part 1', 'Untitled part 2']);
+    expect(tree[1]!.children[1]!.children.map((n) => n.title)).toEqual([
+      'Untitled chapter 1',
+      'Untitled chapter 2',
+    ]);
+    expect(tree.every((n) => n.untitled)).toBe(true);
+  });
+
+  it('a titled node is not untitled', () => {
+    const [titled] = buildTree([node('v1', 'I'), node('v2')], {});
+    expect(titled).toMatchObject({ title: 'I', untitled: false });
   });
 
   it('nodes know their stored title and their position among siblings', () => {
@@ -102,9 +111,9 @@ describe('chapterSequence', () => {
       p3: [node('c3', 'Three')],
     };
     expect(chapterSequence(volumes, children)).toEqual([
-      { id: 'c1', title: 'One' },
-      { id: 'c2', title: 'Chapter 1' },
-      { id: 'c3', title: 'Three' },
+      { id: 'c1', title: 'One', untitled: false },
+      { id: 'c2', title: 'Untitled chapter 1', untitled: true },
+      { id: 'c3', title: 'Three', untitled: false },
     ]);
   });
 

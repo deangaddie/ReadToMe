@@ -23,6 +23,7 @@ function node(
     level,
     title: id,
     rawTitle: id,
+    untitled: false,
     isFirst: true,
     isLast: true,
     expandable: level !== 'chapter',
@@ -159,6 +160,24 @@ describe('r2m-structure-tree', () => {
     expect(item('v2').getAttribute('aria-expanded')).toBe('true');
     expect(item('v2').querySelector('.tree__loading')).not.toBeNull();
     expect(ids()).toEqual(['v1', 'v2']);
+  });
+
+  it('an untitled node shows its placeholder title set apart from real titles', async () => {
+    await mount({
+      nodes: chapters('Alpha').concat(
+        node('c2', 'chapter', [], { title: 'Untitled chapter 2', rawTitle: null, untitled: true }),
+      ),
+    });
+    const title = (id: string) => item(id).querySelector('.tree__title')!;
+    expect(title('c2').textContent).toBe('Untitled chapter 2');
+    expect(title('c2').classList.contains('r2m-placeholder-title')).toBe(true);
+    expect(title('Alpha').classList.contains('r2m-placeholder-title')).toBe(false);
+    // Accessible names carry the placeholder wording too.
+    tree.selection = 'paragraphs';
+    await tree.rendered();
+    expect(item('c2').querySelector('.tree__select')!.getAttribute('aria-label')).toBe(
+      'Select paragraphs of Untitled chapter 2',
+    );
   });
 
   it('a click on a chapter selects it; the toggle asks the caller to expand or collapse', async () => {

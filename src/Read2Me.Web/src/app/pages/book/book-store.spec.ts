@@ -140,6 +140,7 @@ describe('BookStore', () => {
       level: 'part',
       title: id,
       rawTitle: id,
+      untitled: false,
       isFirst: true,
       isLast: true,
       expandable: true,

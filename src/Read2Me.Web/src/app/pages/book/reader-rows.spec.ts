@@ -204,9 +204,10 @@ describe('buildRows', () => {
     {
       id: 'c1',
       title: 'One',
+      untitled: false,
       paragraphs: [para('p1', [narration()]), para('pz', [pause()], true)],
     },
-    { id: 'c2', title: 'Two', paragraphs: [para('p2', [item()])] },
+    { id: 'c2', title: 'Two', untitled: false, paragraphs: [para('p2', [item()])] },
   ];
 
   it('read mode hides pause paragraphs', () => {
@@ -239,6 +240,7 @@ describe('buildRows', () => {
         {
           id: 'c',
           title: 'C',
+          untitled: false,
           paragraphs: [
             para('a', [item({ itemType: 'ChapterPause', isPause: true, text: null })], true),
             para('b', [], true),

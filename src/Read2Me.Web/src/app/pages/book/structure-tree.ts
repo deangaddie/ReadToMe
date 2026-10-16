@@ -6,7 +6,7 @@ import { adoptStyles } from '@app/core/styles';
 import type { NodeStatusSummary } from '@app/live/live-messages';
 import { countBadge, icon, statusChip } from '@app/ui/partials';
 import { TypeAhead, typeAheadTarget } from '@app/ui/roving';
-import type { TreeNode } from './book-tree';
+import { type TreeNode, placeholderTitleClass } from './book-tree';
 import { NODE_MENU_OPEN, type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
 import type { ActionEntryId, NodeMenuTarget, SelectionKind } from './node-menu-entries';
 import type { TriState } from './selection';
@@ -212,7 +212,7 @@ export class StructureTree extends R2mElement {
                   />`
                 : nothing
             }
-            <span class="tree__title">${node.title}</span>
+            <span class="tree__title ${placeholderTitleClass(node)}">${node.title}</span>
             ${
               isOpen && !node.loaded
                 ? html`<span class="tree__loading" aria-busy="true" aria-label="Loading"></span>`
