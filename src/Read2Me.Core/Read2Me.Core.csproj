@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <PackageReference Include="FractionalIndexing" Version="1.0.1" />
+    <PackageReference Include="FractionalIndexing" />
   </ItemGroup>
 </Project>

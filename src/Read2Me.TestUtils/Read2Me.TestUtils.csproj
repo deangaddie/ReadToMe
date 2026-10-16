@@ -11,7 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="FractionalIndexing" Version="1.0.1" />
+    <PackageReference Include="FractionalIndexing" />
   </ItemGroup>
 
   <ItemGroup>
