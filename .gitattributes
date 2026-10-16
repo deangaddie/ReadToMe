@@ -1,2 +1,32 @@
-# The acceptance-fixture test compares this transcript byte-for-byte, LF included; a CRLF checkout fails it.
-Infra/ContainerHealth/test-assets/*.txt text eol=lf
+# Text files are LF in the index and the working copy, whatever core.autocrlf says.
+# A CRLF checkout breaks byte-for-byte fixture comparisons (Infra/ContainerHealth/test-assets)
+# and eslint-plugin-lit's no-useless-template-literals in src/Read2Me.Web.
+* text=auto eol=lf
+
+# cmd.exe misparses labels and goto in LF batch files.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binaries: never normalized or diffed as text.
+*.woff2 binary
+*.woff binary
+*.ttf binary
+*.otf binary
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.wav binary
+*.mp3 binary
+*.m4a binary
+*.m4b binary
+*.flac binary
+*.ogg binary
+*.epub binary
+*.pdf binary
+*.zip binary
+*.db binary
+*.gguf binary
+*.bin binary
