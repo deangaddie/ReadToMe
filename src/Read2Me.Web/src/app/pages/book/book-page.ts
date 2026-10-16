@@ -23,7 +23,7 @@ import { ProjectStore } from '../project/project-store';
 import { AudioGenerator } from './audio-generator';
 import { BookEditor } from './book-editor';
 import { BookStore } from './book-store';
-import type { TreeNode } from './book-tree';
+import { type TreeNode, placeholderTitleClass } from './book-tree';
 import { openEditWithAiDialog } from './edit-with-ai/edit-with-ai-dialog';
 import { openManualRereadDialog } from './manual-reread-dialog';
 import { type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
@@ -545,8 +545,10 @@ export class BookPage extends R2mElement {
   /** Reads {@link ctx} inside the list's effect, so status deltas re-render only the rows. */
   private readonly renderRow = (row: ReaderRow) => {
     switch (row.kind) {
-      case 'chapter':
-        return html`<h2 class="book__chapter book__row">${row.title}</h2>`;
+      case 'chapter': {
+        const placeholder = placeholderTitleClass(row);
+        return html`<h2 class="book__chapter book__row ${placeholder}">${row.title}</h2>`;
+      }
       case 'paragraph':
         return html`<div class="book__row">
           ${paragraphRow(row.paragraph, row.chapterId, this.ctx(), row)}

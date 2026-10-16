@@ -114,6 +114,7 @@ describe('chapterDialogTotals', () => {
       {
         id: 'c1',
         title: 'One',
+        untitled: false,
         paragraphs: [
           paragraph('p1', item({ itemType: 'Narration', characterId: 'n' })),
           paragraph('p2', item({ itemType: 'Character' })),
@@ -125,7 +126,7 @@ describe('chapterDialogTotals', () => {
           ),
         ],
       },
-      { id: 'c2', title: 'Two', paragraphs: [] },
+      { id: 'c2', title: 'Two', untitled: false, paragraphs: [] },
     ]);
     expect(totals).toEqual({ c1: 2, c2: 0 });
   });
@@ -160,6 +161,7 @@ describe('chapterVoicedTotals', () => {
       {
         id: 'c1',
         title: 'One',
+        untitled: false,
         paragraphs: [
           paragraph('p1', item({ itemType: 'Narration', characterId: 'n' })),
           paragraph(
@@ -170,7 +172,7 @@ describe('chapterVoicedTotals', () => {
           paragraph('p3', item({ itemType: 'Pause', isPause: true })),
         ],
       },
-      { id: 'c2', title: 'Two', paragraphs: [] },
+      { id: 'c2', title: 'Two', untitled: false, paragraphs: [] },
     ];
     expect(chapterVoicedTotals(chapters, false)).toEqual({ c1: 2, c2: 0 });
     expect(chapterVoicedTotals(chapters, true)).toEqual({ c1: 3, c2: 0 });

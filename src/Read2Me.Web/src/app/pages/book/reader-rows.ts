@@ -16,7 +16,7 @@ import type { IconName } from '@app/ui/icons';
 import type { StatusKind } from '@app/ui/partials';
 import type { SpeakerChipState } from '@app/ui/speaker-chip';
 import type { SpeakerRosterEntry } from '@app/ui/speaker-menu';
-import type { ChapterParents } from './book-tree';
+import type { ChapterParents, NodeTitle } from './book-tree';
 
 /**
  * What the reader rows show (design §6.3), as pure functions of the loaded data. Components bind
@@ -206,9 +206,8 @@ export function reviewOf(ctx: RowContext, itemId: string): AudioReviewInfo | Aud
 
 // ---- rows ---------------------------------------------------------------------------------------
 
-export interface LoadedChapterView {
+export interface LoadedChapterView extends NodeTitle {
   id: string;
-  title: string;
   paragraphs: readonly ParagraphDto[];
 }
 
@@ -219,7 +218,7 @@ export interface RowPosition {
 }
 
 export type ReaderRow =
-  | { kind: 'chapter'; key: string; chapterId: string; title: string }
+  | ({ kind: 'chapter'; key: string; chapterId: string } & NodeTitle)
   | ({ kind: 'paragraph'; key: string; chapterId: string; paragraph: ParagraphDto } & RowPosition)
   | ({
       kind: 'pause';
@@ -250,6 +249,7 @@ export function buildRows(chapters: readonly LoadedChapterView[], mode: ReaderMo
       key: `chapter:${chapter.id}`,
       chapterId: chapter.id,
       title: chapter.title,
+      untitled: chapter.untitled,
     });
     chapter.paragraphs.forEach((paragraph, i, all) => {
       const position = { isFirst: i === 0, isLast: i === all.length - 1 };

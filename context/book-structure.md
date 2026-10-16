@@ -22,6 +22,8 @@ Use these terms exactly in code, tests, and discussion.
 ## Book view
 
 - **Book page** — the web app's reader for one Book; its row shape is the **Reader mode** ([web.md](web.md)).
+- **Placeholder title** — the label shown for a Volume, Part or Chapter whose title is missing or blank: "Untitled chapter 3", numbered by position among its siblings, and set visibly apart from a real title wherever it appears (structure tree, Book page heading, accessible names). Never stored and never narrated; renaming starts from an empty title, not from the placeholder.
+  _Avoid_: "default title", "fallback title", "Chapter 3" as if it were the node's title
 
 - **Book mutation** — one user or domain operation that changes the persisted Book, even when it touches several records or facets (a split, an accepted AI edit, a Character merge). Committed through `BookMutations.CommitAsync`, which owns per-project write serialization, the transaction, the single commit point and the revision. Returns a **Book mutation receipt**: project and mutation identity, revision, any created identity and the node holding it, the facets and identifiers *actually* affected, and structural split/merge relationships — facts, never instructions for how to reconcile. A valid operation that changes nothing is `NoChange` and consumes no revision ([ADR 0007](../docs/adr/0007-book-mutations-reconcile-book-view-projections.md)).
 - **Receipt-driven refresh** — how an open view converges on a committed Book mutation; defined in [web.md](web.md). The persisted Book is authoritative, and a client view is always rebuildable from it ([ADR 0012](../docs/adr/0012-blazor-ui-removed.md)).

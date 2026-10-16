@@ -159,7 +159,7 @@ describe('r2m-book-page', () => {
     const tree = page.querySelector('nav.book__tree r2m-structure-tree')!;
     const titles = () =>
       Array.from(tree.querySelectorAll('.tree__title')).map((n) => n.textContent?.trim());
-    expect(titles()).toEqual(['The Encyclopedists', 'Chapter 2']);
+    expect(titles()).toEqual(['The Encyclopedists', 'Untitled chapter 2']);
     expect(tree.querySelector('[data-node-id=c1] .r2m-count-badge')?.textContent).toContain('3');
     expect(tree.querySelector('[data-node-id=c1]')?.getAttribute('aria-current')).toBe('true');
     expect(store.window()[0]).toBe('c1');
@@ -171,6 +171,12 @@ describe('r2m-book-page', () => {
     for (let i = 0; i < 4; i++) await settle();
     expect(store.currentChapterId()).toBe('c2');
     expect(store.scrollRequest()?.chapterId).toBe('c2');
+    // An untitled chapter's heading is its placeholder title, set apart as the tree's is.
+    const headings = Array.from(page.querySelectorAll('.book__chapter'));
+    expect(headings.map((h) => [text(h), h.classList.contains('r2m-placeholder-title')])).toEqual([
+      ['The Encyclopedists', false],
+      ['Untitled chapter 2', true],
+    ]);
 
     // The toolbar button hides the tree and the reader takes the width.
     const toggle = page.querySelector<HTMLButtonElement>('[aria-label="Hide structure"]')!;

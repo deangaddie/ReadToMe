@@ -101,11 +101,18 @@ export class BookStore {
 
   /** The loaded window, in reading order, as the reader renders it. */
   readonly chapters = computed<LoadedChapterView[]>(() => {
-    const titles = new Map(this.sequence().map((c) => [c.id, c.title]));
+    const chapterRefs = new Map(this.sequence().map((c) => [c.id, c]));
     const paragraphs = this._paragraphs();
     return this._window()
       .filter((id) => paragraphs[id])
-      .map((id) => ({ id, title: titles.get(id) ?? 'Chapter', paragraphs: paragraphs[id]! }));
+      .map((id) => {
+        // A windowed chapter is always in the sequence; its position is unknown if it ever is not.
+        const { title, untitled } = chapterRefs.get(id) ?? {
+          title: 'Untitled chapter',
+          untitled: true,
+        };
+        return { id, title, untitled, paragraphs: paragraphs[id]! };
+      });
   });
 
   readonly speakers = computed<SpeakerContext>(() => ({

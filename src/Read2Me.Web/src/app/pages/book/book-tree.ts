@@ -8,11 +8,10 @@ export interface NodeRef {
   id: string;
 }
 
-export interface TreeNode {
+export interface TreeNode extends NodeTitle {
   id: string;
   level: NodeLevel;
-  title: string;
-  /** The stored title, null when untitled ({@link title} then carries the positional fallback). */
+  /** The stored title, null when never given one. */
   rawTitle: string | null;
   /** Position among siblings of the same level: the node menu hides merges at the ends. */
   isFirst: boolean;
@@ -25,20 +24,28 @@ export interface TreeNode {
   children: TreeNode[];
 }
 
-export interface ChapterRef {
+export interface ChapterRef extends NodeTitle {
   id: string;
-  title: string;
 }
 
-const LEVEL_WORD: Record<NodeLevel, string> = {
-  volume: 'Volume',
-  part: 'Part',
-  chapter: 'Chapter',
-};
+/** The title a node shows: its stored one, or a placeholder title when it has none. */
+export interface NodeTitle {
+  /** The stored title, or the placeholder title when {@link untitled}. */
+  title: string;
+  /** No stored title (null or blank): {@link title} is a placeholder, shown set apart. */
+  untitled: boolean;
+}
 
-/** A node's title, or its level and 1-based position among its siblings. */
-export function nodeTitle(node: NodeDto, level: NodeLevel, index: number): string {
-  return node.title?.trim() ? node.title : `${LEVEL_WORD[level]} ${index + 1}`;
+/** The class that sets a placeholder title apart from a real one; empty for a real title. */
+export function placeholderTitleClass({ untitled }: NodeTitle): string {
+  return untitled ? 'r2m-placeholder-title' : '';
+}
+
+/** A node's title, or the placeholder "Untitled <level> <n>", n its 1-based position among siblings. */
+export function nodeTitle(node: NodeDto, level: NodeLevel, index: number): NodeTitle {
+  return node.title?.trim()
+    ? { title: node.title, untitled: false }
+    : { title: `Untitled ${level} ${index + 1}`, untitled: true };
 }
 
 /**
@@ -57,7 +64,7 @@ function identity(node: NodeDto, level: NodeLevel, index: number, count: number)
   return {
     id: node.id,
     level,
-    title: nodeTitle(node, level, index),
+    ...nodeTitle(node, level, index),
     rawTitle: node.title,
     isFirst: index === 0,
     isLast: index === count - 1,
@@ -126,7 +133,7 @@ export function chapterSequence(volumes: readonly NodeDto[], children: ChildrenM
     for (const part of parts) {
       const chapters = children[part.id];
       if (!chapters) return out;
-      chapters.forEach((c, i) => out.push({ id: c.id, title: nodeTitle(c, 'chapter', i) }));
+      chapters.forEach((c, i) => out.push({ id: c.id, ...nodeTitle(c, 'chapter', i) }));
     }
   }
   return out;
