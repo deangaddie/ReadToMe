@@ -64,11 +64,12 @@ export class ProjectsPage extends R2mElement {
         this.store.loading() && !this.store.loaded()
           ? html`<div class="projects__grid" aria-busy="true" aria-label="Loading projects">
               ${SKELETONS.map(
-                () => html`<div class="projects__skeleton">
-                  <div class="projects__skeleton-cover"></div>
-                  <div class="projects__skeleton-line projects__skeleton-line--title"></div>
-                  <div class="projects__skeleton-line"></div>
-                </div>`,
+                () =>
+                  html`<div class="projects__skeleton">
+                    <div class="projects__skeleton-cover"></div>
+                    <div class="projects__skeleton-line projects__skeleton-line--title"></div>
+                    <div class="projects__skeleton-line"></div>
+                  </div>`,
               )}
             </div>`
           : projects.length === 0 && !error

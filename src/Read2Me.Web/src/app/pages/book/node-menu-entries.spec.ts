@@ -109,7 +109,10 @@ describe('menuEntries matrix', () => {
       'Insert item at start',
       'Insert item at end',
     ]);
-    expect(inserts(target('pause-paragraph'))).toEqual(['Insert paragraph before', 'Insert paragraph after']);
+    expect(inserts(target('pause-paragraph'))).toEqual([
+      'Insert paragraph before',
+      'Insert paragraph after',
+    ]);
   });
 
   it('an item offers no node inserts', () => {
@@ -149,9 +152,9 @@ describe('menuEntries matrix', () => {
 
   it('item without a cue offers Add delivery cue…', () => {
     const entries = entriesOf(target('item', { cue: null }));
-    expect(entries.filter((e) => e.id.endsWith('-cue')).map((e) => [e.id, e.label, e.group])).toEqual([
-      ['add-cue', 'Add delivery cue…', 'edit'],
-    ]);
+    expect(
+      entries.filter((e) => e.id.endsWith('-cue')).map((e) => [e.id, e.label, e.group]),
+    ).toEqual([['add-cue', 'Add delivery cue…', 'edit']]);
   });
 
   it('item with a cue offers Edit delivery cue… and Remove delivery cue instead', () => {
@@ -179,7 +182,14 @@ describe('menuEntries matrix', () => {
   });
 
   it('only delete is destructive', () => {
-    for (const kind of ['volume', 'part', 'chapter', 'paragraph', 'item', 'pause-paragraph'] as const) {
+    for (const kind of [
+      'volume',
+      'part',
+      'chapter',
+      'paragraph',
+      'item',
+      'pause-paragraph',
+    ] as const) {
       const destructive = entriesOf(target(kind)).filter((e) => e.destructive);
       expect(destructive.map((e) => e.id)).toEqual(['delete']);
     }
@@ -374,7 +384,9 @@ describe('menuEntries selection shortcuts (tickets 12 + 13)', () => {
   });
 
   it('rows never get them, whatever the selection', () => {
-    expect(ids(target('paragraph', { selection: 'paragraphs' }))).not.toContain('select-unprocessed');
+    expect(ids(target('paragraph', { selection: 'paragraphs' }))).not.toContain(
+      'select-unprocessed',
+    );
     expect(ids(target('item', { selection: 'items' }))).not.toContain('generate-audio-node');
   });
 });

@@ -256,7 +256,9 @@ describe('r2m-overview-page', () => {
   it('editing the title inline PATCHes and shows the returned detail', async () => {
     const page = await render();
     api.on('PATCH', BASE, { ...DETAIL, title: 'Dune Messiah' });
-    const edit = page.querySelector<HTMLButtonElement>('.details__title .r2m-inline-edit__display')!;
+    const edit = page.querySelector<HTMLButtonElement>(
+      '.details__title .r2m-inline-edit__display',
+    )!;
     edit.click();
     await page.rendered();
     const input = page.querySelector<HTMLInputElement>('.details__title input')!;

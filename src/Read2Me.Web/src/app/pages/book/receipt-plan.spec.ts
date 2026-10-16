@@ -160,7 +160,7 @@ describe('planReceipt', () => {
       expect(plan.reloadChapters).toEqual(['c2']);
     });
 
-    it("by another view is not revealed", () => {
+    it('by another view is not revealed', () => {
       expect(planReceipt(created('c9', false), ctx()).revealChapter).toBeNull();
     });
 

@@ -604,7 +604,11 @@ describe('r2m-provider-settings-page', () => {
         () =>
           new Promise((resolve) => {
             land = () =>
-              resolve({ text: 'My own sentence.', default: 'The default sentence.', maxLength: 40 });
+              resolve({
+                text: 'My own sentence.',
+                default: 'The default sentence.',
+                maxLength: 40,
+              });
           }),
       );
       page.querySelector<HTMLButtonElement>('[data-action="save-sample-text"]')!.click();

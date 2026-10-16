@@ -64,7 +64,9 @@ describe('BookEditor', () => {
       import: importFile.call,
       importManually: importManually.call,
     } as unknown as ProjectsApi);
-    override(ToastService, { problem: (p: unknown) => problems.push(p) } as unknown as ToastService);
+    override(ToastService, {
+      problem: (p: unknown) => problems.push(p),
+    } as unknown as ToastService);
     editor = new BookEditor(store as unknown as BookStore);
   });
 

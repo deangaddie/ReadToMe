@@ -200,16 +200,36 @@ export function menuEntries(target: NodeMenuTarget, book: MenuBook): MenuEntry[]
   if (kind === 'volume' || kind === 'part' || kind === 'chapter') {
     if (target.selection === 'paragraphs') {
       entries.push(
-        { id: 'select-unprocessed', label: 'Select unprocessed', icon: 'checklist', group: 'select' },
-        { id: 'attribute-node', label: 'Attribute unprocessed', icon: 'auto_awesome', group: 'select' },
+        {
+          id: 'select-unprocessed',
+          label: 'Select unprocessed',
+          icon: 'checklist',
+          group: 'select',
+        },
+        {
+          id: 'attribute-node',
+          label: 'Attribute unprocessed',
+          icon: 'auto_awesome',
+          group: 'select',
+        },
       );
       // Unquoted speech (a Q:/A: transcript) was stamped narration at import; this hands it back
       // to the selection. No whole-book scope, so never on a volume.
       if (kind !== 'volume') entries.push(RELEASE_ENTRY);
     } else if (target.selection === 'items') {
       entries.push(
-        { id: 'select-needs-audio', label: 'Select needs audio', icon: 'checklist', group: 'select' },
-        { id: 'generate-audio-node', label: 'Generate audio for this node', icon: 'graphic_eq', group: 'select' },
+        {
+          id: 'select-needs-audio',
+          label: 'Select needs audio',
+          icon: 'checklist',
+          group: 'select',
+        },
+        {
+          id: 'generate-audio-node',
+          label: 'Generate audio for this node',
+          icon: 'graphic_eq',
+          group: 'select',
+        },
       );
     }
     entries.push({ id: 'edit-title', label: 'Edit title', icon: 'edit', group: 'edit' });
@@ -234,7 +254,12 @@ export function menuEntries(target: NodeMenuTarget, book: MenuBook): MenuEntry[]
       });
     }
     if (!target.isLast) {
-      entries.push({ id: 'merge-next', label: 'Merge with next', icon: 'merge', group: 'structure' });
+      entries.push({
+        id: 'merge-next',
+        label: 'Merge with next',
+        icon: 'merge',
+        group: 'structure',
+      });
     }
   }
 
@@ -312,7 +337,9 @@ export function nodeInsertOf(id: MenuEntryId): Placement | null {
 }
 
 /** The pause insertion an entry names, or null for any other entry. */
-export function pauseInsertOf(id: MenuEntryId): { position: InsertPosition; kind: PauseKind } | null {
+export function pauseInsertOf(
+  id: MenuEntryId,
+): { position: InsertPosition; kind: PauseKind } | null {
   const match = /^pause-(before|after):(\w+)$/.exec(id);
   if (!match) return null;
   return {

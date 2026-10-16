@@ -165,7 +165,9 @@ describe('settings API services', () => {
     await audio.saveStep({ stepId: 'silence-trim', enabled: true, settings: { thresholdDb: -40 } });
     expect(await audio.testFfmpeg('C:\ffmpeg.exe')).toEqual({ success: true, message: 'ok' });
 
-    expect(api.calls('PUT', '/api/settings/audio-processing')[0]?.body).toEqual({ werThreshold: 0.2 });
+    expect(api.calls('PUT', '/api/settings/audio-processing')[0]?.body).toEqual({
+      werThreshold: 0.2,
+    });
     expect(api.calls('PUT', '/api/settings/audio-processing/pauses')[0]?.body).toEqual({
       volumeMs: 1,
       partMs: 2,
@@ -184,13 +186,19 @@ describe('settings API services', () => {
   });
 
   it('AudioProcessingApi lists recent samples with the limit and previews one step', async () => {
-    api.on('GET', '/api/audio/samples/recent', (_body, url) => [{ limit: url.searchParams.get('limit') }]);
-    api.on('POST', '/api/settings/audio-processing/steps/consonant-soften/preview', { previewId: 'p1' });
+    api.on('GET', '/api/audio/samples/recent', (_body, url) => [
+      { limit: url.searchParams.get('limit') },
+    ]);
+    api.on('POST', '/api/settings/audio-processing/steps/consonant-soften/preview', {
+      previewId: 'p1',
+    });
     const audio = new AudioProcessingApi();
 
     expect(await audio.recentSamples()).toEqual([{ limit: '20' } as never]);
     const request = { sample: { folder: 'f', itemId: 'i' }, settings: { engine: 'adyneq' } };
-    expect(await audio.previewStep('consonant-soften', request)).toEqual({ previewId: 'p1' } as never);
+    expect(await audio.previewStep('consonant-soften', request)).toEqual({
+      previewId: 'p1',
+    } as never);
     expect(
       api.calls('POST', '/api/settings/audio-processing/steps/consonant-soften/preview')[0]?.body,
     ).toEqual(request);

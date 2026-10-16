@@ -46,7 +46,11 @@ export class FakeNavigation extends EventTarget {
       formData: null,
       navigationType,
       destination: { url: href, key: String(key) },
-      intercept: (options: { handler: () => Promise<void>; focusReset?: string; scroll?: string }) => {
+      intercept: (options: {
+        handler: () => Promise<void>;
+        focusReset?: string;
+        scroll?: string;
+      }) => {
         handler = options.handler;
         const { focusReset, scroll } = options;
         this.intercepts.push({

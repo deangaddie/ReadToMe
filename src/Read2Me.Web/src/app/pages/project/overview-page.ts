@@ -66,7 +66,9 @@ export class OverviewPage extends R2mElement {
     this.store = use(ProjectStore, this);
     const lastBuild = computed(() => {
       const output = this.lastOutput();
-      return output ? { date: formatBuildDate(output.createdAt), isPartial: output.isPartial } : null;
+      return output
+        ? { date: formatBuildDate(output.createdAt), isPartial: output.isPartial }
+        : null;
     });
     this.steps = computed(() => {
       const status = this.store.status();

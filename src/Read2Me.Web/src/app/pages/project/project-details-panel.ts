@@ -121,7 +121,9 @@ export class ProjectDetailsPanel extends R2mElement {
         ],
         { dense: true },
       )}
-      <span class="details__type">${statusChip({ status: 'info', label: d.fileType, compact: true })}</span>
+      <span class="details__type"
+        >${statusChip({ status: 'info', label: d.fileType, compact: true })}</span
+      >
 
       <!-- live(): a refused PUT refetches the same value, and the box must still snap back. -->
       <label class="r2m-switch details__narrator-only">
