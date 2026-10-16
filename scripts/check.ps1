@@ -5,7 +5,7 @@ The PR gate: runs the stages CI runs, in the same order, and stops at the first 
 .DESCRIPTION
 Stages, in order (each one is a separate named step in .github/workflows/ci.yml):
 
-  1. build-web.ps1 -Check      lint + typecheck + api:check + icons:check + bun tests + build into wwwroot/app
+  1. build-web.ps1 -Check      format:check + lint + typecheck + api:check + icons:check + bun tests + build into wwwroot/app
   2. dotnet build              the whole solution
   3. unit tests                src/Read2Me.Tests
   4. E2E in Chromium           src/Read2Me.E2eTests with R2M_E2E_BROWSER=chromium, the whole suite

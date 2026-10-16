@@ -5,7 +5,7 @@ can serve it at /app and the browser E2E tests run instead of skipping.
 
 .DESCRIPTION
 Runs `bun install --frozen-lockfile` (exactly what bun.lock says) and `bun run build` in src/Read2Me.Web.
-Pass -Check to run `bun run check` (lint + typecheck + api:check + icons:check + tests + build) instead of a
+Pass -Check to run `bun run check` (format:check + lint + typecheck + api:check + icons:check + tests + build) instead of a
 bare build, which is what a PR gate wants. Pass -SkipInstall when node_modules is already current (local loops).
 
 Bun is looked up on PATH first, then at ~/.bun/bin/bun.exe (where the Windows installer puts it without adding

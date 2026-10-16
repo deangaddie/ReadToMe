@@ -15,11 +15,12 @@ production bundle at `/app`. It is **not** part of `Read2Me.slnx`; `dotnet build
 bun install --frozen-lockfile   # install exactly what bun.lock says
 bun run dev          # dev server with HMR → http://localhost:4300/app/ (proxies /api, /hubs, /workspace, /openapi, /audio-preview, /preview-source to :5000)
 bun run build        # production build → ../Read2Me.App/wwwroot/app/ (git-ignored)
-bun run check        # lint + typecheck + api:check + icons:check + tests + build — must be green before a PR
+bun run check        # format:check + lint + typecheck + api:check + icons:check + tests + build — must be green before a PR
 bun run lint         # oxlint, type-aware, with eslint-plugin-lit
 bun run typecheck    # tsc --noEmit
 bun test             # bun test over happy-dom; `bun test src/app/core/router.spec.ts` for one file
-bun run format       # oxfmt
+bun run format       # oxfmt, rewrites files in place
+bun run format:check # oxfmt --check: fail on any unformatted file (first step of check)
 bun run api:types    # regenerate src/app/api/schema.d.ts from the host's /openapi/v1.json
 bun run api:check    # fail if schema.d.ts is stale against the running host (skips with a warning when the host is down)
 bun run icons        # rebuild the subset icon font and icons.manifest.json from the IconName union (needs the network)

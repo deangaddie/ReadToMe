@@ -32,7 +32,7 @@ cd src/Read2Me.Web
 bun install --frozen-lockfile           # Bun 1.4.2 pinned by packageManager; no Node needed
 bun run dev                             # HMR dev server on http://localhost:4300/app/, proxies /api,/hubs,/workspace,/openapi,/audio-preview,/preview-source to :5000
 bun run build                           # emits to src/Read2Me.App/wwwroot/app/ (git-ignored); host serves it at /app
-bun run check                           # lint + typecheck + api:check + icons:check + bun test + build
+bun run check                           # format:check + lint + typecheck + api:check + icons:check + bun test + build
 bun test src/app/core/router.spec.ts    # one spec file
 bun run api:types                       # regenerate src/app/api/schema.d.ts from a running host /openapi/v1.json
 bun run icons                           # rebuild the subset icon font from the IconName union (network); icons:check gates offline
