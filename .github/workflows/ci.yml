@@ -23,7 +23,7 @@ jobs:
         with:
           bun-version-file: src/Read2Me.Web/package.json
 
-      # Lint, typecheck, api:check, icons:check, bun tests and the production build into
+      # Format check, lint, typecheck, api:check, icons:check, bun tests and the production build into
       # src/Read2Me.App/wwwroot/app — the bundle the browser E2E tests (Tests/Web) stage into the in-proc host.
       # Same script as the local gate: it also checks the installed Bun against the pin and that the bundle landed.
       - name: Web check and build
