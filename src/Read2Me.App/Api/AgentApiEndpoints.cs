@@ -15,6 +15,7 @@ namespace Read2Me.App.Api
         {
             endpoints.MapProjectEndpoints();
             endpoints.MapProjectStatusEndpoints();
+            endpoints.MapCheckpointEndpoints();
             endpoints.MapBookEndpoints();
             endpoints.MapCharacterEndpoints();
             endpoints.MapCommandEndpoints();

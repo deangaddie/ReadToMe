@@ -41,6 +41,8 @@ const STATUS: ProjectStatusDto = {
   review: 0,
   volumeIds: [],
   nodes: {},
+  pauseParagraphs: 0,
+  checkpoints: {},
   revision: 1,
 };
 

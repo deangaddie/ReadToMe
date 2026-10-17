@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
 using Read2Me.Data;
+using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Mutations;
 using Read2Me.Tests.Infrastructure;
@@ -98,6 +99,38 @@ public class ImportMutationTests : ProjectDbTestBase
         await CommitAsync(new ImportBookContentMutation(_folder, OneChapter("The new text."), ReplaceExisting: true));
 
         Assert.Equal([1], booksSeen);
+    }
+
+    [Fact]
+    public async Task Reread_deletesEveryCheckpoint_andReportsIt()
+    {
+        await new BookHierarchyBuilder(OpenDbAsync)
+            .AddVolume("v1", v => v
+                .AddChapter("c1", c => c.AddParagraph("pg1", g => g.AddNarration("i1", "The old text."))))
+            .BuildAsync();
+        await SeedCheckpointAsync(PipelineStep.Structure, CheckpointState.Confirmed);
+        await SeedCheckpointAsync(PipelineStep.Pauses, CheckpointState.Skipped, stale: true);
+
+        // The manual reread commits this same mutation, split by rules instead of automatically.
+        var receipt = await CommitAsync(
+            new ImportBookContentMutation(_folder, OneChapter("The new text."), ReplaceExisting: true));
+
+        Assert.True(receipt.Effects.Facets.HasFlag(BookFacets.Checkpoints));
+        Assert.Empty(await CheckpointRowsAsync());
+    }
+
+    [Fact]
+    public async Task Reread_withNoCheckpoints_doesNotReportThem()
+    {
+        await new BookHierarchyBuilder(OpenDbAsync)
+            .AddVolume("v1", v => v
+                .AddChapter("c1", c => c.AddParagraph("pg1", g => g.AddNarration("i1", "The old text."))))
+            .BuildAsync();
+
+        var receipt = await CommitAsync(
+            new ImportBookContentMutation(_folder, OneChapter("The new text."), ReplaceExisting: true));
+
+        Assert.False(receipt.Effects.Facets.HasFlag(BookFacets.Checkpoints));
     }
 
     [Fact]

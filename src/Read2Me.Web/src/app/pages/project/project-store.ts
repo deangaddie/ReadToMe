@@ -18,7 +18,7 @@ import { Debounced, REFETCH_DEBOUNCE_MS } from '@app/shared/debounced';
 
 export { REFETCH_DEBOUNCE_MS };
 
-/** Facets that move a `/status` count: structure, speakers, audio, reviews, cast and voices. */
+/** Facets that move a `/status` value: structure, speakers, audio, reviews, cast, voices and checkpoints. */
 const STATUS_FACETS: readonly BookFacet[] = [
   'Structure',
   'Attribution',
@@ -27,6 +27,7 @@ const STATUS_FACETS: readonly BookFacet[] = [
   'Characters',
   'Narrator',
   'Voices',
+  'Checkpoints',
 ];
 
 /** Facets the project detail shows: narrator link and name, narrator-only policy. */

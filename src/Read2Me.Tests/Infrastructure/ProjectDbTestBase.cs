@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Read2Me.Data;
+using Read2Me.Data.Entities;
+using Read2Me.Data.Enums;
 
 namespace Read2Me.Tests.Infrastructure
 {
@@ -41,6 +43,29 @@ namespace Read2Me.Tests.Infrastructure
         {
             await using var db = await OpenDbAsync();
             return (await db.ParagraphItems.FindAsync(paragraphItemId))!.CharacterId;
+        }
+
+        /// <summary>
+        /// A checkpoint row written straight to the Book — arrange-side only, so a test can start from
+        /// a stale row, which no gesture produces directly.
+        /// </summary>
+        protected async Task SeedCheckpointAsync(
+            PipelineStep step, CheckpointState state, bool stale = false, DateTimeOffset? at = null)
+        {
+            await using var db = await OpenDbAsync();
+            db.StepCheckpoints.Add(new StepCheckpoint
+            {
+                Step = step, State = state, Stale = stale, At = at ?? DateTimeOffset.UnixEpoch,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        /// <summary>The steps that hold a checkpoint row, in Pipeline order.</summary>
+        protected async Task<List<StepCheckpoint>> CheckpointRowsAsync()
+        {
+            await using var db = await OpenDbAsync();
+            // In memory: the step is stored as text, so SQL would sort it alphabetically.
+            return (await db.StepCheckpoints.ToListAsync()).OrderBy(c => c.Step).ToList();
         }
 
         /// <summary>

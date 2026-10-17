@@ -29,6 +29,8 @@ function status(overrides: Partial<ProjectStatusDto> = {}): ProjectStatusDto {
     review: 0,
     volumeIds: [VOL],
     nodes: { [VOL]: node() },
+    pauseParagraphs: 0,
+    checkpoints: {},
     revision: 1,
     ...overrides,
   };

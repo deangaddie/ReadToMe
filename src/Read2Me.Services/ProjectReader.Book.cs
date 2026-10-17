@@ -67,6 +67,18 @@ namespace Read2Me.Services
             return await db.Volumes.AnyAsync();
         }
 
+        public async Task<int> CountPauseParagraphsAsync(ProjectFolderId folderId, CancellationToken ct = default)
+        {
+            var dbPath = Path.Combine(_session.FileSystem.GetProjectFolderPath(folderId), "project.db");
+            if (!_session.FileSystem.FileExists(dbPath))
+                return 0;
+
+            var db = await _session.OpenAsync(folderId);
+            return await db.Paragraphs.CountAsync(p =>
+                p.Items.Count == 0
+                || (p.Items.Count == 1 && p.Items.All(i => i.ItemType != ParagraphItemType.Speech)), ct);
+        }
+
         public async Task<List<Volume>> GetVolumesAsync(ProjectFolderId folderId)
         {
             var db = await _session.OpenAsync(folderId);

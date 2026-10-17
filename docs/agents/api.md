@@ -187,7 +187,9 @@ curl -s http://localhost:5000/api/projects/{folder}/status
 #   attribution: { remaining, processing, queued },       ← paragraphs
 #   audio: { remaining }, review,                         ← paragraphs
 #   volumeIds, nodes: { <volume|part|chapter id>: { attributionRemaining, audioRemaining,
-#   review, attributionProcessing, attributionQueued, isDone } }, revision }
+#   review, attributionProcessing, attributionQueued, isDone } },
+#   pauseParagraphs,                                      ← paragraphs: no items, or one pause item
+#   checkpoints: { <step id>: { state, stale, at } }, revision }
 curl -s http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/status   # one node's summary
 ```
 
@@ -195,6 +197,25 @@ curl -s http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/st
 included, credited to the linked narrator when there is one) and `readyVoices` how many of them
 have a voice with audio. Both reads reseed the node roll-ups from the database, so they are
 current even with no UI open, and hub clients receive the corrected `nodeStatus` deltas.
+
+A Pipeline step the user has checked holds a **checkpoint**. `checkpoints` lists only the steps
+that have one, keyed by the camelCase step id (`import | structure | speakers | text | voices |
+titles | pauses | audio | export`). Unlike the PascalCase enums elsewhere in this API, a
+checkpoint's `state` is lower case too (`confirmed` | `skipped`), because these ids double as the
+route segment and the web's step ids. Set, replace or clear one:
+
+```bash
+curl -s -X PUT http://localhost:5000/api/projects/{folder}/checkpoints/structure \
+  -H 'Content-Type: application/json' -d '{"state":"confirmed"}'   # confirmed | skipped | open → 204
+```
+
+Structure, Text and Titles take `confirmed` or `skipped`, Speakers only `confirmed` and Pauses
+only `skipped`. The other steps are done by their data, so any state on them is a 422, `open`
+included. `open` deletes the row. Repeating the state a row already holds changes nothing and
+still answers 204. The same state on a stale row reconfirms it. The refreshed `/status` arrives
+through the `Checkpoints` receipt. A step that isn't one of the nine ids is a 404. A book with no
+content is a 422 "Read the book first", and a body without `state` is a 400. A reread or a clear
+deletes every checkpoint.
 
 ## 2. Discover characters, attribute dialog
 

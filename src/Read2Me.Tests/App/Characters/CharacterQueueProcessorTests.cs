@@ -646,6 +646,9 @@ namespace Read2Me.Tests.App.Characters
                 Task.FromResult<IReadOnlyList<ProjectSummary>>([]);
             public Task<Read2Me.Data.Entities.Project?> GetProjectAsync(ProjectFolderId folderId) =>
                 Task.FromResult<Read2Me.Data.Entities.Project?>(null);
+            public Task<IReadOnlyList<Read2Me.Data.Entities.StepCheckpoint>> GetStepCheckpointsAsync(
+                ProjectFolderId folderId, CancellationToken ct = default) =>
+                Task.FromResult<IReadOnlyList<Read2Me.Data.Entities.StepCheckpoint>>([]);
         }
 
         /// <summary>Stands in for the post-apply "is this paragraph fully stamped?" read.</summary>

@@ -128,6 +128,9 @@ namespace Read2Me.Services
         /// (ADR-0004). Rides the context <see cref="GetProjectAsync"/> already opened.
         /// </summary>
         Task<NarratorIdentity> GetNarratorAsync(ProjectFolderId folderId, CancellationToken ct = default);
+
+        /// <summary>The Pipeline steps the user confirmed or skipped, in Pipeline order. Steps with no row are open.</summary>
+        Task<IReadOnlyList<StepCheckpoint>> GetStepCheckpointsAsync(ProjectFolderId folderId, CancellationToken ct = default);
     }
 
     /// <summary>Book structure and text: volumes/parts/chapters/paragraphs and their content.</summary>
@@ -135,6 +138,9 @@ namespace Read2Me.Services
     {
         Task<BookOverview> GetBookOverviewAsync(ProjectFolderId folderId);
         Task<bool> HasBookContentAsync(ProjectFolderId folderId);
+
+        /// <summary>Paragraphs that are pauses: no items, or one pause item (<c>PauseParagraph.Is</c> in SQL).</summary>
+        Task<int> CountPauseParagraphsAsync(ProjectFolderId folderId, CancellationToken ct = default);
         Task<List<Volume>> GetVolumesAsync(ProjectFolderId folderId);
         Task<List<Part>> GetPartsAsync(ProjectFolderId folderId, Guid volumeId);
         Task<List<Chapter>> GetChaptersAsync(ProjectFolderId folderId, Guid partId);

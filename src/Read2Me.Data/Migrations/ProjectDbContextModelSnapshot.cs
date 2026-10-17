@@ -15,7 +15,7 @@ namespace Read2Me.Data.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.13");
 
             modelBuilder.Entity("Read2Me.Data.Entities.AudioReview", b =>
                 {
@@ -276,6 +276,26 @@ namespace Read2Me.Data.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Projects");
+                });
+
+            modelBuilder.Entity("Read2Me.Data.Entities.StepCheckpoint", b =>
+                {
+                    b.Property<string>("Step")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Stale")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Step");
+
+                    b.ToTable("StepCheckpoints");
                 });
 
             modelBuilder.Entity("Read2Me.Data.Entities.Voice", b =>

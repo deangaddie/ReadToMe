@@ -1,4 +1,5 @@
 using Read2Me.Core.Models;
+using Read2Me.Data.Enums;
 
 namespace Read2Me.Services.Mutations;
 
@@ -305,6 +306,14 @@ public sealed record SetNarratorCharacterMutation(
 /// </summary>
 public sealed record SetNarratorOnlyModeMutation(
     ProjectFolderId FolderId, bool Enabled) : BookMutation(FolderId);
+
+/// <summary>
+/// Confirms or skips a Pipeline step, or reopens it with a null state. Not Book content, but it
+/// commits like any mutation so the write lock serializes it and a receipt carries it to every
+/// open Overview.
+/// </summary>
+public sealed record SetCheckpointMutation(
+    ProjectFolderId FolderId, PipelineStep Step, CheckpointState? State) : BookMutation(FolderId);
 
 
 // ── manual and AI book edits ─────────────────────────────────────────────────

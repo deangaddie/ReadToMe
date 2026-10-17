@@ -33,7 +33,7 @@ public sealed class ImportBookContentMutationImplementation(IBookContentPersiste
                 BookMutationRejection.NotFound,
                 $"No project record found in '{mutation.FolderId.Value}'.");
 
-        var removed = mutation.ReplaceExisting ? await BookContentRemoval.ClearAsync(db, ct) : 0;
+        var removed = mutation.ReplaceExisting ? await BookContentRemoval.ClearAsync(db, ct) : default;
 
         var added = await persister.PersistAsync(db, mutation.Content, ct);
 
@@ -44,7 +44,8 @@ public sealed class ImportBookContentMutationImplementation(IBookContentPersiste
         if (coverNamed) project.CoverImage = mutation.CoverImageFileName;
 
         var facets = BookFacets.None;
-        if (removed > 0 || added > 0) facets |= ReplacedFacets;
+        if (removed.Rows > 0 || added > 0) facets |= ReplacedFacets;
+        facets |= removed.CheckpointFacet;
         // The cover is not Book content, but it is on the project row a Book View reads, so a commit
         // that only renamed it still has to reach open readers.
         if (coverNamed) facets |= BookFacets.ProjectPolicy;

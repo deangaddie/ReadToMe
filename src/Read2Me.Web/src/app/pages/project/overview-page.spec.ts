@@ -55,6 +55,8 @@ function status(overrides: Partial<ProjectStatusDto> = {}): ProjectStatusDto {
         isDone: false,
       },
     },
+    pauseParagraphs: 0,
+    checkpoints: {},
     revision: 1,
     ...overrides,
   };

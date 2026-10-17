@@ -76,6 +76,25 @@ export type UpdateProjectRequest = Schema['UpdateProjectRequest'];
 
 export type NarratorOnlyModeRequest = Schema['NarratorOnlyModeRequest'];
 
+/**
+ * `PipelineStep`: the nine stepper step ids, which are also the checkpoint route segment and the
+ * keys of {@link ProjectStatusDto.checkpoints}.
+ */
+export type PipelineStepId =
+  | 'import'
+  | 'structure'
+  | 'speakers'
+  | 'text'
+  | 'voices'
+  | 'titles'
+  | 'pauses'
+  | 'audio'
+  | 'export';
+
+/** `PUT /api/projects/{folder}/checkpoints/{step}`: `open` deletes the row. */
+export type SetCheckpointRequest = Schema['SetCheckpointRequest'];
+export type CheckpointRequestState = NonNullable<SetCheckpointRequest['state']>;
+
 export interface CoverImageResponse {
   coverImage: string;
 }
@@ -135,6 +154,13 @@ export interface ManualImportRequest {
 
 // ---- Project roll-ups (`ProjectStatusEndpoints.cs`) -----------------------------------------------
 
+/** `StepCheckpointDto`: a confirmed or skipped step; `at` is when, kept when the row goes stale. */
+export interface StepCheckpointDto {
+  state: 'confirmed' | 'skipped';
+  stale: boolean;
+  at: string;
+}
+
 /** `NodeStatusService.NodeStatusSummary`: paragraph counts under one volume/part/chapter. */
 export interface NodeStatusSummaryDto {
   attributionRemaining: number;
@@ -161,6 +187,10 @@ export interface ProjectStatusDto {
   /** Book order. */
   volumeIds: Guid[];
   nodes: Record<string, NodeStatusSummaryDto>;
+  /** Paragraphs that are pauses: no items, or one pause item. */
+  pauseParagraphs: number;
+  /** Only the steps that have a row. */
+  checkpoints: Partial<Record<PipelineStepId, StepCheckpointDto>>;
   revision: number;
 }
 
