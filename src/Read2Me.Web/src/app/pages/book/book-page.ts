@@ -4,6 +4,7 @@ import {
   BookApi,
   type BookCommand,
   type NarrationReleaseScope,
+  type NodeLevel,
   toApiError,
 } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
@@ -23,7 +24,7 @@ import { ProjectStore } from '../project/project-store';
 import { AudioGenerator } from './audio-generator';
 import { BookEditor } from './book-editor';
 import { BookStore } from './book-store';
-import { type TreeNode, placeholderTitleClass } from './book-tree';
+import { type HeadingRef, type TreeNode, placeholderTitleClass } from './book-tree';
 import { openEditWithAiDialog } from './edit-with-ai/edit-with-ai-dialog';
 import { openManualRereadDialog } from './manual-reread-dialog';
 import { type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
@@ -548,28 +549,9 @@ export class BookPage extends R2mElement {
     switch (row.kind) {
       case 'volume':
       case 'part':
-        return html`<div class="book__heading-row book__row">
-          <div class="book__heading" data-node-id=${row.id}>
-            <h2 class="book__${row.kind} ${placeholderTitleClass(row)}">${row.title}</h2>
-          </div>
-        </div>`;
-      case 'chapter': {
-        const menu = structureNodeMenu({
-          node: { level: 'chapter', id: row.chapterId, rawTitle: row.rawTitle },
-          position: row,
-          selection: this.selectionKind(),
-          status: this.project.nodes()[row.chapterId] ?? null,
-          locked: this.ctx().locked,
-        });
-        return html`<div class="book__heading-row book__row">
-          <div class="book__heading" data-chapter-id=${row.chapterId}>
-            <h2 class="book__chapter ${placeholderTitleClass(row)}">${row.title}</h2>
-            <span class="book__heading-menu"
-              >${nodeMenuTrigger(menu.target, { disabled: menu.disabled })}</span
-            >
-          </div>
-        </div>`;
-      }
+        return this.headingRow(row.kind, row);
+      case 'chapter':
+        return this.headingRow('chapter', { ...row, id: row.chapterId });
       case 'paragraph':
         return html`<div class="book__row">
           ${paragraphRow(row.paragraph, row.chapterId, this.ctx(), row)}
@@ -592,6 +574,33 @@ export class BookPage extends R2mElement {
       }
     }
   };
+
+  /**
+   * A Volume, Part or Chapter heading with the node's Node menu trigger at the end of the row,
+   * offering what the tree offers for it (structureNodeMenu).
+   */
+  private headingRow(level: NodeLevel, heading: HeadingRef) {
+    const { id } = heading;
+    const menu = structureNodeMenu({
+      node: { level, id, rawTitle: heading.rawTitle },
+      position: heading,
+      selection: this.selectionKind(),
+      status: this.project.nodes()[id] ?? null,
+      locked: this.ctx().locked,
+    });
+    return html`<div class="book__heading-row book__row">
+      <div
+        class="book__heading"
+        data-chapter-id=${level === 'chapter' ? id : nothing}
+        data-node-id=${level === 'chapter' ? nothing : id}
+      >
+        <h2 class="book__${level} ${placeholderTitleClass(heading)}">${heading.title}</h2>
+        <span class="book__heading-menu"
+          >${nodeMenuTrigger(menu.target, { disabled: menu.disabled })}</span
+        >
+      </div>
+    </div>`;
+  }
 
   private setMode(mode: ReaderMode): void {
     this.store.setMode(mode);
@@ -710,16 +719,20 @@ export class BookPage extends R2mElement {
 
   /**
    * A reader row's menu opening (`NODE_MENU_OPEN`, on its way to the shared menu): rows have no
-   * tree to take their actions, so the reader does. A chapter heading's go where the tree's do; a
-   * paragraph's only one is a narration-only paragraph's Release narration.
+   * tree to take their actions, so the reader does. A Volume, Part or Chapter heading's go where
+   * the tree's do; a paragraph's only one is a narration-only paragraph's Release narration.
    */
   private readonly onRowMenuOpen = (e: Event): void => {
     const request = (e as CustomEvent<NodeMenuRequest>).detail;
     const { target } = request;
-    if (target.kind === 'chapter') {
-      const chapter = this.store.chapters().find((c) => c.id === target.id);
-      if (!chapter) return;
-      const node: ActionNode = { level: 'chapter', id: chapter.id, title: chapter.title };
+    if (target.kind === 'volume' || target.kind === 'part' || target.kind === 'chapter') {
+      const level = target.kind;
+      const heading = this.store
+        .chapters()
+        .map((c) => (level === 'chapter' ? c : c[level]))
+        .find((h) => h?.id === target.id);
+      if (!heading) return;
+      const node: ActionNode = { level, id: heading.id, title: heading.title };
       request.onAction = (action) => this.nodeAction(node, action);
       return;
     }

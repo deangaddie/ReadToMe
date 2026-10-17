@@ -84,9 +84,9 @@
     padding-right: var(--r2m-space-3);
   }
   /*
-   * A chapter heading row: the title, then its Node menu trigger at the end of the row. The space
-   * above is the row's padding, not a margin, so the measured list counts it and the hover outline
-   * frames only the heading.
+   * A Volume, Part or Chapter heading row: the title, then its Node menu trigger at the end of the
+   * row. The space above is the row's padding, not a margin, so the measured list counts it and the
+   * hover outline frames only the heading.
    */
   .book__heading-row {
     padding-top: var(--r2m-space-4);

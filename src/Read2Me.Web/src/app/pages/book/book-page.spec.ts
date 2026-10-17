@@ -113,6 +113,14 @@ afterEach(() => document.body.replaceChildren());
 
 const text = (el: Element | null) => el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 
+/** Opens a Node menu from its trigger and lists the entries it offers. */
+async function menuEntries(page: BookPage, trigger: HTMLButtonElement) {
+  trigger.click();
+  await page.rendered();
+  const entries = Array.from(page.querySelectorAll<HTMLElement>('[role="menu"] [data-entry]'));
+  return entries.map((e) => e.dataset['entry']);
+}
+
 describe('r2m-book-page', () => {
   it('shows an empty state when the book has not been read in', async () => {
     api.on('GET', `${BASE}/book`, { ...OVERVIEW, hasContent: false, volumes: [] });
@@ -178,8 +186,6 @@ describe('r2m-book-page', () => {
         .querySelector(`.book__heading[data-node-id=${id}] h2`)
         ?.classList.contains('r2m-placeholder-title');
     expect([placeholder('v1'), placeholder('p1'), placeholder('p2')]).toEqual([false, false, true]);
-    // No menu on a Volume or Part heading yet.
-    expect(page.querySelector('.book__heading[data-node-id] .r2m-node-menu__trigger')).toBeNull();
     // Opening a chapter still makes the chapter current, not the heading above it.
     expect(store.currentChapterId()).toBe('c2');
   });
@@ -279,12 +285,6 @@ describe('r2m-book-page', () => {
       )!;
     const treeTrigger = (page: BookPage, chapterId: string) =>
       page.querySelector<HTMLButtonElement>(`[data-node-id=${chapterId}] .r2m-node-menu__trigger`)!;
-    const menuEntries = async (page: BookPage, trigger: HTMLButtonElement) => {
-      trigger.click();
-      await page.rendered();
-      const entries = Array.from(page.querySelectorAll<HTMLElement>('[role="menu"] [data-entry]'));
-      return entries.map((e) => e.dataset['entry']);
-    };
 
     it.each(['read', 'speakers', 'audio'] as const)(
       'in %s mode offers exactly what the tree offers for the same chapter',
@@ -388,6 +388,162 @@ describe('r2m-book-page', () => {
         'Psychohistorians',
       );
       expect(text(page.querySelector('[data-node-id=c2] .tree__title'))).toBe('Psychohistorians');
+    });
+  });
+
+  describe('Volume and Part heading Node menu', () => {
+    /** Two volumes (so both show), the first with two parts (so both show), one chapter each. */
+    const startNested = async (path: string) => {
+      api
+        .on('GET', `${BASE}/book`, {
+          ...OVERVIEW,
+          volumes: [
+            { id: 'v1', title: 'Book One' },
+            { id: 'v2', title: null },
+          ],
+        })
+        .on('GET', `${BASE}/nodes/volume/v1/children`, {
+          parts: [
+            { id: 'pa', title: 'Arrival' },
+            { id: 'pb', title: null },
+          ],
+        })
+        .on('GET', `${BASE}/nodes/part/pa/children`, { chapters: [{ id: 'c1', title: 'One' }] })
+        .on('GET', `${BASE}/nodes/part/pb/children`, { chapters: [{ id: 'c2', title: 'Two' }] })
+        .on('GET', `${BASE}/nodes/volume/v2/children`, { parts: [{ id: 'pc', title: null }] })
+        .on('GET', `${BASE}/nodes/part/pc/children`, { chapters: [{ id: 'c3', title: 'Three' }] })
+        .on('GET', `${BASE}/nodes/chapter/c3/children`, { paragraphs: [DIALOG('p4')] })
+        .on('GET', `${BASE}/nodes/chapter/c3/voices`, {});
+      const started = await start(path);
+      await started.store.openChapter('c2');
+      await started.store.loadPrevious(false);
+      await started.page.rendered();
+      // Open the first volume in the tree, so its parts' triggers show there too.
+      const toggle = started.page.querySelector<HTMLElement>(
+        '[role=treeitem][data-node-id=v1] .tree__toggle',
+      )!;
+      if (toggle.closest('[aria-expanded=false]')) toggle.click();
+      for (let i = 0; i < 4; i++) await settle();
+      return started;
+    };
+    const headingTrigger = (page: BookPage, id: string) =>
+      page.querySelector<HTMLButtonElement>(
+        `.book__heading[data-node-id=${id}] .r2m-node-menu__trigger`,
+      )!;
+    const treeTrigger = (page: BookPage, id: string) =>
+      page.querySelector<HTMLButtonElement>(
+        `[role=treeitem][data-node-id=${id}] .r2m-node-menu__trigger`,
+      )!;
+    const choose = async (page: BookPage, id: string, entry: string) => {
+      headingTrigger(page, id).click();
+      await page.rendered();
+      page.querySelector<HTMLButtonElement>(`[role="menu"] [data-entry=${entry}]`)!.click();
+      for (let i = 0; i < 4; i++) await settle();
+    };
+
+    it.each(['read', 'speakers', 'audio'] as const)(
+      'in %s mode offers exactly what the tree offers for the same Volume or Part',
+      async (mode) => {
+        const { page } = await startNested(`projects/dune/book?mode=${mode}`);
+        for (const id of ['v1', 'pa', 'pb']) {
+          const fromTree = await menuEntries(page, treeTrigger(page, id));
+          expect(fromTree.length).toBeGreaterThan(0);
+          expect(await menuEntries(page, headingTrigger(page, id))).toEqual(fromTree);
+        }
+      },
+    );
+
+    it('hides the merges at the ends, as the tree does', async () => {
+      const { page } = await startNested('projects/dune/book?mode=speakers');
+      expect(headingTrigger(page, 'pa').getAttribute('aria-label')).toBe('Actions for Arrival');
+      const first = await menuEntries(page, headingTrigger(page, 'pa'));
+      expect(first).toContain('merge-next');
+      expect(first).not.toContain('merge-previous');
+      expect(first).toContain('release-narration');
+      const last = await menuEntries(page, headingTrigger(page, 'pb'));
+      expect(last).toContain('merge-previous');
+      expect(last).not.toContain('merge-next');
+      const volume = await menuEntries(page, headingTrigger(page, 'v1'));
+      expect(volume).toContain('merge-next');
+      expect(volume).not.toContain('merge-previous');
+      // No whole-volume release, as in the tree.
+      expect(volume).not.toContain('release-narration');
+    });
+
+    it('is disabled while the node is busy or the editor is locked, as the tree trigger is', async () => {
+      api.on('GET', `${BASE}/status`, {
+        revision: 1,
+        nodes: {
+          pa: {
+            attributionRemaining: 2,
+            audioRemaining: 0,
+            review: 0,
+            attributionQueued: 0,
+            attributionProcessing: true,
+            isDone: false,
+          },
+        },
+        audio: { remaining: 0 },
+      });
+      const { page, store } = await startNested('projects/dune/book');
+      expect(treeTrigger(page, 'pa').disabled).toBe(true);
+      expect(headingTrigger(page, 'pa').disabled).toBe(true);
+      expect(headingTrigger(page, 'pb').disabled).toBe(false);
+      expect(headingTrigger(page, 'v1').disabled).toBe(false);
+
+      // A failed read leaves the view stale, which locks the editor.
+      api.on('GET', `${BASE}/nodes/part/pb/children`, () => problem(500, 'db locked'));
+      await store.refresh();
+      await page.rendered();
+      expect(store.stale()).toContain('db locked');
+      expect(headingTrigger(page, 'v1').disabled).toBe(true);
+      expect(headingTrigger(page, 'pb').disabled).toBe(true);
+    });
+
+    it.each([
+      ['v1', 'Book One', { type: 'UpdateVolumeTitle', volumeId: 'v1', title: 'Renamed' }],
+      ['pb', '', { type: 'UpdatePartTitle', partId: 'pb', title: 'Renamed' }],
+    ])(
+      'Edit title on %s starts from the stored title, never the placeholder',
+      async (id, initial, command) => {
+        const prompts: unknown[] = [];
+        override(PromptService, {
+          text: async (o: unknown) => (prompts.push(o), 'Renamed'),
+        } as unknown as PromptService);
+        api.on('POST', `${BASE}/commands`, { newEntityId: null });
+        const { page } = await startNested('projects/dune/book');
+
+        await choose(page, id, 'edit-title');
+        expect(prompts).toEqual([expect.objectContaining({ initial })]);
+        expect(api.calls('POST', `${BASE}/commands`).map((r) => r.body)).toEqual([command]);
+      },
+    );
+
+    it('runs the shortcuts and Release narration as the tree does', async () => {
+      api
+        .on('GET', `${BASE}/nodes/part/pa/paragraph-ids`, (_body, url) =>
+          url.searchParams.get('unprocessedOnly') === 'true'
+            ? [{ id: 'p2', chapterId: 'c1', partId: 'pa', volumeId: 'v1' }]
+            : [],
+        )
+        .on('POST', `${BASE}/attribution/enqueue`, { enqueued: 1 });
+      const { page } = await startNested('projects/dune/book?mode=speakers');
+      const selection = use(SelectionStore, page);
+      const release = mock(async () => true);
+      use(SpeakerAssigner, page).releaseNarration = release;
+
+      await choose(page, 'pa', 'select-unprocessed');
+      expect(selection.ids()).toEqual(['p2']);
+
+      await choose(page, 'v1', 'attribute-node');
+      expect(api.calls('POST', `${BASE}/attribution/enqueue`).map((r) => r.body)).toEqual([
+        { level: 'volume', nodeId: 'v1', unprocessedOnly: true },
+      ]);
+
+      // The release names the part as it shows, placeholder title included.
+      await choose(page, 'pb', 'release-narration');
+      expect(release).toHaveBeenCalledWith('Part', 'pb', 'Untitled part 2');
+      expect(selection.count()).toBe(0);
     });
   });
 
