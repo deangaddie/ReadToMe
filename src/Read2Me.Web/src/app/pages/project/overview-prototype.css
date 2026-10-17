@@ -1,0 +1,229 @@
+/* PROTOTYPE — throwaway styles for overview-prototype.ts. Delete with the branch. */
+
+/* ---- shared message primitives ---- */
+.proto-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--r2m-space-2);
+  margin: var(--r2m-space-2) 0 0;
+  padding: var(--r2m-space-2) var(--r2m-space-3);
+  border-radius: var(--r2m-radius-md);
+  border-left: 3px solid var(--r2m-status-warn);
+  background: var(--r2m-status-warn-soft);
+  color: var(--r2m-text);
+  font-size: var(--r2m-text-md);
+}
+.proto-callout .r2m-icon {
+  color: var(--r2m-status-warn);
+  font-size: 18px;
+  flex: 0 0 auto;
+}
+.proto-advice {
+  display: flex;
+  align-items: center;
+  gap: var(--r2m-space-1);
+  margin: var(--r2m-space-1) 0 0;
+  font-size: var(--r2m-text-sm);
+  color: var(--r2m-text-muted);
+}
+.proto-advice .r2m-icon {
+  font-size: 16px;
+}
+.proto-hint {
+  font-size: var(--r2m-text-sm);
+  color: var(--r2m-text-muted);
+  font-style: italic;
+}
+.proto-head-spacer {
+  flex: 1 1 auto;
+}
+.proto-actions-gap {
+  width: var(--r2m-space-2);
+}
+
+/* checkpoint controls */
+.proto-control {
+  border: 1px solid var(--r2m-outline);
+  background: transparent;
+}
+.proto-control--compact {
+  height: 24px;
+  padding: 0 var(--r2m-space-2);
+  font-size: var(--r2m-text-sm);
+}
+.proto-control--compact .r2m-icon {
+  font-size: 14px;
+}
+.proto-control--stale {
+  border-color: var(--r2m-status-warn);
+  color: var(--r2m-status-warn);
+}
+.proto-step--stale .r2m-pipeline__marker {
+  border-color: var(--r2m-status-warn);
+  background: var(--r2m-status-warn);
+  color: #fff;
+}
+
+/* help toggle + inline help */
+.proto-help-toggle {
+  width: 28px;
+  height: 28px;
+  color: var(--r2m-text-muted);
+}
+.proto-help-toggle .r2m-icon {
+  font-size: 18px;
+}
+.proto-help-toggle--on {
+  background: var(--r2m-accent-soft, var(--r2m-surface-high));
+  color: var(--r2m-accent);
+}
+.proto-help {
+  font-size: var(--r2m-text-md);
+  line-height: 1.5;
+}
+.proto-help h4 {
+  margin: var(--r2m-space-3) 0 var(--r2m-space-1);
+  font-size: var(--r2m-text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--r2m-text-muted);
+}
+.proto-help p,
+.proto-help ul {
+  margin: 0 0 var(--r2m-space-2);
+}
+.proto-help ul {
+  padding-left: 1.2em;
+}
+.proto-help--inline {
+  margin-top: var(--r2m-space-3);
+  padding: var(--r2m-space-3) var(--r2m-space-4);
+  border-radius: var(--r2m-radius-md);
+  background: var(--r2m-surface-low);
+  border: 1px solid var(--r2m-outline);
+}
+.proto-help--panel {
+  display: flex;
+  flex-direction: column;
+  padding: var(--r2m-space-4);
+  border: 1px solid var(--r2m-outline);
+  border-radius: var(--r2m-radius-lg);
+  background: var(--r2m-surface-low);
+}
+.proto-help__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--r2m-space-2);
+}
+.proto-help__title {
+  display: flex;
+  align-items: center;
+  gap: var(--r2m-space-2);
+  margin: 0;
+  font-size: var(--r2m-text-lg);
+  font-weight: 600;
+}
+.proto-help__foot {
+  margin-top: var(--r2m-space-3);
+  font-size: var(--r2m-text-sm);
+}
+.proto-help__foot a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r2m-space-1);
+  color: var(--r2m-accent);
+}
+.proto-step--help-open .r2m-pipeline__body {
+  border-radius: var(--r2m-radius-md);
+  background: color-mix(in srgb, var(--r2m-accent) 6%, transparent);
+  margin: calc(-1 * var(--r2m-space-2));
+  padding: var(--r2m-space-2);
+  padding-bottom: var(--r2m-space-5);
+}
+
+/* ---- variant C: compact rows ---- */
+.proto-pipeline--c .r2m-pipeline__body {
+  padding-bottom: var(--r2m-space-3);
+}
+.proto-pipeline--c .proto-step--closed .r2m-pipeline__line {
+  min-height: var(--r2m-space-2);
+}
+.proto-row-toggle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--r2m-space-2);
+  width: 100%;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.proto-row-toggle:hover .r2m-pipeline__title {
+  color: var(--r2m-accent);
+}
+.proto-row-chevron {
+  color: var(--r2m-text-muted);
+}
+.proto-step--closed .r2m-pipeline__title {
+  font-size: var(--r2m-text-md);
+  font-weight: 500;
+}
+.proto-step--open .proto-row-toggle {
+  margin-bottom: var(--r2m-space-1);
+}
+.proto-flag {
+  display: inline-grid;
+  place-items: center;
+  color: var(--r2m-status-warn);
+}
+.proto-flag .r2m-icon {
+  font-size: 18px;
+}
+
+/* ---- floating switcher (not part of the design under review) ---- */
+.proto-switcher {
+  position: fixed;
+  left: 50%;
+  bottom: 56px;
+  z-index: 50;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--r2m-space-2);
+  padding: var(--r2m-space-1) var(--r2m-space-2);
+  border-radius: var(--r2m-radius-pill);
+  background: #111;
+  color: #fff;
+  font-size: var(--r2m-text-sm);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.35);
+  max-width: calc(100vw - 32px);
+}
+.proto-switcher__label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.proto-switcher__label b {
+  margin-right: var(--r2m-space-1);
+  font-size: var(--r2m-text-md);
+}
+.proto-switcher__arrow {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: #333;
+  color: #fff;
+  cursor: pointer;
+}
+.proto-switcher__arrow:hover {
+  background: #555;
+}

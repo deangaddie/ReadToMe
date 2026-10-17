@@ -22,8 +22,21 @@ import { type PipelineStep, type StepActionId, derivePipeline } from './pipeline
 import { ProjectStore } from './project-store';
 import './project-details-panel';
 import overviewCss from './overview-page.css' with { type: 'text' };
+// PROTOTYPE (throwaway): `?variant=A|B|C` swaps the stepper for the nine-step variants.
+import {
+  VARIANTS,
+  type Variant,
+  bindSwitcherKeys,
+  switcher,
+  variantA,
+  variantB,
+  variantBAside,
+  variantC,
+} from './overview-prototype';
+import protoCss from './overview-prototype.css' with { type: 'text' };
 
 adoptStyles(overviewCss);
+adoptStyles(protoCss);
 
 /** `formatDate(…, 'mediumDate')`: "19 Sep 2026" in the browser's locale. */
 export function formatBuildDate(iso: string): string {
@@ -61,9 +74,19 @@ export class OverviewPage extends R2mElement {
   /** Built in `connected()`, once the shell's store is reachable through the DOM. */
   private steps!: ReadonlySignal<PipelineStep[] | null>;
 
+  /** PROTOTYPE: the `?variant=` key when one is set; null renders the real page. */
+  private readonly variant = computed<Variant | null>(() => {
+    const v = this.router.query().get('variant')?.toUpperCase();
+    return v && (VARIANTS as readonly string[]).includes(v) ? (v as Variant) : null;
+  });
+
+  private goVariant = (v: Variant) =>
+    this.router.navigate(this.router.path(), { replace: true, query: { variant: v } });
+
   protected override connected(): void {
     this.classList.add('overview');
     this.store = use(ProjectStore, this);
+    this.onDisconnect(bindSwitcherKeys(() => this.variant() ?? 'A', this.goVariant));
     const lastBuild = computed(() => {
       const output = this.lastOutput();
       return output
@@ -104,6 +127,7 @@ export class OverviewPage extends R2mElement {
     const error = this.store.error();
     const steps = this.steps();
     const author = detail?.author;
+    const variant = this.variant();
     return html`
       <header class="r2m-page-header">
         <h1 class="r2m-page-header__title">${detail?.title ?? this.store.folder() ?? ''}</h1>
@@ -116,6 +140,12 @@ export class OverviewPage extends R2mElement {
           : nothing
       }
 
+      ${variant ? this.prototypeBody(variant) : this.realBody(steps)}
+    `;
+  }
+
+  private realBody(steps: PipelineStep[] | null) {
+    return html`
       <div class="overview__body">
         <section class="overview__pipeline" aria-label="Production pipeline">
           ${
@@ -135,6 +165,20 @@ export class OverviewPage extends R2mElement {
         </aside>
       </div>
     `;
+  }
+
+  /** PROTOTYPE: the nine-step variants over fake data, plus the floating switcher. */
+  private prototypeBody(variant: Variant) {
+    const aside = variant === 'B' ? variantBAside() : null;
+    return html`<div class="overview__body">
+        <section class="overview__pipeline" aria-label="Production pipeline (prototype)">
+          ${variant === 'A' ? variantA() : variant === 'B' ? variantB() : variantC()}
+        </section>
+        <aside class="overview__details" aria-label="Project">
+          ${aside ?? html`<r2m-project-details-panel></r2m-project-details-panel>`}
+        </aside>
+      </div>
+      ${switcher(variant, this.goVariant)}`;
   }
 
   /** The stepper works without it, so a failure just leaves the step saying nothing was built. */
