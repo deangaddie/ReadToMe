@@ -247,6 +247,36 @@ describe('buildRows', () => {
     ]);
   });
 
+  it.each(['read', 'speakers', 'audio'] as const)(
+    '%s mode puts a Volume then a Part heading above the chapter that begins them',
+    (mode) => {
+      const volume = {
+        id: 'v2',
+        title: 'Untitled volume 2',
+        untitled: true,
+        rawTitle: null,
+        isFirst: false,
+        isLast: true,
+      };
+      const part = {
+        id: 'p3',
+        title: 'Arrival',
+        untitled: false,
+        rawTitle: 'Arrival',
+        isFirst: true,
+        isLast: false,
+      };
+      const [c1, c2] = chapters;
+      const rows = buildRows([c1!, { ...c2!, volume, part }], mode);
+      expect(rows.filter((r) => r.kind !== 'paragraph' && r.kind !== 'pause')).toEqual([
+        expect.objectContaining({ kind: 'chapter', key: 'chapter:c1' }),
+        { kind: 'volume', key: 'volume:v2', chapterId: 'c2', ...volume },
+        { kind: 'part', key: 'part:p3', chapterId: 'c2', ...part },
+        expect.objectContaining({ kind: 'chapter', key: 'chapter:c2' }),
+      ]);
+    },
+  );
+
   it('read mode hides pause paragraphs', () => {
     expect(buildRows(chapters, 'read').map((r) => r.key)).toEqual([
       'chapter:c1',
