@@ -21,7 +21,8 @@ namespace Read2Me.App.Api
     /// <summary>
     /// The whole-project roll-up behind the pipeline stepper and the reader tree badges.
     /// <see cref="Nodes"/> is keyed by Volume/Part/Chapter id and is the same map the live hub's
-    /// <c>nodeStatus</c> deltas patch; <see cref="VolumeIds"/> are in book order.
+    /// <c>nodeStatus</c> deltas patch; <see cref="VolumeIds"/> are in book order. <see cref="Checkpoints"/>
+    /// holds only the steps the user confirmed or skipped, keyed by step id.
     /// </summary>
     public sealed record ProjectStatusDto(
         bool HasContent,
@@ -34,6 +35,8 @@ namespace Read2Me.App.Api
         int Review,
         IReadOnlyList<Guid> VolumeIds,
         IReadOnlyDictionary<string, NodeStatusSummary> Nodes,
+        int PauseParagraphs,
+        IReadOnlyDictionary<string, StepCheckpointDto> Checkpoints,
         long Revision);
 
     public static class ProjectStatusEndpoints
@@ -41,13 +44,15 @@ namespace Read2Me.App.Api
         public static void MapProjectStatusEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapGet("/api/projects/{folder}/status", GetProjectStatusAsync)
-                .WithSummary("Whole-project roll-up: content, cast and voice counts, item/attribution/audio/review remaining, per-node summaries and the book revision they were read at.");
+                .WithSummary("Whole-project roll-up: content, cast and voice counts, item/attribution/audio/review remaining, per-node summaries, " +
+                             "pause paragraphs, the confirmed or skipped Pipeline step checkpoints (step id → state, stale, at; only steps with a row) " +
+                             "and the book revision they were read at.");
             endpoints.MapGet("/api/projects/{folder}/nodes/{level}/{id:guid}/status", GetNodeStatusAsync)
                 .WithSummary("Roll-up for one volume/part/chapter: attribution/audio/review paragraphs remaining and attribution in flight. A node with no speech paragraphs answers zeros.");
         }
 
         private static async Task<IResult> GetProjectStatusAsync(
-            string folder, IFileSystem fs, IBookContentReader content, IAudioItemReader audio,
+            string folder, IFileSystem fs, IProjectCatalogReader catalog, IBookContentReader content, IAudioItemReader audio,
             ICharacterReader characters, NodeStatusService nodeStatus, BookRevisionSequence revisions,
             CancellationToken ct)
         {
@@ -84,6 +89,8 @@ namespace Read2Me.App.Api
                 Review: seed.Count(r => r.Review > 0),
                 VolumeIds: volumeIds,
                 Nodes: nodes,
+                PauseParagraphs: await content.CountPauseParagraphsAsync(folderId, ct),
+                Checkpoints: CheckpointEndpoints.StatusMap(await catalog.GetStepCheckpointsAsync(folderId, ct)),
                 Revision: revision));
         }
 

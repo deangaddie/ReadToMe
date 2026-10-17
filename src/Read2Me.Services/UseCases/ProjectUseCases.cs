@@ -98,5 +98,16 @@ namespace Read2Me.Services.UseCases
             }
             catch (Exception) { return Result.Fail("Failed to save narrator-only setting."); }
         }
+
+        /// <summary>
+        /// Confirms, skips or (with a null state) reopens a Pipeline step through
+        /// <see cref="BookMutations"/>, so the write lock serializes it with Book edits and a
+        /// Checkpoints receipt refreshes every open Overview. The outcome comes back whole: the
+        /// API answers a write-lock conflict differently from a refusal. Unlike its siblings this
+        /// does not turn an unexpected fault into a refusal, which the API would send as a 422.
+        /// </summary>
+        public Task<BookMutationOutcome> SetCheckpointAsync(
+            string folderName, PipelineStep step, CheckpointState? state) =>
+            mutations.CommitAsync(new SetCheckpointMutation(new ProjectFolderId(folderName), step, state));
     }
 }

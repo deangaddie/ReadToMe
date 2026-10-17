@@ -5,9 +5,11 @@ import type {
   CreateProjectRequest,
   CreateProjectResponse,
   Guid,
+  CheckpointRequestState,
   ManualImportRequest,
   NodeLevel,
   NodeStatusSummaryDto,
+  PipelineStepId,
   ProjectDetailDto,
   ProjectStatusDto,
   ProjectSummary,
@@ -24,7 +26,7 @@ export const BOOK_MAX_BYTES = 100 * 1024 * 1024;
 
 /**
  * `ProjectEndpoints.cs`: the project catalog, create-from-upload, delete, import, metadata,
- * narrator-only policy and cover image.
+ * narrator-only policy and cover image; Pipeline step checkpoints (`CheckpointEndpoints.cs`).
  */
 export class ProjectsApi {
   private readonly api = use(ApiClient);
@@ -88,6 +90,19 @@ export class ProjectsApi {
 
   nodeStatus(folder: string, level: NodeLevel, id: Guid): Promise<NodeStatusSummaryDto> {
     return this.api.get<NodeStatusSummaryDto>(`${projectUrl(folder)}/nodes/${level}/${id}/status`);
+  }
+
+  /**
+   * Confirms, skips or (`open`) reopens a Pipeline step. 204 even when nothing changed; the
+   * refreshed status arrives through the `Checkpoints` receipt. 422 outside the step's states or
+   * before the book is read.
+   */
+  setCheckpoint(
+    folder: string,
+    step: PipelineStepId,
+    state: CheckpointRequestState,
+  ): Promise<void> {
+    return this.api.put<void>(`${projectUrl(folder)}/checkpoints/${step}`, { state });
   }
 }
 

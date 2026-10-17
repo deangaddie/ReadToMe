@@ -116,6 +116,8 @@ public static class ServiceCollectionExtensions
         // process-wide facts about a project, not per-request ones.
         services.TryAddSingleton<Mutations.ProjectWriteLocks>();
         services.TryAddSingleton<Mutations.BookRevisionSequence>();
+        // When a checkpoint was confirmed or skipped; tests swap in a manual clock.
+        services.TryAddSingleton(TimeProvider.System);
         // Process-wide settings-change signal for the live hub relay (the settings services are scoped).
         services.TryAddSingleton<Events.EventBroadcaster<Events.SettingsChanged>>();
         services.AddOptions<Mutations.BookMutationOptions>();
@@ -247,6 +249,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.SetNarratorOnlyModeMutation>,
             Mutations.Implementations.SetNarratorOnlyModeMutationImplementation>();
+        // Pipeline step checkpoints — one row per confirmed or skipped step
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SetCheckpointMutation>,
+            Mutations.Implementations.SetCheckpointMutationImplementation>();
         // Voice and Voice Rule lifecycles — Voice rows and rule rows only, previews everywhere
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.CreateVoiceMutation>,

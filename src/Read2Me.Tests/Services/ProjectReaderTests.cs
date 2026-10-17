@@ -681,5 +681,49 @@ namespace Read2Me.Tests.Services
             Assert.Equal(0, rows[2].LineCount);
             Assert.Equal(0, rows[2].VoiceCount);
         }
+
+        // ── Pipeline status reads ────────────────────────────────────────────
+
+        [Fact]
+        public async Task CountPauseParagraphs_countsPauseOnlyAndEmptyParagraphs()
+        {
+            await new BookHierarchyBuilder(OpenDbAsync)
+                .AddVolume("vol", v => v.AddChapter("ch", c => c
+                    .AddParagraph("chapter-pause", p => p.AddPause("cp", ParagraphItemType.ChapterPause))
+                    .AddParagraph("pause", p => p.AddPause("pp"))
+                    .AddParagraph("empty")
+                    .AddParagraph("spoken", p => p.AddNarration("n"))
+                    // A pause beside speech is part of a spoken paragraph, not a pause paragraph.
+                    .AddParagraph("mixed", p => p.AddNarration("m").AddPause("mp"))))
+                .BuildAsync();
+
+            Assert.Equal(3, await _reader.CountPauseParagraphsAsync(_folder));
+        }
+
+        [Fact]
+        public async Task CountPauseParagraphs_isZeroForAProjectWithNoDatabase()
+        {
+            Assert.Equal(0, await _reader.CountPauseParagraphsAsync(_folder));
+        }
+
+        [Fact]
+        public async Task GetStepCheckpoints_returnsEveryRowInPipelineOrder()
+        {
+            var at = new DateTimeOffset(2026, 10, 17, 9, 30, 0, TimeSpan.FromHours(1));
+            await SeedCheckpointAsync(PipelineStep.Titles, CheckpointState.Skipped, stale: true, at: at);
+            await SeedCheckpointAsync(PipelineStep.Structure, CheckpointState.Confirmed, at: at);
+
+            var rows = await _reader.GetStepCheckpointsAsync(_folder);
+
+            Assert.Equal(
+                [(PipelineStep.Structure, CheckpointState.Confirmed, false, at), (PipelineStep.Titles, CheckpointState.Skipped, true, at)],
+                rows.Select(r => (r.Step, r.State, r.Stale, r.At)));
+        }
+
+        [Fact]
+        public async Task GetStepCheckpoints_isEmptyForAProjectWithNoDatabase()
+        {
+            Assert.Empty(await _reader.GetStepCheckpointsAsync(_folder));
+        }
     }
 }

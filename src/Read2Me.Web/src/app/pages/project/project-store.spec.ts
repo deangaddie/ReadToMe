@@ -53,6 +53,8 @@ function statusDto(overrides: Partial<ProjectStatusDto> = {}): ProjectStatusDto 
     review: 0,
     volumeIds: ['v1'],
     nodes: { v1: summary({ attributionRemaining: 2, audioRemaining: 2 }), c1: summary() },
+    pauseParagraphs: 0,
+    checkpoints: {},
     revision: 5,
     ...overrides,
   };
@@ -199,6 +201,25 @@ describe('ProjectStore', () => {
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', STATUS_URL)).toHaveLength(2);
     expect(store.status()?.hasContent).toBe(false);
+  });
+
+  it('a Checkpoints receipt refetches status, where the confirmed and skipped steps live', async () => {
+    await open();
+    api.on(
+      'GET',
+      STATUS_URL,
+      statusDto({
+        checkpoints: {
+          structure: { state: 'confirmed', stale: false, at: '2026-10-17T09:00:00Z' },
+        },
+      }),
+    );
+
+    live.receiptsEmitter.emit(receipt(6, 'Checkpoints'));
+    await settle(REFETCH_DEBOUNCE_MS + 20);
+
+    expect(api.calls('GET', STATUS_URL)).toHaveLength(2);
+    expect(store.status()?.checkpoints.structure?.state).toBe('confirmed');
   });
 
   it('a receipt that only touches voice rules neither refetches nor gaps', async () => {

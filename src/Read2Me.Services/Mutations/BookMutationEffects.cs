@@ -43,8 +43,13 @@ public enum BookFacets
     /// — a reader holds it in the hierarchy branch it loaded, so naming rows cannot reread it.
     /// </summary>
     NodeTitle = 1 << 10,
+    /// <summary>
+    /// A Pipeline step's confirmed checkpoint was set, cleared or marked stale. Not Book content: it
+    /// moves only the project status the Overview reads.
+    /// </summary>
+    Checkpoints = 1 << 11,
     All = Structure | ItemText | Attribution | Audio | Reviews
-        | Characters | Narrator | Voices | VoiceRules | ProjectPolicy | NodeTitle,
+        | Characters | Narrator | Voices | VoiceRules | ProjectPolicy | NodeTitle | Checkpoints,
 }
 
 public enum BookStructuralRelationKind

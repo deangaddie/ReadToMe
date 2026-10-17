@@ -17,7 +17,10 @@ namespace Read2Me.Tests.Fakes
         public virtual Task<Project?> GetProjectAsync(ProjectFolderId folderId) => Task.FromResult<Project?>(null);
         public virtual Task<NarratorIdentity> GetNarratorAsync(ProjectFolderId folderId, CancellationToken ct = default) =>
             Task.FromResult(NarratorIdentity.Unlinked);
+        public virtual Task<IReadOnlyList<StepCheckpoint>> GetStepCheckpointsAsync(ProjectFolderId folderId, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<StepCheckpoint>>([]);
         public virtual Task<bool> HasBookContentAsync(ProjectFolderId folderId) => Task.FromResult(false);
+        public virtual Task<int> CountPauseParagraphsAsync(ProjectFolderId folderId, CancellationToken ct = default) => Task.FromResult(0);
         public virtual Task<BookOverview> GetBookOverviewAsync(ProjectFolderId folderId) =>
             Task.FromResult(new BookOverview(null, false, [], [], 0, 0, [], new Dictionary<Guid, int>()));
         public virtual Task<List<Volume>> GetVolumesAsync(ProjectFolderId folderId) => Task.FromResult(new List<Volume>());

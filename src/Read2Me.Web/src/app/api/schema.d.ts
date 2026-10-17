@@ -319,7 +319,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Whole-project roll-up: content, cast and voice counts, item/attribution/audio/review remaining, per-node summaries and the book revision they were read at. */
+        /** Whole-project roll-up: content, cast and voice counts, item/attribution/audio/review remaining, per-node summaries, pause paragraphs, the confirmed or skipped Pipeline step checkpoints (step id → state, stale, at; only steps with a row) and the book revision they were read at. */
         get: {
             parameters: {
                 query?: never;
@@ -379,6 +379,47 @@ export interface paths {
             };
         };
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/checkpoints/{step}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Confirm, skip or reopen a Pipeline step (state: confirmed | skipped | open). 204 on success, including a repeat that changed nothing; the refreshed /status arrives through the Checkpoints receipt. 404 unknown step; 422 when the step does not take that state or the book has no content; 400 without a state. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    step: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["SetCheckpointRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         post?: never;
         delete?: never;
         options?: never;
@@ -4988,6 +5029,8 @@ export interface components {
             name: string;
             aliases: components["schemas"]["CharacterAliasDto"][];
         };
+        /** @enum {unknown} */
+        CheckpointRequestState: "confirmed" | "skipped" | "open" | null;
         FfmpegTestRequest: {
             ffmpegPath?: null | string;
         };
@@ -5139,6 +5182,9 @@ export interface components {
         SetActiveRequest: {
             /** Format: int32 */
             id: number | string;
+        };
+        SetCheckpointRequest: {
+            state: null | components["schemas"]["CheckpointRequestState"];
         };
         SimilarityTestRequest: {
             text1?: null | string;

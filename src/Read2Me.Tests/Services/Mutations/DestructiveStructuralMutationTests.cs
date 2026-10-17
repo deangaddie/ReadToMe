@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
 using Read2Me.Data;
+using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Mutations;
 using Read2Me.Tests.Infrastructure;
@@ -329,6 +330,18 @@ public class DestructiveStructuralMutationTests : ProjectDbTestBase
         Assert.Empty(await verify.Chapters.ToListAsync());
         Assert.Empty(await verify.Paragraphs.ToListAsync());
         Assert.Empty(await verify.ParagraphItems.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ClearBookContent_deletesEveryCheckpoint_andReportsIt()
+    {
+        await SeedTwoVolumesAsync();
+        await SeedCheckpointAsync(PipelineStep.Titles, CheckpointState.Skipped);
+
+        var receipt = await CommitAsync(new ClearBookContentMutation(_folder));
+
+        Assert.True(receipt.Effects.Facets.HasFlag(BookFacets.Checkpoints));
+        Assert.Empty(await CheckpointRowsAsync());
     }
 
     [Fact]

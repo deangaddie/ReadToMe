@@ -23,6 +23,7 @@ namespace Read2Me.Data
         public DbSet<VoiceRule> VoiceRules => Set<VoiceRule>();
         public DbSet<CharacterAlias> CharacterAliases => Set<CharacterAlias>();
         public DbSet<AudioReview> AudioReviews => Set<AudioReview>();
+        public DbSet<StepCheckpoint> StepCheckpoints => Set<StepCheckpoint>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -135,6 +136,13 @@ namespace Read2Me.Data
                 e.Property(r => r.OriginalTextSnapshot).HasMaxLength(8000);
                 e.HasOne(r => r.ParagraphItem).WithMany().HasForeignKey(r => r.ParagraphItemId);
                 e.HasIndex(r => r.ParagraphItemId).IsUnique();
+            });
+
+            modelBuilder.Entity<StepCheckpoint>(e =>
+            {
+                e.HasKey(c => c.Step);
+                e.Property(c => c.Step).HasConversion<string>();
+                e.Property(c => c.State).HasConversion<string>().IsRequired();
             });
         }
     }

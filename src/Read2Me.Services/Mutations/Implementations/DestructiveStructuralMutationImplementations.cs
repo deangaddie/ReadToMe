@@ -274,8 +274,21 @@ public sealed class ClearBookContentMutationImplementation
         ClearBookContentMutation mutation, ProjectDbContext db, CancellationToken ct)
     {
         var removed = await BookContentRemoval.ClearAsync(db, ct);
-        return removed == 0 ? BookMutationEffects.Nothing : DestructiveEffects.Removed;
+        return removed.RemovedNothing
+            ? BookMutationEffects.Nothing
+            : DestructiveEffects.Removed with { Facets = DestructiveEffects.RemovedFacets | removed.CheckpointFacet };
     }
+}
+
+/// <summary>
+/// What emptying a Book took: content rows, and the checkpoint rows a reread clears with them.
+/// </summary>
+internal readonly record struct BookContentRemoved(int Rows, int Checkpoints)
+{
+    public bool RemovedNothing => Rows == 0 && Checkpoints == 0;
+
+    /// <summary>Checkpoints when any checkpoint rows went; a receipt must say so even when no content did.</summary>
+    public BookFacets CheckpointFacet => Checkpoints > 0 ? BookFacets.Checkpoints : BookFacets.None;
 }
 
 /// <summary>
@@ -286,8 +299,11 @@ public sealed class ClearBookContentMutationImplementation
 /// </summary>
 internal static class BookContentRemoval
 {
-    /// <summary>Removes every node and item, and returns how many rows went.</summary>
-    public static async Task<int> ClearAsync(ProjectDbContext db, CancellationToken ct)
+    /// <summary>
+    /// Removes every node and item, and every confirmed or skipped checkpoint: a Book read afresh is
+    /// a Book nobody has checked yet.
+    /// </summary>
+    public static async Task<BookContentRemoved> ClearAsync(ProjectDbContext db, CancellationToken ct)
     {
         // Bottom-up, and as set operations rather than through the change tracker: a Book's content
         // is far too large to load merely in order to delete it.
@@ -296,6 +312,7 @@ internal static class BookContentRemoval
         removed += await db.Chapters.ExecuteDeleteAsync(ct);
         removed += await db.Parts.ExecuteDeleteAsync(ct);
         removed += await db.Volumes.ExecuteDeleteAsync(ct);
-        return removed;
+        var checkpoints = await db.StepCheckpoints.ExecuteDeleteAsync(ct);
+        return new BookContentRemoved(removed, checkpoints);
     }
 }

@@ -192,6 +192,7 @@ export const BOOK_FACETS = [
   'VoiceRules',
   'ProjectPolicy',
   'NodeTitle',
+  'Checkpoints',
 ] as const;
 
 export type BookFacet = (typeof BOOK_FACETS)[number];
