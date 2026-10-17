@@ -666,6 +666,86 @@ public class BookMutationsTests : ProjectDbTestBase
             $"Slowest {waits.Max()}, median {waits.Order().ElementAt(samples / 2)}.");
     }
 
+    // ── checkpoint staleness ─────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ChapterSplit_stalesAnExistingStructureRow_inTheSameCommit_andReportsCheckpoints()
+    {
+        var b = await SeedTwoChaptersAsync();
+        var confirmedAt = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
+        await SeedCheckpointAsync(PipelineStep.Structure, CheckpointState.Confirmed, at: confirmedAt);
+        await SeedCheckpointAsync(PipelineStep.Speakers, CheckpointState.Confirmed);
+        await using var caller = NewCaller();
+
+        var outcome = await caller.Mutations.CommitAsync(new SplitAtChapterMutation(_folder, b.ChapterId("c2"), null));
+
+        var receipt = Assert.IsType<BookMutationOutcome.Committed>(outcome).Receipt;
+        Assert.Equal(BookFacets.Structure | BookFacets.Checkpoints, receipt.Effects.Facets);
+        var rows = await CheckpointRowsAsync();
+        var structure = rows.Single(r => r.Step == PipelineStep.Structure);
+        Assert.True(structure.Stale);
+        Assert.Equal(CheckpointState.Confirmed, structure.State);
+        Assert.Equal(confirmedAt, structure.At);
+        Assert.False(rows.Single(r => r.Step == PipelineStep.Speakers).Stale);
+    }
+
+    [Fact]
+    public async Task ChapterSplit_withNoCheckpointRows_doesNotReportCheckpoints()
+    {
+        var b = await SeedTwoChaptersAsync();
+        await using var caller = NewCaller();
+
+        var outcome = await caller.Mutations.CommitAsync(new SplitAtChapterMutation(_folder, b.ChapterId("c2"), null));
+
+        Assert.Equal(BookFacets.Structure,
+            Assert.IsType<BookMutationOutcome.Committed>(outcome).Receipt.Effects.Facets);
+        Assert.Empty(await CheckpointRowsAsync());
+    }
+
+    [Fact]
+    public async Task ChapterSplit_withRowsAlreadyStale_doesNotReportCheckpoints()
+    {
+        var b = await SeedTwoChaptersAsync();
+        await SeedCheckpointAsync(PipelineStep.Structure, CheckpointState.Confirmed, stale: true);
+        await SeedCheckpointAsync(PipelineStep.Pauses, CheckpointState.Skipped, stale: true);
+        await using var caller = NewCaller();
+
+        var outcome = await caller.Mutations.CommitAsync(new SplitAtChapterMutation(_folder, b.ChapterId("c2"), null));
+
+        Assert.Equal(BookFacets.Structure,
+            Assert.IsType<BookMutationOutcome.Committed>(outcome).Receipt.Effects.Facets);
+    }
+
+    [Fact]
+    public async Task FailedChapterSplit_leavesCheckpointRowsUntouched()
+    {
+        await SeedTwoChaptersAsync();
+        await SeedCheckpointAsync(PipelineStep.Structure, CheckpointState.Confirmed);
+        await using var caller = NewCaller();
+
+        var outcome = await caller.Mutations.CommitAsync(new SplitAtChapterMutation(_folder, Guid.NewGuid(), null));
+
+        Assert.IsType<BookMutationOutcome.Rejected>(outcome);
+        Assert.False(Assert.Single(await CheckpointRowsAsync()).Stale);
+    }
+
+    [Fact]
+    public async Task AddingChapterTitles_reportsStructure_butStalesNothing()
+    {
+        var b = new BookHierarchyBuilder(OpenDbAsync);
+        await b.AddVolume("v1", v => v.AddChapter("Chapter One", c => c
+                .AddParagraph("pg", g => g.AddNarration("i", "Text"))))
+            .BuildAsync();
+        await SeedCheckpointAsync(PipelineStep.Titles, CheckpointState.Skipped);
+        await using var caller = NewCaller();
+
+        var outcome = await caller.Mutations.CommitAsync(new AddChapterTitlesMutation(_folder));
+
+        Assert.Equal(BookFacets.Structure,
+            Assert.IsType<BookMutationOutcome.Committed>(outcome).Receipt.Effects.Facets);
+        Assert.False(Assert.Single(await CheckpointRowsAsync()).Stale);
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────
 
     /// <summary>One caller's DI scope, as a request gets — its own session, its own mutations.</summary>
@@ -697,6 +777,16 @@ public class BookMutationsTests : ProjectDbTestBase
         var b = new BookHierarchyBuilder(folderName == null ? OpenDbAsync : () => OpenDbAsync(folderName));
         await b.AddVolume("vol", v => v.AddChapter("ch", c => c
             .AddParagraph("para", p => p.AddNarration("item", "Hello world"))))
+            .BuildAsync();
+        return b;
+    }
+
+    private async Task<BookHierarchyBuilder> SeedTwoChaptersAsync()
+    {
+        var b = new BookHierarchyBuilder(OpenDbAsync);
+        await b.AddVolume("v1", v => v.AddPart("p1", p => p
+                .AddChapter("c1", c => c.AddParagraph("pg1", g => g.AddNarration("i1", "One")))
+                .AddChapter("c2", c => c.AddParagraph("pg2", g => g.AddNarration("i2", "Two")))))
             .BuildAsync();
         return b;
     }

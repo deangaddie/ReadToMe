@@ -1,8 +1,10 @@
 using System.Reflection;
 using System.Runtime.ExceptionServices;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Read2Me.Data;
+using Read2Me.Services.Checkpoints;
 using Read2Me.Services.Events;
 
 namespace Read2Me.Services.Mutations;
@@ -127,6 +129,7 @@ public sealed class BookMutations(
             return null;
         }
 
+        effects = await MarkCheckpointsStaleAsync(mutation, effects, db, ct);
         await db.SaveChangesAsync(ct);
 
         // The last point at which cancellation is still honourable. Past it the change is real, so
@@ -135,6 +138,25 @@ public sealed class BookMutations(
         ct.ThrowIfCancellationRequested();
         await transaction.CommitAsync(CancellationToken.None);
         return effects;
+    }
+
+    /// <summary>
+    /// Stales the confirmed checkpoints this mutation disturbed, inside its transaction, so a commit
+    /// and the reconfirm it asks for land together. Reports <see cref="BookFacets.Checkpoints"/> only
+    /// when a row actually changed: no row, or a row already stale, is nothing for the Overview to
+    /// refetch.
+    /// </summary>
+    private static async Task<BookMutationEffects> MarkCheckpointsStaleAsync(
+        BookMutation mutation, BookMutationEffects effects, ProjectDbContext db, CancellationToken ct)
+    {
+        var steps = CheckpointStaleness.StepsToStale(mutation, effects);
+        if (steps.Count == 0)
+            return effects;
+
+        var staled = await db.StepCheckpoints
+            .Where(c => steps.Contains(c.Step) && !c.Stale)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.Stale, true), ct);
+        return staled == 0 ? effects : effects with { Facets = effects.Facets | BookFacets.Checkpoints };
     }
 
     /// <summary>

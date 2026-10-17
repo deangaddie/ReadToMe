@@ -217,6 +217,13 @@ through the `Checkpoints` receipt. A step that isn't one of the nine ids is a 40
 content is a 422 "Read the book first", and a body without `state` is a 400. A reread or a clear
 deletes every checkpoint.
 
+A Book change that disturbs a checkpoint marks it `stale` in the same commit, keeping its `state`
+and `at`, and that command's receipt also carries `Checkpoints`. A split at a Part or Chapter, or a
+Volume, Part or Chapter merge, delete or insert, stales Structure, Titles and Pauses. A Volume, Part or Chapter rename
+stales Titles. `ApplyBookEdits` stales Text when it rewrote item text and Titles when it rewrote a
+title. Nothing else stales a checkpoint, including paragraph and item edits, Add titles and Add
+pauses.
+
 ## 2. Discover characters, attribute dialog
 
 ```bash
