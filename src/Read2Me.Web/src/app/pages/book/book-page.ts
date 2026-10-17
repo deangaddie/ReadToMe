@@ -546,6 +546,13 @@ export class BookPage extends R2mElement {
   /** Reads {@link ctx} inside the list's effect, so status deltas re-render only the rows. */
   private readonly renderRow = (row: ReaderRow) => {
     switch (row.kind) {
+      case 'volume':
+      case 'part':
+        return html`<div class="book__heading-row book__row">
+          <div class="book__heading" data-node-id=${row.id}>
+            <h2 class="book__${row.kind} ${placeholderTitleClass(row)}">${row.title}</h2>
+          </div>
+        </div>`;
       case 'chapter': {
         const menu = structureNodeMenu({
           node: { level: 'chapter', id: row.chapterId, rawTitle: row.rawTitle },

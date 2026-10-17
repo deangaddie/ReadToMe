@@ -110,7 +110,7 @@ describe('chapterSequence', () => {
       v2: [node('p3')],
       p3: [node('c3', 'Three')],
     };
-    expect(chapterSequence(volumes, children)).toEqual([
+    expect(chapterSequence(volumes, children).map(({ volume: _v, part: _p, ...c }) => c)).toEqual([
       { id: 'c1', title: 'One', untitled: false, rawTitle: 'One', isFirst: true, isLast: true },
       {
         id: 'c2',
@@ -136,6 +136,85 @@ describe('chapterSequence', () => {
       ['a', true, false],
       ['b', false, false],
       ['c', false, true],
+    ]);
+  });
+
+  it('the first chapter of each Volume and Part the tree shows carries that heading', () => {
+    const volumes = [node('v1', 'Book One'), node('v2')];
+    const children = {
+      v1: [node('p1', 'Arrival'), node('p2')],
+      p1: [node('c1'), node('c2')],
+      p2: [node('c3')],
+      v2: [node('p3', 'Lone part')],
+      p3: [node('c4')],
+    };
+    const headings = chapterSequence(volumes, children).map(({ id, volume, part }) => ({
+      id,
+      volume,
+      part,
+    }));
+    expect(headings).toEqual([
+      {
+        id: 'c1',
+        volume: {
+          id: 'v1',
+          title: 'Book One',
+          untitled: false,
+          rawTitle: 'Book One',
+          isFirst: true,
+          isLast: false,
+        },
+        part: {
+          id: 'p1',
+          title: 'Arrival',
+          untitled: false,
+          rawTitle: 'Arrival',
+          isFirst: true,
+          isLast: false,
+        },
+      },
+      { id: 'c2', volume: undefined, part: undefined },
+      {
+        id: 'c3',
+        volume: undefined,
+        part: {
+          id: 'p2',
+          title: 'Untitled part 2',
+          untitled: true,
+          rawTitle: null,
+          isFirst: false,
+          isLast: true,
+        },
+      },
+      // A lone Part within a Volume is hidden in the tree, so it gets no heading either.
+      {
+        id: 'c4',
+        volume: {
+          id: 'v2',
+          title: 'Untitled volume 2',
+          untitled: true,
+          rawTitle: null,
+          isFirst: false,
+          isLast: true,
+        },
+        part: undefined,
+      },
+    ]);
+  });
+
+  it('a single Volume gets no heading; a Volume heading waits for its first chapter', () => {
+    const children = {
+      v1: [node('p1', 'Empty'), node('p2', 'Full')],
+      p1: [],
+      p2: [node('c1')],
+    };
+    const [only] = chapterSequence([node('v1', 'Only')], children);
+    expect(only).toMatchObject({ id: 'c1', part: { id: 'p2' } });
+    expect(only?.volume).toBeUndefined();
+
+    const volumes = [node('v1', 'I'), node('v2', 'II')];
+    expect(chapterSequence(volumes, { ...children, v2: [] })).toMatchObject([
+      { id: 'c1', volume: { id: 'v1' }, part: { id: 'p2' } },
     ]);
   });
 

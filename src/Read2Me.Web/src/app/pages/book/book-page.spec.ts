@@ -140,6 +140,55 @@ describe('r2m-book-page', () => {
     expect(page.getAttribute('data-current-chapter')).toBe('c1');
   });
 
+  it('a chapter that begins a Volume or Part the tree shows has their headings above it', async () => {
+    api
+      .on('GET', `${BASE}/book`, {
+        ...OVERVIEW,
+        volumes: [
+          { id: 'v1', title: 'Book One' },
+          { id: 'v2', title: null },
+        ],
+      })
+      .on('GET', `${BASE}/nodes/volume/v1/children`, {
+        parts: [
+          { id: 'p1', title: 'Arrival' },
+          { id: 'p2', title: null },
+        ],
+      })
+      .on('GET', `${BASE}/nodes/part/p1/children`, { chapters: [{ id: 'c1', title: 'One' }] })
+      .on('GET', `${BASE}/nodes/part/p2/children`, { chapters: [{ id: 'c2', title: 'Two' }] });
+    const { page, store } = await start('projects/dune/book');
+    await store.openChapter('c2');
+    await store.loadPrevious(false);
+    await page.rendered();
+
+    const keys = Array.from(page.querySelectorAll('.r2m-vlist__row'), (r) =>
+      r.getAttribute('data-row-key'),
+    ).filter((k) => !k?.startsWith('paragraph:'));
+    expect(keys).toEqual(['volume:v1', 'part:p1', 'chapter:c1', 'part:p2', 'chapter:c2']);
+    const heading = (id: string) => {
+      const el = page.querySelector(`.book__heading[data-node-id=${id}] h2`);
+      return [el?.className.match(/book__(volume|part)/)?.[1], text(el)];
+    };
+    expect(heading('v1')).toEqual(['volume', 'Book One']);
+    expect(heading('p1')).toEqual(['part', 'Arrival']);
+    expect(heading('p2')).toEqual(['part', 'Untitled part 2']);
+    const placeholder = (id: string) =>
+      page
+        .querySelector(`.book__heading[data-node-id=${id}] h2`)
+        ?.classList.contains('r2m-placeholder-title');
+    expect([placeholder('v1'), placeholder('p1'), placeholder('p2')]).toEqual([false, false, true]);
+    // No menu on a Volume or Part heading yet.
+    expect(page.querySelector('.book__heading[data-node-id] .r2m-node-menu__trigger')).toBeNull();
+    // Opening a chapter still makes the chapter current, not the heading above it.
+    expect(store.currentChapterId()).toBe('c2');
+  });
+
+  it('a single volume with a single part shows no Volume or Part heading', async () => {
+    const { page } = await start('projects/dune/book');
+    expect(page.querySelector('.book__volume, .book__part')).toBeNull();
+  });
+
   it('lists the chapters in the tree with their badges, and a tree click opens a chapter', async () => {
     api.on('GET', `${BASE}/status`, {
       revision: 1,

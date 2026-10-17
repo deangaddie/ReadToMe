@@ -16,7 +16,7 @@ import type { IconName } from '@app/ui/icons';
 import type { StatusKind } from '@app/ui/partials';
 import type { SpeakerChipState } from '@app/ui/speaker-chip';
 import type { SpeakerRosterEntry } from '@app/ui/speaker-menu';
-import type { ChapterParents, ChapterRef } from './book-tree';
+import type { ChapterParents, ChapterRef, HeadingRef } from './book-tree';
 
 /**
  * What the reader rows show (design §6.3), as pure functions of the loaded data. Components bind
@@ -217,8 +217,13 @@ export interface RowPosition {
   isLast: boolean;
 }
 
+/**
+ * Every row names the chapter it belongs to: the top row's chapter is the current one. A Volume or
+ * Part heading belongs to the chapter it stands above, so it is current with that chapter.
+ */
 export type ReaderRow =
-  | ({ kind: 'chapter'; key: string; chapterId: string } & Omit<ChapterRef, 'id'>)
+  | ({ kind: 'volume' | 'part'; key: string; chapterId: string } & HeadingRef)
+  | ({ kind: 'chapter'; key: string; chapterId: string } & Omit<HeadingRef, 'id'>)
   | ({ kind: 'paragraph'; key: string; chapterId: string; paragraph: ParagraphDto } & RowPosition)
   | ({
       kind: 'pause';
@@ -240,11 +245,16 @@ export function pauseLabel(item: ParagraphItemDto | undefined): string {
   return (item && PAUSE_LABELS[item.itemType]) ?? 'Paragraph pause';
 }
 
-/** The viewport's rows: a header per chapter, then its paragraphs; Read mode hides pause paragraphs. */
+/**
+ * The viewport's rows: a header per chapter, then its paragraphs; Read mode hides pause paragraphs.
+ * A chapter that begins a Volume or Part the tree shows has that heading above its own.
+ */
 export function buildRows(chapters: readonly LoadedChapterView[], mode: ReaderMode): ReaderRow[] {
   const rows: ReaderRow[] = [];
   for (const chapter of chapters) {
-    const { id, paragraphs, ...heading } = chapter;
+    const { id, paragraphs, volume, part, ...heading } = chapter;
+    if (volume) rows.push({ kind: 'volume', key: `volume:${volume.id}`, chapterId: id, ...volume });
+    if (part) rows.push({ kind: 'part', key: `part:${part.id}`, chapterId: id, ...part });
     rows.push({ kind: 'chapter', key: `chapter:${id}`, chapterId: id, ...heading });
     paragraphs.forEach((paragraph, i, all) => {
       const position = { isFirst: i === 0, isLast: i === all.length - 1 };

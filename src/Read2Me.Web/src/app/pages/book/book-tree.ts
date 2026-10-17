@@ -24,13 +24,21 @@ export interface TreeNode extends NodeTitle {
   children: TreeNode[];
 }
 
-export interface ChapterRef extends NodeTitle {
+/** A Volume, Part or Chapter as a Book page heading shows it. */
+export interface HeadingRef extends NodeTitle {
   id: string;
   /** The stored title, null when never given one: the Node menu edits it, never the placeholder. */
   rawTitle: string | null;
-  /** Position among its part's chapters: the Node menu hides merges at the ends. */
+  /** Position among its siblings: the Node menu hides merges at the ends. */
   isFirst: boolean;
   isLast: boolean;
+}
+
+export interface ChapterRef extends HeadingRef {
+  /** Set on the first chapter of a Volume the tree shows: its heading goes above this chapter's. */
+  volume?: HeadingRef;
+  /** Set on the first chapter of a Part the tree shows: its heading goes above this chapter's. */
+  part?: HeadingRef;
 }
 
 /** The title a node shows: its stored one, or a placeholder title when it has none. */
@@ -54,6 +62,14 @@ export function nodeTitle(node: NodeDto, level: NodeLevel, index: number): NodeT
 }
 
 /**
+ * Whether the tree (and so the Book page) shows a level: a lone volume, or a lone part within a
+ * volume, adds no navigation and collapses away.
+ */
+function showsLevel(siblings: readonly unknown[]): boolean {
+  return siblings.length > 1;
+}
+
+/**
  * The structure tree (design §6.3) from what is loaded. A single volume and a single part add no
  * navigation, so they collapse away: one volume shows its parts (or chapters) as roots, and a
  * volume with one part shows that part's chapters directly.
@@ -61,19 +77,22 @@ export function nodeTitle(node: NodeDto, level: NodeLevel, index: number): NodeT
 export function buildTree(volumes: readonly NodeDto[], children: ChildrenMap): TreeNode[] {
   const volumeNodes = volumes.map((v, i) => volumeNode(v, i, volumes.length, children));
   const [only] = volumeNodes;
-  if (only && volumeNodes.length === 1) return only.children;
+  if (only && !showsLevel(volumeNodes)) return only.children;
   return volumeNodes;
 }
 
-function identity(node: NodeDto, level: NodeLevel, index: number, count: number) {
+function headingRef(node: NodeDto, level: NodeLevel, index: number, count: number): HeadingRef {
   return {
     id: node.id,
-    level,
     ...nodeTitle(node, level, index),
     rawTitle: node.title,
     isFirst: index === 0,
     isLast: index === count - 1,
   };
+}
+
+function identity(node: NodeDto, level: NodeLevel, index: number, count: number) {
+  return { ...headingRef(node, level, index, count), level };
 }
 
 function volumeNode(
@@ -88,7 +107,7 @@ function volumeNode(
     return { ...base, loaded: false, loadTarget: { level: 'volume', id: volume.id }, children: [] };
   }
   const [onlyPart] = parts;
-  if (onlyPart && parts.length === 1) {
+  if (onlyPart && !showsLevel(parts)) {
     const chapters = children[onlyPart.id];
     return {
       ...base,
@@ -129,24 +148,29 @@ function chapterNode(chapter: NodeDto, index: number, count: number): TreeNode {
 /**
  * Chapters in book order, up to the first volume or part whose children are not loaded — so the
  * chapter after the last one listed is either unknown (load {@link firstUnloaded}) or the end.
+ * The first chapter of a Volume or Part carries that parent's heading, but only for a level the
+ * tree shows ({@link showsLevel}).
  */
 export function chapterSequence(volumes: readonly NodeDto[], children: ChildrenMap): ChapterRef[] {
   const out: ChapterRef[] = [];
-  for (const volume of volumes) {
+  for (const [v, volume] of volumes.entries()) {
     const parts = children[volume.id];
     if (!parts) return out;
-    for (const part of parts) {
+    let volumeHeading = showsLevel(volumes)
+      ? headingRef(volume, 'volume', v, volumes.length)
+      : undefined;
+    for (const [p, part] of parts.entries()) {
       const chapters = children[part.id];
       if (!chapters) return out;
-      chapters.forEach((c, i) =>
+      let partHeading = showsLevel(parts) ? headingRef(part, 'part', p, parts.length) : undefined;
+      chapters.forEach((c, i) => {
         out.push({
-          id: c.id,
-          ...nodeTitle(c, 'chapter', i),
-          rawTitle: c.title,
-          isFirst: i === 0,
-          isLast: i === chapters.length - 1,
-        }),
-      );
+          ...headingRef(c, 'chapter', i, chapters.length),
+          ...(volumeHeading && { volume: volumeHeading }),
+          ...(partHeading && { part: partHeading }),
+        });
+        volumeHeading = partHeading = undefined;
+      });
     }
   }
   return out;

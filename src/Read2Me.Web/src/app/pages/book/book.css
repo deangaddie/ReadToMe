@@ -100,11 +100,24 @@
     border-radius: var(--r2m-radius-md) var(--r2m-radius-md) 0 0;
     transition: box-shadow 120ms;
   }
-  .book__chapter {
+  .book__chapter,
+  .book__part,
+  .book__volume {
     flex: 1 1 auto;
     margin: 0;
     font-size: var(--r2m-text-xl);
     font-weight: 600;
+  }
+  /* Volume > Part > Chapter: each level one step up from the one below. */
+  .book__part {
+    font-size: var(--r2m-text-2xl);
+  }
+  .book__volume {
+    font-size: calc(var(--r2m-text-2xl) * 1.25);
+    font-weight: 700;
+  }
+  .book__heading-row:has(.book__volume) {
+    padding-top: var(--r2m-space-8);
   }
   .book__heading-menu {
     display: inline-flex;
