@@ -205,10 +205,47 @@ describe('buildRows', () => {
       id: 'c1',
       title: 'One',
       untitled: false,
+      rawTitle: 'One',
+      isFirst: true,
+      isLast: false,
       paragraphs: [para('p1', [narration()]), para('pz', [pause()], true)],
     },
-    { id: 'c2', title: 'Two', untitled: false, paragraphs: [para('p2', [item()])] },
+    {
+      id: 'c2',
+      title: 'Untitled chapter 2',
+      untitled: true,
+      rawTitle: null,
+      isFirst: false,
+      isLast: true,
+      paragraphs: [para('p2', [item()])],
+    },
   ];
+
+  it("a chapter heading row carries the chapter's stored title and position, for its Node menu", () => {
+    const headings = buildRows(chapters, 'read').filter((r) => r.kind === 'chapter');
+    expect(headings).toEqual([
+      {
+        kind: 'chapter',
+        key: 'chapter:c1',
+        chapterId: 'c1',
+        title: 'One',
+        untitled: false,
+        rawTitle: 'One',
+        isFirst: true,
+        isLast: false,
+      },
+      {
+        kind: 'chapter',
+        key: 'chapter:c2',
+        chapterId: 'c2',
+        title: 'Untitled chapter 2',
+        untitled: true,
+        rawTitle: null,
+        isFirst: false,
+        isLast: true,
+      },
+    ]);
+  });
 
   it('read mode hides pause paragraphs', () => {
     expect(buildRows(chapters, 'read').map((r) => r.key)).toEqual([
@@ -241,6 +278,9 @@ describe('buildRows', () => {
           id: 'c',
           title: 'C',
           untitled: false,
+          rawTitle: 'C',
+          isFirst: true,
+          isLast: true,
           paragraphs: [
             para('a', [item({ itemType: 'ChapterPause', isPause: true, text: null })], true),
             para('b', [], true),

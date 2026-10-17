@@ -83,12 +83,39 @@
     max-width: 72ch;
     padding-right: var(--r2m-space-3);
   }
+  /*
+   * A chapter heading row: the title, then its Node menu trigger at the end of the row. The space
+   * above is the row's padding, not a margin, so the measured list counts it and the hover outline
+   * frames only the heading.
+   */
+  .book__heading-row {
+    padding-top: var(--r2m-space-4);
+  }
+  .book__heading {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--r2m-space-2);
+    padding: var(--r2m-space-2) var(--r2m-space-1);
+    border-bottom: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-md) var(--r2m-radius-md) 0 0;
+    transition: box-shadow 120ms;
+  }
   .book__chapter {
+    flex: 1 1 auto;
     margin: 0;
-    padding: var(--r2m-space-6) 0 var(--r2m-space-2);
     font-size: var(--r2m-text-xl);
     font-weight: 600;
-    border-bottom: 1px solid var(--r2m-outline);
+  }
+  .book__heading-menu {
+    display: inline-flex;
+    flex: 0 0 auto;
+    opacity: 0;
+    transition: opacity 120ms;
+  }
+  .book__heading:hover .book__heading-menu,
+  .book__heading:focus-within .book__heading-menu,
+  .book__heading:has(.r2m-node-menu__trigger[aria-expanded='true']) .book__heading-menu {
+    opacity: 1;
   }
   .book__pause {
     display: flex;
@@ -261,7 +288,8 @@
    * the selected and unknown tints without replacing them.
    */
   .r2m-paragraph:is(:hover, :focus-within, :has(.r2m-node-menu__trigger[aria-expanded='true'])),
-  .book__pause:is(:hover, :focus-within, :has(.r2m-node-menu__trigger[aria-expanded='true'])) {
+  .book__pause:is(:hover, :focus-within, :has(.r2m-node-menu__trigger[aria-expanded='true'])),
+  .book__heading:is(:hover, :focus-within, :has(.r2m-node-menu__trigger[aria-expanded='true'])) {
     box-shadow: inset 0 0 0 1px var(--r2m-outline);
   }
   .r2m-paragraph:is(
@@ -270,6 +298,8 @@
       :has(> .r2m-paragraph__status .r2m-node-menu__trigger[aria-expanded='true'])
     )
     > .r2m-paragraph__status
+    .r2m-node-menu__trigger,
+  .book__heading:is(:hover, :focus-within, :has(.r2m-node-menu__trigger[aria-expanded='true']))
     .r2m-node-menu__trigger {
     box-shadow: 0 0 0 1px var(--r2m-outline);
     border-radius: var(--r2m-radius-sm);

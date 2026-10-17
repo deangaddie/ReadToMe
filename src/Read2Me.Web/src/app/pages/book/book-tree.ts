@@ -26,6 +26,11 @@ export interface TreeNode extends NodeTitle {
 
 export interface ChapterRef extends NodeTitle {
   id: string;
+  /** The stored title, null when never given one: the Node menu edits it, never the placeholder. */
+  rawTitle: string | null;
+  /** Position among its part's chapters: the Node menu hides merges at the ends. */
+  isFirst: boolean;
+  isLast: boolean;
 }
 
 /** The title a node shows: its stored one, or a placeholder title when it has none. */
@@ -133,7 +138,15 @@ export function chapterSequence(volumes: readonly NodeDto[], children: ChildrenM
     for (const part of parts) {
       const chapters = children[part.id];
       if (!chapters) return out;
-      chapters.forEach((c, i) => out.push({ id: c.id, ...nodeTitle(c, 'chapter', i) }));
+      chapters.forEach((c, i) =>
+        out.push({
+          id: c.id,
+          ...nodeTitle(c, 'chapter', i),
+          rawTitle: c.title,
+          isFirst: i === 0,
+          isLast: i === chapters.length - 1,
+        }),
+      );
     }
   }
   return out;

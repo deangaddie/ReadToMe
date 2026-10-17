@@ -16,7 +16,7 @@ import type { IconName } from '@app/ui/icons';
 import type { StatusKind } from '@app/ui/partials';
 import type { SpeakerChipState } from '@app/ui/speaker-chip';
 import type { SpeakerRosterEntry } from '@app/ui/speaker-menu';
-import type { ChapterParents, NodeTitle } from './book-tree';
+import type { ChapterParents, ChapterRef } from './book-tree';
 
 /**
  * What the reader rows show (design §6.3), as pure functions of the loaded data. Components bind
@@ -206,19 +206,19 @@ export function reviewOf(ctx: RowContext, itemId: string): AudioReviewInfo | Aud
 
 // ---- rows ---------------------------------------------------------------------------------------
 
-export interface LoadedChapterView extends NodeTitle {
-  id: string;
+/** A loaded chapter: its stored title and position (for the heading's Node menu) and its paragraphs. */
+export interface LoadedChapterView extends ChapterRef {
   paragraphs: readonly ParagraphDto[];
 }
 
-/** Position among the chapter's paragraphs: the node menu hides merges at the ends. */
+/** Position among siblings (a chapter's paragraphs, a part's chapters): the node menu hides merges at the ends. */
 export interface RowPosition {
   isFirst: boolean;
   isLast: boolean;
 }
 
 export type ReaderRow =
-  | ({ kind: 'chapter'; key: string; chapterId: string } & NodeTitle)
+  | ({ kind: 'chapter'; key: string; chapterId: string } & Omit<ChapterRef, 'id'>)
   | ({ kind: 'paragraph'; key: string; chapterId: string; paragraph: ParagraphDto } & RowPosition)
   | ({
       kind: 'pause';
@@ -244,20 +244,15 @@ export function pauseLabel(item: ParagraphItemDto | undefined): string {
 export function buildRows(chapters: readonly LoadedChapterView[], mode: ReaderMode): ReaderRow[] {
   const rows: ReaderRow[] = [];
   for (const chapter of chapters) {
-    rows.push({
-      kind: 'chapter',
-      key: `chapter:${chapter.id}`,
-      chapterId: chapter.id,
-      title: chapter.title,
-      untitled: chapter.untitled,
-    });
-    chapter.paragraphs.forEach((paragraph, i, all) => {
+    const { id, paragraphs, ...heading } = chapter;
+    rows.push({ kind: 'chapter', key: `chapter:${id}`, chapterId: id, ...heading });
+    paragraphs.forEach((paragraph, i, all) => {
       const position = { isFirst: i === 0, isLast: i === all.length - 1 };
       if (!paragraph.isPauseParagraph) {
         rows.push({
           kind: 'paragraph',
           key: `paragraph:${paragraph.id}`,
-          chapterId: chapter.id,
+          chapterId: id,
           paragraph,
           ...position,
         });
@@ -265,7 +260,7 @@ export function buildRows(chapters: readonly LoadedChapterView[], mode: ReaderMo
         rows.push({
           kind: 'pause',
           key: `pause:${paragraph.id}`,
-          chapterId: chapter.id,
+          chapterId: id,
           paragraph,
           label: pauseLabel(paragraph.items[0]),
           ...position,

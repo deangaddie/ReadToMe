@@ -113,8 +113,6 @@ describe('chapterDialogTotals', () => {
     const totals = chapterDialogTotals([
       {
         id: 'c1',
-        title: 'One',
-        untitled: false,
         paragraphs: [
           paragraph('p1', item({ itemType: 'Narration', characterId: 'n' })),
           paragraph('p2', item({ itemType: 'Character' })),
@@ -126,7 +124,7 @@ describe('chapterDialogTotals', () => {
           ),
         ],
       },
-      { id: 'c2', title: 'Two', untitled: false, paragraphs: [] },
+      { id: 'c2', paragraphs: [] },
     ]);
     expect(totals).toEqual({ c1: 2, c2: 0 });
   });
