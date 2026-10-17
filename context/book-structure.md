@@ -22,6 +22,8 @@ Use these terms exactly in code, tests, and discussion.
 ## Book view
 
 - **Book page** — the web app's reader for one Book; its row shape is the **Reader mode** ([web.md](web.md)).
+- **Node menu** — the one actions menu for a Volume, Part, Chapter, Paragraph or ParagraphItem, opened from its ⋮ trigger in the structure tree or on the Book page. A node offers the same entries wherever its menu is opened: what may be done to it is a fact about the node, not about the pane.
+  _Avoid_: "overflow menu", "context menu", "tree menu"
 - **Placeholder title** — the label shown for a Volume, Part or Chapter whose title is missing or blank: "Untitled chapter 3", numbered by position among its siblings, and set visibly apart from a real title wherever it appears (structure tree, Book page heading, accessible names). Never stored and never narrated; renaming starts from an empty title, not from the placeholder.
   _Avoid_: "default title", "fallback title", "Chapter 3" as if it were the node's title
 
