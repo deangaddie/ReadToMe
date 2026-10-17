@@ -2,6 +2,9 @@ import type { NodeLevel, ParagraphDto, ParagraphItemDto } from '@app/api';
 import type { ChapterParents } from './book-tree';
 import type { LoadedChapterView } from './reader-rows';
 
+/** What the totals read of a loaded chapter. */
+type ChapterParagraphs = Pick<LoadedChapterView, 'id' | 'paragraphs'>;
+
 /**
  * The reader selections' pure rules (design §6.3): which paragraphs (ticket 12) and which items
  * (ticket 13) can be selected, how a selection rolls up into a tree node's tri-state, and how
@@ -95,7 +98,7 @@ export function nodeState(
 
 /** How many Character paragraphs each loaded chapter holds — the chapter totals the tree can know without a read. */
 export function chapterDialogTotals(
-  chapters: readonly LoadedChapterView[],
+  chapters: readonly ChapterParagraphs[],
 ): Record<string, number> {
   const totals: Record<string, number> = {};
   for (const chapter of chapters) {
@@ -106,7 +109,7 @@ export function chapterDialogTotals(
 
 /** How many voiced items each loaded chapter holds — the audio totals the tree can know without a read. */
 export function chapterVoicedTotals(
-  chapters: readonly LoadedChapterView[],
+  chapters: readonly ChapterParagraphs[],
   narratorOnlyMode: boolean,
 ): Record<string, number> {
   const totals: Record<string, number> = {};

@@ -111,9 +111,31 @@ describe('chapterSequence', () => {
       p3: [node('c3', 'Three')],
     };
     expect(chapterSequence(volumes, children)).toEqual([
-      { id: 'c1', title: 'One', untitled: false },
-      { id: 'c2', title: 'Untitled chapter 1', untitled: true },
-      { id: 'c3', title: 'Three', untitled: false },
+      { id: 'c1', title: 'One', untitled: false, rawTitle: 'One', isFirst: true, isLast: true },
+      {
+        id: 'c2',
+        title: 'Untitled chapter 1',
+        untitled: true,
+        rawTitle: null,
+        isFirst: true,
+        isLast: true,
+      },
+      { id: 'c3', title: 'Three', untitled: false, rawTitle: 'Three', isFirst: true, isLast: true },
+    ]);
+  });
+
+  it("gives each chapter its position among its part's chapters, for the merge entries", () => {
+    const children = { v1: [node('p1')], p1: [node('a'), node('b'), node('c')] };
+    expect(
+      chapterSequence([node('v1')], children).map(({ id, isFirst, isLast }) => [
+        id,
+        isFirst,
+        isLast,
+      ]),
+    ).toEqual([
+      ['a', true, false],
+      ['b', false, false],
+      ['c', false, true],
     ]);
   });
 

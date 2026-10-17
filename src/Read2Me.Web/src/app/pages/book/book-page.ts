@@ -41,6 +41,7 @@ import { type TriState, chapterDialogTotals, chapterVoicedTotals } from './selec
 import { AudioSelectionStore, SelectionStore } from './selection-store';
 import { SpeakerAssigner } from './speaker-assigner';
 import { buildRoster } from './speaker-roster';
+import { structureNodeMenu } from './structure-node-menu';
 import '@app/ui/measured-list';
 import '@app/ui/speaker-menu';
 import './node-menu';
@@ -546,8 +547,21 @@ export class BookPage extends R2mElement {
   private readonly renderRow = (row: ReaderRow) => {
     switch (row.kind) {
       case 'chapter': {
-        const placeholder = placeholderTitleClass(row);
-        return html`<h2 class="book__chapter book__row ${placeholder}">${row.title}</h2>`;
+        const menu = structureNodeMenu({
+          node: { level: 'chapter', id: row.chapterId, rawTitle: row.rawTitle },
+          position: row,
+          selection: this.selectionKind(),
+          status: this.project.nodes()[row.chapterId] ?? null,
+          locked: this.ctx().locked,
+        });
+        return html`<div class="book__heading-row book__row">
+          <div class="book__heading" data-chapter-id=${row.chapterId}>
+            <h2 class="book__chapter ${placeholderTitleClass(row)}">${row.title}</h2>
+            <span class="book__heading-menu"
+              >${nodeMenuTrigger(menu.target, { disabled: menu.disabled })}</span
+            >
+          </div>
+        </div>`;
       }
       case 'paragraph':
         return html`<div class="book__row">
@@ -619,9 +633,17 @@ export class BookPage extends R2mElement {
     });
   };
 
-  /** The node menu's selection shortcuts, for whichever selection the mode is in. */
+  /** The tree's node menu shortcuts; a Book page heading's arrive through {@link onRowMenuOpen}. */
   private readonly onNodeAction = (e: Event): void => {
     const { node, action } = (e as CustomEvent<{ node: TreeNode; action: ActionEntryId }>).detail;
+    this.nodeAction(node, action);
+  };
+
+  /**
+   * A Volume, Part or Chapter's selection shortcuts, from the tree or a Book page heading, for
+   * whichever selection the mode is in. The release names the node by the title it shows.
+   */
+  private nodeAction(node: ActionNode, action: ActionEntryId): void {
     switch (action) {
       case 'select-unprocessed':
         // The node's unprocessed paragraphs, without loading every chapter.
@@ -658,7 +680,7 @@ export class BookPage extends R2mElement {
         void this.releaseNarration(node.level === 'part' ? 'Part' : 'Chapter', node.id, node.title);
         return;
     }
-  };
+  }
 
   /**
    * A release flips paragraphs into Character paragraphs, so both selections clear and their
@@ -680,13 +702,20 @@ export class BookPage extends R2mElement {
   }
 
   /**
-   * A paragraph row's menu opening (`NODE_MENU_OPEN`, on its way to the shared menu): rows have no
-   * tree to take their actions, so the reader does. The only one is a narration-only paragraph's
-   * Release narration.
+   * A reader row's menu opening (`NODE_MENU_OPEN`, on its way to the shared menu): rows have no
+   * tree to take their actions, so the reader does. A chapter heading's go where the tree's do; a
+   * paragraph's only one is a narration-only paragraph's Release narration.
    */
   private readonly onRowMenuOpen = (e: Event): void => {
     const request = (e as CustomEvent<NodeMenuRequest>).detail;
     const { target } = request;
+    if (target.kind === 'chapter') {
+      const chapter = this.store.chapters().find((c) => c.id === target.id);
+      if (!chapter) return;
+      const node: ActionNode = { level: 'chapter', id: chapter.id, title: chapter.title };
+      request.onAction = (action) => this.nodeAction(node, action);
+      return;
+    }
     if (target.kind !== 'paragraph') return;
     request.onAction = (action) => {
       if (action === 'release-narration') {
@@ -907,6 +936,9 @@ export class BookPage extends R2mElement {
     return this.rows().findIndex((r) => r.kind === 'chapter' && r.chapterId === chapterId);
   }
 }
+
+/** What a selection shortcut needs of the node it was chosen on: a tree node or a Book page heading. */
+type ActionNode = Pick<TreeNode, 'level' | 'id' | 'title'>;
 
 const rowKey = (row: ReaderRow) => row.key;
 

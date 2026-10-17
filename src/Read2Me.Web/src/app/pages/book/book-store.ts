@@ -106,12 +106,17 @@ export class BookStore {
     return this._window()
       .filter((id) => paragraphs[id])
       .map((id) => {
-        // A windowed chapter is always in the sequence; its position is unknown if it ever is not.
-        const { title, untitled } = chapterRefs.get(id) ?? {
+        // A windowed chapter is always in the sequence; its position is unknown if it ever is not,
+        // so its menu then offers no merge.
+        const ref = chapterRefs.get(id) ?? {
+          id,
           title: 'Untitled chapter',
           untitled: true,
+          rawTitle: null,
+          isFirst: true,
+          isLast: true,
         };
-        return { id, title, untitled, paragraphs: paragraphs[id]! };
+        return { ...ref, paragraphs: paragraphs[id]! };
       });
   });
 

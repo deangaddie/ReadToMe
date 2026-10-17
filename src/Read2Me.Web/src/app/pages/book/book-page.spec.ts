@@ -4,7 +4,7 @@ import { Router, type RouteDef } from '@app/core/router';
 import { override, resetServices, use } from '@app/core/services';
 import type { QueueMessage } from '@app/live/live-messages';
 import { Preflight } from '@app/shared/preflight';
-import { ConfirmService } from '@app/ui/dialogs';
+import { ConfirmService, PromptService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
 import { STRUCTURE_RULES } from '../../../testing/structure-rules';
 import { FakeApi, problem } from '../../../testing/fake-api';
@@ -221,6 +221,125 @@ describe('r2m-book-page', () => {
       'insert-node:After',
       'delete',
     ]);
+  });
+
+  describe('chapter heading Node menu', () => {
+    const headingTrigger = (page: BookPage, chapterId: string) =>
+      page.querySelector<HTMLButtonElement>(
+        `.book__heading[data-chapter-id=${chapterId}] .r2m-node-menu__trigger`,
+      )!;
+    const treeTrigger = (page: BookPage, chapterId: string) =>
+      page.querySelector<HTMLButtonElement>(`[data-node-id=${chapterId}] .r2m-node-menu__trigger`)!;
+    const menuEntries = async (page: BookPage, trigger: HTMLButtonElement) => {
+      trigger.click();
+      await page.rendered();
+      const entries = Array.from(page.querySelectorAll<HTMLElement>('[role="menu"] [data-entry]'));
+      return entries.map((e) => e.dataset['entry']);
+    };
+
+    it.each(['read', 'speakers', 'audio'] as const)(
+      'in %s mode offers exactly what the tree offers for the same chapter',
+      async (mode) => {
+        const { page } = await start(`projects/dune/book?mode=${mode}`);
+        await page.rendered();
+        for (const id of ['c1', 'c2']) {
+          const fromTree = await menuEntries(page, treeTrigger(page, id));
+          expect(await menuEntries(page, headingTrigger(page, id))).toEqual(fromTree);
+        }
+      },
+    );
+
+    it("lists the chapter's entries, merges hidden at the ends, shortcuts following the mode", async () => {
+      const { page } = await start('projects/dune/book?mode=speakers');
+      await page.rendered();
+      expect(headingTrigger(page, 'c1').getAttribute('aria-label')).toBe(
+        'Actions for The Encyclopedists',
+      );
+      expect(await menuEntries(page, headingTrigger(page, 'c1'))).toEqual([
+        'select-unprocessed',
+        'attribute-node',
+        'release-narration',
+        'edit-title',
+        'split',
+        'merge-next',
+        'insert-node:Before',
+        'insert-node:After',
+        'insert-node:AtStart',
+        'insert-node:AtEnd',
+        'delete',
+      ]);
+      const last = await menuEntries(page, headingTrigger(page, 'c2'));
+      expect(last).toContain('merge-previous');
+      expect(last).not.toContain('merge-next');
+    });
+
+    it('is disabled while the chapter is busy, as the tree trigger is', async () => {
+      api.on('GET', `${BASE}/status`, {
+        revision: 1,
+        nodes: {
+          c1: {
+            attributionRemaining: 2,
+            audioRemaining: 0,
+            review: 0,
+            attributionQueued: 2,
+            attributionProcessing: false,
+            isDone: false,
+          },
+        },
+        audio: { remaining: 0 },
+      });
+      const { page } = await start('projects/dune/book');
+      await page.rendered();
+      expect(treeTrigger(page, 'c1').disabled).toBe(true);
+      expect(headingTrigger(page, 'c1').disabled).toBe(true);
+      expect(headingTrigger(page, 'c2').disabled).toBe(false);
+    });
+
+    it('is disabled while the editor is locked', async () => {
+      const { page, store } = await start('projects/dune/book');
+      await page.rendered();
+      expect(headingTrigger(page, 'c1').disabled).toBe(false);
+      // A failed read leaves the view stale, which locks the editor.
+      api.on('GET', `${BASE}/nodes/part/p1/children`, () => problem(500, 'db locked'));
+      await store.refresh();
+      await page.rendered();
+      expect(store.stale()).toContain('db locked');
+      expect(headingTrigger(page, 'c1').disabled).toBe(true);
+    });
+
+    it('Edit title starts from the stored title and both panes show the new one after the save', async () => {
+      const prompts: unknown[] = [];
+      override(PromptService, {
+        text: async (o: unknown) => (prompts.push(o), 'Psychohistorians'),
+      } as unknown as PromptService);
+      api.on('POST', `${BASE}/commands`, { newEntityId: null });
+      const { page, store } = await start('projects/dune/book');
+      await page.rendered();
+
+      headingTrigger(page, 'c2').click();
+      await page.rendered();
+      page.querySelector<HTMLButtonElement>('[role="menu"] [data-entry=edit-title]')!.click();
+      for (let i = 0; i < 4; i++) await settle();
+      // An untitled chapter's rename starts empty, never from its placeholder.
+      expect(prompts).toEqual([expect.objectContaining({ initial: '' })]);
+      expect(api.calls('POST', `${BASE}/commands`).map((r) => r.body)).toEqual([
+        { type: 'UpdateChapterTitle', chapterId: 'c2', title: 'Psychohistorians' },
+      ]);
+
+      // The receipt's reload reads the stored title back.
+      api.on('GET', `${BASE}/nodes/part/p1/children`, {
+        chapters: [
+          { id: 'c1', title: 'The Encyclopedists' },
+          { id: 'c2', title: 'Psychohistorians' },
+        ],
+      });
+      await store.refresh();
+      await page.rendered();
+      expect(text(page.querySelector('.book__heading[data-chapter-id=c2] .book__chapter'))).toBe(
+        'Psychohistorians',
+      );
+      expect(text(page.querySelector('[data-node-id=c2] .tree__title'))).toBe('Psychohistorians');
+    });
   });
 
   it('a tree pick names the chapter in the URL', async () => {
@@ -525,6 +644,43 @@ describe('r2m-book-page', () => {
       expect(api.calls('POST', `${BASE}/attribution/enqueue`)).toHaveLength(0);
     });
 
+    it('a chapter heading menu runs the shortcuts and Release narration as the tree does', async () => {
+      api
+        .on('GET', `${BASE}/nodes/chapter/c1/paragraph-ids`, (_body, url) =>
+          url.searchParams.get('unprocessedOnly') === 'true'
+            ? [{ id: 'p2', chapterId: 'c1', partId: 'p1', volumeId: 'v1' }]
+            : [],
+        )
+        .on('POST', `${BASE}/attribution/enqueue`, { enqueued: 1 });
+      const { page } = await start('projects/dune/book?mode=speakers');
+      const selection = use(SelectionStore, page);
+      const release = mock(async () => true);
+      use(SpeakerAssigner, page).releaseNarration = release;
+      const choose = async (chapterId: string, entry: string) => {
+        page
+          .querySelector<HTMLButtonElement>(
+            `.book__heading[data-chapter-id=${chapterId}] .r2m-node-menu__trigger`,
+          )!
+          .click();
+        await page.rendered();
+        page.querySelector<HTMLButtonElement>(`[role="menu"] [data-entry=${entry}]`)!.click();
+        for (let i = 0; i < 4; i++) await settle();
+      };
+
+      await choose('c1', 'select-unprocessed');
+      expect(selection.ids()).toEqual(['p2']);
+
+      await choose('c1', 'attribute-node');
+      expect(api.calls('POST', `${BASE}/attribution/enqueue`).map((r) => r.body)).toEqual([
+        { level: 'chapter', nodeId: 'c1', unprocessedOnly: true },
+      ]);
+
+      // The release names the chapter as it shows, placeholder title included.
+      await choose('c2', 'release-narration');
+      expect(release).toHaveBeenCalledWith('Chapter', 'c2', 'Untitled chapter 2');
+      expect(selection.count()).toBe(0);
+    });
+
     it('a release that writes nothing keeps the selection', async () => {
       const { page } = await start('projects/dune/book?mode=speakers');
       const selection = use(SelectionStore, page);
@@ -672,6 +828,20 @@ describe('r2m-book-page', () => {
       generator.enqueueNode = enqueueNode;
 
       page.querySelector<HTMLButtonElement>('[data-node-id=c1] .r2m-node-menu__trigger')!.click();
+      await page.rendered();
+      page
+        .querySelector<HTMLButtonElement>('[role="menu"] [data-entry=generate-audio-node]')!
+        .click();
+      for (let i = 0; i < 4; i++) await settle();
+      expect(enqueueNode).toHaveBeenCalledWith('chapter', 'c1', false);
+
+      // The chapter's heading on the Book page does the same.
+      enqueueNode.mockClear();
+      page
+        .querySelector<HTMLButtonElement>(
+          '.book__heading[data-chapter-id=c1] .r2m-node-menu__trigger',
+        )!
+        .click();
       await page.rendered();
       page
         .querySelector<HTMLButtonElement>('[role="menu"] [data-entry=generate-audio-node]')!
