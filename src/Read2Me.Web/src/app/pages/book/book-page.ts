@@ -2,7 +2,6 @@ import { html, nothing } from 'lit-html';
 import {
   AttributionApi,
   BookApi,
-  type BookCommand,
   type NarrationReleaseScope,
   type NodeLevel,
   type ParagraphDto,
@@ -18,12 +17,15 @@ import { Preflight } from '@app/shared/preflight';
 import { ConfirmService, confirmPermanent } from '@app/ui/dialogs';
 import type { IconName } from '@app/ui/icons';
 import type { MeasuredList } from '@app/ui/measured-list';
-import { menuItem } from '@app/ui/menu';
-import { emptyState, icon, statusChip } from '@app/ui/partials';
+import { menuHeading, menuItem } from '@app/ui/menu';
+import { adviceLine, emptyState, icon, statusChip } from '@app/ui/partials';
 import type { SpeakerMenu } from '@app/ui/speaker-menu';
 import { ToastService } from '@app/ui/toast';
 import { rereadConfirm } from '../project/permanent-changes';
+import { type StepActionId, adviceFor } from '../project/pipeline-steps';
 import { ProjectStore } from '../project/project-store';
+import { type TitleLevel, addedTitlesMessage, titleCommand } from './add-titles';
+import { openAddTitlesDialog } from './add-titles-dialog';
 import { AudioGenerator } from './audio-generator';
 import { BookEditor } from './book-editor';
 import { BookStore } from './book-store';
@@ -73,52 +75,6 @@ const MODE_LABELS: Record<ReaderMode, string> = {
 const SKELETON = [1, 2, 3, 4, 5, 6];
 const BULK_MENU_ID = 'r2m-book-bulk-menu';
 const ACTIONS_MENU_ID = 'r2m-book-actions-menu';
-
-/** Which "Add … titles" entries apply: only levels that add navigation (research §3 Toolbar). */
-interface TitleLevels {
-  volumes: boolean;
-  parts: boolean;
-  chapters: boolean;
-}
-
-/** The book-level commands in the toolbar overflow (research §3 Toolbar), each with its icon. */
-const TITLE_ACTIONS: readonly {
-  action: string;
-  /** Which navigation level the titles add; a book title always applies. */
-  level: keyof TitleLevels | null;
-  label: string;
-  icon: IconName;
-  command: BookCommand;
-}[] = [
-  {
-    action: 'add-book-title',
-    level: null,
-    label: 'Add book title',
-    icon: 'title',
-    command: { type: 'AddBookTitle' },
-  },
-  {
-    action: 'add-volume-titles',
-    level: 'volumes',
-    label: 'Add volume titles',
-    icon: 'library_books',
-    command: { type: 'AddVolumeTitles' },
-  },
-  {
-    action: 'add-part-titles',
-    level: 'parts',
-    label: 'Add part titles',
-    icon: 'bookmark',
-    command: { type: 'AddPartTitles' },
-  },
-  {
-    action: 'add-chapter-titles',
-    level: 'chapters',
-    label: 'Add chapter titles',
-    icon: 'menu_book',
-    command: { type: 'AddChapterTitles' },
-  },
-];
 
 /**
  * `/projects/{folder}/book` (design §6.3, native-web 22–26): the structure tree beside a
@@ -182,8 +138,6 @@ export class BookPage extends R2mElement {
   private nodeStates = computed<Readonly<Record<string, TriState>>>(() => ({}));
   /** Bulk assign is disarmed while attribution runs anywhere (research §3). */
   private queueBusy = computed(() => false);
-  /** Which "Add … titles" entries apply (research §3 Toolbar): only levels that add navigation. */
-  private titleActions = computed(() => ({ volumes: false, parts: false, chapters: false }));
 
   protected override connected(): void {
     this.project = use(ProjectStore, this);
@@ -205,13 +159,6 @@ export class BookPage extends R2mElement {
     this.selectionKind = computed(() => (this.audioSelectable() ? 'items' : 'paragraphs'));
     this.queueBusy = computed(() => this.live.queue()?.attribution.isBusy ?? false);
     this.narratorOnlyMode = computed(() => project.detail()?.narratorOnlyMode ?? false);
-    this.titleActions = computed(() => {
-      const overview = store.overview();
-      const volumes = overview?.volumes.length ?? 0;
-      const parts = overview?.totalParts ?? 0;
-      const chapters = overview?.totalChapters ?? 0;
-      return { volumes: volumes > 1, parts: parts > volumes, chapters: chapters > parts };
-    });
 
     // Every tree node's checkbox state over the selection the mode is in.
     this.nodeStates = computed(() => {
@@ -265,6 +212,24 @@ export class BookPage extends R2mElement {
       const folder = project.folder();
       if (!folder) return;
       untracked(() => void this.start(folder));
+    });
+
+    // `?action=` (from the Overview's rows): once the book and its Pipeline steps have loaded (the
+    // dialog shows their advice) and nothing locks the editor, drop the param and open what the
+    // overflow entry opens. Unknown, or no content: drop only.
+    this.effect(() => {
+      const action = this.router.query().get('action');
+      const overview = store.overview();
+      if (action === null || !overview || !project.pipeline() || editor.locked()) return;
+      untracked(() => {
+        const query = Object.fromEntries(this.router.query());
+        this.router.navigate(this.router.path(), {
+          replace: true,
+          query: { ...query, action: null },
+        });
+        const open = overview.hasContent ? this.deepLinks.get(action) : undefined;
+        if (open) void open();
+      });
     });
 
     this.effect(() => {
@@ -492,6 +457,7 @@ export class BookPage extends R2mElement {
       >
         ${icon('graphic_eq')} Generate audio
       </button>
+      ${adviceLine(this.advice('generateAudio'))}
       <button
         type="button"
         class="r2m-button"
@@ -503,12 +469,18 @@ export class BookPage extends R2mElement {
     </div>`;
   }
 
-  /** The toolbar overflow (ticket 11): the book-level commands, each posting through the editor. */
+  /**
+   * The toolbar overflow (ticket 11), grouped under Pipeline headings (guidance-primitives spec §5):
+   * the book-level commands, each posting through the editor. An entry's advice is its second line.
+   */
   private bookActions() {
-    const titles = this.titleActions();
-    const shown = TITLE_ACTIONS.filter((a) => a.level === null || titles[a.level]);
-    const entry = (action: string, label: string, glyph: IconName, run: () => void) =>
-      menuItem({ action, label, icon: glyph, run });
+    const entry = (
+      action: string,
+      label: string,
+      glyph: IconName,
+      run: () => void,
+      hint: string | null = null,
+    ) => menuItem({ action, label, icon: glyph, run, ...(hint === null ? {} : { hint }) });
     return html`<button
         type="button"
         class="r2m-icon-button"
@@ -521,14 +493,28 @@ export class BookPage extends R2mElement {
         ${icon('more_vert')}
       </button>
       <div id=${ACTIONS_MENU_ID} popover class="r2m-menu" role="menu" aria-label="Book actions">
-        ${shown.map((a) => entry(a.action, a.label, a.icon, () => void this.editor.run(a.command)))}
+        ${menuHeading('Structure')}
+        ${entry('reread', 'Reread… (auto splits)', 'restart_alt', () => void this.reread())}
+        ${entry('manual-reread', 'Reread with split rules…', 'tune', () => void this.rereadManually())}
         <hr class="r2m-menu__divider" />
-        ${entry('add-pauses', 'Add pauses', 'pause', () => void this.addPauses())}
-        <hr class="r2m-menu__divider" />
+        ${menuHeading('Text')}
         ${entry('edit-with-ai', 'Edit with AI…', 'auto_fix_high', () => void this.editWithAi())}
         <hr class="r2m-menu__divider" />
-        ${entry('reread', 'Reread…', 'restart_alt', () => void this.reread())}
-        ${entry('manual-reread', 'Manual reread…', 'tune', () => void this.rereadManually())}
+        ${menuHeading('Titles and pauses')}
+        ${entry(
+          'add-titles',
+          'Add titles…',
+          'title',
+          () => void this.addTitles(),
+          this.advice('addTitles'),
+        )}
+        ${entry(
+          'add-pauses',
+          'Add pauses',
+          'pause',
+          () => void this.addPauses(),
+          this.advice('addPauses'),
+        )}
       </div>`;
   }
 
@@ -890,6 +876,40 @@ export class BookPage extends R2mElement {
   }
 
   // ---- book actions (ticket 11) -------------------------------------------------------------------
+
+  /** What `?action=` opens, by query value: the same as the overflow entry (spec §5). */
+  private readonly deepLinks: ReadonlyMap<string, () => Promise<void>> = new Map([
+    ['titles', () => this.addTitles()],
+    ['edit-ai', () => this.editWithAi()],
+    ['manual-reread', () => this.rereadManually()],
+  ]);
+
+  /** An action's advice line (spec §2) over the project's Pipeline steps, or null. */
+  private advice(action: StepActionId): string | null {
+    return adviceFor(action, this.project.pipeline() ?? []);
+  }
+
+  /**
+   * Add titles (guidance-primitives spec §5): the dialog is its own confirm. Sends the ticked levels
+   * book first, stops at the first refusal (the editor toasts it) and names what landed.
+   */
+  private async addTitles(): Promise<void> {
+    const overview = this.store.overview();
+    if (!overview) return;
+    const levels = await openAddTitlesDialog({
+      volumes: overview.volumes.length,
+      parts: overview.totalParts,
+      chapters: overview.totalChapters,
+      advice: this.advice('addTitles'),
+    });
+    if (!levels) return;
+    const added: TitleLevel[] = [];
+    for (const level of levels) {
+      if (!(await this.editor.run(titleCommand(level)))) break;
+      added.push(level);
+    }
+    if (added.length > 0) this.toast.success(addedTitlesMessage(added));
+  }
 
   /** Add pauses always asks (guidance-primitives spec §7): each pause is a delete to undo. */
   private async addPauses(): Promise<void> {

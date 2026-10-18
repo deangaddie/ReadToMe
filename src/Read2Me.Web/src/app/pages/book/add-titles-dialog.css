@@ -1,0 +1,32 @@
+/* Add titles dialog (guidance-primitives spec §5): one box per level, muted lines for the rest. */
+@scope (r2m-add-titles-dialog) {
+  :scope {
+    display: block;
+    min-width: 360px;
+    max-width: 520px;
+  }
+  .titles__content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-2);
+  }
+  .titles__hint {
+    margin: 0 0 var(--r2m-space-2);
+    color: var(--r2m-text-muted);
+  }
+  .titles__lost,
+  .titles__missing {
+    margin: 0;
+    font-size: var(--r2m-text-sm);
+    color: var(--r2m-text-muted);
+  }
+  .titles__lost {
+    margin-inline-start: calc(18px + var(--r2m-space-2));
+  }
+  .titles__advice:empty {
+    display: none;
+  }
+  .titles__advice {
+    margin-top: var(--r2m-space-2);
+  }
+}

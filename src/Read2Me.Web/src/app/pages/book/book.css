@@ -35,6 +35,13 @@
     align-items: center;
     gap: var(--r2m-space-1);
   }
+  /* Generate audio's advice line beside it (guidance-primitives spec §2): one muted line, clipped. */
+  .book__selection .r2m-advice {
+    max-width: 28ch;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
   .book__bulk {
     position: relative;
   }
