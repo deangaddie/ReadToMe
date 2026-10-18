@@ -16,6 +16,7 @@ import type {
   WatchdogState,
 } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
+import { type ConfirmOptions, ConfirmService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
 import { FakeTimers } from '../../testing/fake-timers';
 import { ActivityStore, ELAPSED_TICK_MS } from './activity-store';
@@ -138,6 +139,14 @@ function setup() {
   const audio = { cancel: mock(async () => undefined) };
   const voices = { cancelBatch: mock(async () => undefined) };
   const assembly = { cancel: mock(async () => undefined) };
+  const confirms: ConfirmOptions[] = [];
+  const confirm = { answer: true, asked: confirms };
+  override(ConfirmService, {
+    confirm: async (o: ConfirmOptions) => {
+      confirms.push(o);
+      return confirm.answer;
+    },
+  } as unknown as ConfirmService);
   override(LiveService, live as unknown as LiveService);
   override(ToastService, toast as unknown as ToastService);
   override(AttributionApi, attribution as unknown as AttributionApi);
@@ -145,7 +154,7 @@ function setup() {
   override(VoicesApi, voices as unknown as VoicesApi);
   override(AssemblyApi, assembly as unknown as AssemblyApi);
   const store = use(ActivityStore);
-  return { live, toast, attribution, audio, voices, assembly, store };
+  return { live, toast, attribution, audio, voices, assembly, store, confirm };
 }
 
 beforeEach(() => {
@@ -208,6 +217,26 @@ describe('ActivityStore', () => {
     expect(audio.cancel).toHaveBeenCalledTimes(1);
     expect(voices.cancelBatch).toHaveBeenCalledTimes(1);
     expect(assembly.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('Cancel on a job asks first (guidance-primitives 14) and sends nothing when declined', async () => {
+    const { live, store, attribution, confirm } = setup();
+    live.pushQueue(busyQueue());
+    confirm.answer = false;
+    await store.cancel('attribution');
+    expect(confirm.asked).toEqual([
+      expect.objectContaining({
+        title: 'Cancel queued jobs?',
+        confirmLabel: 'Cancel queued jobs',
+        destructive: false,
+        message: expect.stringContaining('queued job'),
+      }),
+    ]);
+    expect(attribution.cancel).not.toHaveBeenCalled();
+
+    confirm.answer = true;
+    await store.cancel('attribution');
+    expect(attribution.cancel).toHaveBeenCalledTimes(1);
   });
 
   it('dismisses a failed job locally until the job starts again', () => {

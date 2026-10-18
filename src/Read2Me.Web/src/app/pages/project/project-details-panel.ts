@@ -16,7 +16,9 @@ import type { RejectedFile } from '@app/ui/file-drop';
 import { keyValue } from '@app/ui/key-value';
 import { icon, statusChip } from '@app/ui/partials';
 import { placeholderGradient, projectInitials } from '@app/ui/project-card';
+import { confirmPermanent } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
+import { removeCoverChange } from './permanent-changes';
 import { ProjectStore } from './project-store';
 import '@app/ui/file-drop';
 import '@app/ui/inline-edit';
@@ -184,9 +186,11 @@ export class ProjectDetailsPanel extends R2mElement {
     );
   }
 
+  /** Asks first (guidance-primitives 14): the image the user uploaded is deleted. */
   async removeCover(): Promise<void> {
     const folder = this.store.folder();
     if (!folder) return;
+    if (!(await confirmPermanent(removeCoverChange()))) return;
     await this.write(async () => {
       await this.api.deleteCover(folder);
       await this.store.refreshDetail();

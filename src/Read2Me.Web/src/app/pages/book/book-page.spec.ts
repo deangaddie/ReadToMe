@@ -1244,6 +1244,20 @@ describe('r2m-book-page', () => {
       expect(api.calls('POST', `${BASE}/import`)).toHaveLength(1);
     });
 
+    it('Reread names the confirmed and skipped steps it clears when a checkpoint row exists (guidance-primitives 14)', async () => {
+      api.on('GET', `${BASE}/status`, {
+        revision: 1,
+        nodes: {},
+        audio: { remaining: 0 },
+        checkpoints: { structure: { state: 'skipped', stale: false, at: '2026-10-18' } },
+      });
+      confirmAnswer = false;
+      const { page } = await open1();
+      page.querySelector<HTMLButtonElement>('[data-action=reread]')!.click();
+      for (let i = 0; i < 4; i++) await settle();
+      expect(confirms[0]?.message).toContain('Clears your confirmed and skipped steps.');
+    });
+
     it('Manual reread opens the dialog and sends its request', async () => {
       api.on('POST', `${BASE}/import/manual`, undefined);
       const { page } = await open1();

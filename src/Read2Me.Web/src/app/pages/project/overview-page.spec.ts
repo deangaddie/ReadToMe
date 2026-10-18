@@ -3,6 +3,7 @@ import type { AssemblyOutputDto, ProjectDetailDto, ProjectStatusDto } from '@app
 import { Router, type RouteDef } from '@app/core/router';
 import { override, resetServices } from '@app/core/services';
 import { Preflight } from '@app/shared/preflight';
+import { type ConfirmOptions, ConfirmService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
 import { FakeApi, problem } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';
@@ -75,6 +76,9 @@ let navigation: FakeNavigation;
 let live: FakeLive;
 let toasts: string[];
 let ensureReady: ReturnType<typeof mock>;
+/** Every confirm the page asked for, answered with {@link confirmAnswer}. */
+let confirms: ConfirmOptions[];
+let confirmAnswer: boolean;
 
 beforeEach(() => {
   resetServices();
@@ -84,6 +88,14 @@ beforeEach(() => {
   toasts = [];
   ensureReady = mock(async () => true);
   override(Preflight, { ensureReady } as unknown as Preflight);
+  confirms = [];
+  confirmAnswer = true;
+  override(ConfirmService, {
+    confirm: async (o: ConfirmOptions) => {
+      confirms.push(o);
+      return confirmAnswer;
+    },
+  } as unknown as ConfirmService);
   override(ToastService, {
     success: (m: string) => toasts.push(m),
     warn: (m: string) => toasts.push(m),
@@ -125,6 +137,45 @@ describe('r2m-overview-page', () => {
       'projects/dune/cast/w',
     );
     expect(details.querySelector<HTMLInputElement>('input[name=narratorOnly]')?.checked).toBe(true);
+  });
+
+  it('Remove cover asks a red confirm first (guidance-primitives 14), then DELETEs and refetches', async () => {
+    api
+      .on('GET', BASE, { ...DETAIL, coverImage: 'cover.jpg' })
+      .on('GET', `${BASE}/status`, status());
+    api.on('GET', `${BASE}/assembly/outputs`, []);
+    api.on('DELETE', `${BASE}/cover`, undefined);
+    navigation = installNavigation('projects/dune');
+    const router = new Router();
+    override(Router, router);
+    router.start(ROUTES, async () => true);
+    const outlet = document.createElement('r2m-outlet');
+    document.body.append(outlet);
+    for (let i = 0; i < 4; i++) await settle();
+    const details = outlet.querySelector('r2m-project-details-panel')!;
+    await details.rendered();
+    const remove = () => details.querySelector<HTMLButtonElement>('.details__remove-cover')!;
+
+    confirmAnswer = false;
+    remove().click();
+    for (let i = 0; i < 4; i++) await settle();
+    expect(confirms).toEqual([
+      expect.objectContaining({
+        title: 'Remove cover?',
+        message: expect.stringContaining('Deletes the cover image.'),
+        confirmLabel: 'Remove cover',
+        destructive: true,
+      }),
+    ]);
+    expect(api.calls('DELETE', `${BASE}/cover`)).toHaveLength(0);
+
+    confirmAnswer = true;
+    api.on('GET', BASE, DETAIL);
+    remove().click();
+    for (let i = 0; i < 6; i++) await settle();
+    expect(api.calls('DELETE', `${BASE}/cover`)).toHaveLength(1);
+    await details.rendered();
+    expect(remove()).toBeNull();
   });
 
   it('a fresh project offers Read book as the next step and imports then refetches status', async () => {
@@ -224,18 +275,32 @@ describe('r2m-overview-page', () => {
     const page = await render();
     api.on('POST', `${BASE}/import`, undefined);
 
+    confirmAnswer = false;
     button(page, 'reread').click();
-    await settle();
-    const dialog = document.querySelector('r2m-confirm-dialog')!;
-    await dialog.rendered();
-    expect(dialog.querySelector('.r2m-confirm-dialog__confirm')?.classList).toContain(
-      'r2m-button--danger',
-    );
-    dialog.querySelector<HTMLButtonElement>('.r2m-confirm-dialog__confirm')!.click();
-    await settle();
+    for (let i = 0; i < 4; i++) await settle();
+    expect(confirms).toEqual([
+      expect.objectContaining({ title: 'Reread the book?', destructive: true }),
+    ]);
+    expect(confirms[0]?.message).not.toContain('confirmed and skipped steps');
+    expect(api.calls('POST', `${BASE}/import`)).toHaveLength(0);
 
+    confirmAnswer = true;
+    button(page, 'reread').click();
+    for (let i = 0; i < 4; i++) await settle();
     expect(api.calls('POST', `${BASE}/import`).map((r) => r.body)).toEqual([{ reread: true }]);
     expect(toasts).toEqual(['Book reread']);
+  });
+
+  it('Reread names the confirmed and skipped steps it clears when a checkpoint row exists (guidance-primitives 14)', async () => {
+    const page = await render(
+      status({
+        checkpoints: { structure: { state: 'confirmed', stale: false, at: '2026-10-18' } },
+      }),
+    );
+    confirmAnswer = false;
+    button(page, 'reread').click();
+    for (let i = 0; i < 4; i++) await settle();
+    expect(confirms[0]?.message).toContain('Clears your confirmed and skipped steps.');
   });
 
   it('navigation actions route to cast, book modes and export', async () => {

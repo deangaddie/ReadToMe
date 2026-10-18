@@ -82,6 +82,16 @@ describe('r2m-manual-reread-dialog', () => {
     });
   });
 
+  it('is its own permanent-change confirm: a red submit and a body that names what goes (guidance-primitives 14)', async () => {
+    const { dialog } = await open();
+    const submit = dialog.querySelector<HTMLButtonElement>('.manual__submit')!;
+    expect(submit.classList).toContain('r2m-button--danger');
+    expect(text(dialog.querySelector('.manual__hint'))).toBe(
+      'Re-splits the source file by the rules below. Attribution, audio, titles, pauses and your ' +
+        'confirmed steps are deleted.',
+    );
+  });
+
   it('Cancel closes with nothing', async () => {
     const { result, dialog } = await open();
     dialog.querySelector<HTMLButtonElement>('.manual__cancel')!.click();

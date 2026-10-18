@@ -303,6 +303,28 @@ describe('r2m-voice-card', () => {
     expect(store.voices().voices[0]?.transcript).toBe('hello there');
   });
 
+  it('Send to AI over an existing transcript asks a red confirm first (guidance-primitives 14)', async () => {
+    const card = await mount(
+      voice({ source: 'Uploaded', audioFileName: 'voices/alice/v1.wav', transcript: 'old words' }),
+    );
+    api.on('POST', `${BASE}/voices/v1/transcribe`, { transcript: 'new words' });
+
+    confirmAnswer = false;
+    button(card, 'transcribe').click();
+    await settle();
+    await settle();
+    expect(confirms).toEqual(['Send to AI?']);
+    expect(api.calls('POST', `${BASE}/voices/v1/transcribe`)).toHaveLength(0);
+    expect(preflightTasks).toEqual([]);
+
+    confirmAnswer = true;
+    button(card, 'transcribe').click();
+    await settle();
+    await settle();
+    expect(api.calls('POST', `${BASE}/voices/v1/transcribe`)).toHaveLength(1);
+    expect(toasts).toEqual(['success: Transcript generated.']);
+  });
+
   it('an upload goes through the file drop to the audio endpoint; a refused one is toasted', async () => {
     const card = await mount(voice({ source: 'Uploaded' }));
     const drop = card.querySelector('r2m-file-drop')!;

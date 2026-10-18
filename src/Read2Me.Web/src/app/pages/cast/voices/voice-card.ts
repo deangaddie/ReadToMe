@@ -11,12 +11,13 @@ import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { type ReadonlySignal, computed, signal, untracked } from '@app/core/signals';
 import { Preflight } from '@app/shared/preflight';
-import { ConfirmService } from '@app/ui/dialogs';
+import { ConfirmService, confirmPermanent } from '@app/ui/dialogs';
 import type { RejectedFile } from '@app/ui/file-drop';
 import { icon, statusChip } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
 import { CastStore } from '../cast-store';
 import { openGeneratePromptDialog } from './generate-prompt-dialog';
+import { transcribeChange } from './permanent-changes';
 import {
   canGenerateAudio,
   overwriteEditWarning,
@@ -629,9 +630,11 @@ export class VoiceCard extends R2mElement {
     if (response) this.transcriptDraft.set(null);
   }
 
+  /** Asks first when a transcript (stored or drafted) would be replaced (guidance-primitives 14). */
   async transcribe(): Promise<void> {
     const voice = this.#voice();
     if (!voice?.audioFileName) return;
+    if (!(await confirmPermanent(transcribeChange(this.transcript())))) return;
     if (!(await this.preflight.ensureReady('transcription'))) return;
     this.transcribing.set(true);
     try {
