@@ -32,10 +32,11 @@ cd src/Read2Me.Web
 bun install --frozen-lockfile           # Bun 1.4.2 pinned by packageManager; no Node needed
 bun run dev                             # HMR dev server on http://localhost:4300/app/, proxies /api,/hubs,/workspace,/openapi,/audio-preview,/preview-source to :5000
 bun run build                           # emits to src/Read2Me.App/wwwroot/app/ (git-ignored); host serves it at /app
-bun run check                           # format:check + lint + typecheck + api:check + icons:check + bun test + build
+bun run check                           # format:check + lint + typecheck + api:check + icons:check + help:check + bun test + build
 bun test src/app/core/router.spec.ts    # one spec file
 bun run api:types                       # regenerate src/app/api/schema.d.ts from a running host /openapi/v1.json
 bun run icons                           # rebuild the subset icon font from the IconName union (network); icons:check gates offline
+bun run help                            # render docs/guide/<step>.md into src/app/help/help.generated.ts (committed); help:check gates in check
 
 # dotnet test runs on Microsoft Testing Platform (global.json): filter with xunit's --filter-class/--filter-namespace/--filter-method, not VSTest --filter
 # E2E tests: src/Read2Me.E2eTests — xUnit + Playwright over an in-proc host with fake AI.

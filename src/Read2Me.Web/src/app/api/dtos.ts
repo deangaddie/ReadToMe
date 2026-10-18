@@ -80,16 +80,18 @@ export type NarratorOnlyModeRequest = Schema['NarratorOnlyModeRequest'];
  * `PipelineStep`: the nine stepper step ids, which are also the checkpoint route segment and the
  * keys of {@link ProjectStatusDto.checkpoints}.
  */
-export type PipelineStepId =
-  | 'import'
-  | 'structure'
-  | 'speakers'
-  | 'text'
-  | 'voices'
-  | 'titles'
-  | 'pauses'
-  | 'audio'
-  | 'export';
+export const PIPELINE_STEP_IDS = [
+  'import',
+  'structure',
+  'speakers',
+  'text',
+  'voices',
+  'titles',
+  'pauses',
+  'audio',
+  'export',
+] as const;
+export type PipelineStepId = (typeof PIPELINE_STEP_IDS)[number];
 
 /** `PUT /api/projects/{folder}/checkpoints/{step}`: `open` deletes the row. */
 export type SetCheckpointRequest = Schema['SetCheckpointRequest'];

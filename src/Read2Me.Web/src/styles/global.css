@@ -738,6 +738,35 @@ dialog.r2m-dialog--fullscreen {
   color: var(--r2m-text-muted);
 }
 
+/* ---- help text (r2m-help): one step's docs/guide page, rendered at build time ---------------- */
+.r2m-help {
+  max-width: 60ch;
+  line-height: 1.5;
+
+  & .r2m-help__title {
+    margin: 0 0 var(--r2m-space-2);
+    font-size: var(--r2m-text-lg);
+  }
+  & .r2m-help__body {
+    & h3 {
+      margin: var(--r2m-space-3) 0 var(--r2m-space-1);
+      font-size: var(--r2m-text-md);
+    }
+    & p,
+    & ul,
+    & ol {
+      margin: 0 0 var(--r2m-space-2);
+    }
+    & ul,
+    & ol {
+      padding-inline-start: 1.25em;
+    }
+    & code {
+      font-size: 0.9em;
+    }
+  }
+}
+
 /* ---- speaker chip + menu -------------------------------------------------------------------- */
 .r2m-speaker-chip,
 .r2m-speaker-menu__row {
