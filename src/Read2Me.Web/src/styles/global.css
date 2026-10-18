@@ -545,6 +545,27 @@ dialog.r2m-dialog--fullscreen {
 .r2m-menu__item--destructive .r2m-icon {
   color: var(--r2m-status-error);
 }
+/* An entry with a muted second line (its advice). */
+.r2m-menu__item--hinted {
+  min-height: 52px;
+  padding-block: var(--r2m-space-1);
+  white-space: normal;
+}
+.r2m-menu__text {
+  display: flex;
+  flex-direction: column;
+}
+.r2m-menu__hint {
+  max-width: 32ch;
+  font-size: var(--r2m-text-sm);
+  color: var(--r2m-text-muted);
+}
+/* A non-interactive group label. */
+.r2m-menu__heading {
+  padding: var(--r2m-space-2) var(--r2m-space-4) var(--r2m-space-1);
+  font: 500 var(--r2m-text-sm) var(--r2m-font-sans);
+  color: var(--r2m-text-muted);
+}
 /* mat-divider between entry groups. */
 .r2m-menu__divider {
   margin: var(--r2m-space-1) 0;
@@ -669,6 +690,52 @@ dialog.r2m-dialog--fullscreen {
 .r2m-empty-state__headline {
   color: var(--r2m-text);
   font-weight: 500;
+}
+.r2m-empty-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--r2m-space-2);
+  margin-top: var(--r2m-space-2);
+}
+
+/* ---- message primitives (blockable, callout, advice line) ----------------------------------- */
+/* Holds a disabled control's blocked reason; focusable only while blocked. */
+.r2m-blockable {
+  display: inline-flex;
+  border-radius: var(--r2m-radius-md);
+
+  &:focus-visible {
+    outline: 2px solid var(--r2m-accent);
+    outline-offset: 2px;
+  }
+}
+.r2m-callout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--r2m-space-2);
+  padding: var(--r2m-space-2) var(--r2m-space-3);
+  border-radius: var(--r2m-radius-md);
+  color: var(--_fg);
+  background: var(--_bg);
+}
+.r2m-callout--info {
+  --_fg: var(--r2m-status-info);
+  --_bg: var(--r2m-status-info-soft);
+}
+.r2m-callout--warn {
+  --_fg: var(--r2m-status-warn);
+  --_bg: var(--r2m-status-warn-soft);
+}
+.r2m-callout__text {
+  flex: 1 1 16rem;
+  color: var(--r2m-text);
+}
+.r2m-advice {
+  margin: 0;
+  font-size: var(--r2m-text-sm);
+  color: var(--r2m-text-muted);
 }
 
 /* ---- speaker chip + menu -------------------------------------------------------------------- */

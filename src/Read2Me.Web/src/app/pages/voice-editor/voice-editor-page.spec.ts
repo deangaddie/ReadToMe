@@ -219,6 +219,9 @@ describe('r2m-voice-editor-page', () => {
     );
     expect(button(page, 'preview').disabled).toBe(true);
     expect(button(page, 'apply').disabled).toBe(true);
+    expect(button(page, 'apply').closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(
+      'Tick at least one step.',
+    );
     expect(page.querySelector('[data-action="restore"]')).toBeNull();
     expect(
       page.querySelector<HTMLAnchorElement>('[data-action="back"]')?.getAttribute('href'),
@@ -354,7 +357,7 @@ describe('r2m-voice-editor-page', () => {
     const page = await render(problem(404, 'no such voice'));
 
     expect(text(page.querySelector('.r2m-empty-state'))).toContain('That voice no longer exists.');
-    expect(page.querySelector('[data-action="back-empty"]')?.getAttribute('href')).toBe(
+    expect(page.querySelector('.r2m-empty-state__action')?.getAttribute('href')).toBe(
       'projects/dune/cast',
     );
   });

@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'bun:test';
 import { html, render } from 'lit-html';
-import { countBadge, emptyState, icon, spinner, statusChip } from './partials';
+import {
+  adviceLine,
+  blockable,
+  callout,
+  countBadge,
+  emptyState,
+  icon,
+  spinner,
+  statusChip,
+} from './partials';
 
 function mount(template: unknown): HTMLElement {
   const host = document.createElement('div');
@@ -47,23 +56,123 @@ describe('statusChip', () => {
 });
 
 describe('emptyState', () => {
-  it('renders the icon, headline, hint and action', () => {
+  it('renders the icon, headline and hint', () => {
     const el = mount(
-      emptyState(
-        { icon: 'search', headline: 'No projects', hint: 'Import a book to start.' },
-        html`<button>Import</button>`,
-      ),
+      emptyState({ icon: 'search', headline: 'No projects', hint: 'Import a book to start.' }),
     );
     expect(el.querySelector('.r2m-empty-state__icon')?.textContent).toBe('search');
     expect(el.querySelector('.r2m-empty-state__headline')?.textContent).toBe('No projects');
     expect(el.querySelector('.r2m-empty-state__hint')?.textContent).toBe('Import a book to start.');
-    expect(el.querySelector('button')?.textContent).toBe('Import');
+    expect(el.querySelector('.r2m-empty-state__actions')).toBeNull();
   });
 
   it('leaves the hint out when there is none', () => {
     const el = mount(emptyState({ icon: 'search', headline: 'Nothing', compact: true }));
     expect(el.querySelector('.r2m-empty-state__hint')).toBeNull();
     expect(el.querySelector('.r2m-empty-state--compact')).not.toBeNull();
+  });
+
+  it('renders a run action as a button and an href action as a link, the first filled', () => {
+    let ran = 0;
+    const el = mount(
+      emptyState({ icon: 'search', headline: 'No cast' }, [
+        { label: 'Discover characters', icon: 'person_search', run: () => ran++ },
+        { label: 'Back to the cast', href: 'cast' },
+      ]),
+    );
+    const [first, second] = el.querySelectorAll<HTMLElement>('.r2m-empty-state__action');
+    expect(first?.tagName).toBe('BUTTON');
+    expect(first?.getAttribute('type')).toBe('button');
+    expect(first?.querySelector('.r2m-icon')?.textContent).toBe('person_search');
+    expect(first?.textContent).toContain('Discover characters');
+    expect(first?.classList.contains('r2m-button--filled')).toBe(true);
+    first?.click();
+    expect(ran).toBe(1);
+    expect(second?.tagName).toBe('A');
+    expect(second?.getAttribute('href')).toBe('cast');
+    expect(second?.textContent?.trim()).toBe('Back to the cast');
+    expect(second?.classList.contains('r2m-button--filled')).toBe(false);
+  });
+
+  it('shows at most two actions', () => {
+    const el = mount(
+      emptyState({ icon: 'search', headline: 'x' }, [
+        { label: 'a', href: 'a' },
+        { label: 'b', href: 'b' },
+        { label: 'c', href: 'c' },
+      ]),
+    );
+    expect(el.querySelectorAll('.r2m-empty-state__action')).toHaveLength(2);
+  });
+});
+
+describe('blockable', () => {
+  it('carries the reason as a focusable tooltip while blocked', () => {
+    const wrap = mount(blockable('Preview first', html`<button disabled>Apply</button>`))
+      .firstElementChild as HTMLElement;
+    expect(wrap.classList.contains('r2m-blockable')).toBe(true);
+    expect(wrap.getAttribute('data-tooltip')).toBe('Preview first');
+    expect(wrap.getAttribute('tabindex')).toBe('0');
+    expect(wrap.querySelector('button')?.textContent).toBe('Apply');
+  });
+
+  it('is inert and out of the tab order when not blocked', () => {
+    const wrap = mount(blockable(null, html`<button>Apply</button>`))
+      .firstElementChild as HTMLElement;
+    expect(wrap.hasAttribute('data-tooltip')).toBe(false);
+    expect(wrap.hasAttribute('tabindex')).toBe(false);
+  });
+});
+
+describe('callout', () => {
+  it('is a banner of its kind with the text and no action', () => {
+    const el = mount(callout({ kind: 'warn', text: 'Some chapters have no title.' }))
+      .firstElementChild as HTMLElement;
+    expect(el.classList.contains('r2m-callout')).toBe(true);
+    expect(el.classList.contains('r2m-callout--warn')).toBe(true);
+    expect(el.querySelector('.r2m-icon')?.textContent).toBe('warning');
+    expect(el.querySelector('.r2m-callout__text')?.textContent).toBe(
+      'Some chapters have no title.',
+    );
+    expect(el.querySelector('button, a')).toBeNull();
+  });
+
+  it('runs a button action', () => {
+    let ran = 0;
+    const el = mount(
+      callout({ kind: 'info', text: 'Ready.', action: { label: 'Add titles', run: () => ran++ } }),
+    );
+    expect(el.querySelector('.r2m-icon')?.textContent).toBe('info');
+    const button = el.querySelector<HTMLButtonElement>('button.r2m-callout__action');
+    expect(button?.getAttribute('type')).toBe('button');
+    expect(button?.textContent?.trim()).toBe('Add titles');
+    button?.click();
+    expect(ran).toBe(1);
+  });
+
+  it('links an href action', () => {
+    const el = mount(
+      callout({
+        kind: 'info',
+        text: 'No TTS provider.',
+        action: { label: 'Open settings', href: 'settings/providers' },
+      }),
+    );
+    const link = el.querySelector('a.r2m-callout__action');
+    expect(link?.getAttribute('href')).toBe('settings/providers');
+    expect(link?.textContent?.trim()).toBe('Open settings');
+  });
+});
+
+describe('adviceLine', () => {
+  it('renders a muted paragraph for a sentence', () => {
+    const el = mount(adviceLine('Attribute speakers first.')).querySelector('p');
+    expect(el?.className).toBe('r2m-advice');
+    expect(el?.textContent).toBe('Attribute speakers first.');
+  });
+
+  it('renders nothing for null', () => {
+    expect(mount(adviceLine(null)).children).toHaveLength(0);
   });
 });
 

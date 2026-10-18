@@ -17,7 +17,8 @@ import { Preflight } from '@app/shared/preflight';
 import { ConfirmService } from '@app/ui/dialogs';
 import type { IconName } from '@app/ui/icons';
 import type { MeasuredList } from '@app/ui/measured-list';
-import { emptyState, icon } from '@app/ui/partials';
+import { menuItem } from '@app/ui/menu';
+import { emptyState, icon, statusChip } from '@app/ui/partials';
 import type { SpeakerMenu } from '@app/ui/speaker-menu';
 import { ToastService } from '@app/ui/toast';
 import { ProjectStore } from '../project/project-store';
@@ -321,6 +322,13 @@ export class BookPage extends R2mElement {
               : nothing
         }
         <span class="book__spacer"></span>
+        ${
+          this.editor.saving()
+            ? html`<span data-testid="book-saving"
+                >${statusChip({ status: 'busy', label: 'Saving…', compact: true })}</span
+              >`
+            : nothing
+        }
         ${noContent ? nothing : this.bookActions()}
       </div>
 
@@ -341,7 +349,7 @@ export class BookPage extends R2mElement {
                 headline: 'The book has not been read in yet',
                 hint: 'Read it in from the project overview.',
               },
-              html`<a class="r2m-button r2m-button--filled" href="./">Go to overview</a>`,
+              [{ label: 'Go to overview', href: './' }],
             )
           : html`<div class="book__body ${treeOpen ? '' : 'book__body--tree-hidden'}">
               ${
@@ -492,19 +500,8 @@ export class BookPage extends R2mElement {
   private bookActions() {
     const titles = this.titleActions();
     const shown = TITLE_ACTIONS.filter((a) => a.level === null || titles[a.level]);
-    const entry = (action: string, label: string, glyph: IconName, onClick: () => void) =>
-      html`<button
-        type="button"
-        role="menuitem"
-        class="r2m-menu__item"
-        data-action=${action}
-        @click=${() => {
-          this.closeMenu(ACTIONS_MENU_ID);
-          onClick();
-        }}
-      >
-        ${icon(glyph)}<span>${label}</span>
-      </button>`;
+    const entry = (action: string, label: string, glyph: IconName, run: () => void) =>
+      menuItem({ action, label, icon: glyph, run });
     return html`<button
         type="button"
         class="r2m-icon-button"

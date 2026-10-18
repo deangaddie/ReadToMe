@@ -22,9 +22,7 @@ export class NotFoundPage extends R2mElement {
           headline: 'This page does not exist',
           hint: 'Check the address, or start again from the projects shelf.',
         },
-        html`<a class="r2m-button r2m-button--stroked r2m-not-found-page__link" href="projects"
-          >Go to projects</a
-        >`,
+        [{ label: 'Go to projects', href: 'projects' }],
       )}
     `;
   }

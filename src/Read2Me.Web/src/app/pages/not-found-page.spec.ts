@@ -34,6 +34,6 @@ describe('r2m-not-found-page', () => {
     expect(page.querySelector('.r2m-empty-state__headline')?.textContent).toContain(
       'This page does not exist',
     );
-    expect(page.querySelector('.r2m-not-found-page__link')?.getAttribute('href')).toBe('projects');
+    expect(page.querySelector('.r2m-empty-state__action')?.getAttribute('href')).toBe('projects');
   });
 });

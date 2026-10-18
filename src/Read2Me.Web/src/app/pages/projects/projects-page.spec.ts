@@ -81,7 +81,7 @@ describe('r2m-projects-page', () => {
   it('shows the empty state with the primary action when there are no projects', async () => {
     const page = await render([]);
     expect(page.querySelector('.r2m-empty-state')).not.toBeNull();
-    expect(page.querySelectorAll('.projects__new').length).toBe(2);
+    expect(page.querySelector('.r2m-empty-state__action')?.textContent).toContain('New project');
   });
 
   it('shows the load failure as an error chip, not a toast', async () => {

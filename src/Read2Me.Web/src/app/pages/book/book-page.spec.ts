@@ -1102,6 +1102,22 @@ describe('r2m-book-page', () => {
       ]);
     });
 
+    it('shows a busy "Saving…" chip on the toolbar while the write is in flight', async () => {
+      const reply = Promise.withResolvers<unknown>();
+      api.on('POST', `${BASE}/commands`, () => reply.promise);
+      const { page } = await open1();
+      expect(page.querySelector('[data-testid=book-saving]')).toBeNull();
+
+      page.querySelector<HTMLButtonElement>('[data-action=add-pauses]')!.click();
+      await settle();
+      await page.rendered();
+      const chip = page.querySelector('[data-testid=book-saving] .r2m-status-chip');
+      expect(chip?.classList.contains('r2m-status-chip--busy')).toBe(true);
+      expect(text(chip!)).toContain('Saving…');
+      // Clearing once the write settles is the editor's `saving` (book-editor.spec).
+      reply.resolve({ newEntityId: null });
+    });
+
     it('Reread confirms destructively, then rereads', async () => {
       api.on('POST', `${BASE}/import`, undefined);
       const confirms: unknown[] = [];

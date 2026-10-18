@@ -327,7 +327,7 @@ export class CastPage extends R2mElement {
           headline: 'Character not found',
           hint: 'It may have been deleted or merged.',
         },
-        html`<a class="r2m-button" href=${castPath(this.folder())}>Back to the cast</a>`,
+        [{ label: 'Back to the cast', href: castPath(this.folder()) }],
       );
     }
     return emptyState({
