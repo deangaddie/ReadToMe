@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import type { BookOverviewDto, ParagraphDto } from '@app/api';
+import type { BookOverviewDto, ParagraphDto, ProjectStatusDto } from '@app/api';
 import { Router, type RouteDef } from '@app/core/router';
 import { override, resetServices, use } from '@app/core/services';
-import type { QueueMessage } from '@app/live/live-messages';
+import type { QueueMessage, Receipt } from '@app/live/live-messages';
 import { Preflight } from '@app/shared/preflight';
 import { type ConfirmOptions, ConfirmService, PromptService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
@@ -29,6 +29,23 @@ const OVERVIEW: BookOverviewDto = {
   totalChapters: 2,
   revision: 1,
   structureRules: STRUCTURE_RULES,
+};
+
+/** A read-in book with every derived Pipeline condition held and no checkpoint rows. */
+const STATUS: ProjectStatusDto = {
+  hasContent: true,
+  characters: 1,
+  charactersWithLines: 1,
+  readyVoices: 1,
+  items: { total: 3, withAudio: 0, unattributed: 0 },
+  attribution: { remaining: 0, processing: false, queued: 0 },
+  audio: { remaining: 0 },
+  review: 0,
+  volumeIds: ['v1'],
+  nodes: {},
+  pauseParagraphs: 0,
+  checkpoints: {},
+  revision: 1,
 };
 
 const DIALOG = (id: string): ParagraphDto => ({
@@ -105,7 +122,7 @@ beforeEach(() => {
   } as unknown as ToastService);
   api
     .on('GET', BASE, { folderName: 'dune', title: 'Dune', narrator: null, narratorOnlyMode: false })
-    .on('GET', `${BASE}/status`, { revision: 1, nodes: {}, audio: { remaining: 0 } })
+    .on('GET', `${BASE}/status`, STATUS)
     .on('GET', `${BASE}/book`, OVERVIEW)
     .on('GET', `${BASE}/audio/reviews`, {})
     .on('GET', `${BASE}/nodes/volume/v1/children`, { parts: [{ id: 'p1', title: null }] })
@@ -132,6 +149,43 @@ async function menuEntries(page: BookPage, trigger: HTMLButtonElement) {
   return entries.map((e) => e.dataset['entry']);
 }
 
+/**
+ * Answers each command with `respond` and echoes an accepted one as this tab's own receipt, so
+ * the editor moves to the next command without waiting out its timeout.
+ */
+function echoOwnReceipts(respond: (body: unknown) => unknown) {
+  const listeners: ((r: Receipt) => void)[] = [];
+  (live as unknown as { receipts: unknown }).receipts = (
+    _folder: string,
+    listener: (r: Receipt) => void,
+  ) => (listeners.push(listener), () => undefined);
+  let revision = 1;
+  api.on('POST', `${BASE}/commands`, (body) => {
+    const reply = respond(body);
+    if (reply instanceof Response) return reply;
+    revision++;
+    for (const listener of listeners) {
+      listener({
+        folder: 'dune',
+        mutationName: (body as { type: string }).type,
+        mutationId: `m${revision}`,
+        revision,
+        originId: 'fake-connection',
+        isOwn: true,
+        effects: {
+          scope: 'Exact',
+          facets: 'Structure',
+          nodeIds: [],
+          paragraphIds: [],
+          paragraphItemIds: [],
+          structural: [],
+          changedNothing: false,
+        },
+      });
+    }
+    return reply;
+  });
+}
 describe('r2m-book-page', () => {
   it('shows an empty state when the book has not been read in', async () => {
     api.on('GET', `${BASE}/book`, { ...OVERVIEW, hasContent: false, volumes: [] });
@@ -208,7 +262,7 @@ describe('r2m-book-page', () => {
 
   it('lists the chapters in the tree with their badges, and a tree click opens a chapter', async () => {
     api.on('GET', `${BASE}/status`, {
-      revision: 1,
+      ...STATUS,
       nodes: {
         c1: {
           attributionRemaining: 3,
@@ -335,7 +389,7 @@ describe('r2m-book-page', () => {
 
     it('is disabled while the chapter is busy, as the tree trigger is', async () => {
       api.on('GET', `${BASE}/status`, {
-        revision: 1,
+        ...STATUS,
         nodes: {
           c1: {
             attributionRemaining: 2,
@@ -483,7 +537,7 @@ describe('r2m-book-page', () => {
 
     it('is disabled while the node is busy or the editor is locked, as the tree trigger is', async () => {
       api.on('GET', `${BASE}/status`, {
-        revision: 1,
+        ...STATUS,
         nodes: {
           pa: {
             attributionRemaining: 2,
@@ -1149,21 +1203,128 @@ describe('r2m-book-page', () => {
       await page.rendered();
     };
 
-    it('offers the title entries that add navigation, pauses, reread and manual reread', async () => {
+    it('groups the entries under Pipeline headings, each with its label (guidance-primitives 18)', async () => {
       const { page } = await open1();
-      const actions = Array.from(
-        page.querySelectorAll<HTMLElement>('[aria-label="Book actions"][role=menu] [data-action]'),
-        (e) => e.dataset['action'],
+      const menu = page.querySelector('[aria-label="Book actions"][role=menu]')!;
+      const shape = Array.from(
+        menu.querySelectorAll<HTMLElement>('.r2m-menu__heading, [data-action]'),
+        (e) =>
+          e.dataset['action']
+            ? `${e.dataset['action']}: ${text(e.querySelector('.r2m-menu__label'))}`
+            : `# ${text(e)}`,
       );
-      // One volume, one part, two chapters: only the chapter titles add navigation.
-      expect(actions).toEqual([
-        'add-book-title',
-        'add-chapter-titles',
-        'add-pauses',
-        'edit-with-ai',
-        'reread',
-        'manual-reread',
+      expect(shape).toEqual([
+        '# Structure',
+        'reread: Reread… (auto splits)',
+        'manual-reread: Reread with split rules…',
+        '# Text',
+        'edit-with-ai: Edit with AI…',
+        '# Titles and pauses',
+        'add-titles: Add titles…',
+        'add-pauses: Add pauses',
       ]);
+    });
+
+    it('Add titles and Add pauses show their advice as a muted second line while Structure is unsettled', async () => {
+      const { page } = await open1();
+      const hint = (action: string) =>
+        text(page.querySelector(`[data-action=${action}] .r2m-menu__hint`));
+      expect(hint('add-titles')).toBe(
+        'Usually done after Structure: a reread drops inserted titles.',
+      );
+      expect(hint('add-pauses')).toBe(
+        'Usually done after Structure: a reread drops inserted pauses.',
+      );
+      expect(page.querySelector('[data-action=reread] .r2m-menu__hint')).toBeNull();
+    });
+
+    it('the hints go once Structure is confirmed', async () => {
+      api.on('GET', `${BASE}/status`, {
+        ...STATUS,
+        checkpoints: { structure: { state: 'confirmed', stale: false, at: '2026-10-18' } },
+      });
+      const { page } = await open1();
+      expect(page.querySelector('[data-action=add-titles] .r2m-menu__hint')).toBeNull();
+      expect(page.querySelector('[data-action=add-pauses] .r2m-menu__hint')).toBeNull();
+    });
+
+    it('Add titles offers the levels that add navigation and sends the ticked ones in order', async () => {
+      api.on('GET', `${BASE}/book`, {
+        ...OVERVIEW,
+        volumes: [
+          { id: 'v1', title: null },
+          { id: 'v2', title: null },
+        ],
+        totalParts: 2,
+        totalChapters: 6,
+      });
+      echoOwnReceipts(() => ({ newEntityId: null }));
+      const { page } = await open1();
+      page.querySelector<HTMLButtonElement>('[data-action=add-titles]')!.click();
+      await settle();
+      const dialog = document.querySelector('r2m-add-titles-dialog')!;
+      await dialog.rendered();
+      // Two volumes, one part each, six chapters: book, volume and chapter add navigation.
+      const boxes = Array.from(
+        dialog.querySelectorAll<HTMLInputElement>('input[type=checkbox]'),
+        (b) => b.name,
+      );
+      expect(boxes).toEqual(['book', 'volume', 'chapter']);
+      expect(text(dialog.querySelector('.r2m-advice'))).toBe(
+        'Usually done after Structure: a reread drops inserted titles.',
+      );
+
+      const volume = dialog.querySelector<HTMLInputElement>('input[name=volume]')!;
+      volume.checked = false;
+      volume.dispatchEvent(new Event('change'));
+      await dialog.rendered();
+      dialog.querySelector<HTMLButtonElement>('[data-action=apply-titles]')!.click();
+      for (let i = 0; i < 8; i++) await settle();
+      expect(api.calls('POST', `${BASE}/commands`).map((r) => r.body)).toEqual([
+        { type: 'AddBookTitle' },
+        { type: 'AddChapterTitles' },
+      ]);
+      expect(toasts).toEqual(['Added book and chapter titles']);
+    });
+
+    it('Add titles stops at the first refusal and names only what landed', async () => {
+      echoOwnReceipts((body) =>
+        (body as { type: string }).type === 'AddChapterTitles'
+          ? problem(422, 'no chapters')
+          : { newEntityId: null },
+      );
+      api.on('GET', `${BASE}/book`, {
+        ...OVERVIEW,
+        volumes: [
+          { id: 'v1', title: null },
+          { id: 'v2', title: null },
+        ],
+        totalParts: 4,
+        totalChapters: 8,
+      });
+      const { page } = await open1();
+      page.querySelector<HTMLButtonElement>('[data-action=add-titles]')!.click();
+      await settle();
+      const dialog = document.querySelector('r2m-add-titles-dialog')!;
+      await dialog.rendered();
+      dialog.querySelector<HTMLButtonElement>('[data-action=apply-titles]')!.click();
+      for (let i = 0; i < 12; i++) await settle();
+      expect(
+        api.calls('POST', `${BASE}/commands`).map((r) => (r.body as { type: string }).type),
+      ).toEqual(['AddBookTitle', 'AddVolumeTitles', 'AddPartTitles', 'AddChapterTitles']);
+      expect(toasts).toEqual(['problem: no chapters', 'Added book, volume and part titles']);
+    });
+
+    it('a cancelled Add titles sends nothing', async () => {
+      const { page } = await open1();
+      page.querySelector<HTMLButtonElement>('[data-action=add-titles]')!.click();
+      await settle();
+      const dialog = document.querySelector('r2m-add-titles-dialog')!;
+      await dialog.rendered();
+      dialog.querySelector<HTMLButtonElement>('[data-action=cancel]')!.click();
+      for (let i = 0; i < 4; i++) await settle();
+      expect(api.calls('POST', `${BASE}/commands`)).toHaveLength(0);
+      expect(toasts).toEqual([]);
     });
 
     it('stay shut until the overview has loaded, so the entries cannot move under the pointer', async () => {
@@ -1246,7 +1407,7 @@ describe('r2m-book-page', () => {
 
     it('Reread names the confirmed and skipped steps it clears when a checkpoint row exists (guidance-primitives 14)', async () => {
       api.on('GET', `${BASE}/status`, {
-        revision: 1,
+        ...STATUS,
         nodes: {},
         audio: { remaining: 0 },
         checkpoints: { structure: { state: 'skipped', stale: false, at: '2026-10-18' } },
@@ -1302,6 +1463,78 @@ describe('r2m-book-page', () => {
       await open(started.page);
       return started;
     }
+  });
+
+  describe('?action= deep links (guidance-primitives 18)', () => {
+    /** The last navigation the page made, if it replaced the entry. */
+    const lastReplace = () => navigation.calls.filter((c) => c.history === 'replace').at(-1)?.url;
+
+    for (const [value, tag] of [
+      ['titles', 'r2m-add-titles-dialog'],
+      ['edit-ai', 'r2m-edit-with-ai-dialog'],
+      ['manual-reread', 'r2m-manual-reread-dialog'],
+    ] as const) {
+      it(`?action=${value} drops the param and opens the overflow entry's dialog`, async () => {
+        await start(`projects/dune/book?mode=speakers&action=${value}`);
+        for (let i = 0; i < 4; i++) await settle();
+        expect(document.querySelectorAll(tag)).toHaveLength(1);
+        const url = new URL(lastReplace()!);
+        expect(url.searchParams.has('action')).toBe(false);
+        expect(url.searchParams.get('mode')).toBe('speakers');
+      });
+    }
+
+    it('the manual reread dialog is titled "Reread with split rules"', async () => {
+      await start('projects/dune/book?action=manual-reread');
+      for (let i = 0; i < 4; i++) await settle();
+      const dialog = document.querySelector('r2m-manual-reread-dialog')!;
+      await dialog.rendered();
+      expect(text(dialog.querySelector('.r2m-dialog__title'))).toBe('Reread with split rules');
+    });
+
+    it('an unknown value only drops the param', async () => {
+      await start('projects/dune/book?action=pauses');
+      for (let i = 0; i < 4; i++) await settle();
+      expect(document.querySelector('dialog')).toBeNull();
+      expect(new URL(lastReplace()!).searchParams.has('action')).toBe(false);
+    });
+
+    it('with no content it only drops the param', async () => {
+      api.on('GET', `${BASE}/book`, { ...OVERVIEW, hasContent: false, volumes: [] });
+      await start('projects/dune/book?action=titles');
+      for (let i = 0; i < 4; i++) await settle();
+      expect(document.querySelector('dialog')).toBeNull();
+      expect(new URL(lastReplace()!).searchParams.has('action')).toBe(false);
+    });
+
+    it('waits while the editor is locked, then opens', async () => {
+      const reply = Promise.withResolvers<unknown>();
+      echoOwnReceipts(() => reply.promise);
+      const { page, router } = await start('projects/dune/book');
+      // A write in flight locks the editor.
+      void use(BookEditor, page).run({ type: 'AddPauses' });
+      await settle();
+      router.navigate(router.path(), { query: { action: 'titles' } });
+      for (let i = 0; i < 4; i++) await settle();
+      expect(document.querySelector('r2m-add-titles-dialog')).toBeNull();
+      expect(router.query().get('action')).toBe('titles');
+
+      reply.resolve({ newEntityId: null });
+      for (let i = 0; i < 6; i++) await settle();
+      expect(document.querySelectorAll('r2m-add-titles-dialog')).toHaveLength(1);
+    });
+  });
+
+  it("the audio selection bar shows Generate audio's advice beside it", async () => {
+    const { page } = await start('projects/dune/book?mode=audio');
+    use(AudioSelectionStore, page).add([
+      { id: 'p1-i', chapterId: 'c1', partId: 'p1', volumeId: 'v1' },
+    ]);
+    await page.rendered();
+    const bar = page.querySelector('[data-testid=selection-bar]')!;
+    expect(text(bar.querySelector('.r2m-advice'))).toBe(
+      "Text, Titles or Pauses aren't settled yet: changes there will need new audio.",
+    );
   });
 
   it('a failed read shows the stale banner, and Refresh reads again', async () => {

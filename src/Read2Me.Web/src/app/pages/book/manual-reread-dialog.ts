@@ -31,8 +31,9 @@ const PREFIX_HINT: Record<LevelKey, string> = {
 };
 
 /**
- * Manual reread (research §3 ManualRereadDialog): structure switches, then one detection rule per
- * active level. Closes with the request to send, or null on Cancel. Validation is the pure form's.
+ * Reread with split rules, the manual reread (research §3 ManualRereadDialog): structure switches,
+ * then one detection rule per active level. Closes with the request to send, or null on Cancel.
+ * Validation is the pure form's.
  * The filled-in dialog is its own permanent-change confirm (guidance-primitives 14): the body names
  * what the reread deletes and the submit is red. The switches are `role=switch` checkboxes (`.r2m-switch`) and each level's modes a native radio
  * group (`.r2m-radio-group`), the §5.3 forms for mat-slide-toggle and mat-radio-group.
@@ -52,7 +53,7 @@ export class ManualRereadDialog extends R2mElement {
     const form = this.#form();
     const error = this.#error();
     return html`
-      <h2 class="r2m-dialog__title">Manual reread</h2>
+      <h2 class="r2m-dialog__title">Reread with split rules</h2>
       <div class="r2m-dialog__content manual__content">
         <p class="manual__hint">
           Re-splits the source file by the rules below. Attribution, audio, titles, pauses and your
