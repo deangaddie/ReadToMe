@@ -5,6 +5,7 @@ import { signal } from '@app/core/signals';
 import { IDLE_ASSEMBLY, IDLE_VOICE_BATCH } from '@app/live/live-state';
 import type { QueueMessage } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
+import { ConfirmService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
 import { ActivityStore } from './activity-store';
 import { summaryJob } from './activity-bar';
@@ -36,6 +37,8 @@ async function mount(narrow = false) {
     error: mock(),
   } as unknown as ToastService);
   const voices = { cancelBatch: mock(async () => void cancels.push('voiceBatch')) };
+  // Cancel asks first (guidance-primitives 14); the store spec covers the question itself.
+  override(ConfirmService, { confirm: async () => true } as unknown as ConfirmService);
   override(VoicesApi, voices as unknown as VoicesApi);
   override(AttributionApi, { cancel: mock() } as unknown as AttributionApi);
   override(AudioApi, { cancel: mock() } as unknown as AudioApi);
@@ -97,6 +100,7 @@ describe('r2m-activity-bar', () => {
     expect(store.drawerOpen()).toBe(true);
     expect(store.tab()).toBe('jobs');
     pills[0]!.querySelector<HTMLButtonElement>('.r2m-job-pill__cancel')!.click();
+    await bar.rendered();
     expect(cancels).toEqual(['voiceBatch']);
   });
 

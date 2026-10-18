@@ -22,6 +22,7 @@ import { menuItem } from '@app/ui/menu';
 import { emptyState, icon, statusChip } from '@app/ui/partials';
 import type { SpeakerMenu } from '@app/ui/speaker-menu';
 import { ToastService } from '@app/ui/toast';
+import { rereadConfirm } from '../project/permanent-changes';
 import { ProjectStore } from '../project/project-store';
 import { AudioGenerator } from './audio-generator';
 import { BookEditor } from './book-editor';
@@ -898,14 +899,7 @@ export class BookPage extends R2mElement {
   }
 
   private async reread(): Promise<void> {
-    const ok = await this.confirm.confirm({
-      title: 'Reread the book?',
-      message:
-        'This deletes all book data — attribution, generated audio, and edits — and ' +
-        'reprocesses the source file from scratch. This cannot be undone.',
-      destructive: true,
-      confirmLabel: 'Delete and reread',
-    });
+    const ok = await this.confirm.confirm(rereadConfirm(this.project.status()?.checkpoints ?? {}));
     if (ok) await this.editor.reread();
   }
 

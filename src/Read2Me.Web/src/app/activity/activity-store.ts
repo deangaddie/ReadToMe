@@ -3,6 +3,7 @@ import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import type { QueueMessage } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
+import { confirmPermanent } from '@app/ui/dialogs';
 import type { JobView } from '@app/ui/job';
 import { ToastService } from '@app/ui/toast';
 import {
@@ -15,6 +16,7 @@ import {
   isActiveJob,
   isQueueBusy,
 } from './activity-jobs';
+import { cancelJobChange } from './permanent-changes';
 
 export type ActivityTab = 'jobs' | 'llm' | 'audio' | 'services';
 
@@ -132,8 +134,14 @@ export class ActivityStore {
 
   // ---- actions -----------------------------------------------------------------------------------
 
-  /** Cancel by job id: the four global queues each have an endpoint; local jobs bring their own. */
+  /**
+   * Cancel by job id, after the permanent-change confirm (guidance-primitives 14): the four global
+   * queues each have an endpoint; local jobs bring their own.
+   */
   async cancel(id: string): Promise<void> {
+    // Only a rendered pill or card cancels, so the job is there; an unknown id asks nothing.
+    const job = this.jobs().find((j) => j.id === id);
+    if (!(await confirmPermanent(job ? cancelJobChange(job) : null))) return;
     try {
       switch (id) {
         case ATTRIBUTION_JOB_ID:

@@ -4,6 +4,7 @@ import { type AttributionChainStep, AttributionPromptStyle, toApiError } from '@
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
+import { confirmPermanent } from '@app/ui/dialogs';
 import { closeMenuOf } from '@app/ui/menu';
 import { icon, statusChip } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
@@ -16,6 +17,7 @@ import {
   removeStep,
 } from './chain-steps';
 import { LlmSettingsStore } from './llm-settings-store';
+import { removeStepChange } from './permanent-changes';
 
 const ADD_MENU_ID = 'r2m-llm-chain-add-menu';
 
@@ -138,7 +140,7 @@ export class LlmChainCard extends R2mElement {
         ?disabled=${busy}
         aria-label=${`Remove ${row.config.name}`}
         data-tooltip="Remove"
-        @click=${() => void this.removeRung(row.index)}
+        @click=${() => void this.removeRung(row)}
       >
         ${icon('delete')}
       </button>
@@ -183,9 +185,10 @@ export class LlmChainCard extends R2mElement {
     return this.save(moveStep(this.store.steps(), index, delta));
   }
 
-  /** Not `remove`: that name is `HTMLElement.remove()`. */
-  private removeRung(index: number): Promise<void> {
-    return this.save(removeStep(this.store.steps(), index));
+  /** Not `remove`: that name is `HTMLElement.remove()`. Asks first (guidance-primitives 14). */
+  private async removeRung(row: ChainRow): Promise<void> {
+    if (!(await confirmPermanent(removeStepChange(row.index, row.config.name)))) return;
+    return this.save(removeStep(this.store.steps(), row.index));
   }
 
   private add(option: ChainOption): Promise<void> {

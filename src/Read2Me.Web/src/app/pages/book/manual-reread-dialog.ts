@@ -4,6 +4,7 @@ import { openDialog } from '@app/core/dialog';
 import { R2mElement, define } from '@app/core/element';
 import { computed, signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
+import { icon } from '@app/ui/partials';
 import {
   DEFAULT_MANUAL_REREAD_FORM,
   type LevelKey,
@@ -32,7 +33,8 @@ const PREFIX_HINT: Record<LevelKey, string> = {
 /**
  * Manual reread (research §3 ManualRereadDialog): structure switches, then one detection rule per
  * active level. Closes with the request to send, or null on Cancel. Validation is the pure form's.
- * The switches are `role=switch` checkboxes (`.r2m-switch`) and each level's modes a native radio
+ * The filled-in dialog is its own permanent-change confirm (guidance-primitives 14): the body names
+ * what the reread deletes and the submit is red. The switches are `role=switch` checkboxes (`.r2m-switch`) and each level's modes a native radio
  * group (`.r2m-radio-group`), the §5.3 forms for mat-slide-toggle and mat-radio-group.
  */
 export class ManualRereadDialog extends R2mElement {
@@ -53,8 +55,8 @@ export class ManualRereadDialog extends R2mElement {
       <h2 class="r2m-dialog__title">Manual reread</h2>
       <div class="r2m-dialog__content manual__content">
         <p class="manual__hint">
-          Re-splits the source file by the rules below. Existing chapters, attribution and audio are
-          replaced.
+          Re-splits the source file by the rules below. Attribution, audio, titles, pauses and your
+          confirmed steps are deleted.
         </p>
 
         <h3 class="manual__heading">Book structure</h3>
@@ -93,10 +95,10 @@ export class ManualRereadDialog extends R2mElement {
         </button>
         <button
           type="button"
-          class="r2m-button r2m-button--filled manual__submit"
+          class="r2m-button r2m-button--filled r2m-button--danger manual__submit"
           @click=${() => this.#submit()}
         >
-          Reread
+          ${icon('delete_forever')} Reread
         </button>
       </div>
     `;

@@ -228,6 +228,33 @@ describe('r2m-llm-settings-page', () => {
     ]);
   });
 
+  it('removing a chain step asks a red confirm first (guidance-primitives 14), then PUTs without it', async () => {
+    const steps = [
+      { configId: 1, thinking: false, promptStyle: AttributionPromptStyle.Simple },
+      { configId: 2, thinking: true, promptStyle: AttributionPromptStyle.Full },
+    ];
+    const page = await render(chain({ steps }));
+
+    confirmAnswer = false;
+    page.querySelector<HTMLButtonElement>('[aria-label="Remove big"]')!.click();
+    await flush(page);
+    expect(confirms).toEqual([
+      expect.objectContaining({
+        title: 'Remove step?',
+        message: expect.stringContaining('Removes step 2 (big) and its settings.'),
+        confirmLabel: 'Remove step',
+        destructive: true,
+      }),
+    ]);
+    expect(api.calls('PUT', CHAIN)).toHaveLength(0);
+
+    confirmAnswer = true;
+    api.on('PUT', CHAIN, chain({ steps: [steps[0]!] }));
+    page.querySelector<HTMLButtonElement>('[aria-label="Remove big"]')!.click();
+    await flush(page);
+    expect(api.calls('PUT', CHAIN)[0]?.body).toEqual({ steps: [steps[0]], selfConsistency: false });
+  });
+
   it('a Chapter rung shows the Chapter chip', async () => {
     const steps = [
       { configId: 1, thinking: false, promptStyle: AttributionPromptStyle.Chapter },

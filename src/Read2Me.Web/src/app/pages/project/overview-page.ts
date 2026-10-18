@@ -18,6 +18,7 @@ import { ConfirmService } from '@app/ui/dialogs';
 import { statusChip } from '@app/ui/partials';
 import { type PipelineActionEvent, pipeline } from '@app/ui/pipeline';
 import { ToastService } from '@app/ui/toast';
+import { rereadConfirm } from './permanent-changes';
 import { type PipelineStep, type StepActionId, derivePipeline } from './pipeline-steps';
 import { ProjectStore } from './project-store';
 import './project-details-panel';
@@ -158,16 +159,7 @@ export class OverviewPage extends R2mElement {
           this.toast.success('Book read in');
         });
       case 'reread':
-        if (
-          !(await this.confirm.confirm({
-            title: 'Reread the book?',
-            message:
-              'This deletes all book data — attribution, generated audio, and edits — and ' +
-              'reprocesses the source file from scratch. This cannot be undone.',
-            destructive: true,
-            confirmLabel: 'Delete and reread',
-          }))
-        )
+        if (!(await this.confirm.confirm(rereadConfirm(this.store.status()?.checkpoints ?? {}))))
           return;
         return this.run(step, action, async () => {
           await this.projects.import(folder, true);
