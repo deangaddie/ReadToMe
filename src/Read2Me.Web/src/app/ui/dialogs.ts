@@ -1,6 +1,7 @@
 import { html, nothing } from 'lit-html';
 import { R2mElement, define } from '@app/core/element';
 import { openDialog } from '@app/core/dialog';
+import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import { icon } from './partials';
 
@@ -9,8 +10,40 @@ export interface ConfirmOptions {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
-  /** Red confirm with a delete icon — every delete, reread, clear, regenerate-all (design §8). */
+  /**
+   * Red confirm with a delete icon: the change deletes, discards or replaces something the user
+   * made or waited for (guidance-primitives spec §7). A change that loses nothing stays neutral.
+   */
   destructive?: boolean;
+}
+
+/**
+ * A change one more action cannot reverse (CONTEXT.md "permanent-change confirm"): what a button or
+ * menu entry asks about before it runs. Each action has a pure builder in its feature folder that
+ * returns one of these, or null when this particular call needs no confirm. `action` is the verb on
+ * the button and in the title; `scope` says what changes, `cost` what reversing it would take.
+ */
+export interface PermanentChange {
+  action: string;
+  scope: string;
+  cost: string;
+  destructive: boolean;
+}
+
+/** The confirm a {@link PermanentChange} shows: "Action?", scope then cost, the verb on the button. */
+export function permanentConfirmOptions(change: PermanentChange): ConfirmOptions {
+  return {
+    title: `${change.action}?`,
+    message: `${change.scope} ${change.cost}`,
+    confirmLabel: change.action,
+    destructive: change.destructive,
+  };
+}
+
+/** Asks about the change through {@link ConfirmService}; null needs no asking and is true at once. */
+export async function confirmPermanent(change: PermanentChange | null): Promise<boolean> {
+  if (change === null) return true;
+  return use(ConfirmService).confirm(permanentConfirmOptions(change));
 }
 
 /** Confirmation dialog (design §7): resolves true only on the confirm button. */

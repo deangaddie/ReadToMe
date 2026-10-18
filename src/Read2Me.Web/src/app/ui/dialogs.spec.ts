@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it } from 'bun:test';
+import { override, resetServices } from '@app/core/services';
 import {
   ConfirmService,
+  type PermanentChange,
   PromptService,
   type ConfirmOptions,
   type TextPromptOptions,
+  confirmPermanent,
+  permanentConfirmOptions,
 } from './dialogs';
 
 // The services open a real <dialog>; happy-dom's showModal only flips `open`, so Escape, the focus
@@ -83,6 +87,52 @@ describe('ConfirmService', () => {
     expect(dialog.querySelector('.r2m-confirm-dialog__cancel')?.textContent?.trim()).toBe(
       'Keep editing',
     );
+  });
+});
+
+describe('confirmPermanent (guidance-primitives 13)', () => {
+  const change: PermanentChange = {
+    action: 'Add pauses',
+    scope: 'Inserts a pause after every chapter title (3 chapters).',
+    cost: 'Removing them later means deleting each one.',
+    destructive: false,
+  };
+
+  afterEach(() => resetServices());
+
+  it('maps the change onto the confirm: question title, scope then cost, the verb on the button', () => {
+    expect(permanentConfirmOptions(change)).toEqual({
+      title: 'Add pauses?',
+      message:
+        'Inserts a pause after every chapter title (3 chapters). Removing them later means deleting each one.',
+      confirmLabel: 'Add pauses',
+      destructive: false,
+    });
+    expect(permanentConfirmOptions({ ...change, destructive: true }).destructive).toBe(true);
+  });
+
+  it('null needs no confirm and resolves true without a dialog', async () => {
+    const asked: ConfirmOptions[] = [];
+    override(ConfirmService, {
+      confirm: async (o: ConfirmOptions) => {
+        asked.push(o);
+        return false;
+      },
+    } as unknown as ConfirmService);
+    expect(await confirmPermanent(null)).toBe(true);
+    expect(asked).toEqual([]);
+  });
+
+  it('a change goes through ConfirmService and answers what the user chose', async () => {
+    const asked: ConfirmOptions[] = [];
+    override(ConfirmService, {
+      confirm: async (o: ConfirmOptions) => {
+        asked.push(o);
+        return false;
+      },
+    } as unknown as ConfirmService);
+    expect(await confirmPermanent(change)).toBe(false);
+    expect(asked).toEqual([permanentConfirmOptions(change)]);
   });
 });
 

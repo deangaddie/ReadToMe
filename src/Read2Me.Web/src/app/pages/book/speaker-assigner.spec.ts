@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
-import { ApiError, AttributionApi, BookApi } from '@app/api';
+import { ApiError, AttributionApi, BookApi, type ParagraphItemDto } from '@app/api';
 import { override, resetServices } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { ConfirmService, PromptService } from '@app/ui/dialogs';
@@ -26,6 +26,38 @@ describe('SpeakerAssigner', () => {
   let promptText: ReturnType<typeof mock>;
   let toasts: { kind: string; message: unknown }[];
   const paragraphs = signal<Record<string, ParagraphStatusEntry | null>>({});
+  /** The loaded window: p1 holds narration with audio, a voiced line with audio and a bare line. */
+  const speech = (
+    id: string,
+    itemType: 'Narration' | 'Character',
+    characterId: string | null,
+    audioFileName: string | null,
+  ): ParagraphItemDto => ({
+    id,
+    itemType,
+    text: id,
+    characterId,
+    audioFileName,
+    voiceInstructions: null,
+    orderKey: id,
+    isPause: false,
+  });
+  const chapters = signal([
+    {
+      id: 'c1',
+      paragraphs: [
+        {
+          id: 'p1',
+          isPauseParagraph: false,
+          items: [
+            speech('n1', 'Narration', 'n', 'n1.wav'),
+            speech('i1', 'Character', 'h', 'i1.wav'),
+            speech('i2', 'Character', null, null),
+          ],
+        },
+      ],
+    },
+  ]);
 
   beforeEach(() => {
     resetServices();
@@ -64,15 +96,51 @@ describe('SpeakerAssigner', () => {
       {
         folder: signal('dune'),
         speakers: signal({ names: { h: 'Hardin' }, narrator: null }),
+        chapters,
       } as unknown as BookStore,
       { paragraphs } as unknown as ProjectStore,
     );
   });
 
   it('an item pick posts SetItemCharacter, then forgets the paragraph outcome', async () => {
-    await assigner.assign({ kind: 'item', itemId: 'i1', paragraphId: 'p1' }, 'h');
-    expect(run).toHaveBeenCalledWith({ type: 'SetItemCharacter', itemId: 'i1', characterId: 'h' });
+    await assigner.assign({ kind: 'item', itemId: 'i2', paragraphId: 'p1' }, 'h');
+    expect(run).toHaveBeenCalledWith({ type: 'SetItemCharacter', itemId: 'i2', characterId: 'h' });
     expect(clearOutcome).toHaveBeenCalledWith('dune', 'p1');
+    // The line had no audio to lose: no permanent-change confirm.
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('an item pick that discards audio asks first; declined, it writes nothing', async () => {
+    confirm.mockResolvedValueOnce(false);
+    await assigner.assign({ kind: 'item', itemId: 'i1', paragraphId: 'p1' }, 'g');
+    expect(confirm).toHaveBeenCalledWith({
+      title: 'Assign?',
+      message: 'Discards audio on 1 item. It must be generated again for the new speaker.',
+      confirmLabel: 'Assign',
+      destructive: true,
+    });
+    expect(run).not.toHaveBeenCalled();
+
+    await assigner.assign({ kind: 'item', itemId: 'i1', paragraphId: 'p1' }, 'g');
+    expect(run).toHaveBeenCalledWith({ type: 'SetItemCharacter', itemId: 'i1', characterId: 'g' });
+  });
+
+  it('a pick onto the speaker the item already has keeps its audio and asks nothing', async () => {
+    await assigner.assign({ kind: 'item', itemId: 'i1', paragraphId: 'p1' }, 'h');
+    expect(confirm).not.toHaveBeenCalled();
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('a paragraph clear counts the audio on the dialog lines it sweeps, not the narration', async () => {
+    await assigner.assign({ kind: 'paragraph', paragraphId: 'p1' }, null);
+    expect(confirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Clear?',
+        message: expect.stringContaining('Discards audio on 1 item.'),
+        destructive: true,
+      }),
+    );
+    expect(run).toHaveBeenCalledTimes(1);
   });
 
   it('a paragraph clear posts a null speaker; a refused write clears no outcome', async () => {
