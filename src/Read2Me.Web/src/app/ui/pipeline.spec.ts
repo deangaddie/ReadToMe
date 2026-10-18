@@ -17,26 +17,26 @@ const STEPS: PipelineStepView[] = [
         icon: 'restart_alt',
         primary: false,
         destructive: true,
-        disabled: false,
+        blockedReason: null,
       },
     ],
   },
   {
-    id: 'cast',
-    title: 'Cast',
-    icon: 'groups',
-    chip: { status: 'neutral', label: 'Not started' },
-    detail: 'Find who speaks',
+    id: 'speakers',
+    title: 'Speakers',
+    icon: 'record_voice_over',
+    chip: { status: 'neutral', label: 'Review not confirmed' },
+    detail: 'Assign a speaker to every line.',
     next: true,
     actions: [
       {
-        id: 'discover',
-        label: 'Discover characters',
-        icon: 'person_search',
+        id: 'attribute',
+        label: 'Attribute unprocessed',
+        icon: 'auto_awesome',
         primary: true,
-        disabled: false,
+        blockedReason: 'Every paragraph has a speaker',
       },
-      { id: 'openCast', label: 'Open cast', icon: 'groups', primary: false, disabled: true },
+      { id: 'openCast', label: 'Open cast', icon: 'groups', primary: false, blockedReason: null },
     ],
   },
 ];
@@ -56,22 +56,30 @@ describe('pipeline()', () => {
     const { el } = mount();
     const steps = Array.from(el.querySelectorAll('.r2m-pipeline__step'));
 
-    expect(steps.map((s) => s.getAttribute('data-step'))).toEqual(['import', 'cast']);
+    expect(steps.map((s) => s.getAttribute('data-step'))).toEqual(['import', 'speakers']);
     expect(steps[0]!.classList.contains('r2m-pipeline__step--done')).toBe(true);
     expect(steps[0]!.querySelector('.r2m-pipeline__marker')?.textContent?.trim()).toBe('check');
     expect(steps[1]!.getAttribute('aria-current')).toBe('step');
     expect(steps[0]!.hasAttribute('aria-current')).toBe(false);
-    expect(steps[1]!.querySelector('.r2m-status-chip')?.textContent).toContain('Not started');
+    expect(steps[1]!.querySelector('.r2m-status-chip')?.textContent).toContain(
+      'Review not confirmed',
+    );
   });
 
-  it('emits step + action, and honours disabled', () => {
+  it('emits step + action; a blocked action is disabled and its wrapper carries the reason', () => {
     const { el, events } = mount();
-    const discover = el.querySelector<HTMLButtonElement>('[data-action="discover"]')!;
     const openCast = el.querySelector<HTMLButtonElement>('[data-action="openCast"]')!;
+    const attribute = el.querySelector<HTMLButtonElement>('[data-action="attribute"]')!;
 
-    discover.click();
-    expect(events).toEqual([{ step: 'cast', action: 'discover' }]);
-    expect(openCast.disabled).toBe(true);
+    openCast.click();
+    expect(events).toEqual([{ step: 'speakers', action: 'openCast' }]);
+    expect(openCast.disabled).toBe(false);
+    expect(openCast.closest('.r2m-blockable')?.hasAttribute('data-tooltip')).toBe(false);
+
+    expect(attribute.disabled).toBe(true);
+    const wrapper = attribute.closest('.r2m-blockable')!;
+    expect(wrapper.getAttribute('data-tooltip')).toBe('Every paragraph has a speaker');
+    expect(wrapper.getAttribute('tabindex')).toBe('0');
     expect(
       el
         .querySelector('[data-action="reread"]')!
@@ -79,12 +87,18 @@ describe('pipeline()', () => {
     ).toBe(true);
   });
 
-  it('disables every action while one is busy and spins that one', () => {
-    const { el } = mount('cast:discover');
+  it('disables every action while one is busy and spins that one, with no reason', () => {
+    const { el } = mount('speakers:openCast');
 
     const buttons = Array.from(el.querySelectorAll<HTMLButtonElement>('.r2m-pipeline__action'));
     expect(buttons.every((b) => b.disabled)).toBe(true);
-    expect(el.querySelector('[data-action="discover"] .r2m-spinner')).not.toBeNull();
+    expect(el.querySelector('[data-action="openCast"] .r2m-spinner')).not.toBeNull();
     expect(el.querySelector('[data-action="reread"] .r2m-spinner')).toBeNull();
+    expect(
+      el
+        .querySelector('[data-action="openCast"]')!
+        .closest('.r2m-blockable')!
+        .hasAttribute('data-tooltip'),
+    ).toBe(false);
   });
 });

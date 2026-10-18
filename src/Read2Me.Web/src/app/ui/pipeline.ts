@@ -1,7 +1,7 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
 import type { IconName } from './icons';
-import { type StatusKind, icon, spinner, statusChip } from './partials';
+import { type StatusKind, blockable, icon, spinner, statusChip } from './partials';
 
 export interface PipelineAction {
   id: string;
@@ -11,7 +11,8 @@ export interface PipelineAction {
   primary: boolean;
   /** Red, for actions that discard work (reread). */
   destructive?: boolean;
-  disabled: boolean;
+  /** Why the action is disabled, as its tooltip; null when it can be clicked. */
+  blockedReason: string | null;
 }
 
 export interface PipelineStepView {
@@ -32,9 +33,10 @@ export interface PipelineActionEvent {
 
 /**
  * Production pipeline stepper (design §6.2): one row per step with a numbered marker (a check once
- * done), title, status chip, a one-line detail and the step's actions. Presentational: the
- * overview derives the steps and handles `onAct`. `busyAction` (`step:action`) shows a spinner in
- * that button and disables every action while it runs.
+ * done), title, status chip, a one-line detail and the step's actions, each wrapped in `blockable`
+ * so a disabled one says why. Presentational: the overview derives the steps and handles `onAct`.
+ * `busyAction` (`step:action`) shows a spinner in that button and disables every action while it
+ * runs (a momentary busy carries no reason).
  */
 export function pipeline(options: {
   steps: readonly PipelineStepView[];
@@ -46,18 +48,23 @@ export function pipeline(options: {
   const last = steps.length - 1;
   const action = (step: PipelineStepView, a: PipelineAction) => {
     const busy = busyAction === `${step.id}:${a.id}`;
-    const cls = a.primary
-      ? 'r2m-button r2m-button--filled r2m-pipeline__action r2m-pipeline__action--primary'
-      : `r2m-button r2m-pipeline__action ${a.destructive ? 'r2m-pipeline__action--destructive' : ''}`;
-    return html`<button
-      type="button"
-      class=${cls}
-      data-action=${a.id}
-      ?disabled=${a.disabled || busyAction !== null}
-      @click=${() => onAct({ step: step.id, action: a.id })}
-    >
-      ${busy ? spinner(16, 'r2m-pipeline__spinner') : icon(a.icon)} ${a.label}
-    </button>`;
+    const cls = [
+      'r2m-button r2m-pipeline__action',
+      a.primary ? 'r2m-button--filled r2m-pipeline__action--primary' : '',
+      a.destructive ? 'r2m-pipeline__action--destructive' : '',
+    ].join(' ');
+    return blockable(
+      a.blockedReason,
+      html`<button
+        type="button"
+        class=${cls}
+        data-action=${a.id}
+        ?disabled=${a.blockedReason !== null || busyAction !== null}
+        @click=${() => onAct({ step: step.id, action: a.id })}
+      >
+        ${busy ? spinner(16, 'r2m-pipeline__spinner') : icon(a.icon)} ${a.label}
+      </button>`,
+    );
   };
   return html`<ol class="r2m-pipeline">
     ${repeat(

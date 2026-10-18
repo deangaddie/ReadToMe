@@ -1,53 +1,34 @@
 import { html, nothing } from 'lit-html';
-import {
-  AssemblyApi,
-  type AssemblyOutputDto,
-  AttributionApi,
-  AudioApi,
-  ProjectsApi,
-  toApiError,
-} from '@app/api';
+import { AttributionApi, AudioApi, ProjectsApi, toApiError } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
-import { type ReadonlySignal, computed, signal, untracked } from '@app/core/signals';
+import { signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
-import { LiveService } from '@app/live/live.service';
 import { Preflight } from '@app/shared/preflight';
 import { ConfirmService } from '@app/ui/dialogs';
 import { statusChip } from '@app/ui/partials';
 import { type PipelineActionEvent, pipeline } from '@app/ui/pipeline';
 import { ToastService } from '@app/ui/toast';
 import { rereadConfirm } from './permanent-changes';
-import { type PipelineStep, type StepActionId, derivePipeline } from './pipeline-steps';
+import type { StepActionId } from './pipeline-steps';
 import { ProjectStore } from './project-store';
 import './project-details-panel';
 import overviewCss from './overview-page.css' with { type: 'text' };
 
 adoptStyles(overviewCss);
 
-/** `formatDate(…, 'mediumDate')`: "19 Sep 2026" in the browser's locale. */
-export function formatBuildDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
 /**
- * `/projects/{folder}` (design §6.2): the pipeline stepper beside the project card. Steps are
- * derived from the store's `/status` bootstrap plus live hub state; actions post a command and let
- * the receipt (or the HTTP response, when the hub is down) refresh the counts. Reads the
- * {@link ProjectStore} the project shell provides.
+ * `/projects/{folder}` (design §6.2): the nine-step Pipeline stepper beside the project card. The
+ * steps are the {@link ProjectStore}'s `pipeline`; actions post a command and let the receipt (or
+ * the HTTP response, when the hub is down) refresh the counts, or navigate to the page that does
+ * the work. Reads the store the project shell provides.
  */
 export class OverviewPage extends R2mElement {
   private store!: ProjectStore;
-  private readonly live = use(LiveService);
   private readonly projects = use(ProjectsApi);
   private readonly attribution = use(AttributionApi);
   private readonly audio = use(AudioApi);
-  private readonly assembly = use(AssemblyApi);
   private readonly preflight = use(Preflight);
   private readonly confirm = use(ConfirmService);
   private readonly toast = use(ToastService);
@@ -56,54 +37,15 @@ export class OverviewPage extends R2mElement {
   /** `step:action` of the command in flight; the stepper disables its actions meanwhile. */
   readonly busy = signal<string | null>(null);
 
-  /** Newest assembled audiobook, for the Export step's "Last build". */
-  private readonly lastOutput = signal<AssemblyOutputDto | null>(null);
-
-  /** Built in `connected()`, once the shell's store is reachable through the DOM. */
-  private steps!: ReadonlySignal<PipelineStep[] | null>;
-
   protected override connected(): void {
     this.classList.add('overview');
     this.store = use(ProjectStore, this);
-    const lastBuild = computed(() => {
-      const output = this.lastOutput();
-      return output
-        ? { date: formatBuildDate(output.createdAt), isPartial: output.isPartial }
-        : null;
-    });
-    this.steps = computed(() => {
-      const status = this.store.status();
-      if (!status) return null;
-      return derivePipeline({
-        status,
-        nodes: this.store.nodes(),
-        folderAudioRemaining: this.store.folderAudioRemaining(),
-        audioInFlight: this.store.audioInFlight(),
-        voiceBatchRunning: this.live.voiceBatch().isRunning,
-        assemblyRunning: this.live.assembly().isRunning,
-        lastBuild: lastBuild(),
-      });
-    });
-    this.effect(() => {
-      const folder = this.store.folder();
-      untracked(() => {
-        this.lastOutput.set(null);
-        if (folder) void this.loadLastOutput(folder);
-      });
-    });
-    this.onDisconnect(
-      this.live.on('assembly', (m) => {
-        const folder = this.store.folder();
-        if (m.kind === 'completed' && folder && (m.folder ?? folder) === folder)
-          void this.loadLastOutput(folder);
-      }),
-    );
   }
 
   protected template() {
     const detail = this.store.detail();
     const error = this.store.error();
-    const steps = this.steps();
+    const steps = this.store.pipeline();
     const author = detail?.author;
     return html`
       <header class="r2m-page-header">
@@ -138,16 +80,6 @@ export class OverviewPage extends R2mElement {
     `;
   }
 
-  /** The stepper works without it, so a failure just leaves the step saying nothing was built. */
-  private async loadLastOutput(folder: string): Promise<void> {
-    try {
-      const [newest] = await this.assembly.outputs(folder);
-      if (this.store.folder() === folder) this.lastOutput.set(newest ?? null);
-    } catch {
-      // Left as it was.
-    }
-  }
-
   async onAction({ step, action }: PipelineActionEvent): Promise<void> {
     const folder = this.store.folder();
     if (!folder) return;
@@ -165,8 +97,22 @@ export class OverviewPage extends R2mElement {
           await this.projects.import(folder, true);
           this.toast.success('Book reread');
         });
-      case 'discover':
-        this.router.navigate(`${base}/cast`, { query: { discover: '1' } });
+      case 'checkStructure':
+      case 'reviewText':
+        this.router.navigate(`${base}/book`, { query: { mode: 'read' } });
+        return;
+      case 'manualReread':
+        this.router.navigate(`${base}/book`, { query: { action: 'manual-reread' } });
+        return;
+      case 'editWithAi':
+        this.router.navigate(`${base}/book`, { query: { action: 'edit-ai' } });
+        return;
+      case 'addTitles':
+        this.router.navigate(`${base}/book`, { query: { action: 'titles' } });
+        return;
+      case 'addPauses':
+        // Build 17 runs it in place behind its permanent-change confirm; until then the Book overflow has it.
+        this.router.navigate(`${base}/book`);
         return;
       case 'openCast':
         this.router.navigate(`${base}/cast`);

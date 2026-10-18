@@ -9,8 +9,8 @@ import { FakeApi, problem } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';
 import { type FakeNavigation, installNavigation, settle } from '../../../testing/fake-navigation';
 import type { OverviewPage } from './overview-page';
-import { formatBuildDate } from './overview-page';
 import './project-shell';
+import { formatBuildDate } from './project-store';
 import './overview-page';
 
 const BASE = '/api/projects/dune';
@@ -128,8 +128,8 @@ const text = (el: Element | null) => el?.textContent?.replace(/\s+/g, ' ').trim(
 describe('r2m-overview-page', () => {
   it('shows the stepper and the project card side by side', async () => {
     const page = await render();
-    expect(page.querySelectorAll('.r2m-pipeline__step').length).toBe(6);
-    expect(text(page.querySelector('[data-step="attribute"]'))).toContain('3 remaining');
+    expect(page.querySelectorAll('.r2m-pipeline__step').length).toBe(9);
+    expect(text(page.querySelector('[data-step="speakers"]'))).toContain('3 paragraphs unassigned');
     const details = page.querySelector('r2m-project-details-panel')!;
     expect(details.textContent).toContain('Narrated by Watson');
     expect(details.textContent).toContain('dune.epub');
@@ -216,12 +216,12 @@ describe('r2m-overview-page', () => {
     expect(toasts).toEqual(['Queued 4 paragraphs']);
   });
 
-  it('a nodeStatus delta taking attribution to 0 remaining marks Attribute done and makes Voices next', async () => {
+  it('a nodeStatus delta taking attribution to 0 unassigned leaves Speakers waiting for its review', async () => {
     const page = await render();
     const step = (name: string) => page.querySelector<HTMLElement>(`[data-step="${name}"]`)!;
     const chip = (name: string) => text(step(name).querySelector('.r2m-pipeline__chip'));
-    expect(step('attribute').getAttribute('aria-current')).toBe('step');
-    expect(chip('attribute')).toContain('3 remaining');
+    expect(step('structure').getAttribute('aria-current')).toBe('step');
+    expect(chip('speakers')).toContain('3 paragraphs unassigned');
 
     const attributed = {
       attributionRemaining: 0,
@@ -238,10 +238,12 @@ describe('r2m-overview-page', () => {
     });
     await page.rendered();
 
-    expect(chip('attribute')).toContain('Done');
-    expect(step('attribute').hasAttribute('aria-current')).toBe(false);
+    expect(chip('speakers')).toContain('Review not confirmed');
     expect(button(page, 'attribute').disabled).toBe(true);
-    expect(step('voices').getAttribute('aria-current')).toBe('step');
+    expect(button(page, 'attribute').closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(
+      'Every paragraph has a speaker',
+    );
+    expect(step('structure').getAttribute('aria-current')).toBe('step');
   });
 
   it('a cancelled preflight queues nothing', async () => {
@@ -303,12 +305,17 @@ describe('r2m-overview-page', () => {
     expect(confirms[0]?.message).toContain('Clears your confirmed and skipped steps.');
   });
 
-  it('navigation actions route to cast, book modes and export', async () => {
+  it('navigation actions route to cast, the Book page (modes and ?action= deep links) and export', async () => {
     // Each navigation leaves the overview, so every action starts from a fresh page.
     const routes: [string, string][] = [
-      ['discover', 'projects/dune/cast?discover=1'],
-      ['openCast', 'projects/dune/cast'],
+      ['checkStructure', 'projects/dune/book?mode=read'],
+      ['manualReread', 'projects/dune/book?action=manual-reread'],
       ['openSpeakers', 'projects/dune/book?mode=speakers'],
+      ['openCast', 'projects/dune/cast'],
+      ['reviewText', 'projects/dune/book?mode=read'],
+      ['editWithAi', 'projects/dune/book?action=edit-ai'],
+      ['addTitles', 'projects/dune/book?action=titles'],
+      ['addPauses', 'projects/dune/book'],
       ['openAudioMode', 'projects/dune/book?mode=audio'],
       ['assemble', 'projects/dune/export'],
     ];
