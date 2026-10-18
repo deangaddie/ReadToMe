@@ -39,15 +39,84 @@ export function statusChip(options: {
   >`;
 }
 
+/**
+ * One action a message offers: an in-place command renders as a button, something that lives
+ * elsewhere as a link. The label is the real control's exact button label.
+ */
+export type MessageAction =
+  | { label: string; icon?: IconName; run: () => void }
+  | { label: string; icon?: IconName; href: string };
+
+export type EmptyStateAction = MessageAction;
+
+function messageAction(action: MessageAction, cls: string) {
+  const content = html`${action.icon ? icon(action.icon) : nothing}${action.label}`;
+  return 'href' in action
+    ? html`<a class="r2m-button ${cls}" href=${action.href}>${content}</a>`
+    : html`<button type="button" class="r2m-button ${cls}" @click=${action.run}>
+        ${content}
+      </button>`;
+}
+
+/** An empty view: what is missing, why, and at most two actions (the first filled). */
 export function emptyState(
   options: { icon: IconName; headline: string; hint?: string; compact?: boolean },
-  action: unknown = nothing,
+  actions: readonly EmptyStateAction[] = [],
 ) {
+  const shown = actions.slice(0, 2);
   return html`<div class="r2m-empty-state ${options.compact ? 'r2m-empty-state--compact' : ''}">
     ${icon(options.icon, 'r2m-empty-state__icon')}
     <p class="r2m-empty-state__headline">${options.headline}</p>
-    ${options.hint ? html`<p class="r2m-empty-state__hint">${options.hint}</p>` : nothing} ${action}
+    ${options.hint ? html`<p class="r2m-empty-state__hint">${options.hint}</p>` : nothing}
+    ${
+      shown.length > 0
+        ? html`<div class="r2m-empty-state__actions">
+            ${shown.map((a, i) =>
+              messageAction(a, `r2m-empty-state__action ${i === 0 ? 'r2m-button--filled' : ''}`),
+            )}
+          </div>`
+        : nothing
+    }
   </div>`;
+}
+
+/**
+ * Makes a disabled control's blocked reason reachable: a `data-tooltip` wrapper that takes focus
+ * only while blocked, since a disabled button cannot (`ui/tooltip.ts` shows on `focusin`, so a tap
+ * shows it too). The control still sets `?disabled=${reason !== null}` itself; the reason comes
+ * from a pure `xBlockedReason` in the feature folder. A momentary busy carries no reason.
+ */
+export function blockable(reason: string | null, control: unknown) {
+  return html`<span
+    class="r2m-blockable"
+    data-tooltip=${reason ?? nothing}
+    tabindex=${reason === null ? nothing : '0'}
+    >${control}</span
+  >`;
+}
+
+export interface Callout {
+  kind: 'info' | 'warn';
+  text: string;
+  action?: MessageAction;
+}
+
+/**
+ * A state-driven banner with no dismiss: it clears when its condition does. Shown under an
+ * Overview step row and at the top of the step's page, both from one pure `xCallout` in the stage's
+ * feature folder. Errors stay toasts.
+ */
+export function callout(options: Callout) {
+  return html`<div class="r2m-callout r2m-callout--${options.kind}">
+    ${icon(DEFAULT_ICONS[options.kind], 'r2m-callout__icon')}
+    <span class="r2m-callout__text">${options.text}</span>
+    ${options.action ? messageAction(options.action, 'r2m-callout__action') : nothing}
+  </div>`;
+}
+
+/** The one muted sentence an out-of-order action shows before it is clicked, or nothing. */
+export function adviceLine(text: string | null) {
+  return text === null ? nothing : html`<p class="r2m-advice">${text}</p>`;
 }
 
 export type CountBadgeKind = 'attribution' | 'audio' | 'review';

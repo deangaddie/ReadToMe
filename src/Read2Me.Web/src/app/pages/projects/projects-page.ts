@@ -79,7 +79,7 @@ export class ProjectsPage extends R2mElement {
                   headline: 'No projects yet',
                   hint: 'Import an epub or text file to create your first audiobook project.',
                 },
-                newButton,
+                [{ label: 'New project', icon: 'add', run: () => void this.create() }],
               )
             : html`<div class="projects__grid">
                 ${repeat(

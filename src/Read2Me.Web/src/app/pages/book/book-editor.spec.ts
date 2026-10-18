@@ -74,13 +74,13 @@ describe('BookEditor', () => {
     const run = editor.run({ type: 'AddPauses' });
     await flush();
     expect(execute.calls).toEqual([['dune', { type: 'AddPauses' }]]);
-    expect(editor.busy()).toBe(true);
+    expect(editor.saving()).toBe(true);
     expect(editor.locked()).toBe(true);
 
     store.settle(true);
     expect(await run).toBe(true);
     expect(store.refreshed).toBe(0);
-    expect(editor.busy()).toBe(false);
+    expect(editor.saving()).toBe(false);
     expect(problems).toEqual([]);
   });
 
@@ -114,7 +114,7 @@ describe('BookEditor', () => {
     ]);
     expect(store.cancelled).toBe(1);
     expect(store.refreshed).toBe(0);
-    expect(editor.busy()).toBe(false);
+    expect(editor.saving()).toBe(false);
   });
 
   it('tryExecute hands the refusal back instead of toasting, and explains a declined write', async () => {

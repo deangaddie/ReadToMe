@@ -21,7 +21,7 @@ import {
 } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import { ConfirmService } from '@app/ui/dialogs';
-import { emptyState, icon, spinner, statusChip } from '@app/ui/partials';
+import { blockable, emptyState, icon, spinner, statusChip } from '@app/ui/partials';
 import type { SettingsValues } from '@app/ui/settings-form';
 import { castPath } from '../cast/cast-path';
 import { ProjectStore } from '../project/project-store';
@@ -140,9 +140,7 @@ export class VoiceEditorPage extends R2mElement {
           : loadError !== null
             ? emptyState(
                 { icon: 'voice_over_off', headline: 'Cannot edit this voice', hint: loadError },
-                html`<a class="r2m-button" data-action="back-empty" href=${backHref}
-                  >Back to the cast</a
-                >`,
+                [{ label: 'Back to the cast', href: backHref }],
               )
             : voice
               ? this.editorTemplate(voice)
@@ -167,8 +165,9 @@ export class VoiceEditorPage extends R2mElement {
         >
           ${this.rendering() ? spinner(18) : icon('play_circle')} Preview
         </button>
-        <span data-tooltip=${applyBlocked ?? nothing}>
-          <button
+        ${blockable(
+          applyBlocked,
+          html`<button
             type="button"
             class="r2m-button r2m-button--stroked"
             data-action="apply"
@@ -176,8 +175,8 @@ export class VoiceEditorPage extends R2mElement {
             @click=${() => void this.apply()}
           >
             ${icon('check')} Apply
-          </button>
-        </span>
+          </button>`,
+        )}
         ${
           voice.referenceWarning
             ? html`<span data-testid="voice-reference-warning"

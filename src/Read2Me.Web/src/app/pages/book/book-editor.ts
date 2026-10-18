@@ -29,12 +29,12 @@ export class BookEditor {
   private readonly projects = use(ProjectsApi);
   private readonly toast = use(ToastService);
 
-  private readonly _busy = signal(false);
+  private readonly _saving = signal(false);
 
-  /** A write is in flight. */
-  readonly busy = this._busy.asReadonly();
+  /** A write is in flight (not staleness: the stale banner covers that); the toolbar shows "Saving…". */
+  readonly saving = this._saving.asReadonly();
   /** Every mutation affordance is off: a write is in flight, or the view is stale (design §6.3). */
-  readonly locked = computed(() => this._busy() || this.store.stale() !== null);
+  readonly locked = computed(() => this._saving() || this.store.stale() !== null);
 
   constructor(private readonly store: BookStore) {}
 
@@ -68,7 +68,7 @@ export class BookEditor {
   /** Why a write would not be sent right now, or null when it would. */
   private declineReason(): string | null {
     if (!this.store.folder()) return 'No project is open.';
-    if (this._busy()) return 'Another change is still being saved.';
+    if (this._saving()) return 'Another change is still being saved.';
     return null;
   }
 
@@ -93,17 +93,17 @@ export class BookEditor {
     quiet = false,
   ): Promise<{ value?: T; error: ApiError | null } | null> {
     const folder = this.store.folder();
-    if (!folder || this._busy()) return null;
+    if (!folder || this._saving()) return null;
 
     // Armed before the request: the receipt can arrive before the HTTP response does.
     const receipt = this.store.expectOwnReceipt(OWN_RECEIPT_TIMEOUT_MS);
-    this._busy.set(true);
+    this._saving.set(true);
     let value: T;
     try {
       value = await write(folder);
     } catch (error) {
       receipt.cancel();
-      this._busy.set(false);
+      this._saving.set(false);
       const failure = toApiError(error);
       if (!quiet) this.toast.problem(failure.toProblem());
       return { error: failure };
@@ -112,7 +112,7 @@ export class BookEditor {
     try {
       if (!(await receipt.settled)) await this.store.refresh();
     } finally {
-      this._busy.set(false);
+      this._saving.set(false);
     }
     return { value, error: null };
   }
