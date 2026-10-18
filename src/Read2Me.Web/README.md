@@ -15,7 +15,7 @@ production bundle at `/app`. It is **not** part of `Read2Me.slnx`; `dotnet build
 bun install --frozen-lockfile   # install exactly what bun.lock says
 bun run dev          # dev server with HMR → http://localhost:4300/app/ (proxies /api, /hubs, /workspace, /openapi, /audio-preview, /preview-source to :5000)
 bun run build        # production build → ../Read2Me.App/wwwroot/app/ (git-ignored)
-bun run check        # format:check + lint + typecheck + api:check + icons:check + tests + build — must be green before a PR
+bun run check        # format:check + lint + typecheck + api:check + icons:check + help:check + tests + build — must be green before a PR
 bun run lint         # oxlint, type-aware, with eslint-plugin-lit
 bun run typecheck    # tsc --noEmit
 bun test             # bun test over happy-dom; `bun test src/app/core/router.spec.ts` for one file
@@ -25,6 +25,8 @@ bun run api:types    # regenerate src/app/api/schema.d.ts from the host's /opena
 bun run api:check    # fail if schema.d.ts is stale against the running host (skips with a warning when the host is down)
 bun run icons        # rebuild the subset icon font and icons.manifest.json from the IconName union (needs the network)
 bun run icons:check  # offline: fail if icons.manifest.json differs from the IconName union
+bun run help         # render docs/guide/<step>.md into src/app/help/help.generated.ts (committed)
+bun run help:check   # fail if help.generated.ts is stale against docs/guide, or a page breaks the lint
 ```
 
 `tsc` is TypeScript 7, which has no JavaScript compiler API. openapi-typescript builds its
@@ -63,8 +65,34 @@ bundler does not see it until then.
 - `src/app/theme/` — the theme service and theme CSS.
 - `src/styles/global.css` — design tokens, fonts and the global primitive CSS.
 - `src/testing/` — test helpers: fake Navigation API, API client, live hub and timers.
-- `scripts/` — `check-api-types.ts` (`api:check`) and `icons.ts` / `icon-manifest.ts`
-  (`icons`, `icons:check`); `icons.manifest.json` sits at the project root.
+- `src/app/help/` — `helpText(step)`, the `r2m-help` partial, over `help.generated.ts`, which
+  `bun run help` renders from the repo's `docs/guide/<step>.md`. See "Help text" below.
+- `scripts/` — `check-api-types.ts` (`api:check`), `icons.ts` / `icon-manifest.ts`
+  (`icons`, `icons:check`) and `help.ts` / `help-render.ts` (`help`, `help:check`);
+  `icons.manifest.json` sits at the project root.
+
+## Help text
+
+Each Pipeline step's help is one markdown file, `docs/guide/<step>.md` at the repo root, one per
+`PipelineStepId` (an optional `docs/guide/README.md` is ignored). The first line is `# <Step name>`:
+it becomes the title and is left out of the body, whose headings start at `##` (rendered one level
+down, under the partial's `<h2>` title). The shape is `# Name`, one "what this step is for"
+paragraph, `## How`, `## Done when`, about 150–300 words. No front matter, no images, no raw HTML
+(it is escaped), no links into the app: name the control in prose. Links are absolute `http(s)://`
+URLs and open in a new tab.
+
+`bun run help` renders the nine files into `src/app/help/help.generated.ts`, which is committed;
+`bun run help:check` (part of `bun run check`) fails when the module is stale or a page breaks the
+lint (`javascript:`/`data:`/relative/`/app` links, `![` images, a missing `# Title`). The authoring
+loop runs from the **repo root**, because Bun's watcher only sees files under its working directory
+and `docs/guide` sits outside this package:
+
+```bash
+bun --watch src/Read2Me.Web/scripts/help.ts   # regenerates the module on every save of docs/guide/*.md
+cd src/Read2Me.Web && bun run dev             # in another terminal: the Overview picks the module up through HMR
+```
+
+Commit the regenerated module with the markdown.
 
 ## Conventions
 
