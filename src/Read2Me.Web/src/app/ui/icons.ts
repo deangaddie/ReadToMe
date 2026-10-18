@@ -58,6 +58,7 @@ export const ICON_NAMES = [
   'library_music',
   'light_mode',
   'link',
+  'list',
   'lock',
   'memory',
   'menu',

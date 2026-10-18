@@ -8,7 +8,9 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// before the details card, a row's head splits so the `?` stays on the title line with the
 /// checkpoint pills on a second line, and the `?` opens the step's help inline in the row (after
 /// the head row, before the detail line) rather than in the hidden right column. Layout only:
-/// the toggle, the pills and the page state are spec-tested.
+/// the toggle, the pills and the page state are spec-tested. Off the Overview, the app bar's
+/// next-step pill (spec §4) keeps only its main button, ellipsised, under the shell's 900 px
+/// breakpoint.
 /// </summary>
 public class OverviewLayoutTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
@@ -57,5 +59,19 @@ public class OverviewLayoutTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
         Assert.True(inlineBox.Y + inlineBox.Height <= detailBox.Y + 1, "inline help should precede the detail line");
         // The details card stays on the page below the stepper while help is open at this width.
         await Expect(details).ToBeVisibleAsync();
+
+        // Off the Overview the app bar carries the next-step pill; at this width only its main
+        // button shows, its label cut with an ellipsis inside the bar.
+        await GotoAppAsync("projects/overview-layout/cast");
+        var main = Page.Locator(".shell__next-main");
+        await Expect(main).ToBeVisibleAsync();
+        await Expect(main).ToContainTextAsync("Next: Structure");
+        await Expect(Page.Locator(".shell__next-pill").First).ToBeHiddenAsync();
+        await Expect(Page.Locator(".shell__next-overview")).ToBeHiddenAsync();
+        var mainBox = (await main.BoundingBoxAsync())!;
+        Assert.True(mainBox.X + mainBox.Width <= 390, $"pill (right={mainBox.X + mainBox.Width}) should fit the 390 px bar");
+        var truncated = await Page.Locator(".shell__next-label").EvaluateAsync<bool>(
+            "el => el.scrollWidth > el.clientWidth && getComputedStyle(el).textOverflow === 'ellipsis'");
+        Assert.True(truncated, "the pill's label should be truncated with an ellipsis");
     }
 }

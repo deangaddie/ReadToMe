@@ -10,6 +10,7 @@ import { shellContext } from '@app/route-meta';
 import { type SchemePreference, ThemeService } from '@app/theme/theme.service';
 import type { IconName } from '@app/ui/icons';
 import { icon } from '@app/ui/partials';
+import { type GuideEntry, ProjectGuide } from './project-guide';
 import { RailState } from './rail-state';
 import { GLOBAL_NAV_ITEMS, type NavItem, contextNavItems, isActive } from './shell-nav';
 import '@app/core/outlet';
@@ -46,12 +47,22 @@ export class AppShell extends R2mElement {
   private readonly theme = use(ThemeService);
   private readonly live = use(LiveService);
   private readonly activity = use(ActivityStore);
+  private readonly guide = use(ProjectGuide);
 
   /** The activity drawer (design §5); pills and the ▲ open it through the store. */
   readonly drawerOpen = this.activity.drawerOpen;
 
   private readonly context = computed(() => shellContext(this.router.match()));
   private readonly contextItems = computed(() => contextNavItems(this.context()));
+
+  /** The next-step pill's entry: the route's project, on any of its pages but the Overview (spec §4). */
+  private readonly nextStep = computed<GuideEntry | null>(() => {
+    const entry = this.guide.current();
+    const leaf = this.router.match()?.chain.at(-1)?.tag;
+    if (!entry || entry.folder !== this.context().folder || leaf === 'r2m-overview-page')
+      return null;
+    return entry;
+  });
 
   /**
    * One crumb per titled route, linking all but the last. An index child (`path: ''`) shares its
@@ -136,6 +147,8 @@ export class AppShell extends R2mElement {
 
         <span class="shell__spacer"></span>
 
+        ${this.nextStepPill()}
+
         <span
           class="shell__conn shell__conn--${connection}"
           role="status"
@@ -209,6 +222,67 @@ export class AppShell extends R2mElement {
         <r2m-activity-bar .narrow=${narrow}></r2m-activity-bar>
       </footer>
     `;
+  }
+
+  /**
+   * The next step and its primary action (guidance-primitives spec §4): a click runs it through the
+   * project's StepRunner, the Overview row's path (confirms included), with its checkpoint pills
+   * beside it. A running or blocked step names its chip and opens the Overview instead. Under
+   * 900 px the CSS keeps the main button alone.
+   */
+  private nextStepPill() {
+    const entry = this.nextStep();
+    if (!entry) return nothing;
+    const { next, runner } = entry;
+    const disabled = runner.busy() !== null;
+    const openOverview = () => runner.openOverview();
+    const main =
+      next.kind === 'allDone'
+        ? html`<span class="shell__next-main shell__next-main--done">${next.label}</span>`
+        : html`<button
+            type="button"
+            class="r2m-button shell__next-main"
+            data-tooltip=${next.tooltip ?? nothing}
+            ?disabled=${disabled}
+            @click=${
+              next.kind === 'waiting'
+                ? openOverview
+                : () => void runner.act({ step: next.step, action: next.action })
+            }
+          >
+            <span class="shell__next-label">${next.label}</span>
+          </button>`;
+    const pills =
+      next.kind !== 'allDone'
+        ? next.pills.map(
+            (p) =>
+              html`<button
+                type="button"
+                class="r2m-button r2m-button--stroked shell__next-pill"
+                data-checkpoint=${p.id}
+                ?disabled=${disabled}
+                @click=${() => void runner.checkpoint({ step: next.step, pill: p.id })}
+              >
+                ${p.label}
+              </button>`,
+          )
+        : nothing;
+    return html`<div
+      class="shell__next shell__next--${next.tint}"
+      role="group"
+      aria-label="Next step"
+    >
+      ${main} ${pills}
+      <button
+        type="button"
+        class="r2m-icon-button shell__next-overview"
+        aria-label="Open Overview"
+        data-tooltip="Open Overview"
+        @click=${openOverview}
+      >
+        ${icon('list')}
+      </button>
+    </div>`;
   }
 
   private schemeItem(preference: SchemePreference, label: string) {
