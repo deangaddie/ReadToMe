@@ -1,4 +1,10 @@
-import { type ProjectDetailDto, type ProjectStatusDto, ProjectsApi } from '@app/api';
+import {
+  AssemblyApi,
+  type AssemblyOutputDto,
+  type ProjectDetailDto,
+  type ProjectStatusDto,
+  ProjectsApi,
+} from '@app/api';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import {
@@ -15,6 +21,7 @@ import {
 import { LiveService, type Unsubscribe } from '@app/live/live.service';
 import { ProjectTitles } from '@app/shell/project-titles';
 import { Debounced, REFETCH_DEBOUNCE_MS } from '@app/shared/debounced';
+import { type PipelineStep, derivePipeline } from './pipeline-steps';
 
 export { REFETCH_DEBOUNCE_MS };
 
@@ -40,10 +47,13 @@ type StatusMap<T> = Record<string, T | null>;
  * project shell. Holds the detail and the `/status` bootstrap, keeps the node and item status maps
  * current from hub deltas, and turns receipts into refetches — never into entity patches (spec D6):
  * a receipt whose facets move a count, or whose revision skips one, refetches `/status`; one that
- * touches the narrator or project policy refetches the detail.
+ * touches the narrator or project policy refetches the detail. It also owns the nine-step
+ * {@link pipeline} and its last input: the newest build, read on open and again when this
+ * project's assembly completes, plus the hub's voice-batch and assembly flags.
  */
 export class ProjectStore {
   private readonly api = use(ProjectsApi);
+  private readonly assembly = use(AssemblyApi);
   private readonly live = use(LiveService);
   private readonly titles = use(ProjectTitles);
 
@@ -63,6 +73,8 @@ export class ProjectStore {
   private readonly _items = signal<StatusMap<ItemStatusEntry>>({});
   private readonly _loading = signal(false);
   private readonly _error = signal<string | null>(null);
+  /** Newest assembled audiobook, for the Export step; null when none or the read failed. */
+  private readonly _lastOutput = signal<AssemblyOutputDto | null>(null);
 
   readonly folder = this._folder.asReadonly();
   readonly detail = this._detail.asReadonly();
@@ -85,6 +97,24 @@ export class ProjectStore {
       ).length,
   );
 
+  /** The nine Pipeline steps (spec §2); null until `/status` has answered. */
+  readonly pipeline = computed<PipelineStep[] | null>(() => {
+    const status = this._status();
+    if (!status) return null;
+    const output = this._lastOutput();
+    return derivePipeline({
+      status,
+      nodes: this._nodes(),
+      folderAudioRemaining: this._folderAudioRemaining(),
+      audioInFlight: this.audioInFlight(),
+      voiceBatchRunning: this.live.voiceBatch().isRunning,
+      assemblyRunning: this.live.assembly().isRunning,
+      lastBuild: output
+        ? { date: formatBuildDate(output.createdAt), isPartial: output.isPartial }
+        : null,
+    });
+  });
+
   /** Joins the project group, listens to its hub traffic and loads detail + status. */
   async open(folder: string): Promise<void> {
     this.close();
@@ -92,6 +122,7 @@ export class ProjectStore {
     this._detail.set(null);
     this._status.set(null);
     this._error.set(null);
+    this._lastOutput.set(null);
     this.heldSnapshot = null;
 
     this.subscriptions = [
@@ -99,8 +130,12 @@ export class ProjectStore {
       this.live.on('itemStatus', (m) => this.applyItemStatus(m)),
       this.live.receipts(folder, (r) => this.onReceipt(r)),
       this.live.resynced((s) => this.onResync(s)),
+      this.live.on('assembly', (m) => {
+        if (m.kind === 'completed' && this.isMine(m.folder ?? folder)) void this.loadLastOutput();
+      }),
     ];
     void this.live.joinProject(folder).then(() => this.seedItemsFromLive());
+    void this.loadLastOutput();
 
     this._loading.set(true);
     try {
@@ -146,6 +181,18 @@ export class ProjectStore {
     if (!folder) return;
     const detail = await this.api.get(folder);
     if (this._folder() === folder) this.setDetail(detail);
+  }
+
+  /** The stepper works without it, so a failure just leaves Export saying nothing was built. */
+  private async loadLastOutput(): Promise<void> {
+    const folder = this._folder();
+    if (!folder) return;
+    try {
+      const [newest] = await this.assembly.outputs(folder);
+      if (this._folder() === folder) this._lastOutput.set(newest ?? null);
+    } catch {
+      // Left as it was.
+    }
   }
 
   private applyStatus(status: ProjectStatusDto): void {
@@ -245,6 +292,15 @@ function mergeDeltas<T>(current: StatusMap<T>, deltas: StatusMap<T>): StatusMap<
     else next[key] = value;
   }
   return next;
+}
+
+/** `formatDate(…, 'mediumDate')`: "19 Sep 2026" in the browser's locale. */
+export function formatBuildDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 function messageOf(reason: unknown): string {

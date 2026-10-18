@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { ProjectDetailDto, ProjectStatusDto } from '@app/api';
 import { Emitter } from '@app/core/emitter';
+import { IDLE_ASSEMBLY, IDLE_VOICE_BATCH } from '@app/live/live-state';
 import { override, resetServices, use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import type {
+  AssemblyMessage,
+  AssemblyState,
   ItemStatusMessage,
   LiveSnapshot,
   NodeStatusMessage,
@@ -11,11 +14,12 @@ import type {
   ProjectSnapshot,
   Receipt,
   ReceiptMessage,
+  VoiceBatchState,
 } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { ProjectTitles } from '@app/shell/project-titles';
 import { FakeApi, problem } from '../../../testing/fake-api';
-import { ProjectStore, REFETCH_DEBOUNCE_MS } from './project-store';
+import { ProjectStore, REFETCH_DEBOUNCE_MS, formatBuildDate } from './project-store';
 
 function summary(overrides: Partial<NodeStatusSummary> = {}): NodeStatusSummary {
   return {
@@ -64,6 +68,9 @@ function statusDto(overrides: Partial<ProjectStatusDto> = {}): ProjectStatusDto 
 class FakeLive {
   readonly nodeStatus = new Emitter<NodeStatusMessage>();
   readonly itemStatus = new Emitter<ItemStatusMessage>();
+  readonly assemblyMessages = new Emitter<AssemblyMessage>();
+  readonly assembly = signal<AssemblyState>(IDLE_ASSEMBLY);
+  readonly voiceBatch = signal<VoiceBatchState>(IDLE_VOICE_BATCH);
   readonly receiptsEmitter = new Emitter<Receipt>();
   readonly resyncedEmitter = new Emitter<LiveSnapshot>();
   readonly projects = signal<Record<string, ProjectSnapshot>>({});
@@ -73,6 +80,7 @@ class FakeLive {
   on(family: string, listener: (m: unknown) => void) {
     if (family === 'nodeStatus') return this.nodeStatus.subscribe(listener);
     if (family === 'itemStatus') return this.itemStatus.subscribe(listener);
+    if (family === 'assembly') return this.assemblyMessages.subscribe(listener);
     throw new Error(`unexpected family ${family}`);
   }
   receipts(_folder: string, listener: (r: Receipt) => void) {
@@ -111,6 +119,13 @@ function receipt(revision: number, facets: string): Receipt {
 
 const DETAIL_URL = '/api/projects/dune';
 const STATUS_URL = '/api/projects/dune/status';
+const OUTPUTS_URL = '/api/projects/dune/assembly/outputs';
+const FULL_BUILD = {
+  fileName: 'dune.m4b',
+  sizeBytes: 1,
+  createdAt: '2026-09-19T10:00:00Z',
+  isPartial: false,
+};
 
 describe('ProjectStore', () => {
   let api: FakeApi;
@@ -130,11 +145,15 @@ describe('ProjectStore', () => {
 
   const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
-  async function open(status = statusDto()) {
+  async function open(status = statusDto(), outputs: unknown = []) {
     api.on('GET', DETAIL_URL, DETAIL);
     api.on('GET', STATUS_URL, status);
+    api.on('GET', OUTPUTS_URL, outputs);
     await store.open('dune');
+    await settle();
   }
+
+  const exportStep = () => store.pipeline()?.find((s) => s.id === 'export');
 
   it('loads detail + status, joins the project group and names the breadcrumb', async () => {
     await open();
@@ -311,6 +330,70 @@ describe('ProjectStore', () => {
     expect(live.left).toEqual(['dune']);
     live.nodeStatus.emit({ folder: 'dune', nodes: { v1: null }, folderAudioRemaining: 0 });
     expect(store.nodes()['v1']).toBeDefined();
+  });
+
+  describe('pipeline (guidance-primitives 16)', () => {
+    it('is null until /status answers, then the nine steps derived from the store', async () => {
+      expect(store.pipeline()).toBeNull();
+      await open();
+      expect(store.pipeline()?.map((s) => s.id)).toHaveLength(9);
+      expect(store.pipeline()?.find((s) => s.id === 'speakers')?.chip.label).toBe(
+        '2 paragraphs unassigned',
+      );
+    });
+
+    it('reads the newest build on open and shows it on the Export step', async () => {
+      await open(statusDto(), [FULL_BUILD]);
+      expect(api.calls('GET', OUTPUTS_URL)).toHaveLength(1);
+      expect(exportStep()?.state).toBe('done');
+      expect(exportStep()?.detail).toBe(`Last build: ${formatBuildDate(FULL_BUILD.createdAt)}`);
+    });
+
+    it('a failed outputs read leaves Export saying nothing was built', async () => {
+      await open(statusDto(), () => problem(500, 'disk'));
+      expect(exportStep()?.chip.label).toBe('Not built');
+      expect(store.error()).toBeNull();
+    });
+
+    it('reloads the build when this project’s assembly completes, not another’s', async () => {
+      await open();
+      api.on('GET', OUTPUTS_URL, [FULL_BUILD]);
+
+      live.assemblyMessages.emit({ kind: 'completed', folder: 'emma' });
+      await settle();
+      expect(api.calls('GET', OUTPUTS_URL)).toHaveLength(1);
+
+      live.assemblyMessages.emit({ kind: 'completed', folder: 'DUNE' });
+      await settle();
+      expect(api.calls('GET', OUTPUTS_URL)).toHaveLength(2);
+      expect(exportStep()?.state).toBe('done');
+    });
+
+    it('follows the hub’s assembly and voice-batch running flags', async () => {
+      await open();
+      live.assembly.set({ ...IDLE_ASSEMBLY, isRunning: true, folder: 'dune' });
+      live.voiceBatch.set({ ...IDLE_VOICE_BATCH, isRunning: true });
+      expect(exportStep()?.chip.label).toBe('Assembling…');
+      expect(store.pipeline()?.find((s) => s.id === 'voices')?.state).toBe('running');
+    });
+
+    it('receipt → refetch → re-derive: a confirmed Structure row reaches the step', async () => {
+      await open();
+      expect(store.pipeline()?.find((s) => s.id === 'structure')?.state).toBe('unconfirmed');
+      api.on(
+        'GET',
+        STATUS_URL,
+        statusDto({
+          checkpoints: { structure: { state: 'confirmed', stale: false, at: '2026-10-17' } },
+        }),
+      );
+
+      live.receiptsEmitter.emit(receipt(6, 'Checkpoints'));
+      await settle(REFETCH_DEBOUNCE_MS + 20);
+
+      expect(store.pipeline()?.find((s) => s.id === 'structure')?.state).toBe('confirmed');
+      expect(store.pipeline()?.find((s) => s.next)?.id).toBe('speakers');
+    });
   });
 
   it('surfaces a load failure as an error', async () => {
