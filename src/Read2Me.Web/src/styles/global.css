@@ -1948,6 +1948,52 @@ progress {
 .r2m-pipeline__action--destructive {
   color: var(--r2m-status-error);
 }
+/* Variant B head row: checkpoint pills + hint beside the chip, the `?` pinned right by the spacer. */
+.r2m-pipeline__spacer {
+  flex: 1 1 auto;
+}
+.r2m-pipeline__checkpoint {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--r2m-space-1);
+}
+.r2m-pipeline__pill {
+  height: 24px;
+  padding: 0 var(--r2m-space-2);
+  gap: var(--r2m-space-1);
+  font-size: var(--r2m-text-sm);
+  color: var(--r2m-text);
+}
+.r2m-pipeline__hint {
+  font-size: var(--r2m-text-sm);
+  font-style: italic;
+  color: var(--r2m-text-muted);
+}
+.r2m-pipeline__help-toggle {
+  width: 28px;
+  height: 28px;
+  color: var(--r2m-text-muted);
+
+  & .r2m-icon {
+    font-size: 18px;
+  }
+}
+.r2m-pipeline__help-toggle--on {
+  background: color-mix(in srgb, var(--r2m-accent) 12%, transparent);
+  color: var(--r2m-accent);
+}
+/* The row whose help is open is tinted so the side panel reads as its own. */
+.r2m-pipeline__step--help-open .r2m-pipeline__body {
+  margin: calc(-1 * var(--r2m-space-2));
+  padding: var(--r2m-space-2);
+  padding-bottom: var(--r2m-space-5);
+  border-radius: var(--r2m-radius-md);
+  background: color-mix(in srgb, var(--r2m-accent) 6%, transparent);
+}
+.r2m-pipeline__help-inline {
+  margin-top: var(--r2m-space-2);
+}
 
 /* ---- range (mat-slider): a native range in the accent colour --------------------------------- */
 .r2m-range {

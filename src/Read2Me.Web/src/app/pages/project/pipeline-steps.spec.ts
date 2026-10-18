@@ -652,6 +652,14 @@ describe('adviceFor', () => {
     );
   });
 
+  it('each derived step carries its own advice line, from its actions', () => {
+    const rows = steps(status({ pauseParagraphs: 0 }));
+    const advice = (id: string) => rows.find((s) => s.id === id)?.advice;
+    expect(advice('titles')).toBe('Usually done after Structure: a reread drops inserted titles.');
+    expect(advice('pauses')).toBe('Usually done after Structure: a reread drops inserted pauses.');
+    expect(advice('import')).toBeNull();
+  });
+
   it('a Pauses step that is derived-done counts as settled', () => {
     const s = status({ checkpoints: { text: confirmed, titles: confirmed } });
     expect(adviceFor('generateAudio', steps(s))).toBeNull();

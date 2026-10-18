@@ -315,7 +315,6 @@ describe('r2m-overview-page', () => {
       ['reviewText', 'projects/dune/book?mode=read'],
       ['editWithAi', 'projects/dune/book?action=edit-ai'],
       ['addTitles', 'projects/dune/book?action=titles'],
-      ['addPauses', 'projects/dune/book'],
       ['openAudioMode', 'projects/dune/book?mode=audio'],
       ['assemble', 'projects/dune/export'],
     ];
@@ -325,6 +324,142 @@ describe('r2m-overview-page', () => {
       button(page, action).click();
       expect(navigation.calls.at(-1)?.url).toBe(`http://localhost/app/${expected}`);
     }
+  });
+
+  it('a checkpoint pill PUTs its state and refetches status; a refusal is a problem toast (guidance-primitives 17)', async () => {
+    const page = await render();
+    const pill = (step: string, id: string) =>
+      page.querySelector<HTMLButtonElement>(`[data-step="${step}"] [data-checkpoint="${id}"]`)!;
+    expect(text(page.querySelector('[data-step="structure"] .r2m-pipeline__checkpoint'))).toBe(
+      'Confirm Skip',
+    );
+    api.on('PUT', `${BASE}/checkpoints/structure`, undefined).on(
+      'GET',
+      `${BASE}/status`,
+      status({
+        checkpoints: { structure: { state: 'confirmed', stale: false, at: '2026-10-18' } },
+      }),
+    );
+
+    pill('structure', 'confirm').click();
+    await settle();
+    await page.rendered();
+
+    expect(api.calls('PUT', `${BASE}/checkpoints/structure`).map((r) => r.body)).toEqual([
+      { state: 'confirmed' },
+    ]);
+    expect(api.calls('GET', `${BASE}/status`)).toHaveLength(2);
+    expect(text(page.querySelector('[data-step="structure"] .r2m-pipeline__chip'))).toContain(
+      'Confirmed',
+    );
+    expect(text(page.querySelector('[data-step="structure"] .r2m-pipeline__checkpoint'))).toBe(
+      'Reopen',
+    );
+
+    api.on('PUT', `${BASE}/checkpoints/text`, () => problem(422, 'Read the book first'));
+    pill('text', 'skip').click();
+    await settle();
+    expect(api.calls('PUT', `${BASE}/checkpoints/text`).map((r) => r.body)).toEqual([
+      { state: 'skipped' },
+    ]);
+    expect(toasts).toEqual(['problem: Read the book first']);
+  });
+
+  it('Add pauses runs in place: the permanent-change confirm with the chapter count, then the command and its toast', async () => {
+    const page = await render();
+    api.on('GET', `${BASE}/book`, {
+      hasContent: true,
+      volumes: [],
+      characters: [],
+      totalParts: 1,
+      totalChapters: 3,
+    });
+    api.on('POST', `${BASE}/commands`, { newEntityId: null });
+
+    confirmAnswer = false;
+    button(page, 'addPauses').click();
+    for (let i = 0; i < 4; i++) await settle();
+    expect(confirms).toEqual([
+      expect.objectContaining({
+        title: 'Add pauses?',
+        message: expect.stringContaining('Inserts a pause after every chapter title (3 chapters).'),
+        confirmLabel: 'Add pauses',
+        destructive: false,
+      }),
+    ]);
+    expect(api.calls('POST', `${BASE}/commands`)).toHaveLength(0);
+    expect(navigation.calls).toHaveLength(0);
+
+    confirmAnswer = true;
+    button(page, 'addPauses').click();
+    for (let i = 0; i < 4; i++) await settle();
+    expect(api.calls('POST', `${BASE}/commands`).map((r) => r.body)).toEqual([
+      { type: 'AddPauses' },
+    ]);
+    expect(api.calls('GET', `${BASE}/status`)).toHaveLength(2);
+    expect(toasts).toEqual(['Pauses added']);
+  });
+
+  it('the Titles row carries its advice line while Structure is unsettled', async () => {
+    const page = await render();
+    expect(text(page.querySelector('[data-step="titles"] .r2m-advice'))).toBe(
+      'Usually done after Structure: a reread drops inserted titles.',
+    );
+    expect(page.querySelector('[data-step="import"] .r2m-advice')).toBeNull();
+  });
+
+  it('? opens one step’s help in both placements, toggles it off, and switches to another step', async () => {
+    const page = await render();
+    const toggle = (step: string) =>
+      page.querySelector<HTMLButtonElement>(`[data-step="${step}"] .r2m-pipeline__help-toggle`)!;
+    const open = () =>
+      [...page.querySelectorAll<HTMLElement>('.overview__help')].map(
+        (h) =>
+          `${h.classList.contains('overview__help--side') ? 'side' : 'inline'}:${h.querySelector('.r2m-help')?.getAttribute('data-step')}`,
+      );
+    expect(open()).toEqual([]);
+    expect(
+      page.querySelector('.overview__body')?.classList.contains('overview__body--help-open'),
+    ).toBe(false);
+
+    toggle('structure').click();
+    await page.rendered();
+    expect(open().sort()).toEqual(['inline:structure', 'side:structure']);
+    expect(
+      page.querySelector('.overview__body')?.classList.contains('overview__body--help-open'),
+    ).toBe(true);
+    expect(
+      page
+        .querySelector('[data-step="structure"]')
+        ?.classList.contains('r2m-pipeline__step--help-open'),
+    ).toBe(true);
+    expect(page.querySelector('.overview__details .overview__help--side')).not.toBeNull();
+    expect(
+      page.querySelector(
+        '[data-step="structure"] .r2m-pipeline__help-inline .overview__help--inline',
+      ),
+    ).not.toBeNull();
+    // The details card is still in the document (CSS hides it at laptop width).
+    expect(page.querySelector('r2m-project-details-panel')).not.toBeNull();
+
+    toggle('speakers').click();
+    await page.rendered();
+    expect(open().sort()).toEqual(['inline:speakers', 'side:speakers']);
+
+    toggle('speakers').click();
+    await page.rendered();
+    expect(open()).toEqual([]);
+
+    toggle('export').click();
+    await page.rendered();
+    page
+      .querySelector<HTMLButtonElement>('.overview__help--side [aria-label="Close help"]')!
+      .click();
+    await page.rendered();
+    expect(open()).toEqual([]);
+    expect(
+      page.querySelector('.overview__body')?.classList.contains('overview__body--help-open'),
+    ).toBe(false);
   });
 
   it('editing the title inline PATCHes and shows the returned detail', async () => {

@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { render } from 'lit-html';
-import { type PipelineActionEvent, type PipelineStepView, pipeline } from './pipeline';
+import { html } from 'lit-html';
+import {
+  type PipelineActionEvent,
+  type PipelineCheckpointEvent,
+  type PipelineStepView,
+  pipeline,
+} from './pipeline';
 
 const STEPS: PipelineStepView[] = [
   {
@@ -10,6 +16,8 @@ const STEPS: PipelineStepView[] = [
     chip: { status: 'ok', label: 'Done' },
     detail: 'Book read in',
     next: false,
+    checkpoint: [],
+    laterDone: 0,
     actions: [
       {
         id: 'reread',
@@ -28,6 +36,10 @@ const STEPS: PipelineStepView[] = [
     chip: { status: 'neutral', label: 'Review not confirmed' },
     detail: 'Assign a speaker to every line.',
     next: true,
+    checkpoint: [{ id: 'confirm', label: 'Confirm review' }],
+    laterDone: 2,
+    callout: { kind: 'warn', text: '7 items flagged for review.' },
+    advice: 'Usually done after Structure: a reread discards attribution.',
     actions: [
       {
         id: 'attribute',
@@ -43,12 +55,25 @@ const STEPS: PipelineStepView[] = [
 
 afterEach(() => document.body.replaceChildren());
 
-function mount(busyAction: string | null = null) {
+function mount(busyAction: string | null = null, helpOpen: string | null = null) {
   const host = document.createElement('div');
   document.body.append(host);
   const events: PipelineActionEvent[] = [];
-  render(pipeline({ steps: STEPS, busyAction, onAct: (e) => events.push(e) }), host);
-  return { el: host, events };
+  const checkpoints: PipelineCheckpointEvent[] = [];
+  const helps: string[] = [];
+  render(
+    pipeline({
+      steps: STEPS,
+      busyAction,
+      helpOpen,
+      onAct: (e) => events.push(e),
+      onCheckpoint: (e) => checkpoints.push(e),
+      onHelp: (step) => helps.push(step),
+      renderHelp: (step) => html`<em class="fake-help">${step.title} help</em>`,
+    }),
+    host,
+  );
+  return { el: host, events, checkpoints, helps };
 }
 
 describe('pipeline()', () => {
@@ -100,5 +125,72 @@ describe('pipeline()', () => {
         .closest('.r2m-blockable')!
         .hasAttribute('data-tooltip'),
     ).toBe(false);
+  });
+
+  it('row anatomy (variant B): pills and the hint beside the chip, callout under the detail, advice under the actions', () => {
+    const { el, checkpoints } = mount();
+    const speakers = el.querySelector('[data-step="speakers"]')!;
+    const head = speakers.querySelector('.r2m-pipeline__head')!;
+    const pill = head.querySelector<HTMLButtonElement>('[data-checkpoint="confirm"]')!;
+    expect(pill.textContent).toContain('Confirm review');
+    expect(pill.closest('.r2m-pipeline__checkpoint')).not.toBeNull();
+    expect(head.querySelector('.r2m-pipeline__hint')?.textContent).toBe(
+      '2 later steps already done',
+    );
+    pill.click();
+    expect(checkpoints).toEqual([{ step: 'speakers', pill: 'confirm' }]);
+
+    const body = speakers.querySelector('.r2m-pipeline__body')!;
+    const order = [...body.children].map((c) => c.className.split(' ')[0]);
+    expect(order).toEqual([
+      'r2m-pipeline__head',
+      'r2m-pipeline__detail',
+      'r2m-callout',
+      'r2m-pipeline__actions',
+      'r2m-advice',
+    ]);
+    expect(body.querySelector('.r2m-callout')?.textContent).toContain(
+      '7 items flagged for review.',
+    );
+    expect(body.querySelector('.r2m-advice')?.textContent).toBe(
+      'Usually done after Structure: a reread discards attribution.',
+    );
+
+    const importStep = el.querySelector('[data-step="import"]')!;
+    expect(importStep.querySelector('.r2m-pipeline__checkpoint')).toBeNull();
+    expect(importStep.querySelector('.r2m-pipeline__hint')).toBeNull();
+    expect(importStep.querySelector('.r2m-callout')).toBeNull();
+    expect(importStep.querySelector('.r2m-advice')).toBeNull();
+  });
+
+  it('the ? toggles help: the open row is marked, its inline help follows the head row, the others stay closed', () => {
+    const { el, helps } = mount(null, 'speakers');
+    const speakers = el.querySelector('[data-step="speakers"]')!;
+    const toggle = speakers.querySelector<HTMLButtonElement>('.r2m-pipeline__help-toggle')!;
+    expect(toggle.getAttribute('aria-label')).toBe('Help for Speakers');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(speakers.classList.contains('r2m-pipeline__step--help-open')).toBe(true);
+    const inline = speakers.querySelector('.r2m-pipeline__help-inline')!;
+    expect(inline.previousElementSibling?.classList.contains('r2m-pipeline__head')).toBe(true);
+    expect(inline.nextElementSibling?.classList.contains('r2m-pipeline__detail')).toBe(true);
+    expect(inline.querySelector('.fake-help')?.textContent).toBe('Speakers help');
+
+    const importStep = el.querySelector('[data-step="import"]')!;
+    expect(
+      importStep.querySelector('.r2m-pipeline__help-toggle')?.getAttribute('aria-expanded'),
+    ).toBe('false');
+    expect(importStep.querySelector('.r2m-pipeline__help-inline')).toBeNull();
+    expect(importStep.classList.contains('r2m-pipeline__step--help-open')).toBe(false);
+
+    toggle.click();
+    importStep.querySelector<HTMLButtonElement>('.r2m-pipeline__help-toggle')!.click();
+    expect(helps).toEqual(['speakers', 'import']);
+  });
+
+  it('a busy command disables the pills too and spins a busy pill', () => {
+    const { el } = mount('speakers:confirm');
+    const pill = el.querySelector<HTMLButtonElement>('[data-checkpoint="confirm"]')!;
+    expect(pill.disabled).toBe(true);
+    expect(pill.querySelector('.r2m-spinner')).not.toBeNull();
   });
 });

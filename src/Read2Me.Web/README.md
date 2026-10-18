@@ -65,7 +65,7 @@ bundler does not see it until then.
 - `src/app/theme/` — the theme service and theme CSS.
 - `src/styles/global.css` — design tokens, fonts and the global primitive CSS.
 - `src/testing/` — test helpers: fake Navigation API, API client, live hub and timers.
-- `src/app/help/` — `helpText(step)`, the `r2m-help` partial, over `help.generated.ts`, which
+- `src/app/help/` — `helpText(step, { title? })`, the `r2m-help` partial, over `help.generated.ts`, which
   `bun run help` renders from the repo's `docs/guide/<step>.md`. See "Help text" below.
 - `scripts/` — `check-api-types.ts` (`api:check`), `icons.ts` / `icon-manifest.ts`
   (`icons`, `icons:check`) and `help.ts` / `help-render.ts` (`help`, `help:check`);
