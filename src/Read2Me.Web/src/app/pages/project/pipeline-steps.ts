@@ -63,6 +63,8 @@ export interface PipelineStep extends PipelineStepView {
   checkpoint: CheckpointPill[];
   /** On the next step only: later steps already done, confirmed or skipped (never stale). */
   laterDone: number;
+  /** The row's {@link adviceFor} line(s), under its actions; null when none applies. */
+  advice: string | null;
 }
 
 export interface PipelineInput {
@@ -151,7 +153,9 @@ function attributionTotals(input: PipelineInput): {
 }
 
 /** A step before the next marker, the hint and the chip colour are added. */
-type Draft = Omit<PipelineStep, 'next' | 'laterDone' | 'chip' | 'state'> & { outcome: Outcome };
+type Draft = Omit<PipelineStep, 'next' | 'laterDone' | 'chip' | 'state' | 'advice'> & {
+  outcome: Outcome;
+};
 
 export function derivePipeline(input: PipelineInput): PipelineStep[] {
   const s = input.status;
@@ -481,14 +485,21 @@ export function derivePipeline(input: PipelineInput): PipelineStep[] {
   ];
 
   const nextIndex = steps.findIndex((step) => !SETTLED.has(step.outcome.state));
-  return steps.map(({ outcome, ...step }, i) => ({
+  const derived: PipelineStep[] = steps.map(({ outcome, ...step }, i) => ({
     ...step,
     state: outcome.state,
     chip: { status: STATUS_OF[outcome.state], label: outcome.label },
     next: i === nextIndex,
     laterDone:
       i === nextIndex ? steps.slice(i + 1).filter((s) => SETTLED.has(s.outcome.state)).length : 0,
+    advice: null,
   }));
+  // The row's advice line (spec §2): the one sentence its actions carry, now that every state is known.
+  for (const step of derived) {
+    const lines = step.actions.map((a) => adviceFor(a.id, derived)).filter((l) => l !== null);
+    step.advice = lines.length ? lines.join(' ') : null;
+  }
+  return derived;
 }
 
 /** A step with no row, or a stale one, or a derived count still unmet: not done in any sense. */

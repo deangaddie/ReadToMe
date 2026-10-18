@@ -1,4 +1,9 @@
-/* The project overview (design §6.2): the stepper beside the project details card. */
+/*
+ * The project overview (design §6.2, guidance-primitives spec §3): the stepper beside the project
+ * details card. One breakpoint, 1100 px. Above it a step's help replaces the details card in the
+ * right column; below it the page is one column, the details card follows the stepper, and the
+ * same help opens inline in the step's row. Both placements render; the media query shows one.
+ */
 @scope (r2m-overview-page) to (r2m-project-details-panel) {
   :scope {
     display: block;
@@ -11,12 +16,62 @@
     align-items: start;
     margin-top: var(--r2m-space-3);
   }
+  .overview__help {
+    display: flex;
+    flex-direction: column;
+    padding: var(--r2m-space-4);
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-lg);
+    background: var(--r2m-surface-low);
+  }
+  .overview__help--inline {
+    display: none;
+  }
+  .overview__body--help-open .overview__card {
+    display: none;
+  }
+  .overview__help-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--r2m-space-2);
+    margin-bottom: var(--r2m-space-2);
+  }
+  .overview__help-title {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+    margin: 0;
+    font-size: var(--r2m-text-lg);
+    font-weight: 600;
+  }
+  .overview__help-foot {
+    margin: var(--r2m-space-3) 0 0;
+    font-size: var(--r2m-text-sm);
+  }
+  .overview__help-guide {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--r2m-space-1);
+    color: var(--r2m-accent);
+  }
   @media (max-width: 1099.98px) {
     .overview__body {
       grid-template-columns: minmax(0, 1fr);
     }
-    .overview__details {
-      order: -1;
+    .overview__help--side {
+      display: none;
+    }
+    .overview__help--inline {
+      display: flex;
+    }
+    .overview__body--help-open .overview__card {
+      display: block;
+    }
+    /* Head row splits: line one is title · chip · spacer · `?`; line two the pills + hint. */
+    .r2m-pipeline__checkpoint {
+      order: 1;
+      flex-basis: 100%;
     }
   }
   .overview__skeleton {
