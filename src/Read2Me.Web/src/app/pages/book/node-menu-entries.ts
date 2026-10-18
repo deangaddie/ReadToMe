@@ -109,6 +109,25 @@ const SPLIT_LABEL: Partial<Record<NodeMenuKind, string>> = {
   item: 'Split paragraph',
 };
 
+/** What the dialogs call each kind. */
+export const WORD: Record<NodeMenuKind, string> = {
+  volume: 'volume',
+  part: 'part',
+  chapter: 'chapter',
+  paragraph: 'paragraph',
+  item: 'item',
+  'pause-paragraph': 'pause',
+};
+
+const NAME_LIMIT = 60;
+
+/** What a confirm calls the node: its title or text (shortened), else "this paragraph". */
+export function displayName(target: NodeMenuTarget): string {
+  const text = target.text?.trim() ?? '';
+  if (!text) return `this ${WORD[target.kind]}`;
+  return text.length > NAME_LIMIT ? `${text.slice(0, NAME_LIMIT)}…` : text;
+}
+
 export const DELETE_LABEL: Record<NodeMenuKind, string> = {
   volume: 'Delete volume',
   part: 'Delete part',

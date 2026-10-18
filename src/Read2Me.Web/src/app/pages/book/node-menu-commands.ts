@@ -5,7 +5,11 @@ import type {
   NodeKind,
   StructureRuleDto,
 } from '@app/api';
-import type { ConfirmOptions, TextPromptOptions } from '@app/ui/dialogs';
+import {
+  type ConfirmOptions,
+  type TextPromptOptions,
+  permanentConfirmOptions,
+} from '@app/ui/dialogs';
 import {
   CREATED_WORD,
   HAS_CHILDREN,
@@ -13,29 +17,21 @@ import {
   type NodeMenuKind,
   type NodeMenuTarget,
   PLACEMENT_WORDS,
+  WORD,
+  displayName,
   mergeDirectionOf,
   nodeInsertOf,
   pauseInsertOf,
   placementFor,
   ruleFor,
 } from './node-menu-entries';
+import { mergeChange } from './permanent-changes';
 
 /** The two dialogs a menu flow may open — `PromptService.text` and `ConfirmService.confirm`. */
 export interface MenuDialogs {
   text(options: TextPromptOptions): Promise<string | null>;
   confirm(options: ConfirmOptions): Promise<boolean>;
 }
-
-const WORD: Record<NodeMenuKind, string> = {
-  volume: 'volume',
-  part: 'part',
-  chapter: 'chapter',
-  paragraph: 'paragraph',
-  item: 'item',
-  'pause-paragraph': 'pause',
-};
-
-const NAME_LIMIT = 60;
 
 /** Which TTS models act on a delivery cue (spec story 16); static, not tied to the active provider. */
 export const CUE_HINT =
@@ -126,7 +122,11 @@ export async function commandFor(
 
     default: {
       const direction = mergeDirectionOf(entry);
-      if (direction) return mergeCommand(kind, id, direction);
+      if (direction) {
+        // Always asks: nothing records where the seam was (guidance-primitives spec §7).
+        const ok = await dialogs.confirm(permanentConfirmOptions(mergeChange(target, direction)));
+        return ok ? mergeCommand(kind, id, direction) : null;
+      }
       const pause = pauseInsertOf(entry);
       if (pause) {
         return {
@@ -284,11 +284,4 @@ function deleteCommand(kind: NodeMenuKind, id: string): BookCommand {
     default:
       return { type: 'DeleteParagraph', paragraphId: id };
   }
-}
-
-/** What the delete confirm calls the node: its title or text (shortened), else "this paragraph". */
-export function displayName(target: NodeMenuTarget): string {
-  const text = target.text?.trim() ?? '';
-  if (!text) return `this ${WORD[target.kind]}`;
-  return text.length > NAME_LIMIT ? `${text.slice(0, NAME_LIMIT)}…` : text;
 }

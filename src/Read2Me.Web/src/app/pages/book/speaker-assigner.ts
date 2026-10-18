@@ -3,15 +3,17 @@ import {
   BookApi,
   type Guid,
   type NarrationReleaseScope,
+  type ParagraphItemDto,
   toApiError,
 } from '@app/api';
 import { use } from '@app/core/services';
-import { ConfirmService, PromptService } from '@app/ui/dialogs';
+import { ConfirmService, PromptService, confirmPermanent } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
 import type { ProjectStore } from '../project/project-store';
 import type { BookEditor } from './book-editor';
 import type { BookStore } from './book-store';
 import { NOTHING_TO_ASSIGN, bulkConfirm, bulkDoneMessage } from './bulk-assign';
+import { paragraphSweep, speakerChange } from './permanent-changes';
 import {
   releaseConfirm,
   releaseDoneMessage,
@@ -46,8 +48,15 @@ export class SpeakerAssigner {
     private readonly project: ProjectStore,
   ) {}
 
-  /** `characterId` null clears the speaker (the line needs attributing again). */
+  /**
+   * `characterId` null clears the speaker (the line needs attributing again). A pick or clear that
+   * discards audio asks first (permanent-change confirm, the delivery-cue precedent); one that
+   * moves no audio goes straight through.
+   */
   async assign(target: AssignTarget, characterId: Guid | null): Promise<void> {
+    if (target.kind !== 'selection') {
+      if (!(await confirmPermanent(speakerChange(this.stampedItems(target), characterId)))) return;
+    }
     switch (target.kind) {
       case 'item': {
         const ok = await this.editor.run({
@@ -111,6 +120,22 @@ export class SpeakerAssigner {
     } catch (error) {
       this.toast.problem(toApiError(error).toProblem());
     }
+  }
+
+  /**
+   * The items the host will stamp for an item or paragraph target, from the loaded window (a row's
+   * chip is always in it): the one item, or the paragraph's sweep. Empty when the row is gone.
+   */
+  private stampedItems(
+    target: Exclude<AssignTarget, { kind: 'selection' }>,
+  ): readonly ParagraphItemDto[] {
+    const paragraph = this.book
+      .chapters()
+      .flatMap((c) => c.paragraphs)
+      .find((p) => p.id === target.paragraphId);
+    if (!paragraph) return [];
+    if (target.kind === 'paragraph') return paragraphSweep(paragraph);
+    return paragraph.items.filter((i) => i.id === target.itemId);
   }
 
   private async assignSelection(paragraphIds: Guid[], characterId: Guid | null): Promise<void> {

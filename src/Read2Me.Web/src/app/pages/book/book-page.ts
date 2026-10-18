@@ -5,6 +5,7 @@ import {
   type BookCommand,
   type NarrationReleaseScope,
   type NodeLevel,
+  type ParagraphDto,
   toApiError,
 } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
@@ -14,7 +15,7 @@ import { computed, signal, untracked } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import { LiveService } from '@app/live/live.service';
 import { Preflight } from '@app/shared/preflight';
-import { ConfirmService } from '@app/ui/dialogs';
+import { ConfirmService, confirmPermanent } from '@app/ui/dialogs';
 import type { IconName } from '@app/ui/icons';
 import type { MeasuredList } from '@app/ui/measured-list';
 import { menuItem } from '@app/ui/menu';
@@ -31,6 +32,11 @@ import { openManualRereadDialog } from './manual-reread-dialog';
 import { type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
 import type { ActionEntryId, NodeMenuTarget, SelectionKind } from './node-menu-entries';
 import { paragraphRow } from './paragraph-row';
+import {
+  addPausesChange,
+  attributeSelectionChange,
+  generateAudioChange,
+} from './permanent-changes';
 import {
   READER_MODES,
   type ReaderMode,
@@ -516,7 +522,7 @@ export class BookPage extends R2mElement {
       <div id=${ACTIONS_MENU_ID} popover class="r2m-menu" role="menu" aria-label="Book actions">
         ${shown.map((a) => entry(a.action, a.label, a.icon, () => void this.editor.run(a.command)))}
         <hr class="r2m-menu__divider" />
-        ${entry('add-pauses', 'Add pauses', 'pause', () => void this.editor.run({ type: 'AddPauses' }))}
+        ${entry('add-pauses', 'Add pauses', 'pause', () => void this.addPauses())}
         <hr class="r2m-menu__divider" />
         ${entry('edit-with-ai', 'Edit with AI…', 'auto_fix_high', () => void this.editWithAi())}
         <hr class="r2m-menu__divider" />
@@ -741,19 +747,75 @@ export class BookPage extends R2mElement {
     };
   };
 
-  /** The action bar's Attribute: queue the selection, then clear it: the queue owns it now. */
+  /**
+   * The action bar's Attribute: asks first when a selected paragraph already has a speaker or
+   * audio (permanent-change confirm), then queues the selection and clears it: the queue owns it
+   * now.
+   */
   private readonly attributeSelection = async (): Promise<void> => {
     const ids = this.selection.ids();
     if (ids.length === 0) return;
+    const paragraphs = await this.selectedParagraphs(this.selection);
+    if (!paragraphs || !(await confirmPermanent(attributeSelectionChange(paragraphs)))) return;
     const queued = await this.enqueue((folder) => this.attribution.enqueueParagraphs(folder, ids));
     if (queued) this.selection.clear();
   };
 
-  /** The action bar's Generate audio: queue the selection, then clear it: the queue owns it now. */
+  /**
+   * The action bar's Generate audio: asks first when a selected item already has a take, then
+   * queues the selection and clears it: the queue owns it now.
+   */
   private readonly generateSelection = async (): Promise<void> => {
-    const queued = await this.generator.enqueueItems(this.audioSelection.ids());
+    const ids = this.audioSelection.ids();
+    if (ids.length === 0) return;
+    const paragraphs = await this.selectedParagraphs(this.audioSelection);
+    if (!paragraphs) return;
+    const wanted = new Set(ids);
+    const items = paragraphs.flatMap((p) => p.items.filter((i) => wanted.has(i.id)));
+    if (!(await confirmPermanent(generateAudioChange(items)))) return;
+    const queued = await this.generator.enqueueItems(ids);
     if (queued) this.audioSelection.clear();
   };
+
+  /**
+   * The paragraphs a selection names (its own, or those holding its items), from the loaded
+   * window where it has them and by a chapter read where it does not: a tree checkbox selects
+   * across chapters the reader never opened. Null when a read failed (toasted).
+   */
+  private async selectedParagraphs(selection: SelectionStore): Promise<ParagraphDto[] | null> {
+    const folder = this.store.folder();
+    if (!folder) return null;
+    const chapters = new Map(this.store.chapters().map((c) => [c.id, c.paragraphs]));
+    const missing = new Set(
+      Object.values(selection.selection())
+        .map((a) => a.chapterId)
+        .filter((id) => !chapters.has(id)),
+    );
+    if (missing.size > 0) {
+      this.working.set(true);
+      try {
+        const reads = await Promise.all(
+          [...missing].map(
+            async (id) => [id, await this.book.children(folder, 'chapter', id)] as const,
+          ),
+        );
+        for (const [id, children] of reads) chapters.set(id, children.paragraphs ?? []);
+      } catch (error) {
+        this.toast.problem(toApiError(error).toProblem());
+        return null;
+      } finally {
+        this.working.set(false);
+      }
+    }
+    const ids = new Set(selection.ids());
+    const paragraphs: ParagraphDto[] = [];
+    for (const list of chapters.values()) {
+      for (const p of list) {
+        if (ids.has(p.id) || p.items.some((i) => ids.has(i.id))) paragraphs.push(p);
+      }
+    }
+    return paragraphs;
+  }
 
   /** A pick, clear or create closes the menu, like a mat-menu item click. */
   private readonly onBulkToggle = (e: ToggleEvent): void => {
@@ -827,6 +889,13 @@ export class BookPage extends R2mElement {
   }
 
   // ---- book actions (ticket 11) -------------------------------------------------------------------
+
+  /** Add pauses always asks (guidance-primitives spec §7): each pause is a delete to undo. */
+  private async addPauses(): Promise<void> {
+    const chapters = this.store.overview()?.totalChapters ?? 0;
+    if (!(await confirmPermanent(addPausesChange(chapters)))) return;
+    await this.editor.run({ type: 'AddPauses' });
+  }
 
   private async reread(): Promise<void> {
     const ok = await this.confirm.confirm({

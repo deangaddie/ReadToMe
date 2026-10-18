@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import type { ConfirmOptions, TextPromptOptions } from '@app/ui/dialogs';
 import type { StructureRuleDto } from '@app/api';
+import { CUE_HINT, type MenuDialogs, commandFor as commandForRules } from './node-menu-commands';
 import {
-  CUE_HINT,
-  type MenuDialogs,
-  commandFor as commandForRules,
+  type MenuEntryId,
+  type NodeMenuKind,
+  type NodeMenuTarget,
   displayName,
-} from './node-menu-commands';
-import type { MenuEntryId, NodeMenuKind, NodeMenuTarget } from './node-menu-entries';
+} from './node-menu-entries';
 import { STRUCTURE_RULES, rule } from '../../../testing/structure-rules';
 
 /** The flows under the host's rules, unless a spec hands in another table. */
@@ -285,8 +285,8 @@ describe('commandFor', () => {
       ['chapter', 'MergeChapter', 'chapterId'],
       ['paragraph', 'MergeParagraph', 'paragraphId'],
       ['item', 'MergeParagraphItem', 'itemId'],
-    ] as const)('%s merges in the chosen direction', async (kind, type, key) => {
-      const { fake } = dialogs();
+    ] as const)('%s confirms, then merges in the chosen direction', async (kind, type, key) => {
+      const { fake, asked } = dialogs({ confirm: true });
       expect<unknown>(await commandFor('merge-previous', target(kind), fake)).toEqual({
         type,
         [key]: 'n1',
@@ -297,6 +297,34 @@ describe('commandFor', () => {
         [key]: 'n1',
         direction: 'Next',
       });
+      expect(asked.confirm.map((o) => o.title)).toEqual([
+        'Merge with previous?',
+        'Merge with next?',
+      ]);
+    });
+
+    it('the confirm is the permanent-change one: scope, cost, verb; red only for an item', async () => {
+      const { fake, asked } = dialogs({ confirm: true });
+      await commandFor('merge-previous', target('chapter'), fake);
+      expect(asked.confirm[0]).toEqual({
+        title: 'Merge with previous?',
+        message: 'Folds “Old” into the previous chapter. Splitting it back needs the exact point.',
+        confirmLabel: 'Merge with previous',
+        destructive: false,
+      });
+      await commandFor('merge-next', target('item'), fake);
+      expect(asked.confirm[1]).toMatchObject({
+        message:
+          'Folds the next item into “Old”. The next item’s speaker and audio are discarded. ' +
+          'Splitting it back needs the exact point.',
+        destructive: true,
+      });
+    });
+
+    it('a declined confirm sends nothing', async () => {
+      expect<unknown>(
+        await commandFor('merge-next', target('chapter'), dialogs({ confirm: false }).fake),
+      ).toBeNull();
     });
   });
 

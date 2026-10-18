@@ -4,7 +4,7 @@ import { Router, type RouteDef } from '@app/core/router';
 import { override, resetServices, use } from '@app/core/services';
 import type { QueueMessage } from '@app/live/live-messages';
 import { Preflight } from '@app/shared/preflight';
-import { ConfirmService, PromptService } from '@app/ui/dialogs';
+import { type ConfirmOptions, ConfirmService, PromptService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
 import { STRUCTURE_RULES } from '../../../testing/structure-rules';
 import { FakeApi, problem } from '../../../testing/fake-api';
@@ -61,6 +61,9 @@ let navigation: FakeNavigation;
 let live: FakeLive;
 let toasts: string[];
 let ensureReady: ReturnType<typeof mock>;
+/** Every confirm the page asked for, answered with {@link confirmAnswer}. */
+let confirms: ConfirmOptions[];
+let confirmAnswer: boolean;
 
 /** The book page under the project shell, through a root outlet as in the app. */
 async function start(path: string) {
@@ -85,6 +88,14 @@ beforeEach(() => {
   toasts = [];
   ensureReady = mock(async () => true);
   override(Preflight, { ensureReady } as unknown as Preflight);
+  confirms = [];
+  confirmAnswer = true;
+  override(ConfirmService, {
+    confirm: async (o: ConfirmOptions) => {
+      confirms.push(o);
+      return confirmAnswer;
+    },
+  } as unknown as ConfirmService);
   override(ToastService, {
     success: (m: string) => toasts.push(m),
     info: (m: string) => toasts.push(m),
@@ -733,6 +744,48 @@ describe('r2m-book-page', () => {
       ).toEqual([{ paragraphIds: ['p1'] }]);
       expect(toasts).toEqual(['Queued 1 paragraph']);
       expect(selection.count()).toBe(0);
+      // Nothing selected had an assigned speaker: no permanent-change confirm.
+      expect(confirms).toEqual([]);
+    });
+
+    it('Attribute confirms when a selected paragraph has an assigned speaker, reading chapters not in the window', async () => {
+      api.on('POST', `${BASE}/attribution/enqueue-paragraphs`, { enqueued: 2 });
+      api.on('GET', `${BASE}/nodes/chapter/c1/children`, {
+        paragraphs: [DIALOG('p1'), DIALOG('p2')],
+      });
+      const far = DIALOG('p9');
+      far.items[0]!.characterId = 'h';
+      api.on('GET', `${BASE}/nodes/chapter/c9/children`, { paragraphs: [far] });
+      const { page } = await start('projects/dune/book?mode=speakers');
+      const selection = use(SelectionStore, page);
+      selection.toggle('p1', A, true);
+      selection.toggle('p9', { chapterId: 'c9', partId: 'p1', volumeId: 'v1' }, true);
+      await page.rendered();
+
+      confirmAnswer = false;
+      page.querySelector<HTMLButtonElement>('[data-action=attribute-selection]')!.click();
+      for (let i = 0; i < 6; i++) await settle();
+      expect(confirms).toEqual([
+        {
+          title: 'Attribute?',
+          message:
+            'Re-attributes 2 paragraphs: 1 assigned speaker is replaced. ' +
+            'Getting a replaced speaker back means assigning it again by hand.',
+          confirmLabel: 'Attribute',
+          destructive: true,
+        },
+      ]);
+      expect(api.calls('GET', `${BASE}/nodes/chapter/c9/children`)).toHaveLength(1);
+      expect(api.calls('POST', `${BASE}/attribution/enqueue-paragraphs`)).toHaveLength(0);
+      expect(selection.count()).toBe(2);
+
+      confirmAnswer = true;
+      page.querySelector<HTMLButtonElement>('[data-action=attribute-selection]')!.click();
+      for (let i = 0; i < 6; i++) await settle();
+      expect(
+        api.calls('POST', `${BASE}/attribution/enqueue-paragraphs`).map((r) => r.body),
+      ).toEqual([{ paragraphIds: ['p1', 'p9'] }]);
+      expect(selection.count()).toBe(0);
     });
 
     it('a cancelled preflight sends nothing and keeps the selection', async () => {
@@ -1023,6 +1076,40 @@ describe('r2m-book-page', () => {
       for (let i = 0; i < 4; i++) await settle();
       expect(enqueueItems).toHaveBeenCalledWith(['p1-i']);
       expect(selection.count()).toBe(0);
+      expect(confirms).toEqual([]);
+    });
+
+    it('Generate audio confirms when a selected item already has a take', async () => {
+      const taken = NARRATION('p1');
+      taken.items[0]!.audioFileName = 'p1.wav';
+      api.on('GET', `${BASE}/nodes/chapter/c1/children`, { paragraphs: [taken] });
+      const { page } = await start('projects/dune/book?mode=audio');
+      const generator = use(AudioGenerator, page);
+      const enqueueItems = mock(async () => true);
+      generator.enqueueItems = enqueueItems;
+      const selection = use(AudioSelectionStore, page);
+      selection.add([REF]);
+      await page.rendered();
+
+      confirmAnswer = false;
+      page.querySelector<HTMLButtonElement>('[data-action=generate-audio-selection]')!.click();
+      for (let i = 0; i < 4; i++) await settle();
+      expect(confirms).toEqual([
+        {
+          title: 'Generate audio?',
+          message: 'Replaces existing audio on 1 item. The current takes cannot be brought back.',
+          confirmLabel: 'Generate audio',
+          destructive: true,
+        },
+      ]);
+      expect(enqueueItems).not.toHaveBeenCalled();
+      expect(selection.count()).toBe(1);
+
+      confirmAnswer = true;
+      page.querySelector<HTMLButtonElement>('[data-action=generate-audio-selection]')!.click();
+      for (let i = 0; i < 4; i++) await settle();
+      expect(enqueueItems).toHaveBeenCalledWith(['p1-i']);
+      expect(selection.count()).toBe(0);
     });
 
     it('Generate audio for this node hands the node to the generator', async () => {
@@ -1092,9 +1179,26 @@ describe('r2m-book-page', () => {
       expect(button.disabled).toBe(false);
     });
 
-    it('Add pauses posts its command through the editor', async () => {
+    it('Add pauses confirms with the chapter count, then posts its command through the editor', async () => {
       api.on('POST', `${BASE}/commands`, { newEntityId: null });
       const { page } = await open1();
+      confirmAnswer = false;
+      page.querySelector<HTMLButtonElement>('[data-action=add-pauses]')!.click();
+      for (let i = 0; i < 4; i++) await settle();
+      expect(confirms).toEqual([
+        {
+          title: 'Add pauses?',
+          message:
+            'Inserts a pause after every chapter title (2 chapters). ' +
+            'Removing them later means deleting each one.',
+          confirmLabel: 'Add pauses',
+          destructive: false,
+        },
+      ]);
+      expect(api.calls('POST', `${BASE}/commands`)).toHaveLength(0);
+
+      confirmAnswer = true;
+      await open(page);
       page.querySelector<HTMLButtonElement>('[data-action=add-pauses]')!.click();
       for (let i = 0; i < 4; i++) await settle();
       expect(api.calls('POST', `${BASE}/commands`).map((r) => r.body)).toEqual([
@@ -1120,14 +1224,7 @@ describe('r2m-book-page', () => {
 
     it('Reread confirms destructively, then rereads', async () => {
       api.on('POST', `${BASE}/import`, undefined);
-      const confirms: unknown[] = [];
-      let answer = false;
-      override(ConfirmService, {
-        confirm: async (o: unknown) => {
-          confirms.push(o);
-          return answer;
-        },
-      } as unknown as ConfirmService);
+      confirmAnswer = false;
       const { page } = await open1();
       page.querySelector<HTMLButtonElement>('[data-action=reread]')!.click();
       for (let i = 0; i < 4; i++) await settle();
@@ -1140,7 +1237,7 @@ describe('r2m-book-page', () => {
       ]);
       expect(api.calls('POST', `${BASE}/import`)).toHaveLength(0);
 
-      answer = true;
+      confirmAnswer = true;
       await open(page);
       page.querySelector<HTMLButtonElement>('[data-action=reread]')!.click();
       for (let i = 0; i < 6; i++) await settle();
