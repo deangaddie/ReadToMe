@@ -3,6 +3,10 @@ import { routes } from '@app/app.routes';
 import { Router } from '@app/core/router';
 import { override, resetServices, use } from '@app/core/services';
 
+import { signal } from '@app/core/signals';
+import type { NextStep } from '@app/pages/project/next-step';
+import type { StepRunner } from '@app/pages/project/step-runner';
+import { ProjectGuide } from '@app/shell/project-guide';
 import { ProjectTitles } from '@app/shell/project-titles';
 import { ThemeService } from '@app/theme/theme.service';
 import { FakeApi } from '../../testing/fake-api';
@@ -275,5 +279,145 @@ describe('app-root', () => {
       ),
     ).toEqual(['light', 'dark', 'system']);
     expect(shell.querySelector('.shell__settings')?.getAttribute('href')).toBe('settings');
+  });
+});
+
+describe('next-step pill', () => {
+  let calls: string[];
+  let runner: StepRunner;
+
+  beforeEach(() => {
+    calls = [];
+    runner = {
+      busy: signal<string | null>(null),
+      act: async (e: { step: string; action: string }) =>
+        void calls.push(`act ${e.step}:${e.action}`),
+      checkpoint: async (e: { step: string; pill: string }) =>
+        void calls.push(`checkpoint ${e.step}:${e.pill}`),
+      openOverview: () => void calls.push('overview'),
+    } as unknown as StepRunner;
+  });
+
+  const ACT: NextStep = {
+    kind: 'act',
+    step: 'titles',
+    label: 'Next: Titles · Add titles…',
+    tint: 'next',
+    action: 'addTitles',
+    tooltip: 'Usually done after Structure: a reread drops inserted titles.',
+    pills: [
+      { id: 'confirm', label: 'Confirm', state: 'confirmed' },
+      { id: 'skip', label: 'Skip', state: 'skipped' },
+    ],
+  };
+
+  async function mountWith(path: string, next: NextStep, folder = 'foundation') {
+    const mounted = await mount(path);
+    use(ProjectGuide).publish(folder, next, runner);
+    await settle();
+    return mounted;
+  }
+
+  const pill = (shell: Element) => shell.querySelector('.shell__next');
+
+  it('sits after the spacer and before the live dot on a project page', async () => {
+    const { shell } = await mountWith('projects/foundation/book', ACT);
+    const bar = Array.from(shell.querySelector('.shell__appbar')?.children ?? []).map(
+      (el) => el.classList[0],
+    );
+    expect(bar.indexOf('shell__next')).toBe(bar.indexOf('shell__spacer') + 1);
+    expect(bar.indexOf('shell__conn')).toBe(bar.indexOf('shell__next') + 1);
+  });
+
+  it.each([
+    {
+      why: 'on the Overview',
+      path: 'projects/foundation',
+      folder: 'foundation',
+    },
+    {
+      why: 'for another project',
+      path: 'projects/foundation/book',
+      folder: 'dune',
+    },
+    {
+      why: 'off the project routes',
+      path: 'settings/llm',
+      folder: 'foundation',
+    },
+  ])('is hidden $why', async (c) => {
+    const { shell } = await mountWith(c.path, ACT, c.folder);
+    expect(pill(shell)).toBeNull();
+  });
+
+  it('runs the primary action, offers the pills, and opens the Overview from its icon', async () => {
+    const { shell } = await mountWith('projects/foundation/cast', ACT);
+    const main = shell.querySelector<HTMLElement>('.shell__next-main');
+    expect(main?.textContent?.trim()).toBe('Next: Titles · Add titles…');
+    expect(main?.getAttribute('data-tooltip')).toBe(ACT.kind === 'act' ? ACT.tooltip : null);
+    main?.click();
+    shell.querySelectorAll<HTMLElement>('.shell__next-pill').forEach((b) => b.click());
+    shell.querySelector<HTMLElement>('.shell__next-overview')?.click();
+    expect(calls).toEqual([
+      'act titles:addTitles',
+      'checkpoint titles:confirm',
+      'checkpoint titles:skip',
+      'overview',
+    ]);
+    expect(shell.querySelector('.shell__next-overview')?.getAttribute('aria-label')).toBe(
+      'Open Overview',
+    );
+  });
+
+  it('a stale step has the warn tint, still runs its action and offers Reconfirm', async () => {
+    const { shell } = await mountWith('projects/foundation/book', {
+      kind: 'stale',
+      step: 'structure',
+      label: 'Structure changed since you confirmed',
+      tint: 'warn',
+      action: 'checkStructure',
+      tooltip: null,
+      pills: [{ id: 'reconfirm', label: 'Reconfirm', state: 'confirmed' }],
+    });
+    expect(pill(shell)?.classList.contains('shell__next--warn')).toBe(true);
+    shell.querySelector<HTMLElement>('.shell__next-main')?.click();
+    expect(texts(shell, '.shell__next-pill')).toEqual(['Reconfirm']);
+    expect(calls).toEqual(['act structure:checkStructure']);
+  });
+
+  it('a running or blocked step shows step · chip and its pills; the click opens the Overview with the reason as tooltip', async () => {
+    const { shell } = await mountWith('projects/foundation/book', {
+      kind: 'waiting',
+      step: 'speakers',
+      label: 'Speakers · Review not confirmed',
+      tint: 'neutral',
+      tooltip: 'Every paragraph has a speaker',
+      pills: [{ id: 'confirm', label: 'Confirm review', state: 'confirmed' }],
+    });
+    const main = shell.querySelector<HTMLElement>('.shell__next-main');
+    expect(pill(shell)?.classList.contains('shell__next--neutral')).toBe(true);
+    expect(main?.getAttribute('data-tooltip')).toBe('Every paragraph has a speaker');
+    main?.click();
+    shell.querySelector<HTMLElement>('.shell__next-pill')?.click();
+    expect(calls).toEqual(['overview', 'checkpoint speakers:confirm']);
+  });
+
+  it('reads “All steps done” beside the Overview icon', async () => {
+    const { shell } = await mountWith('projects/foundation/export', {
+      kind: 'allDone',
+      label: 'All steps done',
+      tint: 'ok',
+    });
+    expect(pill(shell)?.textContent?.replace(/\s+/g, ' ').trim()).toContain('All steps done');
+    expect(shell.querySelector('.shell__next-pill')).toBeNull();
+    expect(shell.querySelector('.shell__next-overview')).not.toBeNull();
+  });
+
+  it('disables its buttons while a step command runs', async () => {
+    const { shell } = await mountWith('projects/foundation/book', ACT);
+    (runner.busy as ReturnType<typeof signal<string | null>>).set('titles:confirm');
+    await settle();
+    expect(shell.querySelector<HTMLButtonElement>('.shell__next-main')?.disabled).toBe(true);
+    expect(shell.querySelector<HTMLButtonElement>('.shell__next-pill')?.disabled).toBe(true);
   });
 });

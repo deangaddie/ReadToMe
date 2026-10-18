@@ -3,6 +3,8 @@ import { html } from 'lit-html';
 import { R2mElement, define } from '@app/core/element';
 import { Router, type RouteDef } from '@app/core/router';
 import { override, resetServices, use } from '@app/core/services';
+import type { ProjectStatusDto } from '@app/api';
+import { ProjectGuide } from '@app/shell/project-guide';
 import { FakeApi } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';
 import { installNavigation, settle } from '../../../testing/fake-navigation';
@@ -24,6 +26,23 @@ const ROUTES: RouteDef[] = [
   },
   { path: 'elsewhere', tag: 'x-project-child' },
 ];
+
+/** A project before its book is read: Import is the next step. */
+const EMPTY_STATUS: ProjectStatusDto = {
+  hasContent: false,
+  characters: 0,
+  charactersWithLines: 0,
+  readyVoices: 0,
+  items: { total: 0, withAudio: 0, unattributed: 0 },
+  attribution: { remaining: 0, processing: false, queued: 0 },
+  audio: { remaining: 0 },
+  review: 0,
+  volumeIds: [],
+  nodes: {},
+  pauseParagraphs: 0,
+  checkpoints: {},
+  revision: 1,
+};
 
 let live: FakeLive;
 let api: FakeApi;
@@ -80,6 +99,20 @@ describe('r2m-project-shell', () => {
     expect(live.left).toEqual([]);
     expect(live.joined).toEqual(['dune']);
     expect(api.calls('GET', '/api/projects/dune')).toHaveLength(1);
+  });
+
+  it('publishes the project’s next step into the guide, and clears it on leaving', async () => {
+    api.on('GET', '/api/projects/dune/status', EMPTY_STATUS);
+    const { shell } = await start('projects/dune/book');
+    await settle();
+    const guide = use(ProjectGuide);
+    expect(guide.current()?.folder).toBe('dune');
+    expect(guide.current()?.next).toMatchObject({
+      kind: 'act',
+      label: 'Next: Import · Read book',
+    });
+    shell.remove();
+    expect(guide.current()).toBeNull();
   });
 
   it('leaves the group when the shell leaves the page', async () => {

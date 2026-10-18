@@ -8,7 +8,10 @@ import { BookEditor } from '@app/pages/book/book-editor';
 import { BookStore } from '@app/pages/book/book-store';
 import { AudioSelectionStore, SelectionStore } from '@app/pages/book/selection-store';
 import { SpeakerAssigner } from '@app/pages/book/speaker-assigner';
+import { ProjectGuide } from '@app/shell/project-guide';
+import { nextStep } from './next-step';
 import { ProjectStore } from './project-store';
+import { StepRunner } from './step-runner';
 import '@app/core/outlet';
 
 /**
@@ -20,15 +23,19 @@ import '@app/core/outlet';
  * The {@link BookEditor}, the reader's one write path, is provided beside it for the node menus,
  * with the reader's two selections ({@link SelectionStore} for paragraphs,
  * {@link AudioSelectionStore} for items) and the {@link SpeakerAssigner} the rows reach through
- * DOM ancestry. The selections are forgotten when the shell leaves the project.
+ * DOM ancestry. The selections are forgotten when the shell leaves the project. The
+ * {@link StepRunner} runs Pipeline actions for the Overview rows, and the shell publishes the next
+ * step with it into the root {@link ProjectGuide} for the app bar's next-step pill.
  */
 export class ProjectShell extends R2mElement {
   private readonly router = use(Router);
+  private readonly guide = use(ProjectGuide);
   private readonly store = provide(this, ProjectStore, new ProjectStore());
   private readonly book = provide(this, BookStore, new BookStore(this.store));
   private readonly editor = provide(this, BookEditor, new BookEditor(this.book));
   private readonly selection = provide(this, SelectionStore, new SelectionStore());
   private readonly audioSelection = provide(this, AudioSelectionStore, new AudioSelectionStore());
+  private readonly runner = provide(this, StepRunner, new StepRunner(this.store));
 
   constructor() {
     super();
@@ -48,7 +55,18 @@ export class ProjectShell extends R2mElement {
         void this.store.open(folder);
       });
     });
+    this.effect(() => {
+      const folder = this.store.folder();
+      const steps = this.store.pipeline();
+      untracked(() => {
+        if (folder === null) return;
+        if (steps) this.guide.publish(folder, nextStep(steps), this.runner);
+        else this.guide.clear(folder);
+      });
+    });
     this.onDisconnect(() => {
+      const folder = this.store.folder();
+      if (folder !== null) this.guide.clear(folder);
       this.resetSelections();
       this.book.close();
       this.store.close();
