@@ -44,3 +44,11 @@ Use these terms exactly in code, tests, and discussion.
 
 - **Node Status Badge** — a per-node (Volume / Part / Chapter) count of remaining work on the book page's structure tree. Three **stages**: **attribution remaining** (paragraphs with an unattributed item), **audio remaining** (paragraphs with a non-Pause item lacking a WAV — regardless of attribution), **review** (paragraphs with an `AudioReview` row in `NeedsReview`; `Dismissed` excluded). Counts **normalised to Paragraph granularity** — a paragraph qualifies for a stage if *any* item qualifies, contributing 1. All three at zero → single "done" indicator. Shown in every Reader mode.
 - **Node Status roll-up** — each badge is the **cumulative** count of qualifying paragraphs beneath it (Volume ≥ Part ≥ Chapter); the same paragraph echoes up every ancestor. Held by singleton `NodeStatusService`, storing per-paragraph stage **counters** (`unattributed`, `missingAudio`, `review`) + `(Chapter, Part, Volume)` ancestry. Seeded via `IProjectReader.GetNodeStatusSeedAsync` and **never patched incrementally**: the project-status endpoint reseeds it from the database on every read, and its `Changed` pushes the corrected roll-ups to the project's hub group as `nodeStatus`.
+
+## Edit with AI
+
+- **Edit with AI** — the user writes a free-text instruction; the LLM plans it, the matched changes are proposed as reviewable rows, and the accepted rows apply as one **Book mutation**. Edits existing titles and paragraph text only.
+- **Advanced Edit with AI** — the experimental sibling of Edit with AI: its own entry point and code path, built so it can be removed without touching Edit with AI. Its plans are made of **Edit operations**, so it can do what Edit with AI does plus structural changes.
+  _Avoid_: "Edit with AI v2", "plugins"
+- **Edit operation** — a named kind of change Advanced Edit with AI can plan, with its own arguments. An operation only *proposes*: its changes appear as reviewable rows, and the accepted rows from every operation in the plan apply together as one Book mutation. Operations are modules in the codebase, not runtime-loaded extensions.
+  _Avoid_: "plugin", "function", "tool"
