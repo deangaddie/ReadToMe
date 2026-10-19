@@ -5,7 +5,7 @@ Domain vocabulary for ReadToMe. Use these terms exactly in code, tests, and disc
 | Area | File | Covers |
 | ---- | ---- | ------ |
 | Book structure, view, selection, status | [context/book-structure.md](context/book-structure.md) | Volume…ParagraphItem hierarchy, speech vs pause + `NarrationRule`, Book Hierarchy, Alias, Book mutation + receipt, Character paragraph, paragraph/audio item selection, Roll-up, Generatable item, Node Status Badge/roll-up |
-| Project history | [context/history.md](context/history.md) | History, History step, Project state, View a step, Restore |
+| Project history | [context/history.md](context/history.md) | History, History step, Background run, Project state, View a step, Restore |
 | Voice rules | [context/voice-rules.md](context/voice-rules.md) | Voice, Voice Rule, default rule, Position, Anchor, evaluation, effective Character, `VoiceResolver`, `NodeOrderTables`, `AnchorSpanResolver`, dangling anchor, rule editor, resolved preview, Reference Limit |
 | Character attribution | [context/attribution.md](context/attribution.md) | Character attribution, unattributed, processed/unprocessed, Character Queue + what it asks about, item attribution/frozen boundaries/chunk, Chapter prompt style + chapter pass, roster grammar + `Unknown` answer, speech-tag rules (rule tag, rules-discover), delivery cue, escalation chain, narrator link + linked character + `narrator` wire alias |
 | LLM infrastructure | [context/llm.md](context/llm.md) | Constrained completion (JSON schema or GBNF grammar), Completion Runner, completion scanner stop, Run outcome, Thinking budget, Health streak |
