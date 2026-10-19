@@ -17,8 +17,12 @@ import '@app/core/outlet';
 import '@app/activity/activity-bar';
 import '@app/activity/activity-drawer';
 import shellCss from './shell.css' with { type: 'text' };
+// PROTOTYPE (throwaway): `?variant=A|B|C` on a project route mounts the History variants.
+import * as proto from './history-prototype';
+import protoCss from './history-prototype.css' with { type: 'text' };
 
 adoptStyles(shellCss);
+adoptStyles(protoCss);
 
 const NARROW_QUERY = '(max-width: 899.98px)';
 const THEME_MENU_ID = 'r2m-theme-menu';
@@ -81,11 +85,22 @@ export class AppShell extends R2mElement {
     return crumbs;
   });
 
+  /** PROTOTYPE: the `?variant=` key on a project route; null renders the real shell. */
+  private readonly variant = computed<proto.Variant | null>(() => {
+    if (!this.context().folder) return null;
+    const v = this.router.query().get('variant')?.toUpperCase();
+    return v && (proto.VARIANTS as readonly string[]).includes(v) ? (v as proto.Variant) : null;
+  });
+
+  private goVariant = (v: proto.Variant) =>
+    this.router.navigate(this.router.path(), { replace: true, query: { variant: v } });
+
   private readonly narrow = signal(false);
   /** Modal rail visibility on narrow screens; ignored when the rail is docked. */
   private readonly railOpen = signal(false);
 
   protected override connected(): void {
+    this.onDisconnect(proto.bindSwitcherKeys(() => this.variant(), this.goVariant));
     if (typeof matchMedia === 'function') {
       const query = matchMedia(NARROW_QUERY);
       this.narrow.set(query.matches);
@@ -119,8 +134,10 @@ export class AppShell extends R2mElement {
     this.setAttribute('data-live-state', connection);
     const connectionLabel = this.live.statusLabel();
     const preference = this.theme.preference();
+    const variant = this.variant();
+    const viewing = variant !== null && proto.viewing() !== null;
     return html`
-      <header class="shell__appbar">
+      <header class="shell__appbar ${variant === 'B' && viewing ? 'proto-h__appbar--viewing' : ''}">
         <button
           type="button"
           class="r2m-icon-button shell__menu"
@@ -147,7 +164,9 @@ export class AppShell extends R2mElement {
 
         <span class="shell__spacer"></span>
 
-        ${this.nextStepPill()}
+        ${variant ? proto.appBarViewing(variant) : nothing}
+        ${variant && viewing ? nothing : this.nextStepPill()}
+        ${variant ? proto.appBarButton(variant) : nothing}
 
         <span
           class="shell__conn shell__conn--${connection}"
@@ -182,6 +201,7 @@ export class AppShell extends R2mElement {
         >
       </header>
 
+      ${variant ? proto.beforeMain(variant) : nothing}
       <div class="shell__body">
         ${
           narrow && this.railOpen()
@@ -207,7 +227,11 @@ export class AppShell extends R2mElement {
             </ul>
           </nav>
         </aside>
-        <main class="shell__main"><r2m-outlet></r2m-outlet></main>
+        <main class="shell__main ${viewing ? 'proto-h__main--viewing' : ''}" ?inert=${viewing}>
+          <r2m-outlet ?hidden=${variant !== null && proto.replacesMain(variant)}></r2m-outlet>
+          ${variant ? proto.mainReplacement(variant) : nothing}
+        </main>
+        ${variant ? proto.besideMain(variant) : nothing}
         ${
           this.drawerOpen()
             ? html`<aside class="shell__drawer" aria-label="Activity">
@@ -218,6 +242,8 @@ export class AppShell extends R2mElement {
         }
       </div>
 
+      ${variant ? proto.afterBody(variant) : nothing}
+      ${variant ? proto.switcher(variant, this.goVariant) : nothing}
       <footer class="shell__activity" aria-label="Background activity">
         <r2m-activity-bar .narrow=${narrow}></r2m-activity-bar>
       </footer>
