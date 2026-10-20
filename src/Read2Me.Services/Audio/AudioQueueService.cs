@@ -167,6 +167,18 @@ namespace Read2Me.Services.Audio
         public long? AudioVersionOf(ProjectFolderId folder, Guid paragraphItemId)
             => _versions.TryGetValue(new AudioItemKey(folder, paragraphItemId), out var v) ? v : null;
 
+        /// <summary>
+        /// The folder's items still queued or generating, or null when it has none here. An item
+        /// stays tracked from enqueue until its disposition, so the one generating always counts.
+        /// </summary>
+        public BusySource? BusyFor(ProjectFolderId folder)
+        {
+            var left = _store.TrackedKeys().Count(k => k.Folder == folder);
+            return left == 0
+                ? null
+                : new BusySource(BusySourceKind.AudioQueue, $"Audio: {BusySource.Plural(left, "item")} left");
+        }
+
         private static AudioItemKey Key(QueuedAudioItem i) => new(i.Folder, i.Item.ParagraphItemId);
 
         private static AudioItemQueueStatus? Map(QueueItemStatus? s) => s switch

@@ -11,6 +11,7 @@ using Read2Me.Services.Audio;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
+using Read2Me.Services.Queueing;
 
 namespace Read2Me.App.Characters;
 
@@ -31,6 +32,9 @@ public sealed class VoiceBatchRunner
     public string? CurrentVoiceName { get; private set; }
     public string? CurrentOperation { get; private set; }
     public string? LastError { get; private set; }
+
+    /// <summary>The project of the running (or most recent) batch; null until the first start.</summary>
+    public ProjectFolderId? Folder { get; private set; }
 
     public VoiceBatchRunner(
         ILogger<VoiceBatchRunner> logger,
@@ -55,7 +59,7 @@ public sealed class VoiceBatchRunner
         lock (_lock)
         {
             if (IsRunning) return false;
-            ResetState("Generating prompts");
+            ResetState("Generating prompts", folder);
             var ct = _cts!.Token;
             Task.Run(() => RunWithScopeAsync(new GeneratePromptsPhase(regenerateAll), folder, ct));
         }
@@ -67,7 +71,7 @@ public sealed class VoiceBatchRunner
         lock (_lock)
         {
             if (IsRunning) return false;
-            ResetState("Generating audio");
+            ResetState("Generating audio", folder);
             var ct = _cts!.Token;
             Task.Run(() => RunWithScopeAsync(new GenerateAudioPhase(), folder, ct));
         }
@@ -80,9 +84,27 @@ public sealed class VoiceBatchRunner
             _cts?.Cancel();
     }
 
-    private void ResetState(string operation)
+    /// <summary>
+    /// The batch running for <paramref name="folder"/>, or null when none is. Reads "Voice batch:
+    /// generating prompts, 7 voices left" once planning has counted the work.
+    /// </summary>
+    public BusySource? BusyFor(ProjectFolderId folder)
+    {
+        lock (_lock)
+        {
+            if (!IsRunning || Folder != folder) return null;
+            var operation = (CurrentOperation ?? "running").ToLowerInvariant();
+            var reason = Total > 0
+                ? $"Voice batch: {operation}, {BusySource.Plural(Total - Processed, "voice")} left"
+                : $"Voice batch: {operation}";
+            return new BusySource(BusySourceKind.VoiceBatch, reason);
+        }
+    }
+
+    private void ResetState(string operation, ProjectFolderId folder)
     {
         IsRunning = true;
+        Folder = folder;
         Processed = 0;
         Total = 0;
         Failed = 0;

@@ -7,6 +7,7 @@ using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Assembly;
 using Read2Me.Services.Events;
+using Read2Me.Services.Queueing;
 using Read2Me.Services.Voice;
 using Read2Me.Tests.Fakes;
 using Xunit;
@@ -446,6 +447,35 @@ namespace Read2Me.Tests.Services.Audio
             var tmpPath = h.Encoder.LastOutputPath;
             if (tmpPath != null)
                 Assert.False(File.Exists(tmpPath), "tmp file must be deleted on cancel");
+        }
+
+        // ── Busy answer ───────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task BusyFor_WhileEncoding_NamesTheAssemblyForItsFolderOnly()
+        {
+            var manifest = new List<AssemblyManifestEntry> { AudioEntry(Guid.NewGuid(), "audio/a.wav") };
+            var h = BuildHarness(manifest, encodeDelayMs: 5000);
+            Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
+            await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
+
+            Assert.Null(h.Sut.BusyFor(Folder));
+
+            h.Sut.StartAsync(Folder);
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (h.Sut.CurrentPhase != AssemblyPhase.Encode && DateTime.UtcNow < deadline)
+                await Task.Delay(10);
+
+            var busy = h.Sut.BusyFor(Folder);
+            Assert.NotNull(busy);
+            Assert.Equal(BusySourceKind.Assembly, busy.Kind);
+            Assert.Equal("Assembly: encoding 0%", busy.Reason);
+            Assert.Null(h.Sut.BusyFor(new ProjectFolderId("other-book")));
+
+            h.Sut.Cancel();
+            await WaitForIdleAsync(h.Sut, timeoutMs: 6000);
+
+            Assert.Null(h.Sut.BusyFor(Folder));
         }
 
         // ── Partial mode ──────────────────────────────────────────────────────

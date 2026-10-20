@@ -4,6 +4,7 @@ using Read2Me.Data;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services.Events;
+using Read2Me.Services.Queueing;
 
 namespace Read2Me.Services.Audio.Assembly
 {
@@ -73,6 +74,22 @@ namespace Read2Me.Services.Audio.Assembly
         {
             lock (_lock)
                 _cts?.Cancel();
+        }
+
+        /// <summary>
+        /// The Assembly running for <paramref name="folder"/>, or null when none is. Reads
+        /// "Assembly: encoding 42%" while encoding and "Assembly: preparing" before it.
+        /// </summary>
+        public BusySource? BusyFor(ProjectFolderId folder)
+        {
+            lock (_lock)
+            {
+                if (!IsRunning || Folder != folder.Value) return null;
+                var reason = CurrentPhase == AssemblyPhase.Encode
+                    ? $"Assembly: encoding {(int)Math.Round(EncodePercent * 100)}%"
+                    : "Assembly: preparing";
+                return new BusySource(BusySourceKind.Assembly, reason);
+            }
         }
 
         private async Task RunAsync(ProjectFolderId folder, bool allowPartial, CancellationToken ct)

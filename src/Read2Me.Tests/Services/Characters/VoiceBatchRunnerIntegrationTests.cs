@@ -17,6 +17,7 @@ using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
+using Read2Me.Services.Queueing;
 using Read2Me.Services.Voice;
 using Read2Me.Tests.Fakes;
 using Read2Me.Tests.Infrastructure;
@@ -426,6 +427,40 @@ namespace Read2Me.Tests.Services.Characters
 
             h.Sut.Cancel();
             await WaitForIdleAsync(h.Sut);
+        }
+
+        [Fact]
+        public async Task BusyFor_WhileRunning_NamesTheBatchForItsFolderOnly()
+        {
+            var hank = MakeCharacter("Hank");
+            var iris = MakeCharacter("Iris");
+            var h = BuildHarness(
+                characters: new[] { hank, iris },
+                voicesByCharacter: new Dictionary<Guid, List<VoiceEntity>>
+                {
+                    [hank.Id] = new List<VoiceEntity>(),
+                    [iris.Id] = new List<VoiceEntity>(),
+                },
+                orchestratorDelayMs: 3000);
+
+            Assert.Null(h.Sut.BusyFor(Folder));
+
+            h.Sut.StartGeneratePrompts(Folder);
+            Assert.Equal(Folder, h.Sut.Folder);
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (h.Sut.Total == 0 && DateTime.UtcNow < deadline)
+                await Task.Delay(10);
+
+            var busy = h.Sut.BusyFor(Folder);
+            Assert.NotNull(busy);
+            Assert.Equal(BusySourceKind.VoiceBatch, busy.Kind);
+            Assert.Equal("Voice batch: generating prompts, 2 voices left", busy.Reason);
+            Assert.Null(h.Sut.BusyFor(new ProjectFolderId("other-book")));
+
+            h.Sut.Cancel();
+            await WaitForIdleAsync(h.Sut);
+
+            Assert.Null(h.Sut.BusyFor(Folder));
         }
 
         [Fact]

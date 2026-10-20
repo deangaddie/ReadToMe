@@ -213,6 +213,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<Read2Me.App.Services.VoiceOrchestrator>();
         services.AddSingleton<EventBroadcaster<VoiceBatchEvent>>();
         services.AddSingleton<VoiceBatchRunner>();
+        // Reads the queues, the voice batch and the Assembly, all singletons registered in this file.
+        services.AddSingleton<ProjectBusyAnswer>();
 
         // AI book edits
         services.AddScoped<Read2Me.Services.Llm.ChapterOutlineBuilder>();
