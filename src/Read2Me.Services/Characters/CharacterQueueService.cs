@@ -218,6 +218,18 @@ namespace Read2Me.Services.Characters
         public bool IsBusy(ProjectFolderId folder, Guid paragraphId) =>
             StatusOf(folder, paragraphId) is not null;
 
+        /// <summary>
+        /// The folder's paragraphs still queued or processing, or null when it has none here.
+        /// Settled items (Failed/Unfinished included) are finished work and do not count.
+        /// </summary>
+        public BusySource? BusyFor(ProjectFolderId folder)
+        {
+            var left = _store.TrackedKeys().Count(k => k.Folder == folder);
+            return left == 0
+                ? null
+                : new BusySource(BusySourceKind.CharacterQueue, $"Attribution: {BusySource.Plural(left, "paragraph")} left");
+        }
+
         public QueueSnapshot Snapshot()
         {
             var (queuedCount, processingCount) = _store.CountStatuses();
