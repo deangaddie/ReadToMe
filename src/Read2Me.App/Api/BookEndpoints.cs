@@ -104,8 +104,10 @@ namespace Read2Me.App.Api
             endpoints.MapGet("/api/projects/{folder}/characters", GetCharactersAsync)
                 .WithSummary("All characters with their aliases.");
             endpoints.MapPost("/api/projects/{folder}/characters/bulk-assign-preview", BulkAssignPreviewAsync)
+                .RecordsNoStep("A preview; nothing is written.")
                 .WithSummary("What a bulk speaker assign over the paragraph ids would write: the dialog lines and the paragraphs holding them. Paragraphs without dialog count in neither.");
             endpoints.MapPost("/api/projects/{folder}/narration/release-preview", NarrationReleasePreviewAsync)
+                .RecordsNoStep("A preview; nothing is written.")
                 .WithSummary("What a ReleaseNarration command over the scope (Part|Chapter|Paragraph + nodeId) would write: the narration-only paragraphs it would release (for Part and Chapter, only those carrying a speech marker that repeats in at least 5 narration-only paragraphs of their chapter; a Paragraph is unfiltered), how many of their items have audio it would discard, and for Part and Chapter the speechMarkers that passed with the paragraphs each covers (count descending, then marker; empty for a Paragraph and when nothing passes).");
         }
 

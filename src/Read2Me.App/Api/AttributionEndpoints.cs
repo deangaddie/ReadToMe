@@ -24,12 +24,15 @@ namespace Read2Me.App.Api
         public static void MapAttributionEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapPost("/api/projects/{folder}/attribution/enqueue", EnqueueAsync)
+                .RecordsNoStep("Enqueues queue work; what it commits is recorded as it lands.")
                 .WithSummary("Queue LLM character attribution for the paragraphs under a node (level: volume|part|chapter). Poll /api/attribution/queue.");
             endpoints.MapPost("/api/projects/{folder}/attribution/enqueue-paragraphs", EnqueueParagraphsAsync)
+                .RecordsNoStep("Enqueues queue work; what it commits is recorded as it lands.")
                 .WithSummary("Queue LLM character attribution for an explicit list of paragraph ids (a selection). Ids without dialog are ignored; the count answers with what was queued.");
             endpoints.MapGet("/api/projects/{folder}/attribution/paragraphs/{paragraphId:guid}", GetParagraphStatus)
                 .WithSummary("Per-paragraph attribution queue state: queued/processing status and any failure/unknown outcome. Results are on the paragraph's items.");
             endpoints.MapDelete("/api/projects/{folder}/attribution/paragraphs/{paragraphId:guid}/outcome", ClearOutcome)
+                .RecordsNoStep("Clears the queue's in-memory outcome; nothing is written.")
                 .WithSummary("Forget a paragraph's Failed/Unfinished attribution outcome (the chip goes away). 204 whether or not one was recorded.");
             endpoints.MapPost("/api/attribution/cancel",
                     (CharacterQueueService queue) => { queue.CancelAll(); return Results.Ok(); })

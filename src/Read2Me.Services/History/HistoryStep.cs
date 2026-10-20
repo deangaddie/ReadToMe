@@ -12,6 +12,7 @@ public sealed record HistoryStep(
     Guid? ParentStepId,
     int Sequence,
     string Label,
+    string? Summary,
     string Author,
     DateTimeOffset StartedAt,
     DateTimeOffset? EndedAt,

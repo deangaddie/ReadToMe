@@ -84,12 +84,12 @@ internal static class HistoryDatabase
         SqliteConnection connection, SqliteTransaction? transaction, string schema, HistoryStep step, byte[]? patchset,
         CancellationToken ct)
     {
-        var q = schema.Length == 0 ? "" : schema + ".";
+        var q = Qualifier(schema);
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = $"""
             INSERT INTO {q}Step ({StepColumns})
-                VALUES ($id, $parent, $sequence, $label, $author, $startedAt, $endedAt, $isOpen);
+                VALUES ($id, $parent, $sequence, $label, $summary, $author, $startedAt, $endedAt, $isOpen);
             {(patchset is null ? "" : $"INSERT INTO {q}Chunk (StepId, Sequence, Patchset) VALUES ($id, 1, $patchset);")}
             INSERT INTO {q}Head (Id, StepId) VALUES (1, $id) ON CONFLICT (Id) DO UPDATE SET StepId = excluded.StepId;
             """;
@@ -97,6 +97,7 @@ internal static class HistoryDatabase
         command.Parameters.AddWithValue("$parent", step.ParentStepId is { } p ? Stored(p) : DBNull.Value);
         command.Parameters.AddWithValue("$sequence", step.Sequence);
         command.Parameters.AddWithValue("$label", step.Label);
+        command.Parameters.AddWithValue("$summary", (object?)step.Summary ?? DBNull.Value);
         command.Parameters.AddWithValue("$author", step.Author);
         command.Parameters.AddWithValue("$startedAt", Stored(step.StartedAt));
         command.Parameters.AddWithValue("$endedAt", step.EndedAt is { } e ? Stored(e) : DBNull.Value);
@@ -106,6 +107,52 @@ internal static class HistoryDatabase
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    /// <summary>
+    /// Appends <paramref name="patchset"/> as the next chunk of the open step <paramref name="stepId"/>
+    /// and rewrites its "what changed". The Head already points at it.
+    /// </summary>
+    public static async Task ExtendStepAsync(
+        SqliteConnection connection, SqliteTransaction? transaction, string schema, Guid stepId, string? summary,
+        byte[] patchset, CancellationToken ct)
+    {
+        var q = Qualifier(schema);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = $"""
+            INSERT INTO {q}Chunk (StepId, Sequence, Patchset)
+                VALUES ($id, (SELECT MAX(Sequence) + 1 FROM {q}Chunk WHERE StepId = $id), $patchset);
+            UPDATE {q}Step SET Summary = $summary WHERE StepId = $id;
+            """;
+        command.Parameters.AddWithValue("$id", Stored(stepId));
+        command.Parameters.AddWithValue("$summary", (object?)summary ?? DBNull.Value);
+        command.Parameters.AddWithValue("$patchset", patchset);
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    /// Closes <paramref name="stepId"/> at <paramref name="at"/>, and answers its row as it now
+    /// stands — or null when it was already closed, so a close is announced once.
+    /// </summary>
+    public static async Task<HistoryStep?> CloseStepAsync(
+        SqliteConnection connection, SqliteTransaction? transaction, string schema, Guid stepId, DateTimeOffset at,
+        CancellationToken ct)
+    {
+        var q = Qualifier(schema);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = $"""
+            UPDATE {q}Step SET IsOpen = 0, EndedAt = $at WHERE StepId = $id AND IsOpen = 1
+                RETURNING {StepColumns};
+            """;
+        command.Parameters.AddWithValue("$id", Stored(stepId));
+        command.Parameters.AddWithValue("$at", Stored(at));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct) ? ReadStep(reader) : null;
+    }
+
+    /// <summary>"history." for the attached name, nothing on a connection to history.db itself.</summary>
+    private static string Qualifier(string schema) => schema.Length == 0 ? "" : schema + ".";
+
     private static string Stored(Guid id) => id.ToString("D");
     private static string Stored(DateTimeOffset at) => at.ToString("O");
 
@@ -114,13 +161,14 @@ internal static class HistoryDatabase
         r.IsDBNull(1) ? null : Guid.Parse(r.GetString(1)),
         r.GetInt32(2),
         r.GetString(3),
-        r.GetString(4),
-        DateTimeOffset.Parse(r.GetString(5), null, System.Globalization.DateTimeStyles.RoundtripKind),
-        r.IsDBNull(6) ? null : DateTimeOffset.Parse(r.GetString(6), null, System.Globalization.DateTimeStyles.RoundtripKind),
-        r.GetInt64(7) != 0);
+        r.IsDBNull(4) ? null : r.GetString(4),
+        r.GetString(5),
+        DateTimeOffset.Parse(r.GetString(6), null, System.Globalization.DateTimeStyles.RoundtripKind),
+        r.IsDBNull(7) ? null : DateTimeOffset.Parse(r.GetString(7), null, System.Globalization.DateTimeStyles.RoundtripKind),
+        r.GetInt64(8) != 0);
 
     /// <summary>The columns <see cref="ReadStep"/> reads, in its order.</summary>
-    public const string StepColumns = "StepId, ParentStepId, Sequence, Label, Author, StartedAt, EndedAt, IsOpen";
+    public const string StepColumns = "StepId, ParentStepId, Sequence, Label, Summary, Author, StartedAt, EndedAt, IsOpen";
 
     private static void Execute(SqliteConnection connection, string sql)
     {

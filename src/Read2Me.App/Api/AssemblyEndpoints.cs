@@ -27,6 +27,7 @@ namespace Read2Me.App.Api
         public static void MapAssemblyEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapPost("/api/projects/{folder}/assembly", StartAsync)
+                .RecordsNoStep("Assembly writes an output file, not Project state.")
                 .WithSummary("Start m4b assembly. 409 with audioRemainingCount when items still lack audio and allowPartial is false. Poll /api/assembly/status.");
             endpoints.MapGet("/api/assembly/status",
                     (AudiobookAssemblyService svc) => Results.Ok(new AssemblyStatusDto(
@@ -42,6 +43,7 @@ namespace Read2Me.App.Api
             endpoints.MapGet("/api/projects/{folder}/assembly/outputs/{fileName}", DownloadOutput)
                 .WithSummary("Download one assembled audiobook (audio/mp4 attachment; Range requests supported).");
             endpoints.MapDelete("/api/projects/{folder}/assembly/outputs/{fileName}", DeleteOutput)
+                .RecordsNoStep("An output file is not Project state.")
                 .WithSummary("Delete one assembled audiobook (204; 404 when it is not an existing output).");
         }
 

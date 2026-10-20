@@ -36,6 +36,7 @@ public sealed class BookMutations(
     EventBroadcaster<BookMutationReceipt> receipts,
     MutationOrigin origin,
     ProjectHistory history,
+    HistoryStepScope stepScope,
     ILogger<BookMutations> logger)
 {
     private BookMutationOptions Options => options.Value;
@@ -79,7 +80,7 @@ public sealed class BookMutations(
         }
 
         BookMutationReceipt receipt;
-        HistoryStep? step;
+        RecordedStep? step;
         try
         {
             if (await ApplyInOneTransactionAsync(mutation, implementation, ct) is not { } committed)
@@ -131,6 +132,7 @@ public sealed class BookMutations(
         // Declared before the transaction so it is disposed after it: the capture attaches
         // history.db, which cannot be detached while a transaction is open.
         await using var capture = mutation.ChangesProjectState ? await history.BeginCaptureAsync(db, ct) : null;
+        var scope = stepScope.For(mutation.FolderId);
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
         var effects = await implementation(mutation, db, ct);
@@ -144,20 +146,26 @@ public sealed class BookMutations(
 
         effects = await MarkCheckpointsStaleAsync(mutation, effects, db, ct);
         await db.SaveChangesAsync(ct);
-        var step = capture is null ? null : await capture.RecordAsync(ProjectHistory.LabelOf(mutation), ct);
+        var step = capture is null ? null : await capture.RecordAsync(scope, ProjectHistory.LabelOf(mutation), effects, ct);
 
         // The last point at which cancellation is still honourable. Past it the change is real, so
         // the commit runs to completion regardless: a committed mutation must never be reported as
         // uncommitted.
         ct.ThrowIfCancellationRequested();
         await transaction.CommitAsync(CancellationToken.None);
+        if (scope is not null && step is not null)
+        {
+            // Only once the commit stands: a rolled-back chunk must not count toward the step.
+            scope.StepId = step.StepId;
+            scope.Changes = step.Changes;
+        }
         return new CommittedChange(effects, step);
     }
 
-    private sealed record CommittedChange(BookMutationEffects Effects, HistoryStep? Step);
+    private sealed record CommittedChange(BookMutationEffects Effects, RecordedStep? Step);
 
     /// <summary>Best-effort, like <see cref="Publish"/>: the step is committed whatever a subscriber does.</summary>
-    private void Announce(ProjectFolderId folder, HistoryStep step)
+    private void Announce(ProjectFolderId folder, RecordedStep step)
     {
         try
         {

@@ -25,8 +25,10 @@ namespace Read2Me.App.Api
         public static void MapAudioEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapPost("/api/projects/{folder}/audio/enqueue", EnqueueAsync)
+                .RecordsNoStep("Enqueues a Background run; takes are results.")
                 .WithSummary("Queue TTS audio generation for the items under a node (level: volume|part|chapter). Poll /api/audio/queue.");
             endpoints.MapPost("/api/projects/{folder}/audio/enqueue-items", EnqueueItemsAsync)
+                .RecordsNoStep("Enqueues a Background run; takes are results.")
                 .WithSummary("Queue TTS audio generation for an explicit list of item ids (a selection, or one item to retry). Unknown ids are ignored; the count answers with what was queued. 409 when no paragraph TTS service is active.");
             endpoints.MapGet("/api/projects/{folder}/audio/items/{itemId:guid}", GetItemStatus)
                 .WithSummary("Per-item audio state: queued/processing status, failure outcome, or the audio version stamp once complete.");

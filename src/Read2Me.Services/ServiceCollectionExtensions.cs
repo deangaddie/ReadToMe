@@ -129,6 +129,7 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<Events.EventBroadcaster<History.HistoryStepEvent>>();
         services.TryAddSingleton<History.ProjectHistory>();
         services.AddScoped<Mutations.MutationOrigin>();
+        services.AddScoped<History.HistoryStepScope>();
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.InsertParagraphItemMutation>,
             Mutations.Implementations.InsertParagraphItemMutationImplementation>();
