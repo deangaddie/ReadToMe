@@ -1,4 +1,7 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Read2Me.Core.IO;
+using Read2Me.Data;
 using Read2Me.Services;
 using Read2Me.Tests.Fakes;
 using Xunit;
@@ -7,10 +10,15 @@ namespace Read2Me.Tests.Services
 {
     public class ProjectServiceTests
     {
-        private static ProjectService CreateService(FakeFileSystem fs)
+        /// <summary>A real write side over the fake file system: metadata and cover writes are Book mutations.</summary>
+        internal static ProjectService CreateService(FakeFileSystem fs)
         {
-            var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
-            return new ProjectService(fs, session, NullLogger<ProjectService>.Instance);
+            var services = new ServiceCollection();
+            services.AddBookCommandHandlers();
+            services.AddSingleton<IFileSystem>(fs);
+            services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
+            services.AddScoped<ProjectService>();
+            return services.BuildServiceProvider().GetRequiredService<ProjectService>();
         }
 
         private static ProjectReader CreateReader(FakeFileSystem fs)

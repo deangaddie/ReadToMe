@@ -806,7 +806,7 @@ public class BookMutationsTests : ProjectDbTestBase
 
     /// <summary>Holds the project's write lock until released, so contention is observable.</summary>
     private sealed record GatedMutation(ProjectFolderId FolderId, TaskCompletionSource Entered, TaskCompletionSource Release)
-        : BookMutation(FolderId);
+        : ProjectStateMutation(FolderId);
 
     private sealed class GatedMutationImplementation : IBookMutationImplementation<GatedMutation>
     {
@@ -818,7 +818,7 @@ public class BookMutationsTests : ProjectDbTestBase
         }
     }
 
-    private sealed record ExplodingMutation(ProjectFolderId FolderId) : BookMutation(FolderId);
+    private sealed record ExplodingMutation(ProjectFolderId FolderId) : ProjectStateMutation(FolderId);
 
     private sealed class ExplodingMutationImplementation : IBookMutationImplementation<ExplodingMutation>
     {
@@ -827,7 +827,7 @@ public class BookMutationsTests : ProjectDbTestBase
     }
 
     /// <summary>Stages a real write, then reports an expected failure — the rollback case.</summary>
-    private sealed record HalfStagedMutation(ProjectFolderId FolderId, Guid ParagraphId) : BookMutation(FolderId);
+    private sealed record HalfStagedMutation(ProjectFolderId FolderId, Guid ParagraphId) : ProjectStateMutation(FolderId);
 
     private sealed class HalfStagedMutationImplementation : IBookMutationImplementation<HalfStagedMutation>
     {
@@ -846,5 +846,5 @@ public class BookMutationsTests : ProjectDbTestBase
         }
     }
 
-    private sealed record UnregisteredMutation(ProjectFolderId FolderId) : BookMutation(FolderId);
+    private sealed record UnregisteredMutation(ProjectFolderId FolderId) : ProjectStateMutation(FolderId);
 }

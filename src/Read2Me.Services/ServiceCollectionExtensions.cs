@@ -253,6 +253,13 @@ public static class ServiceCollectionExtensions
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.SetCheckpointMutation>,
             Mutations.Implementations.SetCheckpointMutationImplementation>();
+        // Project details — the project row's title, book title, author and cover
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.UpdateProjectMetadataMutation>,
+            Mutations.Implementations.UpdateProjectMetadataMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.SetCoverImageMutation>,
+            Mutations.Implementations.SetCoverImageMutationImplementation>();
         // Voice and Voice Rule lifecycles — Voice rows and rule rows only, previews everywhere
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.CreateVoiceMutation>,
@@ -281,6 +288,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.SetVoiceGeneratedMutation>,
             Mutations.Implementations.SetVoiceGeneratedMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.ApplyVoiceAudioEditMutation>,
+            Mutations.Implementations.ApplyVoiceAudioEditMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.RestoreVoiceAudioOriginalMutation>,
+            Mutations.Implementations.RestoreVoiceAudioOriginalMutationImplementation>();
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.SetVoiceSourceMutation>,
             Mutations.Implementations.SetVoiceSourceMutationImplementation>();

@@ -35,6 +35,10 @@ public enum BookFacets
     Narrator = 1 << 6,
     Voices = 1 << 7,
     VoiceRules = 1 << 8,
+    /// <summary>
+    /// The project row's own fields: the narrator-only policy, the title, book title and author,
+    /// and the cover. A reader refetches the project detail.
+    /// </summary>
     ProjectPolicy = 1 << 9,
     /// <summary>
     /// A Volume, Part or Chapter's own title. Not <see cref="Structure"/>: no node was created,

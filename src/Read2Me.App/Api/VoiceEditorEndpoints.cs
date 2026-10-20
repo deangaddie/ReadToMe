@@ -129,7 +129,15 @@ namespace Read2Me.App.Api
             if (VoiceRefOrNull(folderId, voice) is not { } voiceRef)
                 return NoAudio();
 
-            await editor.ApplyAsync(voiceRef, entry.Final, ct);
+            try
+            {
+                await editor.ApplyAsync(voiceRef, entry.Final, ct);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // The Book refused to record the edit; the editor has already put the audio back.
+                return Results.Problem(ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
+            }
             return Results.Ok(VoiceEndpoints.ToDto(folderId, voice, originals, fs));
         }
 
@@ -147,7 +155,14 @@ namespace Read2Me.App.Api
             if (VoiceRefOrNull(folderId, voice) is not { } voiceRef)
                 return NoAudio();
 
-            await editor.RestoreOriginalAsync(voiceRef, ct);
+            try
+            {
+                await editor.RestoreOriginalAsync(voiceRef, ct);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Problem(ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
+            }
             return Results.Ok(VoiceEndpoints.ToDto(folderId, voice, originals, fs));
         }
 

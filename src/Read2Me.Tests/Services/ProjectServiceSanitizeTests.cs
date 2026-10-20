@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.Services;
 using Read2Me.Tests.Fakes;
 using Xunit;
@@ -10,12 +9,7 @@ namespace Read2Me.Tests.Services
     /// </summary>
     public class ProjectServiceSanitizeTests
     {
-        private static ProjectService CreateService()
-        {
-            var fs = new FakeFileSystem();
-            var session = new ProjectDbSession(fs, new ProjectDbContextProvider(), NullLogger<ProjectDbSession>.Instance);
-            return new ProjectService(fs, session, NullLogger<ProjectService>.Instance);
-        }
+        private static ProjectService CreateService() => ProjectServiceTests.CreateService(new FakeFileSystem());
 
         [Theory]
         [InlineData("My Book", "my-book")]
