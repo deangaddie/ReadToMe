@@ -33,12 +33,22 @@ namespace Read2Me.Services.Queueing
         /// <summary>
         /// Returns a currently-tracked (typically Processing) key to Queued and clears any prior
         /// outcome, so an interrupted item can be re-driven. Stops the elapsed clock.
+        /// <para>
+        /// A key no longer tracked was cleared by <see cref="ClearAll"/> while the worker held it:
+        /// it stays cancelled and the call answers false, so the caller does not put it back on the
+        /// channel. Re-adding it would leave a Queued key nothing will ever drain.
+        /// </para>
         /// </summary>
-        public void ReturnToQueued(TKey key)
+        public bool ReturnToQueued(TKey key)
         {
-            _outcomes.TryRemove(key, out _);
-            _status[key] = QueueItemStatus.Queued;
-            ClearProcessing();
+            while (_status.TryGetValue(key, out var current))
+            {
+                if (!_status.TryUpdate(key, QueueItemStatus.Queued, current)) continue;
+                _outcomes.TryRemove(key, out _);
+                ClearProcessing();
+                return true;
+            }
+            return false;
         }
 
         /// <summary>Moves the key to Processing and starts the single-reader elapsed clock.</summary>

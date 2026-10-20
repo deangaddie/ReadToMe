@@ -39,17 +39,43 @@ namespace Read2Me.Tests.Services.Queueing
         }
 
         [Fact]
-        public void ReturnToQueued_SetsQueued_AndClearsPriorOutcome()
+        public void ReturnToQueued_ProcessingKey_SetsQueued()
+        {
+            var store = NewStore();
+            store.TryMarkQueued(1);
+            store.MarkProcessing(1);
+
+            Assert.True(store.ReturnToQueued(1));
+
+            Assert.Equal(QueueItemStatus.Queued, store.StatusOf(1));
+        }
+
+        [Fact]
+        public void ReturnToQueued_KeyClearedWhileProcessing_StaysUntracked()
+        {
+            var store = NewStore();
+            store.TryMarkQueued(1);
+            store.MarkProcessing(1);
+            store.ClearAll();
+
+            Assert.False(store.ReturnToQueued(1));
+
+            Assert.Null(store.StatusOf(1));
+            Assert.Empty(store.TrackedKeys());
+        }
+
+        [Fact]
+        public void ReturnToQueued_AbandonedKey_KeepsItsOutcome()
         {
             var store = NewStore();
             store.TryMarkQueued(1);
             store.MarkProcessing(1);
             store.Abandon(1, new Outcome("failed"));
 
-            store.ReturnToQueued(1);
+            Assert.False(store.ReturnToQueued(1));
 
-            Assert.Equal(QueueItemStatus.Queued, store.StatusOf(1));
-            Assert.Null(store.OutcomeOf(1));
+            Assert.Null(store.StatusOf(1));
+            Assert.NotNull(store.OutcomeOf(1));
         }
 
         [Fact]

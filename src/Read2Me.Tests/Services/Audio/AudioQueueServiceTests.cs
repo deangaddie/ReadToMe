@@ -195,6 +195,40 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal(0, svc.Snapshot().QueuedCount);
         }
 
+        /// <summary>
+        /// The worker can still be generating when the queue is cleared; its later retry must not
+        /// bring the item back as Queued, or the project reads busy with nothing left to drain it.
+        /// </summary>
+        [Fact]
+        public async Task Apply_RetryAfter_AfterCancelAll_LeavesTheItemCancelled()
+        {
+            var svc = new AudioQueueService();
+            var item = MakeItem();
+            EnqueueAndProcess(svc, item);
+
+            svc.CancelAll();
+            svc.Apply(item, new Disposition.RetryAfter(TimeSpan.FromMilliseconds(10)));
+
+            Assert.Null(svc.StatusOf(Folder, IdOf(item)));
+            Assert.Null(svc.BusyFor(Folder));
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+            Assert.False(svc.Reader.TryRead(out _));
+        }
+
+        [Fact]
+        public void Apply_RetryOnce_AfterCancelAll_DoesNotRequeueOnTheNewChannel()
+        {
+            var svc = new AudioQueueService();
+            var item = MakeItem();
+            EnqueueAndProcess(svc, item);
+
+            svc.CancelAll();
+            svc.Apply(item, new Disposition.RetryOnce());
+
+            Assert.Null(svc.StatusOf(Folder, IdOf(item)));
+            Assert.False(svc.Reader.TryRead(out _));
+        }
+
         [Fact]
         public void CancelAll_DrainsPendingAndResetsStatus()
         {

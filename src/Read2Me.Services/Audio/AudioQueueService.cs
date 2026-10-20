@@ -106,18 +106,20 @@ namespace Read2Me.Services.Audio
                     break;
 
                 // Status returns to Queued and the item re-enters the channel, where it waits on the
-                // gate closed by recovery until that reopens it.
+                // gate closed by recovery until that reopens it. An item a CancelAll cleared while
+                // in flight stays cancelled: it neither returns to Queued nor re-enters the channel.
                 case Disposition.RetryOnce:
-                    _store.ReturnToQueued(key);
-                    _channel.Writer.TryWrite(item with { Attempts = item.Attempts.WithRetry() });
+                    if (_store.ReturnToQueued(key))
+                        _channel.Writer.TryWrite(item with { Attempts = item.Attempts.WithRetry() });
                     break;
 
                 // Status returns to Queued immediately; the write is deferred against the writer
                 // captured now, so a CancelAll during the backoff drops the item instead of
                 // resurrecting it on the replacement channel. This queue has no item token, so the
-                // captured writer is the whole of that guarantee.
+                // captured writer is the whole of that guarantee. One cleared before this runs
+                // stays cancelled, as above.
                 case Disposition.RetryAfter retryAfter:
-                    _store.ReturnToQueued(key);
+                    if (!_store.ReturnToQueued(key)) break;
                     _ = DelayedWrite.Schedule(
                         _channel.Writer,
                         item with { Attempts = item.Attempts.WithBusy() },
