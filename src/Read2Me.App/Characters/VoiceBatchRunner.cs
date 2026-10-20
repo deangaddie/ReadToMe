@@ -10,6 +10,7 @@ using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.Events;
+using Read2Me.Services.History;
 using Read2Me.Services.Llm;
 using Read2Me.Services.Queueing;
 
@@ -117,6 +118,8 @@ public sealed class VoiceBatchRunner
     private async Task RunWithScopeAsync<TWork>(ISweepPhase<TWork> phase, ProjectFolderId folder, CancellationToken ct)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
+        // What the batch commits is its project's Background run step in History.
+        scope.ServiceProvider.GetRequiredService<HistoryStepScope>().JoinBackgroundRuns();
         var deps = new PhaseDeps(
             scope.ServiceProvider.GetRequiredService<IProjectReader>(),
             scope.ServiceProvider.GetRequiredService<BookMutations>(),

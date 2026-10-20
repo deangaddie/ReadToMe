@@ -89,7 +89,7 @@ internal static class HistoryDatabase
         command.Transaction = transaction;
         command.CommandText = $"""
             INSERT INTO {q}Step ({StepColumns})
-                VALUES ($id, $parent, $sequence, $label, $summary, $author, $startedAt, $endedAt, $isOpen);
+                VALUES ($id, $parent, $sequence, $label, $summary, $author, $startedAt, $endedAt, $isOpen, $note);
             {(patchset is null ? "" : $"INSERT INTO {q}Chunk (StepId, Sequence, Patchset) VALUES ($id, 1, $patchset);")}
             INSERT INTO {q}Head (Id, StepId) VALUES (1, $id) ON CONFLICT (Id) DO UPDATE SET StepId = excluded.StepId;
             """;
@@ -102,6 +102,7 @@ internal static class HistoryDatabase
         command.Parameters.AddWithValue("$startedAt", Stored(step.StartedAt));
         command.Parameters.AddWithValue("$endedAt", step.EndedAt is { } e ? Stored(e) : DBNull.Value);
         command.Parameters.AddWithValue("$isOpen", step.IsOpen ? 1 : 0);
+        command.Parameters.AddWithValue("$note", (object?)step.Note ?? DBNull.Value);
         if (patchset is not null)
             command.Parameters.AddWithValue("$patchset", patchset);
         await command.ExecuteNonQueryAsync(ct);
@@ -109,11 +110,12 @@ internal static class HistoryDatabase
 
     /// <summary>
     /// Appends <paramref name="patchset"/> as the next chunk of the open step <paramref name="stepId"/>
-    /// and rewrites its "what changed". The Head already points at it.
+    /// and rewrites its label — a Background run's grows when another run joins it — and its "what
+    /// changed". The Head already points at it.
     /// </summary>
     public static async Task ExtendStepAsync(
-        SqliteConnection connection, SqliteTransaction? transaction, string schema, Guid stepId, string? summary,
-        byte[] patchset, CancellationToken ct)
+        SqliteConnection connection, SqliteTransaction? transaction, string schema, Guid stepId, string label,
+        string? summary, byte[] patchset, CancellationToken ct)
     {
         var q = Qualifier(schema);
         await using var command = connection.CreateCommand();
@@ -121,33 +123,59 @@ internal static class HistoryDatabase
         command.CommandText = $"""
             INSERT INTO {q}Chunk (StepId, Sequence, Patchset)
                 VALUES ($id, (SELECT MAX(Sequence) + 1 FROM {q}Chunk WHERE StepId = $id), $patchset);
-            UPDATE {q}Step SET Summary = $summary WHERE StepId = $id;
+            UPDATE {q}Step SET Label = $label, Summary = $summary WHERE StepId = $id;
             """;
         command.Parameters.AddWithValue("$id", Stored(stepId));
+        command.Parameters.AddWithValue("$label", label);
         command.Parameters.AddWithValue("$summary", (object?)summary ?? DBNull.Value);
         command.Parameters.AddWithValue("$patchset", patchset);
         await command.ExecuteNonQueryAsync(ct);
     }
 
     /// <summary>
-    /// Closes <paramref name="stepId"/> at <paramref name="at"/>, and answers its row as it now
-    /// stands — or null when it was already closed, so a close is announced once.
+    /// Closes <paramref name="stepId"/> at <paramref name="at"/>, setting its <paramref name="note"/>
+    /// when one is given, and answers its row as it now stands — or null when it was already closed
+    /// and there is no note to set, so a change is announced once. A step closed earlier keeps the
+    /// time it closed at.
     /// </summary>
     public static async Task<HistoryStep?> CloseStepAsync(
         SqliteConnection connection, SqliteTransaction? transaction, string schema, Guid stepId, DateTimeOffset at,
-        CancellationToken ct)
+        string? note, CancellationToken ct)
     {
         var q = Qualifier(schema);
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = $"""
-            UPDATE {q}Step SET IsOpen = 0, EndedAt = $at WHERE StepId = $id AND IsOpen = 1
+            UPDATE {q}Step SET IsOpen = 0, EndedAt = IIF(IsOpen = 1, $at, EndedAt), Note = COALESCE($note, Note)
+                WHERE StepId = $id AND (IsOpen = 1 OR $note IS NOT NULL)
                 RETURNING {StepColumns};
             """;
         command.Parameters.AddWithValue("$id", Stored(stepId));
         command.Parameters.AddWithValue("$at", Stored(at));
+        command.Parameters.AddWithValue("$note", (object?)note ?? DBNull.Value);
         await using var reader = await command.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? ReadStep(reader) : null;
+    }
+
+    /// <summary>
+    /// Closes every step still open as "interrupted", with no end time, and answers their rows: what
+    /// the app does on start, when nothing that opened them is still running.
+    /// </summary>
+    public static async Task<IReadOnlyList<HistoryStep>> CloseInterruptedAsync(SqliteConnection connection, CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            UPDATE Step SET IsOpen = 0, Note = IIF(Note IS NULL, $interrupted, Note || $separator || $interrupted)
+                WHERE IsOpen = 1
+                RETURNING {StepColumns};
+            """;
+        command.Parameters.AddWithValue("$interrupted", StepNotes.Interrupted);
+        command.Parameters.AddWithValue("$separator", StepNotes.Separator);
+        var closed = new List<HistoryStep>();
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            closed.Add(ReadStep(reader));
+        return closed;
     }
 
     /// <summary>"history." for the attached name, nothing on a connection to history.db itself.</summary>
@@ -165,10 +193,11 @@ internal static class HistoryDatabase
         r.GetString(5),
         DateTimeOffset.Parse(r.GetString(6), null, System.Globalization.DateTimeStyles.RoundtripKind),
         r.IsDBNull(7) ? null : DateTimeOffset.Parse(r.GetString(7), null, System.Globalization.DateTimeStyles.RoundtripKind),
-        r.GetInt64(8) != 0);
+        r.GetInt64(8) != 0,
+        r.IsDBNull(9) ? null : r.GetString(9));
 
     /// <summary>The columns <see cref="ReadStep"/> reads, in its order.</summary>
-    public const string StepColumns = "StepId, ParentStepId, Sequence, Label, Summary, Author, StartedAt, EndedAt, IsOpen";
+    public const string StepColumns = "StepId, ParentStepId, Sequence, Label, Summary, Author, StartedAt, EndedAt, IsOpen, Note";
 
     private static void Execute(SqliteConnection connection, string sql)
     {

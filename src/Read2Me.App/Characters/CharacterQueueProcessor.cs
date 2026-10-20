@@ -8,6 +8,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
+using Read2Me.Services.History;
 using Read2Me.Services.Llm;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.Queueing;
@@ -21,10 +22,15 @@ namespace Read2Me.App.Characters
         IUnattributedItemCounter reader,
         IProjectCatalogReader catalog,
         BookMutations mutations,
+        HistoryStepScope stepScope,
         ILogger<CharacterQueueProcessor> logger) : ICharacterQueueProcessor
     {
         public async Task ProcessItemAsync(QueuedParagraph item, CancellationToken hostCt)
         {
+            // What attribution commits — the stamps, and the characters and aliases it creates for
+            // itself — is its project's Background run step in History.
+            stepScope.JoinBackgroundRuns();
+
             // One narrator read per drained batch, per folder — never per item. A drain spans
             // folders, so the cache is keyed by folder; it lives no longer than this batch, so a
             // link changed mid-book is picked up by the next one.

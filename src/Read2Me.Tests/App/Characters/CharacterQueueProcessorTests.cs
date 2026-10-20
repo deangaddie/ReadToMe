@@ -6,6 +6,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
+using Read2Me.Services.History;
 using Read2Me.Services.Llm;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.Queueing;
@@ -62,6 +63,7 @@ namespace Read2Me.Tests.App.Characters
                 _reader,
                 _catalog,
                 _root.GetRequiredService<BookMutations>(),
+                _root.GetRequiredService<HistoryStepScope>(),
                 NullLogger<CharacterQueueProcessor>.Instance);
 
             _item = new QueuedParagraph(

@@ -50,12 +50,20 @@ namespace Read2Me.Services.Characters
 
         public event Action? Changed;
 
+        /// <summary>
+        /// Raised by <see cref="CancelAll"/> before it clears anything, so a listener can tell a
+        /// cancelled folder from one that drained — the <see cref="Changed"/> that follows looks the same.
+        /// </summary>
+        public event Action? Cancelling;
+
         public ChannelReader<QueuedParagraph> Reader => _channel.Reader;
 
         public CancellationToken ItemCancellationToken => _itemCts.Token;
 
         public void CancelAll()
         {
+            Cancelling?.Invoke();
+
             var old = Interlocked.Exchange(ref _itemCts, new CancellationTokenSource());
             old.Cancel();
             old.Dispose();
@@ -219,6 +227,10 @@ namespace Read2Me.Services.Characters
 
         public bool IsBusy(ProjectFolderId folder, Guid paragraphId) =>
             StatusOf(folder, paragraphId) is not null;
+
+        /// <summary>The paragraphs still queued or processing, by folder; a folder with none is absent.</summary>
+        public ILookup<ProjectFolderId, Guid> PendingParagraphs() =>
+            _store.TrackedKeys().ToLookup(k => k.Folder, k => k.ParagraphId);
 
         /// <summary>
         /// The folder's paragraphs still queued or processing, or null when it has none here.

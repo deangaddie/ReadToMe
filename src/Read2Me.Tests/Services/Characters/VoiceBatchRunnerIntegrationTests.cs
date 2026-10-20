@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Read2Me.App.Characters;
+using Read2Me.App.Queueing;
 using Read2Me.App.Services;
 using Read2Me.Core.Audio;
 using Read2Me.Core.Configuration;
@@ -16,6 +17,7 @@ using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Events;
+using Read2Me.Services.History;
 using Read2Me.Services.Llm;
 using Read2Me.Services.Queueing;
 using Read2Me.Services.Voice;
@@ -127,7 +129,14 @@ namespace Read2Me.Tests.Services.Characters
                 broadcaster,
                 new EventBroadcaster<LlmStreamEvent>());
 
-            return new Harness(sut, events);
+            // History follows the batch as the app does: its commits are a Background run step.
+            var tracker = new BackgroundRunTracker(
+                new Read2Me.Services.Characters.CharacterQueueService(), sut, broadcaster,
+                _root.GetRequiredService<BackgroundRuns>(), _root.GetRequiredService<ProjectHistory>(),
+                _root.GetRequiredService<IFileSystem>(), NullLogger<BackgroundRunTracker>.Instance);
+            tracker.Follow();
+
+            return new Harness(sut, events, tracker);
         }
 
         /// <summary>
@@ -508,6 +517,66 @@ namespace Read2Me.Tests.Services.Characters
             Assert.True(h.Sut.Processed < 10, $"Expected < 10 processed but got {h.Sut.Processed}");
         }
 
+        // ── History ───────────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task ABatch_IsOneVoiceBatchStepInHistory()
+        {
+            var alice = MakeCharacter("Alice");
+            var bob = MakeCharacter("Bob");
+            var h = BuildHarness(
+                characters: new[] { alice, bob },
+                voicesByCharacter: new Dictionary<Guid, List<VoiceEntity>>
+                {
+                    [alice.Id] = new List<VoiceEntity>(),
+                    [bob.Id] = new List<VoiceEntity>(),
+                });
+            var history = _root!.GetRequiredService<ProjectHistory>();
+            await history.ListAsync(Folder);
+
+            h.Sut.StartGeneratePrompts(Folder);
+            await WaitForRunClosedAsync(h);
+
+            var steps = (await history.ListAsync(Folder)).Steps;
+            Assert.Equal(["Voice batch"], steps.Select(s => s.Label)); // the seed has no Book, so no "History started"
+            Assert.False(steps[0].IsOpen);
+            Assert.Null(steps[0].Note);
+        }
+
+        [Fact]
+        public async Task ACancelledBatch_ClosesItsStep_WithHowManyVoicesItGotThrough()
+        {
+            var characters = Enumerable.Range(0, 10).Select(i => MakeCharacter($"Char{i}")).ToArray();
+            var h = BuildHarness(
+                characters: characters,
+                voicesByCharacter: characters.ToDictionary(c => c.Id, c => new List<VoiceEntity>()),
+                orchestratorDelayMs: 300);
+            var history = _root!.GetRequiredService<ProjectHistory>();
+            await history.ListAsync(Folder);
+
+            h.Sut.StartGeneratePrompts(Folder);
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (h.Sut.Processed == 0 && DateTime.UtcNow < deadline)
+                await Task.Delay(20);
+            h.Sut.Cancel();
+            await WaitForRunClosedAsync(h);
+
+            var run = (await history.ListAsync(Folder)).Steps[0];
+            Assert.Equal("Voice batch", run.Label);
+            Assert.False(run.IsOpen);
+            Assert.Equal($"{h.Sut.Processed} of 10 voices (cancelled)", run.Note);
+        }
+
+        /// <summary>Waits for the batch's terminal event, then for History to close the run's step.</summary>
+        private static async Task WaitForRunClosedAsync(Harness h)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(8);
+            bool Ended() { lock (h.Events) return h.Events.Any(e => e is BatchCompleted or BatchCancelled); }
+            while (!Ended() && DateTime.UtcNow < deadline)
+                await Task.Delay(20);
+            await h.Tracker.ClosedAsync();
+        }
+
         // ── Audio sweep tests ─────────────────────────────────────────────────
 
         private static VoiceEntity MakeGeneratedVoiceWithPrompt(Guid characterId, string? audioFileName = null) =>
@@ -773,7 +842,7 @@ namespace Read2Me.Tests.Services.Characters
 
         // ── Fakes ──────────────────────────────────────────────────────────────
 
-        private sealed record Harness(VoiceBatchRunner Sut, List<VoiceBatchEvent> Events);
+        private sealed record Harness(VoiceBatchRunner Sut, List<VoiceBatchEvent> Events, BackgroundRunTracker Tracker);
 
         private sealed class FakeProjectReader2 : ProjectReaderFakeBase
         {

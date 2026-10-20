@@ -110,7 +110,7 @@ public class LiveRelayTests : IAsyncLifetime
     public async Task History_steps_go_only_to_their_project_group_as_landed_then_closed_with_the_row()
     {
         var at = DateTimeOffset.Parse("2026-10-20T09:30:00Z");
-        var step = new HistoryStep(Guid.NewGuid(), Guid.NewGuid(), 4, "New character", null, "dean", at, at, IsOpen: false);
+        var step = new HistoryStep(Guid.NewGuid(), Guid.NewGuid(), 4, "New character", null, "dean", at, at, IsOpen: false, Note: null);
         _history.Publish(new HistoryStepEvent(new ProjectFolderId("folder-a"), HistoryStepEventKind.Landed, step));
         _history.Publish(new HistoryStepEvent(new ProjectFolderId("folder-a"), HistoryStepEventKind.Closed, step));
 

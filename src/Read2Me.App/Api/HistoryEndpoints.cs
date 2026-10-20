@@ -25,7 +25,7 @@ namespace Read2Me.App.Api
             endpoints.MapGet("/api/projects/{folder}/history", ListAsync)
                 .Produces<HistoryDto>()
                 .WithSummary("The project's History: steps newest first (stepId, parentStepId, display sequence, label, summary — what " +
-                             "changed, in user terms, or null — author, startedAt, endedAt, isOpen while its request runs), headStepId (the tip; null before the first step), busy ({ reason } while " +
+                             "changed, in user terms, or null — author, startedAt, endedAt, isOpen while its request or Background run runs, note — \"part 2\", \"212 of 340 paragraphs (cancelled)\", \"interrupted\" — or null), headStepId (the tip; null before the first step), busy ({ reason } while " +
                              "anything is queued or running for the project, else null) and restoring. The first call on a project " +
                              "starts its History. 404 unknown project.");
         }

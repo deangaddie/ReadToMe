@@ -6,6 +6,12 @@ namespace Read2Me.Services.History;
 /// One <b>History step</b> as History lists it (context/history.md). <see cref="Sequence"/> is for
 /// display only: the line of steps is the <see cref="ParentStepId"/> chain from the Head, so nothing
 /// assumes the highest sequence is the tip (ADR 0016).
+/// <para>
+/// <see cref="Note"/> says what is unusual about the step, or is null: "part 2" when another commit
+/// split its scope, how a Background run ended early ("212 of 340 paragraphs (cancelled)"), or
+/// "interrupted" when the app stopped while it was open — joined by " · ". An interrupted step has
+/// no <see cref="EndedAt"/>: when it really ended is not known.
+/// </para>
 /// </summary>
 public sealed record HistoryStep(
     Guid StepId,
@@ -16,7 +22,8 @@ public sealed record HistoryStep(
     string Author,
     DateTimeOffset StartedAt,
     DateTimeOffset? EndedAt,
-    bool IsOpen);
+    bool IsOpen,
+    string? Note);
 
 /// <summary>A project's History: its steps newest first, and the step the Head points at (null before the first).</summary>
 public sealed record HistoryList(IReadOnlyList<HistoryStep> Steps, Guid? HeadStepId);

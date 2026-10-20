@@ -157,6 +157,7 @@ public sealed class BookMutations(
         {
             // Only once the commit stands: a rolled-back chunk must not count toward the step.
             scope.StepId = step.StepId;
+            scope.Part = step.Part;
             scope.Changes = step.Changes;
         }
         return new CommittedChange(effects, step);

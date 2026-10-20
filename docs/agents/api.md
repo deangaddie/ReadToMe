@@ -634,7 +634,7 @@ multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.A
 | server → client | `queue` | `{ attribution, audio, escalation? }`, debounced 250 ms, everyone |
 | server → client | `nodeStatus`, `itemStatus` | per-project deltas (null value = entry gone), debounced 250 ms, project group only |
 | server → client | `receipt` | `BookMutationReceipt` with `folder` flattened and `originId` untouched, project group only |
-| server → client | `history` | a History step (`stepLanded` when it appears, `stepClosed` when it closes) with `folder` and the `step` row as `GET /history` lists it, project group only. A step recorded with no request open lands and closes together; a request's step lands open and closes when the request ends |
+| server → client | `history` | a History step (`stepLanded` when it appears, `stepClosed` when it closes or its note changes once closed) with `folder` and the `step` row as `GET /history` lists it, project group only. A step recorded with no request or run open lands and closes together; a request's or Background run's step lands open and closes when it ends |
 | server → client | `assembly`, `voiceBatch`, `watchdog`, `settingsChanged` | pass-through (encode progress stepped at 1 %, batch progress debounced), everyone. Every `assembly` message names the run's `folder`; `completed` carries `outputFileName`. The snapshot's `assembly.encodePercent` is 0–100 (the REST status keeps the 0–1 fraction) |
 | server → client | `llm`, `audioGen` | stream groups only; LLM `delta` messages are 100 ms batches of `thinking` + `content` |
 | server → client | `throughput` | `ThroughputSnapshot`, once a second while a run is active plus once when it ends |
@@ -665,13 +665,23 @@ One request is at most one step, whatever it commits: every write endpoint under
 `/api/projects/{folder}` opens a **step scope** for its request, labelled in user terms ("Edit with
 AI", "Split chapter", "New character", "Upload voice audio"; a `commands` request is labelled for
 its command). An agent's requests are grouped exactly as the web app's are. A request that commits
-nothing leaves no step. A write committed outside any request (the queues, until Background runs
-have their own steps) is a step of its own, labelled from the mutation ("Attribute paragraph
-items").
+nothing leaves no step.
+
+A **Background run** is one step too: from the moment the Character Queue or the voice batch makes
+the project busy until both have drained, been cancelled or failed, everything they commit
+(including characters and aliases attribution creates for itself) is one step labelled
+"Attribution", "Voice batch" or, when they overlap, "Attribution and voice batch". A Background run that
+changed nothing leaves no step, and results it commits never split it. Any other write committed
+outside a request is a step of its own, labelled from the mutation.
+
+Whoever is interrupted is split; nothing is merged. A request that commits while a Background run's step is
+open closes it, so the Background run carries on in a new step: Attribution "part 1", the request's step,
+Attribution "part 2". A Background run's commit landing in the middle of a multi-commit request splits the
+request the same way.
 
 ```bash
 curl -s http://localhost:5000/api/projects/{folder}/history
-# → { steps: [{ stepId, parentStepId, sequence, label, summary, author, startedAt, endedAt, isOpen }],
+# → { steps: [{ stepId, parentStepId, sequence, label, summary, author, startedAt, endedAt, isOpen, note }],
 #     headStepId, busy: { reason } | null, restoring }
 ```
 
@@ -680,8 +690,13 @@ curl -s http://localhost:5000/api/projects/{folder}/history
 - `summary` is what changed, in user terms: "4 paragraphs in Chapter 3", "12 paragraphs across 3
   chapters", or a title ("The Storm"). Null when the step changed nothing it can count or place, such
   as a roster or Voice change.
-- `isOpen` is true while the request that owns the step is still running; `stepLanded` then
-  `stepClosed` on the live hub bracket it.
+- `isOpen` is true while the request or Background run that owns the step is still running;
+  `stepLanded` then `stepClosed` on the live hub bracket it.
+- `note` says what is unusual about the step, or is null: "part 1", "part 2" for a split step, how a Background
+  run ended early ("212 of 340 paragraphs (cancelled)", "3 of 7 voices (failed)"), and
+  "interrupted" for a step the app stopped with open, closed on the next start. Pieces join with
+  " · " ("part 2 · interrupted"). An interrupted step has no `endedAt`. A step whose note is set
+  after it closed ("part 1", once part 2 lands) is sent again as `stepClosed`.
 - `busy` names what is queued or running for the project ("Attribution: 128 paragraphs left"), or
   is null when it is idle. `restoring` is always false until Restore exists.
 - History starts the first time a project is opened (`GET /api/projects/{folder}` or this call) or
