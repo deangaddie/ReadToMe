@@ -171,6 +171,52 @@ namespace Read2Me.Tests.Api
         }
 
         /// <summary>
+        /// "New character…" plus its assign in one request: the answer is the character's id, and
+        /// the request commits both the create and the stamp.
+        /// </summary>
+        [Fact]
+        public async Task CreateCharacterAndAssign_AnswersTheCharactersId_AndCommitsBothWrites()
+        {
+            var b = await SeedAsync();
+            var receipts = new List<BookMutationReceipt>();
+            _receipts.Event += receipts.Add;
+
+            var id = IdOf(await PostAsync(new CreateCharacterAndAssignCommand(_folder, "Moriarty", ItemId: b.ItemId("i1"))));
+
+            Assert.NotNull(id);
+            Assert.Equal(2, receipts.Count);
+            Assert.Equal(id, IdOf(await PostAsync(new CreateCharacterCommand(_folder, "moriarty"))));
+        }
+
+        /// <summary>A malformed create-and-assign is a 422 — never a success-shaped null.</summary>
+        [Fact]
+        public async Task CreateCharacterAndAssign_WithNoTarget_Is422()
+        {
+            await SeedAsync();
+
+            var result = await PostAsync(new CreateCharacterAndAssignCommand(_folder, "Moriarty"));
+
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity,
+                Assert.IsType<ProblemHttpResult>(result).StatusCode);
+        }
+
+        /// <summary>Add titles over several levels: one request, one success, no identity; no levels is a 422.</summary>
+        [Fact]
+        public async Task AddTitles_IsOneSuccessForEveryLevel_AndNoLevelsIs422()
+        {
+            await SeedAsync();
+            var receipts = new List<BookMutationReceipt>();
+            _receipts.Event += receipts.Add;
+
+            Assert.Null(IdOf(await PostAsync(new AddTitlesCommand(_folder, [TitleLevel.Book, TitleLevel.Chapter]))));
+            Assert.Equal(2, receipts.Count);
+
+            var result = await PostAsync(new AddTitlesCommand(_folder, []));
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity,
+                Assert.IsType<ProblemHttpResult>(result).StatusCode);
+        }
+
+        /// <summary>
         /// The pause insertion creates a Paragraph and the receipt says so, because a Book View
         /// reconciling from it needs the identity. The wire has never reported one, and does not
         /// start now.

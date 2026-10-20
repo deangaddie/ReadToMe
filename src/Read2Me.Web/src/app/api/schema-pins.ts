@@ -17,6 +17,7 @@ import type {
   BulkAssignPreviewRequest,
   FfmpegTestRequest,
   GenerateDesignPromptRequest,
+  GenerateVoiceAudioRequest,
   ItemsEnqueueRequest,
   LlmServerConfig,
   LlmTestRequest,
@@ -49,6 +50,7 @@ import type {
   VoiceDesignServiceConfig,
   VoiceDesignTestRequest,
 } from './dtos';
+import type { paths } from './schema';
 
 type Pin<THand extends TGenerated, TGenerated> = THand;
 
@@ -92,4 +94,11 @@ export type SchemaPins = [
   Pin<SimilarityTestRequest, Schema['SimilarityTestRequest']>,
   Pin<BookOverviewDto, Schema['BookOverviewDto']>,
   Pin<StructureRuleDto, Schema['StructureRuleDto']>,
+  // Inline in the document (the handler reads it by hand), so pinned to its operation.
+  Pin<
+    GenerateVoiceAudioRequest,
+    NonNullable<
+      paths['/api/projects/{folder}/characters/{characterId}/voices/{voiceId}/generate-audio']['post']['requestBody']
+    >['content']['application/json']
+  >,
 ];

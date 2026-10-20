@@ -197,7 +197,7 @@ describe('r2m-voice-card', () => {
     expect(card.descriptionDraft()).toBeNull();
   });
 
-  it('Generate audio needs a prompt, saves a dirty draft first, then synthesises and bumps the player', async () => {
+  it('Generate audio needs a prompt, sends a dirty draft with the one request, then bumps the player', async () => {
     const card = await mount(voice());
     api.on('POST', `${BASE}/characters/alice/voices/v1/generate-audio`, {
       audioFileName: 'voices/alice/v1.wav',
@@ -214,10 +214,11 @@ describe('r2m-voice-card', () => {
     await settle();
     await settle();
     expect(preflightTasks).toEqual(['voiceDesign']);
-    expect(commands()).toEqual([
-      { type: 'SetVoiceDesignPrompt', voiceId: 'v1', prompt: 'A warm alto' },
-    ]);
-    expect(api.calls('POST', `${BASE}/characters/alice/voices/v1/generate-audio`)).toHaveLength(1);
+    // No separate prompt save: the draft rides on the one generate request.
+    expect(commands()).toEqual([]);
+    expect(
+      api.calls('POST', `${BASE}/characters/alice/voices/v1/generate-audio`).map((r) => r.body),
+    ).toEqual([{ designPrompt: 'A warm alto' }]);
     expect(store.audioVersions()['v1']).toBe(1);
     expect(toasts).toEqual(['warn: over 15 s']);
     expect(card.promptDraft()).toBeNull();

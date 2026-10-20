@@ -315,6 +315,23 @@ sends them to the LLM. Nothing to release — including a Chapter or Part where 
 filter — is a no-op with no revision, so a second release is harmless. `SetParagraphsCharacter`
 with the narrator's id undoes it.
 
+A speaker the roster does not have yet is created and assigned in one request with
+`CreateCharacterAndAssign`: `name` (trimmed) plus exactly one of `itemId` (as `SetItemCharacter`),
+`paragraphId` (as `SetParagraphCharacter`) or `paragraphIds` (as `SetParagraphsCharacter`). Like
+`CreateCharacter` it is idempotent by name — a name or alias the roster already answers to is
+assigned, not doubled — and it answers that character's id:
+
+```bash
+curl -s -X POST http://localhost:5000/api/projects/{folder}/commands \
+  -H 'content-type: application/json' \
+  -d '{ "type": "CreateCharacterAndAssign", "name": "Gaal Dornick", "paragraphIds": ["<id>", "<id>"] }'
+# → { "newEntityId": "<character id>" }
+```
+
+Unlike the single-step speaker commands it rejects rather than no-ops: a blank name, no target or
+more than one, or an empty `paragraphIds` is **422** with nothing written; an unknown target is
+**422** too, though the character has been created by then.
+
 ## 3. Voices
 
 ```bash
@@ -337,6 +354,10 @@ curl -s http://localhost:5000/api/projects/{folder}/voices/{voiceId}
 curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/{characterId}/voices/{voiceId}/generate-audio # 503 "TTS busy, try again" = retry later
 # → { audioFileName, transcript, referenceSeconds, referenceWarning } (warned over 15 s); 422 over the 30 s hard
 # Reference Limit, nothing stored — shorten the voice-design sample text
+# with an unsaved prompt: designs from it instead of the stored one and stores it with the take, so the
+# prompt edit and its audio are one request (a failed take stores neither); no body uses the stored prompt
+curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/{characterId}/voices/{voiceId}/generate-audio \
+  -H 'content-type: application/json' -d '{ "designPrompt": "A gravelly old voice, slow and dry." }'
 
 # reference audio: upload/replace (multipart 'file', 200 MB max; normalised + committed; 422 over the 30 s / 5 MiB
 # hard Reference Limit with nothing stored — never trimmed), then transcribe:
@@ -519,6 +540,18 @@ audio review, as a text edit does, so it is Generatable again; re-sending the st
 cue writes nothing and keeps the audio. Like `SetNarratorCharacter` it rejects rather
 than no-ops: an unknown item, a Pause item, or a cue over 200 characters is **422**.
 Attribution still overwrites a hand-written cue (and keeps the audio when it does).
+
+`AddTitles` runs several title levels in one request — the web's Add titles dialog sends this:
+
+```bash
+curl -s -X POST http://localhost:5000/api/projects/{folder}/commands \
+  -H 'content-type: application/json' -d '{ "type": "AddTitles", "levels": ["Book", "Chapter"] }'
+```
+
+`levels` is any of `Book`, `Volume`, `Part`, `Chapter`; each runs as its single-level command
+(`AddBookTitle`, `AddVolumeTitles`, …) would, book first and each once whatever the order sent.
+Levels with nothing to add are a no-op. No levels is **422**; so is a level's refusal, which stops
+the levels after it and names the ones that had already landed (those stay).
 
 ### Edit with AI
 

@@ -59,6 +59,20 @@ public record CreateCharacterCommand(ProjectFolderId FolderId, string Name) : Bo
 public record SetParagraphCharacterCommand(ProjectFolderId FolderId, Guid ParagraphId, Guid? CharacterId, string? VoiceInstructions = null) : BookCommand(FolderId);
 
 /// <summary>
+/// "New character…" from the speaker menu in one request: resolves <c>Name</c> as
+/// <see cref="CreateCharacterCommand"/> does (an existing name or alias answers with its own id), then
+/// stamps that character on exactly one target — <c>ItemId</c> as <see cref="SetItemCharacterCommand"/>,
+/// <c>ParagraphId</c> as <see cref="SetParagraphCharacterCommand"/>, or <c>ParagraphIds</c> as
+/// <see cref="SetParagraphsCharacterCommand"/>. Answers the character's id.
+/// </summary>
+public record CreateCharacterAndAssignCommand(
+    ProjectFolderId FolderId,
+    string Name,
+    Guid? ItemId = null,
+    Guid? ParagraphId = null,
+    IReadOnlyList<Guid>? ParagraphIds = null) : BookCommand(FolderId);
+
+/// <summary>
 /// Stamps one speaker across every Character item in every listed paragraph — the bulk-assign
 /// write, and the bulk sibling of <see cref="SetParagraphCharacterCommand"/>, which is left
 /// unchanged and keeps its own callers.
@@ -142,6 +156,15 @@ public record AddBookTitleCommand(ProjectFolderId FolderId) : BookCommand(Folder
 public record AddVolumeTitlesCommand(ProjectFolderId FolderId) : BookCommand(FolderId);
 public record AddPartTitlesCommand(ProjectFolderId FolderId) : BookCommand(FolderId);
 public record AddChapterTitlesCommand(ProjectFolderId FolderId) : BookCommand(FolderId);
+
+/// <summary>Which sweep an <see cref="AddTitlesCommand"/> runs. The member names are also the JSON wire values.</summary>
+public enum TitleLevel { Book, Volume, Part, Chapter }
+
+/// <summary>
+/// Add titles over several levels in one request: each named level's sweep, as its single-level
+/// command runs it, always book first and each level once, stopping at the first refusal.
+/// </summary>
+public record AddTitlesCommand(ProjectFolderId FolderId, IReadOnlyList<TitleLevel> Levels) : BookCommand(FolderId);
 
 // Item insertion
 /// <summary>

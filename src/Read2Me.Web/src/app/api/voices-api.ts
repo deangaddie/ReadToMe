@@ -4,6 +4,7 @@ import type {
   CharacterVoicesDto,
   GenerateDesignPromptRequest,
   GenerateDesignPromptResponse,
+  GenerateVoiceAudioRequest,
   GenerateVoiceAudioResponse,
   Guid,
   RenderedDesignPromptResponse,
@@ -73,14 +74,22 @@ export class VoicesApi {
     );
   }
 
-  /** Synchronous, tens of seconds. 422 when the voice has no design prompt or synthesis fails. */
+  /**
+   * Synchronous, tens of seconds. 422 when there is no design prompt or synthesis fails. A
+   * `designPrompt` is designed from instead of the stored one and lands with the take, so an
+   * unsaved edit and its audio are one request; without one the call sends no body.
+   */
   generateAudio(
     folder: string,
     characterId: Guid,
     voiceId: Guid,
+    designPrompt?: string,
   ): Promise<GenerateVoiceAudioResponse> {
+    const body: GenerateVoiceAudioRequest | undefined =
+      designPrompt === undefined ? undefined : { designPrompt };
     return this.api.post<GenerateVoiceAudioResponse>(
       `${projectUrl(folder)}/characters/${characterId}/voices/${voiceId}/generate-audio`,
+      body,
     );
   }
 

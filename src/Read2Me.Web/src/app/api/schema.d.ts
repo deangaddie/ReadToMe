@@ -1717,7 +1717,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Synthesise reference audio for one generated voice from its design prompt. Synchronous; takes tens of seconds. 503 "TTS busy, try again" when the TTS runtime is generating with another model; 422 when the take is over the 30 s hard Reference Limit (nothing stored). referenceWarning is set over the 15 s soft limit. */
+        /** Synthesise reference audio for one generated voice from its design prompt. An optional body { designPrompt } designs from that prompt instead and stores it with the take, so an unsaved prompt edit and its audio land in one request (nothing is stored if synthesis fails). Synchronous; takes tens of seconds. 503 "TTS busy, try again" when the TTS runtime is generating with another model; 422 when the take is over the 30 s hard Reference Limit (nothing stored). referenceWarning is set over the 15 s soft limit. */
         post: {
             parameters: {
                 query?: never;
@@ -1729,7 +1729,13 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        designPrompt?: null | string;
+                    };
+                };
+            };
             responses: {
                 /** @description OK */
                 200: {

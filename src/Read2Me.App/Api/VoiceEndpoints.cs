@@ -1,7 +1,10 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.OpenApi;
 using Read2Me.App.Characters;
 using Read2Me.App.Services;
 using Read2Me.Core.Audio;
@@ -35,6 +38,8 @@ namespace Read2Me.App.Api
     public sealed record VoiceBatchStatusDto(
         bool IsRunning, int Processed, int Total, int Failed,
         string? CurrentVoiceName, string? CurrentOperation, string? LastError);
+    /// <param name="DesignPrompt">An unsaved prompt to design from instead of the stored one; it is stored with the take.</param>
+    public sealed record GenerateVoiceAudioRequest(string? DesignPrompt = null);
     /// <param name="ReferenceSeconds">The stored take's length, as <see cref="VoiceDto"/> reports it.</param>
     /// <param name="ReferenceWarning">Set over the 15 s soft Reference Limit: the take was kept.</param>
     public sealed record GenerateVoiceAudioResponse(
@@ -70,7 +75,8 @@ namespace Read2Me.App.Api
             endpoints.MapPost("/api/projects/{folder}/characters/{characterId:guid}/design-prompt/generate", GenerateDesignPromptAsync)
                 .WithSummary("Ask the LLM for a voice design prompt from a rendered prompt. Synchronous; publishes the LLM run on the live hub. Nothing is persisted — set it on a voice with SetVoiceDesignPrompt.");
             endpoints.MapPost("/api/projects/{folder}/characters/{characterId:guid}/voices/{voiceId:guid}/generate-audio", GenerateAudioAsync)
-                .WithSummary("Synthesise reference audio for one generated voice from its design prompt. Synchronous; takes tens of seconds. 503 \"TTS busy, try again\" when the TTS runtime is generating with another model; 422 when the take is over the 30 s hard Reference Limit (nothing stored). referenceWarning is set over the 15 s soft limit.");
+                .WithSummary("Synthesise reference audio for one generated voice from its design prompt. An optional body { designPrompt } designs from that prompt instead and stores it with the take, so an unsaved prompt edit and its audio land in one request (nothing is stored if synthesis fails). Synchronous; takes tens of seconds. 503 \"TTS busy, try again\" when the TTS runtime is generating with another model; 422 when the take is over the 30 s hard Reference Limit (nothing stored). referenceWarning is set over the 15 s soft limit.")
+                .AddOpenApiOperationTransformer(OptionalJsonBody<GenerateVoiceAudioRequest>);
             endpoints.MapPost("/api/projects/{folder}/voice-batch/prompts", StartPromptBatch)
                 .WithSummary("Start the voice-plan batch: one LLM call per character without voices (regenerateAll replans every character). Poll /api/voice-batch/status.");
             endpoints.MapPost("/api/projects/{folder}/voice-batch/audio", StartAudioBatch)
@@ -83,6 +89,23 @@ namespace Read2Me.App.Api
             endpoints.MapPost("/api/voice-batch/cancel",
                     (VoiceBatchRunner runner) => { runner.Cancel(); return Results.Ok(); })
                 .WithSummary("Cancel the running voice batch.");
+        }
+
+        /// <summary>
+        /// Describes a body the handler reads by hand (so a bodyless call still matches the route) as
+        /// an optional JSON body, the way a bound parameter would have been described.
+        /// </summary>
+        private static async Task OptionalJsonBody<TBody>(
+            OpenApiOperation operation, OpenApiOperationTransformerContext context, CancellationToken ct)
+        {
+            operation.RequestBody = new OpenApiRequestBody
+            {
+                Required = false,
+                Content = new Dictionary<string, OpenApiMediaType>
+                {
+                    ["application/json"] = new() { Schema = await context.GetOrCreateSchemaAsync(typeof(TBody), null, ct) },
+                },
+            };
         }
 
         /// <summary>
@@ -265,11 +288,26 @@ namespace Read2Me.App.Api
         /// Mirrors GenerateAudioPhase.RunStepAsync for a single voice; the generator
         /// persists the result (SetVoiceGeneratedCommand) itself.
         private static async Task<IResult> GenerateAudioAsync(
-            string folder, Guid characterId, Guid voiceId, IFileSystem fs,
+            string folder, Guid characterId, Guid voiceId, HttpRequest request, IFileSystem fs,
             ICharacterReader reader, VoiceOrchestrator orchestrator, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
+
+            // Read by hand rather than bound: an endpoint that declares a JSON body is not matched by a
+            // bodyless POST at all (the /api fallback answers it 404), and bodyless is the common call.
+            GenerateVoiceAudioRequest? body = null;
+            if (request.HasJsonContentType())
+            {
+                try
+                {
+                    body = await request.ReadFromJsonAsync<GenerateVoiceAudioRequest>(ct);
+                }
+                catch (JsonException ex)
+                {
+                    return Results.Problem($"Invalid body: {ex.Message}", statusCode: StatusCodes.Status400BadRequest);
+                }
+            }
 
             var character = (await reader.GetCharactersWithAliasesAsync(folderId))
                 .SingleOrDefault(c => c.Id == characterId);
@@ -280,8 +318,10 @@ namespace Read2Me.App.Api
                 .SingleOrDefault(v => v.Id == voiceId);
             if (voice is null)
                 return Results.NotFound();
-            if (string.IsNullOrWhiteSpace(voice.DesignPrompt))
-                return Results.Problem("Voice has no design prompt. Set one first (SetVoiceDesignPrompt command or the prompt batch).",
+            // An unsaved prompt from the caller wins: the take's commit stores whichever prompt it was designed from.
+            var designPrompt = string.IsNullOrWhiteSpace(body?.DesignPrompt) ? voice.DesignPrompt : body.DesignPrompt;
+            if (string.IsNullOrWhiteSpace(designPrompt))
+                return Results.Problem("Voice has no design prompt. Send one as designPrompt, or set one first (SetVoiceDesignPrompt command or the prompt batch).",
                     statusCode: StatusCodes.Status422UnprocessableEntity);
 
             var result = await orchestrator.GenerateVoiceAudioAsync(new VoiceGenerationRequest
@@ -292,7 +332,7 @@ namespace Read2Me.App.Api
                 CharacterAliases = character.Aliases?.Select(a => a.Name).ToList() ?? [],
                 VoiceId = voice.Id,
                 VoiceName = voice.Name,
-                DesignPrompt = voice.DesignPrompt!,
+                DesignPrompt = designPrompt,
                 SettingsOverrideJson = voice.VoiceDesignSettingsOverrideJson,
             }, ct);
 

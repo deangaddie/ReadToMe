@@ -24,7 +24,7 @@ import { ToastService } from '@app/ui/toast';
 import { rereadConfirm } from '../project/permanent-changes';
 import { type StepActionId, adviceFor } from '../project/pipeline-steps';
 import { ProjectStore } from '../project/project-store';
-import { type TitleLevel, addedTitlesMessage, titleCommand } from './add-titles';
+import { addTitlesCommand, addedTitlesMessage } from './add-titles';
 import { openAddTitlesDialog } from './add-titles-dialog';
 import { AudioGenerator } from './audio-generator';
 import { BookEditor } from './book-editor';
@@ -890,8 +890,8 @@ export class BookPage extends R2mElement {
   }
 
   /**
-   * Add titles (guidance-primitives spec §5): the dialog is its own confirm. Sends the ticked levels
-   * book first, stops at the first refusal (the editor toasts it) and names what landed.
+   * Add titles (guidance-primitives spec §5): the dialog is its own confirm. One request for every
+   * ticked level; a refusal is the editor's toast, which names the levels that had already landed.
    */
   private async addTitles(): Promise<void> {
     const overview = this.store.overview();
@@ -903,12 +903,9 @@ export class BookPage extends R2mElement {
       advice: this.advice('addTitles'),
     });
     if (!levels) return;
-    const added: TitleLevel[] = [];
-    for (const level of levels) {
-      if (!(await this.editor.run(titleCommand(level)))) break;
-      added.push(level);
+    if (await this.editor.run(addTitlesCommand(levels))) {
+      this.toast.success(addedTitlesMessage(levels));
     }
-    if (added.length > 0) this.toast.success(addedTitlesMessage(added));
   }
 
   /** Add pauses always asks (guidance-primitives spec §7): each pause is a delete to undo. */

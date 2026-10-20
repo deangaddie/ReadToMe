@@ -49,6 +49,7 @@ public static class ServiceCollectionExtensions
         // Character
         services.AddScoped<ICommandHandler<SetItemCharacterCommand>, SetItemCharacterHandler>();
         services.AddScoped<ICommandHandler<CreateCharacterCommand>, CreateCharacterHandler>();
+        services.AddScoped<ICommandHandler<CreateCharacterAndAssignCommand>, CreateCharacterAndAssignHandler>();
         services.AddScoped<ICommandHandler<SetParagraphCharacterCommand>, SetParagraphCharacterHandler>();
         services.AddScoped<ICommandHandler<SetParagraphsCharacterCommand>, SetParagraphsCharacterHandler>();
         services.AddScoped<ICommandHandler<ReleaseNarrationCommand>, ReleaseNarrationHandler>();
@@ -83,6 +84,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICommandHandler<AddVolumeTitlesCommand>, AddVolumeTitlesHandler>();
         services.AddScoped<ICommandHandler<AddPartTitlesCommand>, AddPartTitlesHandler>();
         services.AddScoped<ICommandHandler<AddChapterTitlesCommand>, AddChapterTitlesHandler>();
+        services.AddScoped<ICommandHandler<AddTitlesCommand>, AddTitlesHandler>();
 
         // Item insertion
         services.AddScoped<ICommandHandler<InsertParagraphItemCommand>, InsertParagraphItemHandler>();

@@ -21,7 +21,6 @@ describe('SpeakerAssigner', () => {
   let clearOutcome: ReturnType<typeof mock>;
   let bulkAssignPreview: ReturnType<typeof mock>;
   let releaseNarrationPreview: ReturnType<typeof mock>;
-  let characters: ReturnType<typeof mock>;
   let confirm: ReturnType<typeof mock>;
   let promptText: ReturnType<typeof mock>;
   let toasts: { kind: string; message: unknown }[];
@@ -73,7 +72,6 @@ describe('SpeakerAssigner', () => {
         { marker: 'A.', paragraphs: 20 },
       ],
     }));
-    characters = mock(async () => []);
     confirm = mock(async () => true);
     promptText = mock(async () => null);
     toasts = [];
@@ -81,7 +79,6 @@ describe('SpeakerAssigner', () => {
     override(BookApi, {
       bulkAssignPreview,
       releaseNarrationPreview,
-      characters,
     } as unknown as BookApi);
     override(AttributionApi, { clearOutcome } as unknown as AttributionApi);
     override(ConfirmService, { confirm } as unknown as ConfirmService);
@@ -96,6 +93,9 @@ describe('SpeakerAssigner', () => {
       {
         folder: signal('dune'),
         speakers: signal({ names: { h: 'Hardin' }, narrator: null }),
+        overview: signal({
+          characters: [{ id: 'h', name: 'Hardin', aliases: [{ id: 'a', name: 'Salvor' }] }],
+        }),
         chapters,
       } as unknown as BookStore,
       { paragraphs } as unknown as ProjectStore,
@@ -157,51 +157,69 @@ describe('SpeakerAssigner', () => {
     expect(clearOutcome).toHaveBeenCalledTimes(1);
   });
 
-  it('new character: creates by name and assigns the id the host resolved', async () => {
-    await assigner.createAndAssign({ kind: 'item', itemId: 'i1', paragraphId: 'p1' }, '  Gaal ');
-    expect(execute).toHaveBeenCalledWith({ type: 'CreateCharacter', name: 'Gaal' });
+  it('new character: one CreateCharacterAndAssign names the item, then forgets the outcome', async () => {
+    await assigner.createAndAssign({ kind: 'item', itemId: 'i2', paragraphId: 'p1' }, '  Gaal ');
+    expect(run.mock.calls).toEqual([
+      [{ type: 'CreateCharacterAndAssign', name: 'Gaal', itemId: 'i2' }],
+    ]);
+    expect(execute).not.toHaveBeenCalled();
+    expect(clearOutcome).toHaveBeenCalledWith('dune', 'p1');
+    // i2 had no audio to lose.
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('new character onto voiced lines asks about the audio before anything is written', async () => {
+    confirm.mockResolvedValueOnce(false);
+    await assigner.createAndAssign({ kind: 'paragraph', paragraphId: 'p1' }, 'Gaal');
+    expect(confirm).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('Discards audio on 1 item.') }),
+    );
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('new character named like a roster speaker or alias keeps its audio and asks nothing', async () => {
+    await assigner.createAndAssign({ kind: 'item', itemId: 'i1', paragraphId: 'p1' }, 'hardin');
+    await assigner.createAndAssign({ kind: 'item', itemId: 'i1', paragraphId: 'p1' }, 'salvor');
+    expect(confirm).not.toHaveBeenCalled();
     expect(run).toHaveBeenCalledWith({
-      type: 'SetItemCharacter',
+      type: 'CreateCharacterAndAssign',
+      name: 'hardin',
       itemId: 'i1',
-      characterId: 'c-new',
     });
   });
 
-  it('new character with a blank search asks for the name, then creates and assigns', async () => {
+  it('new character with a blank search asks for the name, then sends one command', async () => {
     promptText.mockResolvedValueOnce('Gaal');
-    await assigner.createAndAssign({ kind: 'item', itemId: 'i1', paragraphId: 'p1' }, '  ');
+    await assigner.createAndAssign({ kind: 'item', itemId: 'i2', paragraphId: 'p1' }, '  ');
     expect(promptText).toHaveBeenCalledTimes(1);
-    expect(execute).toHaveBeenCalledWith({ type: 'CreateCharacter', name: 'Gaal' });
-    expect(run).toHaveBeenCalledWith({
-      type: 'SetItemCharacter',
-      itemId: 'i1',
-      characterId: 'c-new',
-    });
+    expect(run.mock.calls).toEqual([
+      [{ type: 'CreateCharacterAndAssign', name: 'Gaal', itemId: 'i2' }],
+    ]);
   });
 
   it('new character: a cancelled name prompt writes nothing', async () => {
     await assigner.createAndAssign({ kind: 'paragraph', paragraphId: 'p1' }, '');
     expect(promptText).toHaveBeenCalledTimes(1);
-    expect(execute).not.toHaveBeenCalled();
     expect(run).not.toHaveBeenCalled();
   });
 
-  it('new character with no id answered resolves it from the roster by name or alias', async () => {
-    execute.mockResolvedValueOnce({ newEntityId: null });
-    characters.mockResolvedValueOnce([
-      { id: 'h', name: 'Hardin', aliases: [{ id: 'a', name: 'Salvor' }] },
-    ]);
-    await assigner.createAndAssign({ kind: 'paragraph', paragraphId: 'p1' }, 'salvor');
-    expect(run).toHaveBeenCalledWith({
-      type: 'SetParagraphCharacter',
-      paragraphId: 'p1',
-      characterId: 'h',
-    });
+  it('new character: a refused write forgets no outcome', async () => {
+    run.mockResolvedValueOnce(false);
+    await assigner.createAndAssign({ kind: 'item', itemId: 'i2', paragraphId: 'p1' }, 'Gaal');
+    expect(clearOutcome).not.toHaveBeenCalled();
+  });
 
-    execute.mockResolvedValueOnce(undefined);
-    await assigner.createAndAssign({ kind: 'paragraph', paragraphId: 'p1' }, '');
-    await assigner.createAndAssign({ kind: 'paragraph', paragraphId: 'p1' }, 'Refused');
-    expect(run).toHaveBeenCalledTimes(1);
+  it('new character over a selection previews, confirms with the typed name, then writes once', async () => {
+    await assigner.createAndAssign({ kind: 'selection', paragraphIds: ['p1', 'p2'] }, 'Gaal');
+    expect(confirm).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Assign Gaal to selection' }),
+    );
+    expect(run.mock.calls).toEqual([
+      [{ type: 'CreateCharacterAndAssign', name: 'Gaal', paragraphIds: ['p1', 'p2'] }],
+    ]);
+    expect(toasts).toEqual([
+      { kind: 'success', message: 'Assigned Gaal to 3 lines in 2 paragraphs.' },
+    ]);
   });
 
   it('bulk: previews, confirms with the wording, writes once and clears only remembered outcomes', async () => {
