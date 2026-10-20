@@ -434,7 +434,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The project's History: steps newest first (stepId, parentStepId, display sequence, label, summary — what changed, in user terms, or null — author, startedAt, endedAt, isOpen while its request or Background run runs, note — "part 2", "212 of 340 paragraphs (cancelled)", "interrupted" — or null), headStepId (the tip; null before the first step), busy ({ reason } while anything is queued or running for the project, else null) and restoring. The first call on a project starts its History. 404 unknown project. */
+        /** The project's History: steps newest first (stepId, parentStepId, display sequence, label, summary — what changed, in user terms, or null — author, startedAt, endedAt — its close, or its last change while open — isOpen while its request or Background run runs, note — "part 2", "212 of 340 paragraphs, cancelled", "interrupted", without brackets — or null, restoredFromStepId — the step a Restore brought back, else null — and cantOpen), headStepId (the tip; null before the first step), busy ({ reason } while anything is queued or running for the project, else null) and restoring. The first call on a project starts its History. 404 unknown project. */
         get: {
             parameters: {
                 query?: never;
@@ -5107,6 +5107,10 @@ export interface components {
             endedAt: null | string;
             isOpen: boolean;
             note: null | string;
+            /** Format: uuid */
+            restoredFromStepId?: null | string;
+            /** @default false */
+            cantOpen: boolean;
         };
         ImportRequest: {
             /** @default false */

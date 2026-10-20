@@ -194,8 +194,8 @@ public sealed record BookEditMessage(
 public sealed record LlmTestMessage(string Kind, int ConfigId, string? Reason = null);
 
 /// <summary>
-/// <c>kind</c>: stepLanded | stepClosed — a step that appeared in a project's History, or one that
-/// closed, with its row as <c>GET /api/projects/{folder}/history</c> lists it. Sent to the project
+/// <c>kind</c>: stepLanded | stepChanged | stepClosed — a step that appeared in a project's History,
+/// an open one a later commit extended, or one that closed, with its row as <c>GET /api/projects/{folder}/history</c> lists it. Sent to the project
 /// group. A step recorded by one mutation lands and closes together, so both arrive back to back.
 /// </summary>
 public sealed record HistoryMessage(string Kind, string Folder, HistoryStep Step);

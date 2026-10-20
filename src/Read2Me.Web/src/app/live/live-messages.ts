@@ -77,7 +77,7 @@ export const LIVE_KINDS = {
   ],
   bookEdit: ['progress', 'done', 'failed'],
   llmTest: ['done', 'failed', 'cancelled'],
-  history: ['stepLanded', 'stepClosed'],
+  history: ['stepLanded', 'stepChanged', 'stepClosed'],
   preflight: ['stage', 'done'],
 } as const;
 
@@ -457,14 +457,21 @@ export interface LlmTestMessage {
 // ---- history (group project) --------------------------------------------------------------------
 
 /**
- * A step that appeared in a project's History, or one that closed, with its row as
+ * A step that appeared in a project's History, an open one a later commit extended (its label,
+ * summary and `endedAt` move on), or one that closed, with its row as
  * `GET /api/projects/{folder}/history` lists it. A one-mutation step lands and closes together.
  */
 export interface HistoryMessage {
   kind: HistoryKind;
   folder: string;
-  step: HistoryStep;
+  step: LiveHistoryStep;
 }
+
+type NullableHistoryField = 'parentStepId' | 'summary' | 'endedAt' | 'note' | 'restoredFromStepId';
+
+/** `HistoryStep` as the hub sends it: its null fields omitted. */
+export type LiveHistoryStep = Omit<HistoryStep, NullableHistoryField> &
+  Partial<Pick<HistoryStep, NullableHistoryField>>;
 
 // ---- snapshots ----------------------------------------------------------------------------------
 

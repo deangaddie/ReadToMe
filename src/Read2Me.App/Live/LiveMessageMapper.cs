@@ -153,6 +153,7 @@ public static class LiveMessageMapper
     public static HistoryMessage Map(HistoryStepEvent e) => e.Kind switch
     {
         HistoryStepEventKind.Landed => new HistoryMessage("stepLanded", e.FolderId.Value, e.Step),
+        HistoryStepEventKind.Changed => new HistoryMessage("stepChanged", e.FolderId.Value, e.Step),
         HistoryStepEventKind.Closed => new HistoryMessage("stepClosed", e.FolderId.Value, e.Step),
         _ => throw new NotSupportedException($"Unhandled History step event {e.Kind}."),
     };

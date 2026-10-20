@@ -18,7 +18,8 @@ namespace Read2Me.App.Queueing;
 /// <summary>
 /// Tracks each project's <b>Background run</b> for History: tells <see cref="BackgroundRuns"/> when
 /// the Character Queue or the voice batch makes a project busy, and when each stops — drained, or
-/// ended early with how far it got ("212 of 340 paragraphs (cancelled)", "3 of 7 voices (failed)").
+/// ended early with how far it got ("212 of 340 paragraphs, cancelled", "3 of 7 voices, failed"),
+/// and how many of its items failed on their own ("3 paragraphs failed").
 /// <para>
 /// On app start, before following anything, it closes every step a previous run of the app left
 /// open as "interrupted": nothing that opened one is running any more.
@@ -81,7 +82,8 @@ public sealed class BackgroundRunTracker(
 
     /// <summary>
     /// A folder with paragraphs pending starts a run; one whose last paragraph has settled ends it.
-    /// Every paragraph seen pending counts toward the run, and one no longer pending is done.
+    /// Every paragraph seen pending counts toward the run, and one no longer pending is done. The
+    /// paragraphs that failed are counted as the folder drains, before anything clears their outcomes.
     /// </summary>
     private void OnQueueChanged()
     {
@@ -105,25 +107,34 @@ public sealed class BackgroundRunTracker(
             foreach (var (folder, run) in _attribution.Where(r => !pending.Contains(r.Key)).ToList())
             {
                 _attribution.Remove(folder);
-                Close(runs.EndedAsync(folder, BackgroundRunKind.Attribution,
-                    run.Cancelled ? StepNotes.Ending(run.Done, run.Seen.Count, "paragraph", StepNotes.Cancelled) : null));
+                if (!run.Cancelled)
+                    run.Failed = FailedIn(folder, run);
+                Close(runs.EndedAsync(folder, BackgroundRunKind.Attribution, StepNotes.Ending(
+                    run.Done, run.Seen.Count, "paragraph", run.Cancelled ? StepNotes.Cancelled : null, run.Failed)));
             }
         }
     }
 
     /// <summary>
-    /// Raised before the queue clears: every folder's run is marked cancelled, with how far it got,
-    /// and ends on the <see cref="CharacterQueueService.Changed"/> that follows the clear. Until then
-    /// work still in flight commits into it.
+    /// Raised before the queue clears: every folder's run is marked cancelled, with how far it got
+    /// and how many paragraphs failed — the clear takes their outcomes — and ends on the
+    /// <see cref="CharacterQueueService.Changed"/> that follows the clear. Until then work still in
+    /// flight commits into it.
     /// </summary>
     private void OnQueueCancelling()
     {
         lock (_lock)
         {
-            foreach (var run in _attribution.Values)
+            foreach (var (folder, run) in _attribution)
+            {
                 run.Cancelled = true;
+                run.Failed = FailedIn(folder, run);
+            }
         }
     }
+
+    private int FailedIn(ProjectFolderId folder, Attribution run) =>
+        run.Seen.Count(p => characterQueue.OutcomeOf(folder, p)?.Kind == ParagraphOutcomeKind.Failed);
 
     /// <summary>
     /// The batch runs from its first event (once planning has counted the work) to its terminal one.
@@ -145,8 +156,10 @@ public sealed class BackgroundRunTracker(
                     var how = e is BatchCancelled ? StepNotes.Cancelled
                         : voiceBatch.LastError is not null ? StepNotes.Failed
                         : null;
+                    // A batch that failed outright says so; counting the voices that failed before it is noise.
+                    var failed = how == StepNotes.Failed ? 0 : voiceBatch.Failed;
                     Close(runs.EndedAsync(folder, BackgroundRunKind.VoiceBatch,
-                        how is null ? null : StepNotes.Ending(voiceBatch.Processed, voiceBatch.Total, "voice", how)));
+                        StepNotes.Ending(voiceBatch.Processed, voiceBatch.Total, "voice", how, failed)));
                     break;
             }
         }
@@ -176,5 +189,6 @@ public sealed class BackgroundRunTracker(
         public HashSet<Guid> Seen { get; } = [];
         public int Done { get; set; }
         public bool Cancelled { get; set; }
+        public int Failed { get; set; }
     }
 }

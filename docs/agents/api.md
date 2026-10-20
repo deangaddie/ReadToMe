@@ -634,7 +634,7 @@ multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.A
 | server → client | `queue` | `{ attribution, audio, escalation? }`, debounced 250 ms, everyone |
 | server → client | `nodeStatus`, `itemStatus` | per-project deltas (null value = entry gone), debounced 250 ms, project group only |
 | server → client | `receipt` | `BookMutationReceipt` with `folder` flattened and `originId` untouched, project group only |
-| server → client | `history` | a History step (`stepLanded` when it appears, `stepClosed` when it closes or its note changes once closed) with `folder` and the `step` row as `GET /history` lists it, project group only. A step recorded with no request or run open lands and closes together; a request's or Background run's step lands open and closes when it ends |
+| server → client | `history` | a History step (`stepLanded` when it appears, `stepChanged` when a later commit extends it while open, `stepClosed` when it closes or its note changes once closed) with `folder` and the `step` row as `GET /history` lists it, project group only. A step recorded with no request or run open lands and closes together; a request's or Background run's step lands open and closes when it ends |
 | server → client | `assembly`, `voiceBatch`, `watchdog`, `settingsChanged` | pass-through (encode progress stepped at 1 %, batch progress debounced), everyone. Every `assembly` message names the run's `folder`; `completed` carries `outputFileName`. The snapshot's `assembly.encodePercent` is 0–100 (the REST status keeps the 0–1 fraction) |
 | server → client | `llm`, `audioGen` | stream groups only; LLM `delta` messages are 100 ms batches of `thinking` + `content` |
 | server → client | `throughput` | `ThroughputSnapshot`, once a second while a run is active plus once when it ends |
@@ -670,7 +670,8 @@ nothing leaves no step.
 A **Background run** is one step too: from the moment the Character Queue or the voice batch makes
 the project busy until both have drained, been cancelled or failed, everything they commit
 (including characters and aliases attribution creates for itself) is one step labelled
-"Attribution", "Voice batch" or, when they overlap, "Attribution and voice batch". A Background run that
+"Attribution", "Voice batch" or, on a step both wrote to, "Attribution and voice batch". Each step is
+labelled from the work that landed in it, so a part holding only voice work says "Voice batch". A Background run that
 changed nothing leaves no step, and results it commits never split it. Any other write committed
 outside a request is a step of its own, labelled from the mutation.
 
@@ -690,12 +691,18 @@ curl -s http://localhost:5000/api/projects/{folder}/history
 - `summary` is what changed, in user terms: "4 paragraphs in Chapter 3", "12 paragraphs across 3
   chapters", or a title ("The Storm"). Null when the step changed nothing it can count or place, such
   as a roster or Voice change.
+- `endedAt` is when the step closed or, while it is open, its last change, so every step has a time
+  span; an interrupted step keeps the time of its last change. `isOpen`, not `endedAt`, says whether
+  it is open.
 - `isOpen` is true while the request or Background run that owns the step is still running;
-  `stepLanded` then `stepClosed` on the live hub bracket it.
+  `stepLanded` then `stepClosed` on the live hub bracket it, with a `stepChanged` for each later
+  commit in between.
 - `note` says what is unusual about the step, or is null: "part 1", "part 2" for a split step, how a Background
-  run ended early ("212 of 340 paragraphs (cancelled)", "3 of 7 voices (failed)"), and
+  run ended early ("212 of 340 paragraphs, cancelled", "3 of 7 voices, failed") or with items that
+  failed on their own ("3 paragraphs failed", "212 of 340 paragraphs, cancelled · 3 failed"), and
   "interrupted" for a step the app stopped with open, closed on the next start. Pieces join with
-  " · " ("part 2 · interrupted"). An interrupted step has no `endedAt`. A step whose note is set
+  " · " ("part 2 · interrupted") and carry no brackets: a client shows one as "Attribution (part 2 ·
+  interrupted)". A step whose note is set
   after it closed ("part 1", once part 2 lands) is sent again as `stepClosed`.
 - `busy` names what is queued or running for the project ("Attribution: 128 paragraphs left"), or
   is null when it is idle. `restoring` is always false until Restore exists.

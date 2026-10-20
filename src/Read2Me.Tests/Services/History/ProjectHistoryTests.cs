@@ -244,7 +244,7 @@ public class ProjectHistoryTests : ProjectDbTestBase
     }
 
     [Fact]
-    public async Task AScopedStep_IsAnnouncedLandedOpen_ThenClosedWhenTheScopeEnds()
+    public async Task AScopedStep_IsAnnouncedLandedOpen_ChangedByEachLaterCommit_ThenClosedWhenTheScopeEnds()
     {
         await SeedOneItemAsync();
         await _history.ListAsync(_folder);
@@ -263,9 +263,12 @@ public class ProjectHistoryTests : ProjectDbTestBase
         }
         finally { events.Event -= OnEvent; }
 
-        Assert.Equal([HistoryStepEventKind.Landed, HistoryStepEventKind.Closed], announced.Select(e => e.Kind));
+        Assert.Equal(
+            [HistoryStepEventKind.Landed, HistoryStepEventKind.Changed, HistoryStepEventKind.Closed],
+            announced.Select(e => e.Kind));
         Assert.True(announced[0].Step.IsOpen);
-        Assert.Equal((await _history.ListAsync(_folder)).Steps[0], announced[1].Step);
+        Assert.True(announced[1].Step.IsOpen);
+        Assert.Equal((await _history.ListAsync(_folder)).Steps[0], announced[2].Step);
     }
 
     // ── what changed ────────────────────────────────────────────────────────

@@ -320,13 +320,14 @@ describe('next-step pill', () => {
 
   const pill = (shell: Element) => shell.querySelector('.shell__next');
 
-  it('sits after the spacer and before the live dot on a project page', async () => {
+  it('sits after the spacer, then the History button, then the live dot on a project page', async () => {
     const { shell } = await mountWith('projects/foundation/book', ACT);
-    const bar = Array.from(shell.querySelector('.shell__appbar')?.children ?? []).map(
-      (el) => el.classList[0],
+    const bar = Array.from(shell.querySelector('.shell__appbar')?.children ?? []).map((el) =>
+      el.classList.contains('shell__history-toggle') ? 'shell__history-toggle' : el.classList[0],
     );
     expect(bar.indexOf('shell__next')).toBe(bar.indexOf('shell__spacer') + 1);
-    expect(bar.indexOf('shell__conn')).toBe(bar.indexOf('shell__next') + 1);
+    expect(bar.indexOf('shell__history-toggle')).toBe(bar.indexOf('shell__next') + 1);
+    expect(bar.indexOf('shell__conn')).toBe(bar.indexOf('shell__history-toggle') + 1);
   });
 
   it.each([
@@ -419,5 +420,74 @@ describe('next-step pill', () => {
     await settle();
     expect(shell.querySelector<HTMLButtonElement>('.shell__next-main')?.disabled).toBe(true);
     expect(shell.querySelector<HTMLButtonElement>('.shell__next-pill')?.disabled).toBe(true);
+  });
+});
+
+describe('History sheet', () => {
+  const toggle = (shell: Element) =>
+    shell.querySelector<HTMLButtonElement>('.shell__history-toggle');
+
+  beforeEach(() => {
+    new FakeApi()
+      .on('GET', '/api/projects/foundation/history', {
+        steps: [
+          {
+            stepId: 's1',
+            parentStepId: null,
+            sequence: 1,
+            label: 'History started',
+            summary: null,
+            author: 'dean',
+            startedAt: new Date().toISOString(),
+            endedAt: new Date().toISOString(),
+            isOpen: false,
+            note: null,
+            restoredFromStepId: null,
+            cantOpen: false,
+          },
+        ],
+        headStepId: 's1',
+        busy: null,
+        restoring: false,
+      })
+      .install();
+  });
+
+  it('has an app-bar button on a project page only', async () => {
+    expect(toggle((await mount('projects/foundation/cast')).shell)).not.toBeNull();
+    document.body.replaceChildren();
+    expect(toggle((await mount('projects')).shell)).toBeNull();
+  });
+
+  it('opens beside the page with the advice line and the steps, and closes again', async () => {
+    const { shell } = await mount('projects/foundation/book');
+    toggle(shell)?.click();
+    await settle();
+    await tick();
+    await settle();
+
+    const sheet = shell.querySelector('.shell__body > .shell__history r2m-history-sheet');
+    expect(sheet).not.toBeNull();
+    expect(toggle(shell)?.getAttribute('aria-pressed')).toBe('true');
+    expect(sheet?.querySelector('.r2m-advice')?.textContent).toContain('nothing is lost');
+    expect(texts(shell, '.history-sheet__label')).toEqual(['History started']);
+    expect(texts(shell, '.history-sheet__current')).toEqual(['Current']);
+
+    shell.querySelector<HTMLButtonElement>('[aria-label="Close History"]')?.click();
+    await settle();
+    expect(shell.querySelector('.shell__history')).toBeNull();
+  });
+
+  it('stays open from one page of the project to the next', async () => {
+    const { shell, router } = await mount('projects/foundation/book');
+    toggle(shell)?.click();
+    await settle();
+
+    router.navigate('projects/foundation/cast');
+    await settle();
+    await tick();
+    await settle();
+
+    expect(shell.querySelector('.shell__history r2m-history-sheet')).not.toBeNull();
   });
 });

@@ -1208,11 +1208,15 @@ export interface HistoryStep {
   summary: string | null;
   author: string;
   startedAt: string;
-  /** Null while open, and on a step closed as "interrupted". */
+  /** When it closed or, while open, its last change; an "interrupted" step keeps its last change. */
   endedAt: string | null;
   isOpen: boolean;
-  /** "part 2", "212 of 340 paragraphs (cancelled)", "interrupted", joined by " · "; null when nothing is unusual. */
+  /** "part 2", "212 of 340 paragraphs, cancelled", "interrupted", joined by " · ", without brackets; null when nothing is unusual. */
   note: string | null;
+  /** The step a Restore step brought back; null for any other step. */
+  restoredFromStepId: Guid | null;
+  /** The step can no longer be opened: its old schema fails to migrate. */
+  cantOpen: boolean;
 }
 
 /** `GET /api/projects/{folder}/history`: steps newest first, the Head, the busy reason and the restoring flag. */

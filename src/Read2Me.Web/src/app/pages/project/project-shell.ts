@@ -8,6 +8,8 @@ import { BookEditor } from '@app/pages/book/book-editor';
 import { BookStore } from '@app/pages/book/book-store';
 import { AudioSelectionStore, SelectionStore } from '@app/pages/book/selection-store';
 import { SpeakerAssigner } from '@app/pages/book/speaker-assigner';
+import { HistorySheetState } from '@app/history/history-sheet-state';
+import { HistoryStore } from '@app/history/history-store';
 import { ProjectGuide } from '@app/shell/project-guide';
 import { nextStep } from './next-step';
 import { ProjectStore } from './project-store';
@@ -25,11 +27,15 @@ import '@app/core/outlet';
  * {@link AudioSelectionStore} for items) and the {@link SpeakerAssigner} the rows reach through
  * DOM ancestry. The selections are forgotten when the shell leaves the project. The
  * {@link StepRunner} runs Pipeline actions for the Overview rows, and the shell publishes the next
- * step with it into the root {@link ProjectGuide} for the app bar's next-step pill.
+ * step with it into the root {@link ProjectGuide} for the app bar's next-step pill. The project's
+ * {@link HistoryStore} follows its History on the hub and is published into the root
+ * {@link HistorySheetState} for the app bar's History button and sheet.
  */
 export class ProjectShell extends R2mElement {
   private readonly router = use(Router);
   private readonly guide = use(ProjectGuide);
+  private readonly historySheet = use(HistorySheetState);
+  private readonly history = provide(this, HistoryStore, new HistoryStore());
   private readonly store = provide(this, ProjectStore, new ProjectStore());
   private readonly book = provide(this, BookStore, new BookStore(this.store));
   private readonly editor = provide(this, BookEditor, new BookEditor(this.book));
@@ -53,6 +59,8 @@ export class ProjectShell extends R2mElement {
         if (folder === undefined || folder === this.store.folder()) return;
         this.resetSelections();
         void this.store.open(folder);
+        this.history.open(folder);
+        this.historySheet.publish(folder, this.history);
       });
     });
     this.effect(() => {
@@ -66,7 +74,11 @@ export class ProjectShell extends R2mElement {
     });
     this.onDisconnect(() => {
       const folder = this.store.folder();
-      if (folder !== null) this.guide.clear(folder);
+      if (folder !== null) {
+        this.guide.clear(folder);
+        this.historySheet.clear(folder);
+      }
+      this.history.close();
       this.resetSelections();
       this.book.close();
       this.store.close();

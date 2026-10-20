@@ -13,8 +13,9 @@ public enum BackgroundRunKind { Attribution, VoiceBatch }
 /// <para>
 /// Like a request's scope, the step is created by the run's first state commit, so a run that
 /// changed nothing leaves no step, and a commit from anyone else splits it into parts. Runs that
-/// overlap share one step, labelled with both. Results the run commits record nothing, so they
-/// never split it.
+/// overlap share one step. Each step is labelled from the run work that landed in it, so
+/// "Attribution and voice batch" names only a step both wrote to. Results the run commits record
+/// nothing, so they never split it.
 /// </para>
 /// </summary>
 public sealed class BackgroundRuns(ProjectHistory history)
@@ -31,17 +32,15 @@ public sealed class BackgroundRuns(ProjectHistory history)
         lock (_lock)
         {
             if (!_runs.TryGetValue(folder, out var run))
-                _runs[folder] = run = new Run(new HistoryStepScope.OpenScope(folder, LabelOf([kind])));
+                _runs[folder] = run = new Run(new HistoryStepScope.OpenScope(folder, LabelOf(new HashSet<BackgroundRunKind> { kind })));
             run.Busy.Add(kind);
-            run.Joined.Add(kind);
-            run.Scope.Label = LabelOf(run.Joined);
         }
     }
 
     /// <summary>
     /// <paramref name="kind"/> no longer keeps <paramref name="folder"/> busy. <paramref name="ending"/>
-    /// says how it ended when that was early ("212 of 340 paragraphs (cancelled)"), or is null when
-    /// it drained. Once no kind is busy the run closes its step, with every ending in its note.
+    /// says how it ended ("212 of 340 paragraphs, cancelled", "3 paragraphs failed"), or is null
+    /// when it drained with nothing failed. Once no kind is busy the run closes its step, with every ending in its note.
     /// </summary>
     public Task EndedAsync(ProjectFolderId folder, BackgroundRunKind kind, string? ending = null)
     {
@@ -69,8 +68,8 @@ public sealed class BackgroundRuns(ProjectHistory history)
             return _runs.GetValueOrDefault(folder)?.Scope;
     }
 
-    /// <summary>"Attribution", "Voice batch", or "Attribution and voice batch" once both have joined.</summary>
-    private static string LabelOf(IReadOnlyCollection<BackgroundRunKind> kinds) =>
+    /// <summary>"Attribution", "Voice batch", or "Attribution and voice batch" when work of both is in the step.</summary>
+    internal static string LabelOf(IReadOnlySet<BackgroundRunKind> kinds) =>
         kinds.Contains(BackgroundRunKind.Attribution) && kinds.Contains(BackgroundRunKind.VoiceBatch)
             ? "Attribution and voice batch"
             : kinds.Contains(BackgroundRunKind.Attribution) ? "Attribution" : "Voice batch";
@@ -79,7 +78,6 @@ public sealed class BackgroundRuns(ProjectHistory history)
     {
         public HistoryStepScope.OpenScope Scope { get; } = scope;
         public HashSet<BackgroundRunKind> Busy { get; } = [];
-        public HashSet<BackgroundRunKind> Joined { get; } = [];
         public List<string> Endings { get; } = [];
     }
 }

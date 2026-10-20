@@ -19,6 +19,7 @@ export * from './preflight-api';
 export * from './book-api';
 export * from './book-edits-api';
 export * from './discovery-api';
+export * from './history-api';
 export * from './settings-api';
 export * from './prompts-api';
 export * from './voice-editor-api';

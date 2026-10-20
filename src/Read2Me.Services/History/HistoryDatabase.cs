@@ -88,7 +88,7 @@ internal static class HistoryDatabase
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = $"""
-            INSERT INTO {q}Step ({StepColumns})
+            INSERT INTO {q}Step ({InsertedColumns})
                 VALUES ($id, $parent, $sequence, $label, $summary, $author, $startedAt, $endedAt, $isOpen, $note);
             {(patchset is null ? "" : $"INSERT INTO {q}Chunk (StepId, Sequence, Patchset) VALUES ($id, 1, $patchset);")}
             INSERT INTO {q}Head (Id, StepId) VALUES (1, $id) ON CONFLICT (Id) DO UPDATE SET StepId = excluded.StepId;
@@ -110,12 +110,13 @@ internal static class HistoryDatabase
 
     /// <summary>
     /// Appends <paramref name="patchset"/> as the next chunk of the open step <paramref name="stepId"/>
-    /// and rewrites its label — a Background run's grows when another run joins it — and its "what
-    /// changed". The Head already points at it.
+    /// and rewrites its label — a Background run's grows when another run's work lands in it — its
+    /// "what changed", and its end time: an open step's is its last change, <paramref name="at"/>.
+    /// The Head already points at it. Answers the step's row as it now stands.
     /// </summary>
-    public static async Task ExtendStepAsync(
+    public static async Task<HistoryStep> ExtendStepAsync(
         SqliteConnection connection, SqliteTransaction? transaction, string schema, Guid stepId, string label,
-        string? summary, byte[] patchset, CancellationToken ct)
+        string? summary, DateTimeOffset at, byte[] patchset, CancellationToken ct)
     {
         var q = Qualifier(schema);
         await using var command = connection.CreateCommand();
@@ -123,13 +124,17 @@ internal static class HistoryDatabase
         command.CommandText = $"""
             INSERT INTO {q}Chunk (StepId, Sequence, Patchset)
                 VALUES ($id, (SELECT MAX(Sequence) + 1 FROM {q}Chunk WHERE StepId = $id), $patchset);
-            UPDATE {q}Step SET Label = $label, Summary = $summary WHERE StepId = $id;
+            UPDATE {q}Step SET Label = $label, Summary = $summary, EndedAt = $at WHERE StepId = $id
+                RETURNING {StepColumns};
             """;
         command.Parameters.AddWithValue("$id", Stored(stepId));
         command.Parameters.AddWithValue("$label", label);
         command.Parameters.AddWithValue("$summary", (object?)summary ?? DBNull.Value);
+        command.Parameters.AddWithValue("$at", Stored(at));
         command.Parameters.AddWithValue("$patchset", patchset);
-        await command.ExecuteNonQueryAsync(ct);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        await reader.ReadAsync(ct);
+        return ReadStep(reader);
     }
 
     /// <summary>
@@ -158,8 +163,8 @@ internal static class HistoryDatabase
     }
 
     /// <summary>
-    /// Closes every step still open as "interrupted", with no end time, and answers their rows: what
-    /// the app does on start, when nothing that opened them is still running.
+    /// Closes every step still open as "interrupted", keeping the end time of its last change, and
+    /// answers their rows: what the app does on start, when nothing that opened them is still running.
     /// </summary>
     public static async Task<IReadOnlyList<HistoryStep>> CloseInterruptedAsync(SqliteConnection connection, CancellationToken ct)
     {
@@ -194,10 +199,15 @@ internal static class HistoryDatabase
         DateTimeOffset.Parse(r.GetString(6), null, System.Globalization.DateTimeStyles.RoundtripKind),
         r.IsDBNull(7) ? null : DateTimeOffset.Parse(r.GetString(7), null, System.Globalization.DateTimeStyles.RoundtripKind),
         r.GetInt64(8) != 0,
-        r.IsDBNull(9) ? null : r.GetString(9));
+        r.IsDBNull(9) ? null : r.GetString(9),
+        r.IsDBNull(10) ? null : Guid.Parse(r.GetString(10)),
+        r.GetInt64(11) != 0);
 
     /// <summary>The columns <see cref="ReadStep"/> reads, in its order.</summary>
-    public const string StepColumns = "StepId, ParentStepId, Sequence, Label, Summary, Author, StartedAt, EndedAt, IsOpen, Note";
+    public const string StepColumns = InsertedColumns + ", RestoredFromStepId, CantOpen";
+
+    /// <summary>The columns <see cref="AppendStepAsync"/> writes; the rest keep their defaults until a later ticket sets them.</summary>
+    private const string InsertedColumns = "StepId, ParentStepId, Sequence, Label, Summary, Author, StartedAt, EndedAt, IsOpen, Note";
 
     private static void Execute(SqliteConnection connection, string sql)
     {

@@ -80,7 +80,8 @@ internal sealed class HistoryCapture : IAsyncDisposable
     /// </para>
     /// </summary>
     public async Task<RecordedStep?> RecordAsync(
-        HistoryStepScope.OpenScope? scope, string label, BookMutationEffects effects, CancellationToken ct)
+        HistoryStepScope.OpenScope? scope, BackgroundRunKind? runKind, string label, BookMutationEffects effects,
+        CancellationToken ct)
     {
         var patchset = _session.Patchset();
         if (patchset.Length == 0)
@@ -102,18 +103,22 @@ internal sealed class HistoryCapture : IAsyncDisposable
             sequence = reader.GetInt32(2);
         }
 
+        var now = _clock.GetUtcNow();
         if (scope?.StepId is { } scoped && scoped == head && headOpen)
         {
             var extended = scope.Changes.With(effects);
+            var extendedKinds = Including(scope.Kinds, runKind);
             var extendedSummary = await StepSummary.DescribeAsync(_db, extended, ct);
-            await HistoryDatabase.ExtendStepAsync(_connection, Transaction, h, scoped, scope.Label, extendedSummary, patchset, ct);
-            return new RecordedStep(scoped, extended, scope.Part, Landed: null, Closed: []);
+            var row = await HistoryDatabase.ExtendStepAsync(
+                _connection, Transaction, h, scoped, LabelOf(scope, extendedKinds), extendedSummary, now, patchset, ct);
+            return new RecordedStep(scoped, extended, extendedKinds, scope.Part, Landed: null, Changed: row, Closed: []);
         }
 
-        // A new step describes only what it holds, even when a scope carries on in it.
+        // A new step describes only what it holds, even when a scope carries on in it: its changes,
+        // and the Background run work in it, which its label names.
         var changes = StepChanges.None.With(effects);
+        var kinds = Including(new HashSet<BackgroundRunKind>(), runKind);
         var summary = await StepSummary.DescribeAsync(_db, changes, ct);
-        var now = _clock.GetUtcNow();
         var closed = new List<HistoryStep>();
         if (head is { } open && headOpen
             && await HistoryDatabase.CloseStepAsync(_connection, Transaction, h, open, now, note: null, ct) is { } interrupted)
@@ -131,11 +136,18 @@ internal sealed class HistoryCapture : IAsyncDisposable
         }
 
         var step = new HistoryStep(
-            Guid.NewGuid(), head, sequence, scope?.Label ?? label, summary, _author, now,
-            EndedAt: scope is null ? now : null, IsOpen: scope is not null, Note: StepNotes.Of(part, ending: null));
+            Guid.NewGuid(), head, sequence, scope is null ? label : LabelOf(scope, kinds), summary, _author, now,
+            EndedAt: now, IsOpen: scope is not null, Note: StepNotes.Of(part, ending: null));
         await HistoryDatabase.AppendStepAsync(_connection, Transaction, h, step, patchset, ct);
-        return new RecordedStep(step.StepId, changes, part, step, closed);
+        return new RecordedStep(step.StepId, changes, kinds, part, step, Changed: null, closed);
     }
+
+    /// <summary>A Background run's step is named for the run work in it; a request's for the request.</summary>
+    private static string LabelOf(HistoryStepScope.OpenScope scope, IReadOnlySet<BackgroundRunKind> kinds) =>
+        kinds.Count > 0 ? BackgroundRuns.LabelOf(kinds) : scope.Label;
+
+    private static HashSet<BackgroundRunKind> Including(IReadOnlySet<BackgroundRunKind> kinds, BackgroundRunKind? kind) =>
+        kind is { } k ? [.. kinds, k] : [.. kinds];
 
     public async ValueTask DisposeAsync()
     {
@@ -194,9 +206,11 @@ internal sealed class HistoryCapture : IAsyncDisposable
 
 /// <summary>
 /// Where a commit landed in History: the step it is a chunk of and which part of its scope that
-/// step is, the step row when the commit created it, and the steps it closed or renamed "part 1" on
-/// the way — each announced once the commit stands. <c>Changes</c> is everything the step now
-/// holds, which its "what changed" describes.
+/// step is, the step row when the commit created it or as it stands once the commit extended it,
+/// and the steps it closed or renamed "part 1" on the way — each announced once the commit stands. <c>Changes</c> is everything the step now
+/// holds, which its "what changed" describes, and <c>Kinds</c> the Background run work in it, which
+/// its label names.
 /// </summary>
 internal sealed record RecordedStep(
-    Guid StepId, StepChanges Changes, int Part, HistoryStep? Landed, IReadOnlyList<HistoryStep> Closed);
+    Guid StepId, StepChanges Changes, IReadOnlySet<BackgroundRunKind> Kinds, int Part, HistoryStep? Landed,
+    HistoryStep? Changed, IReadOnlyList<HistoryStep> Closed);

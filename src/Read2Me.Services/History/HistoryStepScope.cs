@@ -19,8 +19,9 @@ namespace Read2Me.Services.History;
 /// </para>
 /// <para>
 /// Background run work — the queue worker's and the voice batch's DI scopes — calls
-/// <see cref="JoinBackgroundRuns"/> instead, so what it commits lands in the project's open
-/// Background run step (<see cref="BackgroundRuns"/>).
+/// <see cref="JoinBackgroundRuns"/> instead, naming its kind, so what it commits lands in the
+/// project's open Background run step (<see cref="BackgroundRuns"/>), and the step's label names
+/// the kinds whose work landed in it.
 /// </para>
 /// <para>
 /// Not the grouping key for echo suppression: <see cref="MutationOrigin"/> keeps that role.
@@ -30,7 +31,7 @@ public sealed class HistoryStepScope(ProjectHistory history, BackgroundRuns runs
 {
     private readonly ProjectHistory _history = history;
     private OpenScope? _open;
-    private bool _backgroundRunWork;
+    private BackgroundRunKind? _runKind;
 
     /// <summary>
     /// Opens a step scope for <paramref name="folder"/>. Inside a scope already open, this is a no-op:
@@ -47,34 +48,46 @@ public sealed class HistoryStepScope(ProjectHistory history, BackgroundRuns runs
     }
 
     /// <summary>
-    /// Marks this DI scope as Background run work: what it commits to a project lands in that
-    /// project's open run step, or is a step of its own when no run is open for it.
+    /// Marks this DI scope as Background run work of <paramref name="kind"/>: what it commits to a
+    /// project lands in that project's open run step, or is a step of its own when no run is open for it.
     /// </summary>
-    public void JoinBackgroundRuns() => _backgroundRunWork = true;
+    public void JoinBackgroundRuns(BackgroundRunKind kind) => _runKind = kind;
 
-    /// <summary>The scope open for <paramref name="folder"/>, or null when a commit to it is a step of its own.</summary>
-    internal OpenScope? For(ProjectFolderId folder) =>
-        _open is { } open && open.Folder == folder ? open
-        : _backgroundRunWork ? runs.For(folder)
-        : null;
+    /// <summary>
+    /// The scope open for <paramref name="folder"/>, or null when a commit to it is a step of its
+    /// own. <paramref name="runKind"/> is the kind of Background run work the commit is, when it
+    /// lands in the project's run.
+    /// </summary>
+    internal OpenScope? For(ProjectFolderId folder, out BackgroundRunKind? runKind)
+    {
+        runKind = null;
+        if (_open is { } open && open.Folder == folder)
+            return open;
+        if (_runKind is not { } kind || runs.For(folder) is not { } run)
+            return null;
+        runKind = kind;
+        return run;
+    }
 
     /// <summary>
     /// The state of one open scope: its step and which part of the scope that step is, once a
-    /// commit has created it, and everything the step's commits changed so far, which its "what
-    /// changed" describes. The step, part and changes are written only under the project's write
-    /// lock, by the commit that moves them; a Background run's label is renamed by
-    /// <see cref="BackgroundRuns"/> whenever another run joins, and a commit takes it as it finds it.
+    /// commit has created it, everything the step's commits changed so far, which its "what
+    /// changed" describes, and the Background run work in it, which a run's label names. They are
+    /// written only under the project's write lock, by the commit that moves them.
     /// </summary>
     internal sealed class OpenScope(ProjectFolderId folder, string label)
     {
         public ProjectFolderId Folder { get; } = folder;
 
-        /// <summary>A request's never changes; a Background run's names every run that has joined it.</summary>
-        public string Label { get; set; } = label;
+        /// <summary>A request's label. A Background run's step is named for the run work in it instead.</summary>
+        public string Label { get; } = label;
 
         public Guid? StepId { get; set; }
         public int Part { get; set; }
         public StepChanges Changes { get; set; } = StepChanges.None;
+
+        /// <summary>The Background run kinds whose work the current step holds; none for a request's.</summary>
+        public IReadOnlySet<BackgroundRunKind> Kinds { get; set; } = new HashSet<BackgroundRunKind>();
     }
 
     private sealed class Closer(HistoryStepScope owner, OpenScope scope) : IAsyncDisposable
