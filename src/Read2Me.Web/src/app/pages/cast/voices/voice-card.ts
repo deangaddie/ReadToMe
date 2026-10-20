@@ -582,21 +582,21 @@ export class VoiceCard extends R2mElement {
     if (!(await this.preflight.ensureReady('voiceDesign'))) return;
     this.generatingAudio.set(true);
     try {
-      // The host synthesises from the stored prompt: a dirty draft is saved first.
-      if (this.promptDirty()) {
-        const saved = await this.store.run({
-          type: 'SetVoiceDesignPrompt',
-          voiceId: voice.id,
-          prompt: this.prompt(),
-        });
-        if (!saved) return;
-        this.promptDraft.set(null);
-      }
-      const generated = await this.voices.generateAudio(this.folder(), voice.characterId, voice.id);
+      // A dirty draft travels with the request: the host designs from it and stores it with the
+      // take, so the prompt and its audio land together. A failed take keeps the draft.
+      const draft = this.promptDirty() ? this.prompt() : undefined;
+      const generated = await this.voices.generateAudio(
+        this.folder(),
+        voice.characterId,
+        voice.id,
+        draft,
+      );
       this.store.bumpAudio(voice.id);
       // Over the soft Reference Limit the take is kept, but generating says so, as an upload does.
       if (generated.referenceWarning) this.toast.warn(generated.referenceWarning);
       await this.store.refresh();
+      // Cleared once the stored prompt it became is loaded, so the editor never shows the old one.
+      if (draft !== undefined) this.promptDraft.set(null);
     } catch (e) {
       this.toast.problem(toApiError(e).toProblem());
     } finally {

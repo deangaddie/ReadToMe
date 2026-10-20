@@ -71,6 +71,29 @@ namespace Read2Me.Tests.Api
             Assert.Equal(Folder, command.FolderId);
         }
 
+        [Fact]
+        public void CreateCharacterAndAssign_binds_the_one_target_it_names()
+        {
+            var paragraphId = Guid.NewGuid();
+            var command = (CreateCharacterAndAssignCommand)Deserialize(
+                "CreateCharacterAndAssign",
+                $$"""{ "name": "Carol", "paragraphIds": ["{{paragraphId}}"] }""");
+
+            Assert.Equal("Carol", command.Name);
+            Assert.Equal([paragraphId], command.ParagraphIds);
+            Assert.Null(command.ItemId);
+            Assert.Null(command.ParagraphId);
+        }
+
+        [Fact]
+        public void AddTitles_binds_levels_by_name()
+        {
+            var command = (AddTitlesCommand)Deserialize(
+                "AddTitles", """{ "levels": ["Book", "Chapter"] }""");
+
+            Assert.Equal([TitleLevel.Book, TitleLevel.Chapter], command.Levels);
+        }
+
         [Theory]
         [InlineData("Part", NarrationReleaseScope.Part)]
         [InlineData("Chapter", NarrationReleaseScope.Chapter)]

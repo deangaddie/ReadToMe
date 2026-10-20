@@ -41,6 +41,8 @@ public static class BookCommandWireContract
     /// The strict shape: every expected refusal stays a refusal, so an agent sees a 422 rather than a
     /// success-shaped null. <c>SetNarratorCharacter</c>, <c>SetItemDeliveryCue</c> and <c>InsertNode</c> are the
     /// commands written this way — <c>docs/agents/api.md</c> calls that out as what makes them unusual.
+    /// <c>CreateCharacterAndAssign</c> and <c>AddTitles</c> are strict too, but commit more than one
+    /// mutation per request, so their handlers build the result themselves rather than through here.
     /// </summary>
     public static Task<BookCommandResult> ExecuteCommandStrictAsync(
         this BookMutations mutations, BookMutation mutation, CancellationToken ct) =>

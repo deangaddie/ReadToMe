@@ -562,6 +562,11 @@ export interface CharacterVoicesDto {
   voices: VoiceDto[];
 }
 
+/** Optional `generate-audio` body: an unsaved prompt to design from, stored with the take. */
+export interface GenerateVoiceAudioRequest {
+  designPrompt?: string | null;
+}
+
 export interface GenerateVoiceAudioResponse {
   audioFileName: string;
   transcript: string;

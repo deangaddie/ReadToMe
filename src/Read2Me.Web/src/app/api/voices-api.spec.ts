@@ -40,3 +40,19 @@ describe('VoicesApi.uploadAudio', () => {
     expect((error as ApiError).detail).toContain('30 s or shorter');
   });
 });
+
+const GENERATE_URL = '/api/projects/my%20book/characters/alice/voices/v1/generate-audio';
+
+describe('VoicesApi.generateAudio', () => {
+  it('carries an unsaved prompt as designPrompt, and sends no body without one', async () => {
+    api.on('POST', GENERATE_URL, { audioFileName: 'voices/alice/v1.wav' });
+
+    await new VoicesApi().generateAudio('my book', 'alice', 'v1', 'A warm alto');
+    await new VoicesApi().generateAudio('my book', 'alice', 'v1');
+
+    expect(api.calls('POST', GENERATE_URL).map((r) => r.body)).toEqual([
+      { designPrompt: 'A warm alto' },
+      null,
+    ]);
+  });
+});

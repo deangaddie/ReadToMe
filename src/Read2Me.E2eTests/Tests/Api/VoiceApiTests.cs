@@ -101,6 +101,45 @@ public class VoiceApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     /// <summary>
+    /// Generate audio carrying an unsaved design prompt: one request designs from that prompt and
+    /// stores it with the take, so the edit and the audio land together.
+    /// </summary>
+    [Fact]
+    public async Task Generate_audio_with_a_design_prompt_designs_from_it_and_stores_it_with_the_take()
+    {
+        var (folder, aliceId, voiceId) = await PlanOneVoiceAsync();
+        app.FakeAi.Reset();
+
+        var gen = await Http.PostAsJsonAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/characters/{aliceId}/voices/{voiceId}/generate-audio",
+            new { designPrompt = "A gravelly old voice." });
+
+        Assert.Equal(HttpStatusCode.OK, gen.StatusCode);
+        JsonObject body;
+        lock (app.FakeAi.AudioCppSpeechBodies) body = Assert.Single(app.FakeAi.AudioCppSpeechBodies);
+        Assert.StartsWith("(A gravelly old voice.)", body["input"]!.GetValue<string>());
+
+        var voice = JsonDocument.Parse(await Http.GetStringAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/voices/{voiceId}")).RootElement;
+        Assert.Equal("A gravelly old voice.", voice.GetProperty("designPrompt").GetString());
+        Assert.False(string.IsNullOrEmpty(voice.GetProperty("audioFileName").GetString()));
+    }
+
+    [Fact]
+    public async Task Generate_audio_with_a_malformed_body_is_a_400_and_designs_nothing()
+    {
+        var (folder, aliceId, voiceId) = await PlanOneVoiceAsync();
+        app.FakeAi.Reset();
+
+        var gen = await Http.PostAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/characters/{aliceId}/voices/{voiceId}/generate-audio",
+            new StringContent("{ \"designPrompt\": ", System.Text.Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, gen.StatusCode);
+        lock (app.FakeAi.AudioCppSpeechBodies) Assert.Empty(app.FakeAi.AudioCppSpeechBodies);
+    }
+
+    /// <summary>
     /// Plans one voice for a fresh project's Alice, then generates its audio with the named seeded
     /// voice-design config active (restoring the previous one after). Asserts the take lands and
     /// returns the one audio.cpp speech body it sent.

@@ -1248,7 +1248,7 @@ describe('r2m-book-page', () => {
       expect(page.querySelector('[data-action=add-pauses] .r2m-menu__hint')).toBeNull();
     });
 
-    it('Add titles offers the levels that add navigation and sends the ticked ones in order', async () => {
+    it('Add titles offers the levels that add navigation and sends the ticked ones in one request', async () => {
       api.on('GET', `${BASE}/book`, {
         ...OVERVIEW,
         volumes: [
@@ -1281,16 +1281,15 @@ describe('r2m-book-page', () => {
       dialog.querySelector<HTMLButtonElement>('[data-action=apply-titles]')!.click();
       for (let i = 0; i < 8; i++) await settle();
       expect(api.calls('POST', `${BASE}/commands`).map((r) => r.body)).toEqual([
-        { type: 'AddBookTitle' },
-        { type: 'AddChapterTitles' },
+        { type: 'AddTitles', levels: ['Book', 'Chapter'] },
       ]);
       expect(toasts).toEqual(['Added book and chapter titles']);
     });
 
-    it('Add titles stops at the first refusal and names only what landed', async () => {
+    it('a refused Add titles shows the refusal and no success', async () => {
       echoOwnReceipts((body) =>
-        (body as { type: string }).type === 'AddChapterTitles'
-          ? problem(422, 'no chapters')
+        (body as { type: string }).type === 'AddTitles'
+          ? problem(422, 'no chapters. Book, Volume, Part titles were added.')
           : { newEntityId: null },
       );
       api.on('GET', `${BASE}/book`, {
@@ -1309,10 +1308,10 @@ describe('r2m-book-page', () => {
       await dialog.rendered();
       dialog.querySelector<HTMLButtonElement>('[data-action=apply-titles]')!.click();
       for (let i = 0; i < 12; i++) await settle();
-      expect(
-        api.calls('POST', `${BASE}/commands`).map((r) => (r.body as { type: string }).type),
-      ).toEqual(['AddBookTitle', 'AddVolumeTitles', 'AddPartTitles', 'AddChapterTitles']);
-      expect(toasts).toEqual(['problem: no chapters', 'Added book, volume and part titles']);
+      expect(api.calls('POST', `${BASE}/commands`).map((r) => r.body)).toEqual([
+        { type: 'AddTitles', levels: ['Book', 'Volume', 'Part', 'Chapter'] },
+      ]);
+      expect(toasts).toEqual(['problem: no chapters. Book, Volume, Part titles were added.']);
     });
 
     it('a cancelled Add titles sends nothing', async () => {

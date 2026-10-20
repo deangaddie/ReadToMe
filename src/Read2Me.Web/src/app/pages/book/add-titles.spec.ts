@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'bun:test';
-import { type BookShape, type TitleLevel, addedTitlesMessage, availableLevels } from './add-titles';
+import {
+  type BookShape,
+  type TitleLevel,
+  addTitlesCommand,
+  addedTitlesMessage,
+  availableLevels,
+} from './add-titles';
 
 describe('availableLevels', () => {
   const cases: [string, BookShape, Record<TitleLevel, boolean>][] = [
@@ -39,4 +45,12 @@ describe('addedTitlesMessage', () => {
   for (const [levels, expected] of cases) {
     it(expected, () => expect(addedTitlesMessage(levels)).toBe(expected));
   }
+});
+
+describe('addTitlesCommand', () => {
+  it('names every ticked level in one command, book first, by wire name', () =>
+    expect(addTitlesCommand(['chapter', 'book'])).toEqual({
+      type: 'AddTitles',
+      levels: ['Book', 'Chapter'],
+    }));
 });

@@ -1,6 +1,7 @@
 import {
   AttributionApi,
   BookApi,
+  type BookCommand,
   type Guid,
   type NarrationReleaseScope,
   type ParagraphItemDto,
@@ -54,61 +55,66 @@ export class SpeakerAssigner {
    * moves no audio goes straight through.
    */
   async assign(target: AssignTarget, characterId: Guid | null): Promise<void> {
-    if (target.kind !== 'selection') {
-      if (!(await confirmPermanent(speakerChange(this.stampedItems(target), characterId)))) return;
-    }
-    switch (target.kind) {
-      case 'item': {
-        const ok = await this.editor.run({
-          type: 'SetItemCharacter',
-          itemId: target.itemId,
-          characterId,
-        });
-        if (ok) await this.clearOutcome(target.paragraphId);
-        return;
-      }
-      case 'paragraph': {
-        const ok = await this.editor.run({
-          type: 'SetParagraphCharacter',
-          paragraphId: target.paragraphId,
-          characterId,
-        });
-        if (ok) await this.clearOutcome(target.paragraphId);
-        return;
-      }
-      case 'selection':
-        return this.assignSelection(target.paragraphIds, characterId);
-    }
+    // Keyed on the id, not on the roster: an id the roster cannot explain still reads as an assign.
+    const name =
+      characterId === null ? null : (this.book.speakers().names[characterId] ?? 'the character');
+    await this.write(target, characterId, name, (t) => speakerCommand(t, characterId));
   }
 
   /**
-   * "New character…" from the menu: creates (idempotent by name — an existing character or alias
-   * answers with its own id) and assigns in one go. A blank name (the menu's search was empty)
-   * asks for one first; a cancelled prompt writes nothing.
+   * "New character…" from the menu: one `CreateCharacterAndAssign`, so the create and the assign
+   * are one request (idempotent by name — an existing character or alias is assigned, not
+   * doubled). A blank name (the menu's search was empty) asks for one first; a cancelled prompt
+   * writes nothing. The audio confirm comes before the write, so it reckons with the roster's
+   * names: a name nobody goes by yet is a new speaker on every line it lands on.
    */
   async createAndAssign(target: AssignTarget, name: string): Promise<void> {
-    const named =
+    const named = (
       name.trim() ||
       (await this.prompt.text({
         title: 'New character',
         label: 'Name',
         required: true,
         confirmLabel: 'Create',
-      }));
+      })) ||
+      ''
+    ).trim();
     if (!named) return;
-    const id = await this.createCharacter(named);
-    if (id) await this.assign(target, id);
+    await this.write(target, this.knownId(named) ?? NEW_CHARACTER, named, (t) => ({
+      type: 'CreateCharacterAndAssign',
+      name: named,
+      ...targetFields(t),
+    }));
   }
 
-  /** The id of the character called `name`, created if nobody goes by it yet; null when refused. */
-  async createCharacter(name: string): Promise<Guid | null> {
-    const trimmed = name.trim();
-    if (!trimmed) return null;
-    const response = await this.editor.execute({ type: 'CreateCharacter', name: trimmed });
-    if (!response) return null;
-    if (response.newEntityId) return response.newEntityId;
-    // The host has always answered the resolved id; this is the belt for the braces.
-    return this.resolveByName(trimmed);
+  /**
+   * The shared gesture: an item or paragraph write asks first when it discards audio, then
+   * forgets the paragraph's remembered outcome; a selection goes through the bulk preview.
+   */
+  private async write(
+    target: AssignTarget,
+    characterId: Guid | null,
+    name: string | null,
+    command: (target: AssignTarget) => BookCommand,
+  ): Promise<void> {
+    if (target.kind === 'selection') {
+      return this.assignSelection(target.paragraphIds, name, command(target));
+    }
+    if (!(await confirmPermanent(speakerChange(this.stampedItems(target), characterId)))) return;
+    if (await this.editor.run(command(target))) await this.clearOutcome(target.paragraphId);
+  }
+
+  /**
+   * The roster character already answering to `name` (case-insensitive, name or alias, as the host
+   * resolves it), if the loaded book knows one.
+   */
+  private knownId(name: string): Guid | null {
+    const wanted = name.toLowerCase();
+    const match = (this.book.overview()?.characters ?? []).find(
+      (c) =>
+        c.name.toLowerCase() === wanted || c.aliases.some((a) => a.name.toLowerCase() === wanted),
+    );
+    return match?.id ?? null;
   }
 
   /** A paragraph's Failed/Unfinished chip is cleared by hand (the queue state only). */
@@ -138,7 +144,11 @@ export class SpeakerAssigner {
     return paragraph.items.filter((i) => i.id === target.itemId);
   }
 
-  private async assignSelection(paragraphIds: Guid[], characterId: Guid | null): Promise<void> {
+  private async assignSelection(
+    paragraphIds: Guid[],
+    name: string | null,
+    command: BookCommand,
+  ): Promise<void> {
     const folder = this.book.folder();
     if (!folder || paragraphIds.length === 0) return;
 
@@ -150,9 +160,6 @@ export class SpeakerAssigner {
       return;
     }
 
-    // Keyed on the id, not on the roster: an id the roster cannot explain still reads as an assign.
-    const name =
-      characterId === null ? null : (this.book.speakers().names[characterId] ?? 'the character');
     const options = bulkConfirm(name, preview, paragraphIds.length);
     if (!options) {
       this.toast.info(NOTHING_TO_ASSIGN);
@@ -160,8 +167,7 @@ export class SpeakerAssigner {
     }
     if (!(await this.confirm.confirm(options))) return;
 
-    const ok = await this.editor.run({ type: 'SetParagraphsCharacter', paragraphIds, characterId });
-    if (!ok) return;
+    if (!(await this.editor.run(command))) return;
 
     // Only the paragraphs the queue still remembers something about; usually none.
     const statuses = this.project.paragraphs();
@@ -204,16 +210,31 @@ export class SpeakerAssigner {
     this.toast.success(releaseDoneMessage(preview));
     return true;
   }
+}
 
-  private async resolveByName(name: string): Promise<Guid | null> {
-    const folder = this.book.folder();
-    if (!folder) return null;
-    const wanted = name.toLowerCase();
-    const characters = await this.api.characters(folder);
-    const match = characters.find(
-      (c) =>
-        c.name.toLowerCase() === wanted || c.aliases.some((a) => a.name.toLowerCase() === wanted),
-    );
-    return match?.id ?? null;
+/** Stands in for a character the host has not created yet: no line is stamped with it. */
+const NEW_CHARACTER = 'new-character';
+
+/** The speaker write for a known id (null clears), one command per target kind. */
+function speakerCommand(target: AssignTarget, characterId: Guid | null): BookCommand {
+  switch (target.kind) {
+    case 'item':
+      return { type: 'SetItemCharacter', itemId: target.itemId, characterId };
+    case 'paragraph':
+      return { type: 'SetParagraphCharacter', paragraphId: target.paragraphId, characterId };
+    case 'selection':
+      return { type: 'SetParagraphsCharacter', paragraphIds: target.paragraphIds, characterId };
+  }
+}
+
+/** The one target `CreateCharacterAndAssign` names, by its wire field. */
+function targetFields(target: AssignTarget) {
+  switch (target.kind) {
+    case 'item':
+      return { itemId: target.itemId };
+    case 'paragraph':
+      return { paragraphId: target.paragraphId };
+    case 'selection':
+      return { paragraphIds: target.paragraphIds };
   }
 }

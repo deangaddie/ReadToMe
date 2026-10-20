@@ -5,7 +5,7 @@
  * `Command` suffix, properties are the record's positional parameters camelCased, `folderId` comes
  * from the route and is never sent. String enums (`MergeDirection`, `InsertPosition`, `Placement`,
  * `NodeKind`, `PauseKind`, `RuleMoveDirection`, `VoiceAnchorLevel`, `BookEditTargetKind`,
- * `NarrationReleaseScope`) travel as their member names.
+ * `NarrationReleaseScope`, `TitleLevel`) travel as their member names.
  *
  * `BOOK_COMMAND_TYPES` is the runtime list; `book-commands.spec.ts` checks it against the host's
  * "Known types" 400 whenever a host is reachable, and the exhaustiveness check at the bottom fails
@@ -21,6 +21,8 @@ export type NodeKind = 'Volume' | 'Part' | 'Chapter' | 'Paragraph' | 'ParagraphI
 export type RuleMoveDirection = 'Up' | 'Down';
 export type VoiceAnchorLevel = 'Volume' | 'Part' | 'Chapter' | 'Paragraph' | 'ParagraphItem';
 export type BookEditTargetKind = 'VolumeTitle' | 'PartTitle' | 'ChapterTitle' | 'ParagraphItemText';
+/** `AddTitles` levels (`TitleLevel`). */
+export type TitleLevelName = 'Book' | 'Volume' | 'Part' | 'Chapter';
 export type { PauseKind } from './dtos';
 import type { PauseKind } from './dtos';
 
@@ -145,6 +147,14 @@ export interface SetItemCharacter {
 export interface CreateCharacter {
   type: 'CreateCharacter';
   name: string;
+}
+/** "New character…" plus its assign: exactly one of the three targets; answers the character's id. */
+export interface CreateCharacterAndAssign {
+  type: 'CreateCharacterAndAssign';
+  name: string;
+  itemId?: Guid;
+  paragraphId?: Guid;
+  paragraphIds?: Guid[];
 }
 export interface SetParagraphCharacter {
   type: 'SetParagraphCharacter';
@@ -292,6 +302,11 @@ export interface AddPartTitles {
 export interface AddChapterTitles {
   type: 'AddChapterTitles';
 }
+/** Add titles over several levels in one request: book first, each level once, stopping at a refusal. */
+export interface AddTitles {
+  type: 'AddTitles';
+  levels: TitleLevelName[];
+}
 export interface AddPauses {
   type: 'AddPauses';
 }
@@ -371,6 +386,7 @@ export type BookCommand =
   | MergeParagraphItem
   | SetItemCharacter
   | CreateCharacter
+  | CreateCharacterAndAssign
   | SetParagraphCharacter
   | SetParagraphsCharacter
   | ReleaseNarration
@@ -399,6 +415,7 @@ export type BookCommand =
   | AddVolumeTitles
   | AddPartTitles
   | AddChapterTitles
+  | AddTitles
   | AddPauses
   | InsertNode
   | InsertParagraphItem
@@ -418,11 +435,13 @@ export const BOOK_COMMAND_TYPES = [
   'AddCharacterAlias',
   'AddPartTitles',
   'AddPauses',
+  'AddTitles',
   'AddVolumeTitles',
   'ApplyBookEdits',
   'AttributeItems',
   'ClearBookContent',
   'CreateCharacter',
+  'CreateCharacterAndAssign',
   'CreateVoice',
   'CreateVoiceRule',
   'DeleteChapter',
