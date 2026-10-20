@@ -306,6 +306,55 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Null(svc.StatusOf(Folder, inFlight.ParagraphId));
         }
 
+        /// <summary>
+        /// The worker can still be holding an item when the queue is cleared; its later retry must
+        /// not bring it back as Queued, or the project reads busy with nothing left to drain it.
+        /// </summary>
+        [Fact]
+        public async Task Apply_RetryAfter_AfterCancelAll_LeavesTheItemCancelled()
+        {
+            var svc = new CharacterQueueService();
+            var inFlight = MakeItem();
+            EnqueueAndProcess(svc, inFlight);
+            await svc.Reader.ReadAsync(TestContext.Current.CancellationToken);
+
+            svc.CancelAll();
+            svc.Apply(inFlight, new Disposition.RetryAfter(TimeSpan.FromMilliseconds(10)));
+
+            Assert.Null(svc.StatusOf(Folder, inFlight.ParagraphId));
+            Assert.Null(svc.BusyFor(Folder));
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+            Assert.False(svc.Reader.TryRead(out _));
+        }
+
+        [Fact]
+        public async Task Apply_RetryOnce_AfterCancelAll_DoesNotRequeueOnTheNewChannel()
+        {
+            var svc = new CharacterQueueService();
+            var inFlight = MakeItem();
+            EnqueueAndProcess(svc, inFlight);
+            await svc.Reader.ReadAsync(TestContext.Current.CancellationToken);
+
+            svc.CancelAll();
+            svc.Apply(inFlight, new Disposition.RetryOnce());
+
+            Assert.Null(svc.StatusOf(Folder, inFlight.ParagraphId));
+            Assert.False(svc.Reader.TryRead(out _));
+        }
+
+        [Fact]
+        public void MarkDeferred_AfterCancelAll_LeavesTheItemCancelled()
+        {
+            var svc = new CharacterQueueService();
+            var inFlight = MakeItem();
+            EnqueueAndProcess(svc, inFlight);
+
+            svc.CancelAll();
+            svc.MarkDeferred(inFlight);
+
+            Assert.Null(svc.StatusOf(Folder, inFlight.ParagraphId));
+        }
+
         [Fact]
         public async Task Apply_RetryAfter_CancelAllDuringBackoff_DoesNotResurrectOnNewChannel()
         {
