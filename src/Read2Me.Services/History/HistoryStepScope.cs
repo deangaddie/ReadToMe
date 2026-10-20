@@ -14,13 +14,23 @@ namespace Read2Me.Services.History;
 /// open is a step of its own, labelled from the mutation.
 /// </para>
 /// <para>
+/// Whoever is interrupted is split: a commit from anyone else that lands while the scope's step is
+/// open closes it, and the scope carries on in a new step, its next part.
+/// </para>
+/// <para>
+/// Background run work — the queue worker's and the voice batch's DI scopes — calls
+/// <see cref="JoinBackgroundRuns"/> instead, so what it commits lands in the project's open
+/// Background run step (<see cref="BackgroundRuns"/>).
+/// </para>
+/// <para>
 /// Not the grouping key for echo suppression: <see cref="MutationOrigin"/> keeps that role.
 /// </para>
 /// </summary>
-public sealed class HistoryStepScope(ProjectHistory history)
+public sealed class HistoryStepScope(ProjectHistory history, BackgroundRuns runs)
 {
     private readonly ProjectHistory _history = history;
     private OpenScope? _open;
+    private bool _backgroundRunWork;
 
     /// <summary>
     /// Opens a step scope for <paramref name="folder"/>. Inside a scope already open, this is a no-op:
@@ -36,18 +46,34 @@ public sealed class HistoryStepScope(ProjectHistory history)
         return new Closer(this, _open);
     }
 
+    /// <summary>
+    /// Marks this DI scope as Background run work: what it commits to a project lands in that
+    /// project's open run step, or is a step of its own when no run is open for it.
+    /// </summary>
+    public void JoinBackgroundRuns() => _backgroundRunWork = true;
+
     /// <summary>The scope open for <paramref name="folder"/>, or null when a commit to it is a step of its own.</summary>
-    internal OpenScope? For(ProjectFolderId folder) => _open is { } open && open.Folder == folder ? open : null;
+    internal OpenScope? For(ProjectFolderId folder) =>
+        _open is { } open && open.Folder == folder ? open
+        : _backgroundRunWork ? runs.For(folder)
+        : null;
 
     /// <summary>
-    /// The state of one open scope: its step, once a commit has created it, and everything its
-    /// commits changed so far, which the step's "what changed" describes.
+    /// The state of one open scope: its step and which part of the scope that step is, once a
+    /// commit has created it, and everything the step's commits changed so far, which its "what
+    /// changed" describes. The step, part and changes are written only under the project's write
+    /// lock, by the commit that moves them; a Background run's label is renamed by
+    /// <see cref="BackgroundRuns"/> whenever another run joins, and a commit takes it as it finds it.
     /// </summary>
     internal sealed class OpenScope(ProjectFolderId folder, string label)
     {
         public ProjectFolderId Folder { get; } = folder;
-        public string Label { get; } = label;
+
+        /// <summary>A request's never changes; a Background run's names every run that has joined it.</summary>
+        public string Label { get; set; } = label;
+
         public Guid? StepId { get; set; }
+        public int Part { get; set; }
         public StepChanges Changes { get; set; } = StepChanges.None;
     }
 
@@ -56,8 +82,7 @@ public sealed class HistoryStepScope(ProjectHistory history)
         public async ValueTask DisposeAsync()
         {
             owner._open = null;
-            if (scope.StepId is { } stepId)
-                await owner._history.CloseAsync(scope.Folder, stepId);
+            await owner._history.CloseAsync(scope);
         }
     }
 

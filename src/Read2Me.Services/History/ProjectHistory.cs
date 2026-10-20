@@ -97,36 +97,70 @@ public sealed partial class ProjectHistory(
     }
 
     /// <summary>
-    /// Closes a step scope's step, and announces it. Takes the project's write lock, so the close
-    /// never races a commit extending the line, but waits only the mutation budget: a step left
-    /// open is closed by the next commit to the project instead.
+    /// Closes a step scope's current step, if a commit created one, and announces it.
+    /// <paramref name="ending"/> is how a Background run ended early ("212 of 340 paragraphs
+    /// (cancelled)"); it goes in the note even when another commit already closed the step. Takes
+    /// the project's write lock, so the close never races a commit extending the line, but waits
+    /// only the mutation budget: a step left open is closed by the next commit to the project
+    /// instead.
     /// </summary>
-    internal async Task CloseAsync(ProjectFolderId folder, Guid stepId)
+    internal async Task CloseAsync(HistoryStepScope.OpenScope scope, string? ending = null)
     {
+        var folder = scope.Folder;
         // Not the request's token: a request that ends, however it ends, still closes its step.
         using var writeLock = await writeLocks.AcquireAsync(folder, mutationOptions.Value.LockWaitBudget, CancellationToken.None);
         if (writeLock is null)
         {
             logger.LogWarning(
-                "History step {Step} on {Folder} stays open: the write lock was busy past {Budget}. The next commit closes it.",
-                stepId, folder.Value, mutationOptions.Value.LockWaitBudget);
+                "History step {Step} on {Folder} stays open, without its ending {Ending}: the write lock was busy past {Budget}. The next commit closes it.",
+                scope.StepId, folder.Value, ending, mutationOptions.Value.LockWaitBudget);
             return;
         }
+        // Read under the lock: a commit holding it may still be moving the scope onto a new step.
+        if (scope.StepId is not { } stepId)
+            return;
 
+        var note = ending is null ? null : StepNotes.Of(scope.Part, ending);
         HistoryStep? closed;
         await using (var connection = HistoryDatabase.Open(HistoryFileOf(folder), SqliteOpenMode.ReadWrite))
         {
             await connection.OpenAsync();
-            closed = await HistoryDatabase.CloseStepAsync(connection, null, schema: "", stepId, clock.GetUtcNow(), CancellationToken.None);
+            closed = await HistoryDatabase.CloseStepAsync(
+                connection, null, schema: "", stepId, clock.GetUtcNow(), note, CancellationToken.None);
         }
         if (closed is not null)
             events.Publish(new HistoryStepEvent(folder, HistoryStepEventKind.Closed, closed));
     }
 
+    /// <summary>
+    /// Closes every step <paramref name="folder"/>'s History left open as "interrupted": what app
+    /// start does, when nothing that opened a step is running any more. A project with no History
+    /// yet has nothing to close.
+    /// </summary>
+    public async Task CloseInterruptedAsync(ProjectFolderId folder, CancellationToken ct = default)
+    {
+        var file = HistoryFileOf(folder);
+        if (!File.Exists(file))
+            return;
+
+        using var writeLock = await writeLocks.AcquireAsync(folder, mutationOptions.Value.LockWaitBudget, ct);
+        if (writeLock is null)
+            return; // something is already writing, so History is in use: its own commits close what was left open
+
+        IReadOnlyList<HistoryStep> closed;
+        await using (var connection = HistoryDatabase.Open(file, SqliteOpenMode.ReadWrite))
+        {
+            await connection.OpenAsync(ct);
+            closed = await HistoryDatabase.CloseInterruptedAsync(connection, ct);
+        }
+        foreach (var step in closed)
+            events.Publish(new HistoryStepEvent(folder, HistoryStepEventKind.Closed, step));
+    }
+
     /// <summary>Announces what a commit did to History. Call after the commit, never inside it.</summary>
     internal void Announce(ProjectFolderId folder, RecordedStep recorded)
     {
-        if (recorded.Closed is { } closed)
+        foreach (var closed in recorded.Closed)
             events.Publish(new HistoryStepEvent(folder, HistoryStepEventKind.Closed, closed));
         if (recorded.Landed is not { } step)
             return;
@@ -184,7 +218,7 @@ public sealed partial class ProjectHistory(
     private Task InsertStartedStepAsync(SqliteConnection connection, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
-        var step = new HistoryStep(Guid.NewGuid(), null, 1, HistoryDatabase.StartedLabel, null, Author, now, now, IsOpen: false);
+        var step = new HistoryStep(Guid.NewGuid(), null, 1, HistoryDatabase.StartedLabel, null, Author, now, now, IsOpen: false, Note: null);
         return HistoryDatabase.AppendStepAsync(connection, null, schema: "", step, patchset: null, ct);
     }
 

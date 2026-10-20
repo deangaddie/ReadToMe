@@ -1208,8 +1208,11 @@ export interface HistoryStep {
   summary: string | null;
   author: string;
   startedAt: string;
+  /** Null while open, and on a step closed as "interrupted". */
   endedAt: string | null;
   isOpen: boolean;
+  /** "part 2", "212 of 340 paragraphs (cancelled)", "interrupted", joined by " · "; null when nothing is unusual. */
+  note: string | null;
 }
 
 /** `GET /api/projects/{folder}/history`: steps newest first, the Head, the busy reason and the restoring flag. */

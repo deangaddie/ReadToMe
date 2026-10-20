@@ -213,6 +213,9 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<Read2Me.App.Services.VoiceOrchestrator>();
         services.AddSingleton<EventBroadcaster<VoiceBatchEvent>>();
         services.AddSingleton<VoiceBatchRunner>();
+        // History's Background runs follow the Character Queue and the voice batch.
+        services.AddSingleton<BackgroundRunTracker>();
+        services.AddHostedService(sp => sp.GetRequiredService<BackgroundRunTracker>());
         // Reads the queues, the voice batch and the Assembly, all singletons registered in this file.
         services.AddSingleton<ProjectBusyAnswer>();
 

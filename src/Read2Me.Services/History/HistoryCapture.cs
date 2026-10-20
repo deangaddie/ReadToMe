@@ -106,22 +106,35 @@ internal sealed class HistoryCapture : IAsyncDisposable
         {
             var extended = scope.Changes.With(effects);
             var extendedSummary = await StepSummary.DescribeAsync(_db, extended, ct);
-            await HistoryDatabase.ExtendStepAsync(_connection, Transaction, h, scoped, extendedSummary, patchset, ct);
-            return new RecordedStep(scoped, extended, Landed: null, Closed: null);
+            await HistoryDatabase.ExtendStepAsync(_connection, Transaction, h, scoped, scope.Label, extendedSummary, patchset, ct);
+            return new RecordedStep(scoped, extended, scope.Part, Landed: null, Closed: []);
         }
 
         // A new step describes only what it holds, even when a scope carries on in it.
         var changes = StepChanges.None.With(effects);
         var summary = await StepSummary.DescribeAsync(_db, changes, ct);
         var now = _clock.GetUtcNow();
-        var closed = head is { } open && headOpen
-            ? await HistoryDatabase.CloseStepAsync(_connection, Transaction, h, open, now, ct)
-            : null;
+        var closed = new List<HistoryStep>();
+        if (head is { } open && headOpen
+            && await HistoryDatabase.CloseStepAsync(_connection, Transaction, h, open, now, note: null, ct) is { } interrupted)
+            closed.Add(interrupted);
+
+        // A scope that already has a step was interrupted, and carries on as its next part. Its
+        // first part is named only now, so a scope never split has no note.
+        var part = 1;
+        if (scope is { StepId: { } previous })
+        {
+            part = scope.Part + 1;
+            if (part == 2
+                && await HistoryDatabase.CloseStepAsync(_connection, Transaction, h, previous, now, StepNotes.Part(1), ct) is { } first)
+                closed.Add(first);
+        }
+
         var step = new HistoryStep(
             Guid.NewGuid(), head, sequence, scope?.Label ?? label, summary, _author, now,
-            EndedAt: scope is null ? now : null, IsOpen: scope is not null);
+            EndedAt: scope is null ? now : null, IsOpen: scope is not null, Note: StepNotes.Of(part, ending: null));
         await HistoryDatabase.AppendStepAsync(_connection, Transaction, h, step, patchset, ct);
-        return new RecordedStep(step.StepId, changes, step, closed);
+        return new RecordedStep(step.StepId, changes, part, step, closed);
     }
 
     public async ValueTask DisposeAsync()
@@ -180,8 +193,10 @@ internal sealed class HistoryCapture : IAsyncDisposable
 }
 
 /// <summary>
-/// Where a commit landed in History: the step it is a chunk of, the step row when the commit
-/// created it, and a step it closed on the way — each announced once the commit stands. <c>Changes</c>
-/// is everything the step now holds, which its "what changed" describes.
+/// Where a commit landed in History: the step it is a chunk of and which part of its scope that
+/// step is, the step row when the commit created it, and the steps it closed or renamed "part 1" on
+/// the way — each announced once the commit stands. <c>Changes</c> is everything the step now
+/// holds, which its "what changed" describes.
 /// </summary>
-internal sealed record RecordedStep(Guid StepId, StepChanges Changes, HistoryStep? Landed, HistoryStep? Closed);
+internal sealed record RecordedStep(
+    Guid StepId, StepChanges Changes, int Part, HistoryStep? Landed, IReadOnlyList<HistoryStep> Closed);
