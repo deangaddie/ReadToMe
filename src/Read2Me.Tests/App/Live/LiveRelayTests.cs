@@ -11,6 +11,7 @@ using Read2Me.Services.Audio.Assembly;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Events;
 using Read2Me.Services.Health;
+using Read2Me.Services.History;
 using Read2Me.Services.Llm;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.NodeStatus;
@@ -33,6 +34,7 @@ public class LiveRelayTests : IAsyncLifetime
     private readonly EventBroadcaster<WatchdogEvent> _watchdog = new();
     private readonly EventBroadcaster<ServiceStatusChanged> _serviceStatus = new();
     private readonly EventBroadcaster<BookMutationReceipt> _receipts = new();
+    private readonly EventBroadcaster<HistoryStepEvent> _history = new();
     private readonly EventBroadcaster<SettingsChanged> _settings = new();
     private readonly CharacterQueueService _attribution = new();
     private readonly AudioQueueService _audio = new();
@@ -53,7 +55,7 @@ public class LiveRelayTests : IAsyncLifetime
         var throughput = new ThroughputAggregator(_llm, new EventBroadcaster<LlmTimingsSample>());
         var status = new ProjectStatusSource(_nodes, _attribution, _audio, _reviews, new BookRevisionSequence());
 
-        _relay = new LiveRelay(_hub, _registry, status, _llm, _audioGen, _assembly, _voiceBatch, _watchdog, _serviceStatus, _receipts,
+        _relay = new LiveRelay(_hub, _registry, status, _llm, _audioGen, _assembly, _voiceBatch, _watchdog, _serviceStatus, _receipts, _history,
             _settings, _attribution, _audio, _nodes, _reviews, progress, assemblyService, batchRunner, throughput,
             NullLogger<LiveRelay>.Instance);
         await _relay.StartAsync(CancellationToken.None);
@@ -102,6 +104,23 @@ public class LiveRelayTests : IAsyncLifetime
         Assert.Equal(origin, receipt.OriginId);
         Assert.Equal(7, receipt.Revision);
         Assert.Equal("folder-a", receipt.Folder);
+    }
+
+    [Fact]
+    public async Task History_steps_go_only_to_their_project_group_as_landed_then_closed_with_the_row()
+    {
+        var at = DateTimeOffset.Parse("2026-10-20T09:30:00Z");
+        var step = new HistoryStep(Guid.NewGuid(), Guid.NewGuid(), 4, "Create character", "dean", at, at, IsOpen: false);
+        _history.Publish(new HistoryStepEvent(new ProjectFolderId("folder-a"), HistoryStepEventKind.Landed, step));
+        _history.Publish(new HistoryStepEvent(new ProjectFolderId("folder-a"), HistoryStepEventKind.Closed, step));
+
+        await WaitForAsync(() => _hub.Method("history").Count == 2);
+
+        var sent = _hub.Method("history");
+        Assert.All(sent, s => Assert.Equal("project:folder-a", s.Target));
+        Assert.Equal(
+            [new HistoryMessage("stepLanded", "folder-a", step), new HistoryMessage("stepClosed", "folder-a", step)],
+            sent.Select(s => Assert.IsType<HistoryMessage>(s.Payload)));
     }
 
     /// <summary>

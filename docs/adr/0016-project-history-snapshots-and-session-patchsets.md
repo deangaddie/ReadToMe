@@ -65,6 +65,11 @@ Measured on the Dune project (8,414 paragraphs / 14,895 items):
   - right after any schema migration on open.
 
   Chunks never cross a schema change.
+
+  The snapshot taken when History starts is `snapshots/base.db`: the state before the first
+  chunk, so a new project, whose first step is its import, has a snapshot with no step to name it
+  after. A `VACUUM INTO` copy carries the project's own `__EFMigrationsHistory`, which is its
+  migration tag.
 - **Files.**
   - The live layout is unchanged.
   - When a state mutation writes or deletes a voice WAV (including `.orig.wav`), the cover or the source file, the new

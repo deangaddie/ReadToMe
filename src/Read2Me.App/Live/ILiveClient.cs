@@ -40,4 +40,6 @@ public interface ILiveClient
     Task BookEdit(BookEditMessage message);
     [HubMethodName("llmTest")]
     Task LlmTest(LlmTestMessage message);
+    [HubMethodName("history")]
+    Task History(HistoryMessage message);
 }

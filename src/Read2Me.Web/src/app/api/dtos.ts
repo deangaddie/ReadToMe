@@ -1197,3 +1197,23 @@ export interface BookEditRunDto {
   rows: BookEditRow[];
   reason: string | null;
 }
+
+/** `HistoryStep`: one History step. `sequence` is for display; the line is the `parentStepId` chain from the Head. */
+export interface HistoryStep {
+  stepId: Guid;
+  parentStepId: Guid | null;
+  sequence: number;
+  label: string;
+  author: string;
+  startedAt: string;
+  endedAt: string | null;
+  isOpen: boolean;
+}
+
+/** `GET /api/projects/{folder}/history`: steps newest first, the Head, the busy reason and the restoring flag. */
+export interface HistoryDto {
+  steps: HistoryStep[];
+  headStepId: Guid | null;
+  busy: { reason: string } | null;
+  restoring: boolean;
+}

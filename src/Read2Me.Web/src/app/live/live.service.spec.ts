@@ -252,6 +252,7 @@ describe('LiveService', () => {
         'assembly',
         'audioGen',
         'bookEdit',
+        'history',
         'itemStatus',
         'llm',
         'llmTest',

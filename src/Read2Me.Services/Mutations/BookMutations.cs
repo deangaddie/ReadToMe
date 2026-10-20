@@ -3,9 +3,11 @@ using System.Runtime.ExceptionServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Services.Checkpoints;
 using Read2Me.Services.Events;
+using Read2Me.Services.History;
 
 namespace Read2Me.Services.Mutations;
 
@@ -33,6 +35,7 @@ public sealed class BookMutations(
     IOptions<BookMutationOptions> options,
     EventBroadcaster<BookMutationReceipt> receipts,
     MutationOrigin origin,
+    ProjectHistory history,
     ILogger<BookMutations> logger)
 {
     private BookMutationOptions Options => options.Value;
@@ -76,18 +79,19 @@ public sealed class BookMutations(
         }
 
         BookMutationReceipt receipt;
+        HistoryStep? step;
         try
         {
-            var applied = await ApplyInOneTransactionAsync(mutation, implementation, ct);
-            if (applied is null)
+            if (await ApplyInOneTransactionAsync(mutation, implementation, ct) is not { } committed)
                 return new BookMutationOutcome.NoChange();
 
             // Allocated after the commit and still under the lock, so revision order is commit order.
             receipt = new BookMutationReceipt(
-                mutation.FolderId, mutation.Name, Guid.NewGuid(), revisions.Next(mutation.FolderId), applied)
+                mutation.FolderId, mutation.Name, Guid.NewGuid(), revisions.Next(mutation.FolderId), committed.Effects)
             {
                 OriginId = mutation.OriginId,
             };
+            step = committed.Step;
         }
         catch (OperationCanceledException)
         {
@@ -107,17 +111,26 @@ public sealed class BookMutations(
         }
 
         Publish(receipt);
+        if (step is not null)
+            Announce(mutation.FolderId, step);
         return new BookMutationOutcome.Committed(receipt);
     }
 
     /// <summary>
-    /// Runs the implementation, saves, and commits — or rolls back. Returns the applied effects,
-    /// or null when the implementation changed nothing.
+    /// Runs the implementation, saves, and commits — or rolls back. Returns the applied effects and
+    /// the History step recorded with them, or null when the implementation changed nothing.
+    /// <para>
+    /// A state mutation is captured by History in the same transaction (ADR 0016), so a step and
+    /// the change it records commit or roll back together. A results-only one opens no capture.
+    /// </para>
     /// </summary>
-    private async Task<BookMutationEffects?> ApplyInOneTransactionAsync(
+    private async Task<CommittedChange?> ApplyInOneTransactionAsync(
         BookMutation mutation, ImplementationCall implementation, CancellationToken ct)
     {
         var db = await session.OpenAsync(mutation.FolderId);
+        // Declared before the transaction so it is disposed after it: the capture attaches
+        // history.db, which cannot be detached while a transaction is open.
+        await using var capture = mutation.ChangesProjectState ? await history.BeginCaptureAsync(db, ct) : null;
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
         var effects = await implementation(mutation, db, ct);
@@ -131,13 +144,30 @@ public sealed class BookMutations(
 
         effects = await MarkCheckpointsStaleAsync(mutation, effects, db, ct);
         await db.SaveChangesAsync(ct);
+        var step = capture is null ? null : await capture.RecordAsync(ProjectHistory.LabelOf(mutation), ct);
 
         // The last point at which cancellation is still honourable. Past it the change is real, so
         // the commit runs to completion regardless: a committed mutation must never be reported as
         // uncommitted.
         ct.ThrowIfCancellationRequested();
         await transaction.CommitAsync(CancellationToken.None);
-        return effects;
+        return new CommittedChange(effects, step);
+    }
+
+    private sealed record CommittedChange(BookMutationEffects Effects, HistoryStep? Step);
+
+    /// <summary>Best-effort, like <see cref="Publish"/>: the step is committed whatever a subscriber does.</summary>
+    private void Announce(ProjectFolderId folder, HistoryStep step)
+    {
+        try
+        {
+            history.Announce(folder, step);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Announcing History step {Step} on {Folder} failed; the step is committed.", step.StepId, folder.Value);
+        }
     }
 
     /// <summary>

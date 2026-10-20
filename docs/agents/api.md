@@ -634,6 +634,7 @@ multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.A
 | server → client | `queue` | `{ attribution, audio, escalation? }`, debounced 250 ms, everyone |
 | server → client | `nodeStatus`, `itemStatus` | per-project deltas (null value = entry gone), debounced 250 ms, project group only |
 | server → client | `receipt` | `BookMutationReceipt` with `folder` flattened and `originId` untouched, project group only |
+| server → client | `history` | a History step (`stepLanded` when it appears, `stepClosed` when it closes) with `folder` and the `step` row as `GET /history` lists it, project group only. A step recorded by one mutation lands and closes together |
 | server → client | `assembly`, `voiceBatch`, `watchdog`, `settingsChanged` | pass-through (encode progress stepped at 1 %, batch progress debounced), everyone. Every `assembly` message names the run's `folder`; `completed` carries `outputFileName`. The snapshot's `assembly.encodePercent` is 0–100 (the REST status keeps the 0–1 fraction) |
 | server → client | `llm`, `audioGen` | stream groups only; LLM `delta` messages are 100 ms batches of `thinking` + `content` |
 | server → client | `throughput` | `ThroughputSnapshot`, once a second while a run is active plus once when it ends |
@@ -652,3 +653,26 @@ conn.On<JsonElement>("receipt", r => Console.WriteLine(r));
 await conn.StartAsync();
 var snapshot = await conn.InvokeAsync<JsonElement>("JoinProject", "dracula");
 ```
+
+## 8. History
+
+Every change to a project's **Project state** is recorded as a **History step** in the same
+transaction as the change (ADR 0016). Results and progress (generated audio, audio reviews,
+transcription scores, Pipeline checkpoints) never make a step, and nor does a write that changed
+nothing. For now each state mutation is a step of its own, labelled from the mutation ("Create
+character").
+
+```bash
+curl -s http://localhost:5000/api/projects/{folder}/history
+# → { steps: [{ stepId, parentStepId, sequence, label, author, startedAt, endedAt, isOpen }],
+#     headStepId, busy: { reason } | null, restoring }
+```
+
+- `steps` are newest first. `sequence` is for display; the line is the `parentStepId` chain from
+  `headStepId`, the tip.
+- `busy` names what is queued or running for the project ("Attribution: 128 paragraphs left"), or
+  is null when it is idle. `restoring` is always false until Restore exists.
+- History starts the first time a project is opened (`GET /api/projects/{folder}` or this call) or
+  written. An existing project starts with a "History started" step; a new one starts at its
+  import step.
+- 404 for an unknown project.

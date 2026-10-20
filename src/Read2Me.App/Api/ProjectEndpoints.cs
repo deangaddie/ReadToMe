@@ -7,6 +7,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
+using Read2Me.Services.History;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.UseCases;
 
@@ -78,11 +79,13 @@ namespace Read2Me.App.Api
         }
 
         private static async Task<IResult> GetAsync(
-            string folder, IFileSystem fs, IProjectCatalogReader reader, CancellationToken ct)
+            string folder, IFileSystem fs, IProjectCatalogReader reader, ProjectHistory history, CancellationToken ct)
         {
             if (!TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
 
+            // Opening a project is when an existing one meets History: "History started" (ADR 0016).
+            await history.StartAsync(folderId, ct);
             return await DetailAsync(folderId, reader, ct);
         }
 

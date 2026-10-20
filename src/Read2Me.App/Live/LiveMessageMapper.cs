@@ -3,6 +3,7 @@ using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Assembly;
 using Read2Me.Services.BookEdits;
 using Read2Me.Services.Health;
+using Read2Me.Services.History;
 using Read2Me.Services.Llm;
 
 namespace Read2Me.App.Live;
@@ -148,4 +149,11 @@ public static class LiveMessageMapper
         new LlmTestMessage("failed", configId, reason);
 
     public static LlmTestMessage LlmTestCancelled(int configId) => new LlmTestMessage("cancelled", configId);
+
+    public static HistoryMessage Map(HistoryStepEvent e) => e.Kind switch
+    {
+        HistoryStepEventKind.Landed => new HistoryMessage("stepLanded", e.FolderId.Value, e.Step),
+        HistoryStepEventKind.Closed => new HistoryMessage("stepClosed", e.FolderId.Value, e.Step),
+        _ => throw new NotSupportedException($"Unhandled History step event {e.Kind}."),
+    };
 }
