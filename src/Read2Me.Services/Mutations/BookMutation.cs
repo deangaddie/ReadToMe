@@ -32,6 +32,33 @@ public abstract record BookMutation(ProjectFolderId FolderId)
     /// </para>
     /// </summary>
     public Guid OriginId { get; init; }
+
+    /// <summary>
+    /// Whether this mutation changes <b>Project state</b> — the user's choices a History step fixes
+    /// — rather than only results and progress (context/history.md). Declared by the family a
+    /// mutation derives from, <see cref="ProjectStateMutation"/> or <see cref="ResultsOnlyMutation"/>,
+    /// so a new mutation cannot compile without choosing.
+    /// </summary>
+    public abstract bool ChangesProjectState { get; }
+}
+
+/// <summary>
+/// A mutation that changes Project state: book content, the roster, Voices and their reference
+/// audio, Voice Rules, narrator and project settings, cover and metadata. History captures it.
+/// </summary>
+public abstract record ProjectStateMutation(ProjectFolderId FolderId) : BookMutation(FolderId)
+{
+    public sealed override bool ChangesProjectState => true;
+}
+
+/// <summary>
+/// A mutation that writes only results — a generated take, the review of it, its transcription
+/// score — or progress, a Pipeline checkpoint. History never captures one: a Restore keeps the live
+/// results instead of rewinding them.
+/// </summary>
+public abstract record ResultsOnlyMutation(ProjectFolderId FolderId) : BookMutation(FolderId)
+{
+    public sealed override bool ChangesProjectState => false;
 }
 
 /// <summary>
@@ -42,7 +69,7 @@ public sealed record InsertParagraphItemMutation(
     ProjectFolderId FolderId,
     Guid AnchorItemId,
     InsertPosition Position,
-    string Text) : BookMutation(FolderId);
+    string Text) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// Creates one node beside or inside the anchor, its kind following from the anchor and the
@@ -54,7 +81,7 @@ public sealed record InsertNodeMutation(
     Guid AnchorId,
     Placement Placement,
     string? Title,
-    string? Text) : BookMutation(FolderId);
+    string? Text) : ProjectStateMutation(FolderId);
 
 // ── additive structural mutations ────────────────────────────────────────────
 // Every one of these creates nodes: a split makes a new parent beside the source, and the title
@@ -63,40 +90,40 @@ public sealed record InsertNodeMutation(
 
 /// <summary>Splits the Volume holding <c>PartId</c> so that Part and every later sibling start a new one.</summary>
 public sealed record SplitAtPartMutation(
-    ProjectFolderId FolderId, Guid PartId, string? NewVolumeTitle) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid PartId, string? NewVolumeTitle) : ProjectStateMutation(FolderId);
 
 /// <summary>Splits the Part holding <c>ChapterId</c> so that Chapter and every later sibling start a new one.</summary>
 public sealed record SplitAtChapterMutation(
-    ProjectFolderId FolderId, Guid ChapterId, string? NewPartTitle) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid ChapterId, string? NewPartTitle) : ProjectStateMutation(FolderId);
 
 /// <summary>Splits the Chapter holding <c>ParagraphId</c> so that Paragraph and every later sibling start a new one.</summary>
 public sealed record SplitAtParagraphMutation(
-    ProjectFolderId FolderId, Guid ParagraphId, string? NewChapterTitle) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid ParagraphId, string? NewChapterTitle) : ProjectStateMutation(FolderId);
 
 /// <summary>Splits the Paragraph holding <c>ItemId</c> so that item and every later sibling start a new one.</summary>
-public sealed record SplitAtItemMutation(ProjectFolderId FolderId, Guid ItemId) : BookMutation(FolderId);
+public sealed record SplitAtItemMutation(ProjectFolderId FolderId, Guid ItemId) : ProjectStateMutation(FolderId);
 
 /// <summary>Puts the project's book title and author at the very front of the Book, as narration.</summary>
-public sealed record AddBookTitleMutation(ProjectFolderId FolderId) : BookMutation(FolderId);
+public sealed record AddBookTitleMutation(ProjectFolderId FolderId) : ProjectStateMutation(FolderId);
 
 /// <summary>Gives every titled Volume a leading Chapter that speaks its title.</summary>
-public sealed record AddVolumeTitlesMutation(ProjectFolderId FolderId) : BookMutation(FolderId);
+public sealed record AddVolumeTitlesMutation(ProjectFolderId FolderId) : ProjectStateMutation(FolderId);
 
 /// <summary>Gives every titled Part a leading Chapter that speaks its title.</summary>
-public sealed record AddPartTitlesMutation(ProjectFolderId FolderId) : BookMutation(FolderId);
+public sealed record AddPartTitlesMutation(ProjectFolderId FolderId) : ProjectStateMutation(FolderId);
 
 /// <summary>Puts a spoken title Paragraph at the front of every titled Chapter.</summary>
-public sealed record AddChapterTitlesMutation(ProjectFolderId FolderId) : BookMutation(FolderId);
+public sealed record AddChapterTitlesMutation(ProjectFolderId FolderId) : ProjectStateMutation(FolderId);
 
 /// <summary>Inserts every pause the Book's structure implies and does not already have.</summary>
-public sealed record AddPausesMutation(ProjectFolderId FolderId) : BookMutation(FolderId);
+public sealed record AddPausesMutation(ProjectFolderId FolderId) : ProjectStateMutation(FolderId);
 
 /// <summary>Creates one pause Paragraph next to the Paragraph holding <c>AnchorItemId</c>.</summary>
 public sealed record InsertPauseParagraphMutation(
     ProjectFolderId FolderId,
     Guid AnchorItemId,
     InsertPosition Position,
-    PauseKind PauseKind) : BookMutation(FolderId);
+    PauseKind PauseKind) : ProjectStateMutation(FolderId);
 
 // ── destructive structural mutations ─────────────────────────────────────────
 // The other half of the structural family: every one of these removes nodes. A merge folds a node
@@ -106,45 +133,45 @@ public sealed record InsertPauseParagraphMutation(
 
 /// <summary>Folds a Volume into the sibling in <c>Direction</c>, which keeps the Volume's Parts.</summary>
 public sealed record MergeVolumeMutation(
-    ProjectFolderId FolderId, Guid VolumeId, MergeDirection Direction) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid VolumeId, MergeDirection Direction) : ProjectStateMutation(FolderId);
 
 /// <summary>Folds a Part into the sibling in <c>Direction</c>, which keeps the Part's Chapters.</summary>
 public sealed record MergePartMutation(
-    ProjectFolderId FolderId, Guid PartId, MergeDirection Direction) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid PartId, MergeDirection Direction) : ProjectStateMutation(FolderId);
 
 /// <summary>Folds a Chapter into the sibling in <c>Direction</c>, which keeps the Chapter's Paragraphs.</summary>
 public sealed record MergeChapterMutation(
-    ProjectFolderId FolderId, Guid ChapterId, MergeDirection Direction) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid ChapterId, MergeDirection Direction) : ProjectStateMutation(FolderId);
 
 /// <summary>Folds a Paragraph into the sibling in <c>Direction</c>, which keeps the Paragraph's items.</summary>
 public sealed record MergeParagraphMutation(
-    ProjectFolderId FolderId, Guid ParagraphId, MergeDirection Direction) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid ParagraphId, MergeDirection Direction) : ProjectStateMutation(FolderId);
 
 /// <summary>Joins a ParagraphItem's text onto the sibling in <c>Direction</c> and deletes it.</summary>
 public sealed record MergeParagraphItemMutation(
-    ProjectFolderId FolderId, Guid ItemId, MergeDirection Direction) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid ItemId, MergeDirection Direction) : ProjectStateMutation(FolderId);
 
 /// <summary>Deletes a Volume and everything under it.</summary>
-public sealed record DeleteVolumeMutation(ProjectFolderId FolderId, Guid VolumeId) : BookMutation(FolderId);
+public sealed record DeleteVolumeMutation(ProjectFolderId FolderId, Guid VolumeId) : ProjectStateMutation(FolderId);
 
 /// <summary>Deletes a Part and everything under it.</summary>
-public sealed record DeletePartMutation(ProjectFolderId FolderId, Guid PartId) : BookMutation(FolderId);
+public sealed record DeletePartMutation(ProjectFolderId FolderId, Guid PartId) : ProjectStateMutation(FolderId);
 
 /// <summary>Deletes a Chapter and everything under it.</summary>
-public sealed record DeleteChapterMutation(ProjectFolderId FolderId, Guid ChapterId) : BookMutation(FolderId);
+public sealed record DeleteChapterMutation(ProjectFolderId FolderId, Guid ChapterId) : ProjectStateMutation(FolderId);
 
 /// <summary>Deletes a Paragraph and its items.</summary>
-public sealed record DeleteParagraphMutation(ProjectFolderId FolderId, Guid ParagraphId) : BookMutation(FolderId);
+public sealed record DeleteParagraphMutation(ProjectFolderId FolderId, Guid ParagraphId) : ProjectStateMutation(FolderId);
 
 /// <summary>Deletes one ParagraphItem.</summary>
-public sealed record DeleteParagraphItemMutation(ProjectFolderId FolderId, Guid ItemId) : BookMutation(FolderId);
+public sealed record DeleteParagraphItemMutation(ProjectFolderId FolderId, Guid ItemId) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// Removes the Book's entire content — every Volume, Part, Chapter, Paragraph and item — leaving
 /// the project, its Characters and its Voices. The reread and manual-reread imports clear before
 /// they rebuild.
 /// </summary>
-public sealed record ClearBookContentMutation(ProjectFolderId FolderId) : BookMutation(FolderId);
+public sealed record ClearBookContentMutation(ProjectFolderId FolderId) : ProjectStateMutation(FolderId);
 
 // ── speaker attribution ──────────────────────────────────────────────────────
 // The high-frequency family: nothing here creates, deletes, reorders or retypes an item — item
@@ -157,7 +184,7 @@ public sealed record ClearBookContentMutation(ProjectFolderId FolderId) : BookMu
 /// explicit "this is the wrong voice", so it also discards the item's generated audio.
 /// </summary>
 public sealed record SetItemSpeakerMutation(
-    ProjectFolderId FolderId, Guid ItemId, Guid? CharacterId) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid ItemId, Guid? CharacterId) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// Stamps a speaker across one Paragraph's dialog, leaving its narration alone — unless there is no
@@ -167,14 +194,14 @@ public sealed record SetParagraphSpeakerMutation(
     ProjectFolderId FolderId,
     Guid ParagraphId,
     Guid? CharacterId,
-    string? VoiceInstructions = null) : BookMutation(FolderId);
+    string? VoiceInstructions = null) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// The bulk sibling: one speaker across the dialog of every listed Paragraph. Narration is never
 /// swept — a blind fan-out across a selection must not turn a chapter's narration into dialog.
 /// </summary>
 public sealed record SetParagraphsSpeakerMutation(
-    ProjectFolderId FolderId, IReadOnlyList<Guid> ParagraphIds, Guid? CharacterId) : BookMutation(FolderId);
+    ProjectFolderId FolderId, IReadOnlyList<Guid> ParagraphIds, Guid? CharacterId) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// Release narration: the narrator stamp, and the audio, come off every item of the scope's
@@ -182,7 +209,7 @@ public sealed record SetParagraphsSpeakerMutation(
 /// an item's speaker, so it discards audio the way a hand-flip does.
 /// </summary>
 public sealed record ReleaseNarrationMutation(
-    ProjectFolderId FolderId, NarrationReleaseScope Scope, Guid NodeId) : BookMutation(FolderId);
+    ProjectFolderId FolderId, NarrationReleaseScope Scope, Guid NodeId) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// The Character Queue's answer applied to one Paragraph's existing items. Unlike a hand-flip this
@@ -191,7 +218,7 @@ public sealed record ReleaseNarrationMutation(
 public sealed record AttributeParagraphItemsMutation(
     ProjectFolderId FolderId,
     Guid ParagraphId,
-    IReadOnlyList<ItemAttribution> Items) : BookMutation(FolderId);
+    IReadOnlyList<ItemAttribution> Items) : ProjectStateMutation(FolderId);
 
 // ── audio assignment and reviews ─────────────────────────────────────────────
 // The Audio Queue's half of the high-frequency traffic, and the same shape as speaker attribution:
@@ -228,21 +255,21 @@ public sealed record RecordParagraphItemAudioMutation(
     ProjectFolderId FolderId,
     Guid ItemId,
     string RelativePath,
-    AudioReviewVerdict Verdict) : BookMutation(FolderId);
+    AudioReviewVerdict Verdict) : ResultsOnlyMutation(FolderId);
 
 /// <summary>Points one item at an audio file, with no verdict — the generic command endpoint's half.</summary>
 public sealed record SetParagraphItemAudioMutation(
-    ProjectFolderId FolderId, Guid ItemId, string RelativePath) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid ItemId, string RelativePath) : ResultsOnlyMutation(FolderId);
 
 /// <summary>Records a verdict on an item's existing audio without touching the audio itself.</summary>
 public sealed record SetAudioReviewMutation(
-    ProjectFolderId FolderId, Guid ItemId, AudioReviewVerdict Verdict) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid ItemId, AudioReviewVerdict Verdict) : ResultsOnlyMutation(FolderId);
 
 /// <summary>
 /// The reader's "I have listened to it and it is fine": the review stops asking without the take
 /// being regenerated. A fresh failure resets it to needs-review.
 /// </summary>
-public sealed record DismissAudioReviewMutation(ProjectFolderId FolderId, Guid ItemId) : BookMutation(FolderId);
+public sealed record DismissAudioReviewMutation(ProjectFolderId FolderId, Guid ItemId) : ResultsOnlyMutation(FolderId);
 
 // ── character, narrator and policy lifecycles ────────────────────────────────
 // The roster and who narrates. Nothing here names a Paragraph, and almost everything here changes
@@ -261,18 +288,18 @@ public sealed record DismissAudioReviewMutation(ProjectFolderId FolderId, Guid I
 /// roster is keyed by what a speaker is called, so creating a name that already resolves changes
 /// nothing.
 /// </summary>
-public sealed record CreateCharacterMutation(ProjectFolderId FolderId, string CharacterName) : BookMutation(FolderId);
+public sealed record CreateCharacterMutation(ProjectFolderId FolderId, string CharacterName) : ProjectStateMutation(FolderId);
 
 /// <summary>Renames a Character. Its aliases, Voices and lines are untouched.</summary>
 public sealed record RenameCharacterMutation(
-    ProjectFolderId FolderId, Guid CharacterId, string CharacterName) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid CharacterId, string CharacterName) : ProjectStateMutation(FolderId);
 
 /// <summary>Gives a Character another name it answers to, if it does not answer to it already.</summary>
 public sealed record AddCharacterAliasMutation(
-    ProjectFolderId FolderId, Guid CharacterId, string AliasName) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid CharacterId, string AliasName) : ProjectStateMutation(FolderId);
 
 /// <summary>Takes one alias away from whichever Character owns it.</summary>
-public sealed record RemoveCharacterAliasMutation(ProjectFolderId FolderId, Guid AliasId) : BookMutation(FolderId);
+public sealed record RemoveCharacterAliasMutation(ProjectFolderId FolderId, Guid AliasId) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// Declares two Characters to be one person: every line, alias and — when asked — the merged name
@@ -283,21 +310,21 @@ public sealed record MergeCharactersMutation(
     ProjectFolderId FolderId,
     Guid SurvivorId,
     Guid MergedId,
-    bool AddNameAsAlias) : BookMutation(FolderId);
+    bool AddNameAsAlias) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// Removes a Character. Its lines survive as unattributed dialog for the queue to answer again; its
 /// aliases, Voices and Voice Rules do not, and a narrator link to it is cleared in the same
 /// transaction so the delete and the unlink cannot half-land.
 /// </summary>
-public sealed record DeleteCharacterMutation(ProjectFolderId FolderId, Guid CharacterId) : BookMutation(FolderId);
+public sealed record DeleteCharacterMutation(ProjectFolderId FolderId, Guid CharacterId) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// Says which Character narrates this Book, or unlinks narration from the roster with null
 /// (ADR-0004). The seed Narrator row cannot narrate itself — that <em>is</em> the unlinked state.
 /// </summary>
 public sealed record SetNarratorCharacterMutation(
-    ProjectFolderId FolderId, Guid? CharacterId) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid? CharacterId) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// Turns the Book-wide narrator-only policy on or off. It changes no row on any item and still
@@ -305,7 +332,7 @@ public sealed record SetNarratorCharacterMutation(
 /// denominators and the Audio Item Selection's eligibility.
 /// </summary>
 public sealed record SetNarratorOnlyModeMutation(
-    ProjectFolderId FolderId, bool Enabled) : BookMutation(FolderId);
+    ProjectFolderId FolderId, bool Enabled) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// Confirms or skips a Pipeline step, or reopens it with a null state. Not Book content, but it
@@ -313,8 +340,31 @@ public sealed record SetNarratorOnlyModeMutation(
 /// open Overview.
 /// </summary>
 public sealed record SetCheckpointMutation(
-    ProjectFolderId FolderId, PipelineStep Step, CheckpointState? State) : BookMutation(FolderId);
+    ProjectFolderId FolderId, PipelineStep Step, CheckpointState? State) : ResultsOnlyMutation(FolderId);
 
+// ── project details ──────────────────────────────────────────────────────────
+// The project row's own fields: what the project and its book are called, who wrote it, and the
+// cover. None of it is on a Paragraph, and the cover is on the project row a Book View reads, so
+// both report ProjectPolicy, as an import that names a cover does.
+
+/// <summary>
+/// Rewrites the project's title, book title and author; a null field is left as it is. The folder
+/// name never changes: it was derived from the title at creation and is the project's id.
+/// </summary>
+public sealed record UpdateProjectMetadataMutation(
+    ProjectFolderId FolderId, string? Title, string? BookTitle, string? Author) : ProjectStateMutation(FolderId);
+
+/// <summary>
+/// Names the project's cover image, or clears it with null.
+/// <para>
+/// Like <see cref="SetVoiceAudioMutation"/>, naming a cover never reports no-change: an upload
+/// lands at its own file name, so uploading the same name again writes the same string over
+/// different content. The image is written into the project folder before this commits, and the
+/// one it replaces is removed after (ADR 0007).
+/// </para>
+/// </summary>
+public sealed record SetCoverImageMutation(
+    ProjectFolderId FolderId, string? CoverImageFileName) : ProjectStateMutation(FolderId);
 
 // ── manual and AI book edits ─────────────────────────────────────────────────
 // What a person rewrites by hand, and what an approved AI edit program rewrites for them. The two
@@ -333,22 +383,22 @@ public sealed record SetCheckpointMutation(
 
 /// <summary>Rewrites a Volume's title.</summary>
 public sealed record UpdateVolumeTitleMutation(
-    ProjectFolderId FolderId, Guid VolumeId, string Title) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid VolumeId, string Title) : ProjectStateMutation(FolderId);
 
 /// <summary>Rewrites a Part's title.</summary>
 public sealed record UpdatePartTitleMutation(
-    ProjectFolderId FolderId, Guid PartId, string Title) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid PartId, string Title) : ProjectStateMutation(FolderId);
 
 /// <summary>Rewrites a Chapter's title.</summary>
 public sealed record UpdateChapterTitleMutation(
-    ProjectFolderId FolderId, Guid ChapterId, string Title) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid ChapterId, string Title) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// Rewrites one ParagraphItem's text, discarding the audio that spoke the old words and the verdict
 /// on it. Text that comes back unchanged keeps both.
 /// </summary>
 public sealed record UpdateParagraphItemTextMutation(
-    ProjectFolderId FolderId, Guid ItemId, string? Text) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid ItemId, string? Text) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// Sets one speech item's delivery cue by hand: trimmed, blank meaning none, at most
@@ -358,7 +408,7 @@ public sealed record UpdateParagraphItemTextMutation(
 /// <see cref="AttributeParagraphItemsMutation"/> and keep the audio.
 /// </summary>
 public sealed record SetItemDeliveryCueMutation(
-    ProjectFolderId FolderId, Guid ItemId, string? Cue) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid ItemId, string? Cue) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// Applies an approved AI edit program as one Book mutation, however many titles and items it
@@ -371,7 +421,7 @@ public sealed record SetItemDeliveryCueMutation(
 /// </para>
 /// </summary>
 public sealed record ApplyBookEditsMutation(
-    ProjectFolderId FolderId, IReadOnlyList<BookEditItem> Edits) : BookMutation(FolderId);
+    ProjectFolderId FolderId, IReadOnlyList<BookEditItem> Edits) : ProjectStateMutation(FolderId);
 
 // ── Voice and Voice Rule lifecycles ──────────────────────────────────────────
 // The Voices a Character can be read in, and the positional rules that pick between them. Nothing
@@ -399,30 +449,30 @@ public sealed record CreateVoiceMutation(
     string VoiceName,
     bool IsGenerated = false,
     string? Description = null,
-    string? DesignPrompt = null) : BookMutation(FolderId);
+    string? DesignPrompt = null) : ProjectStateMutation(FolderId);
 
 /// <summary>Points the Character's default Voice Rule at this Voice.</summary>
-public sealed record SetVoiceDefaultMutation(ProjectFolderId FolderId, Guid VoiceId) : BookMutation(FolderId);
+public sealed record SetVoiceDefaultMutation(ProjectFolderId FolderId, Guid VoiceId) : ProjectStateMutation(FolderId);
 
 /// <summary>Renames a Voice and rewrites its description. The audio it names is untouched.</summary>
 public sealed record UpdateVoiceMutation(
-    ProjectFolderId FolderId, Guid VoiceId, string VoiceName, string? Description) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid VoiceId, string VoiceName, string? Description) : ProjectStateMutation(FolderId);
 
 /// <summary>Stores the description a generated Voice is synthesised from.</summary>
 public sealed record SetVoiceDesignPromptMutation(
-    ProjectFolderId FolderId, Guid VoiceId, string Prompt) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid VoiceId, string Prompt) : ProjectStateMutation(FolderId);
 
 /// <summary>Overrides the voice-design server's settings for this Voice, or clears the override with null.</summary>
 public sealed record SetVoiceDesignSettingsOverrideMutation(
-    ProjectFolderId FolderId, Guid VoiceId, string? Json) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid VoiceId, string? Json) : ProjectStateMutation(FolderId);
 
 /// <summary>Overrides the TTS server's settings for this Voice, or clears the override with null.</summary>
 public sealed record SetVoiceTtsSettingsOverrideMutation(
-    ProjectFolderId FolderId, Guid VoiceId, string? Json) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid VoiceId, string? Json) : ProjectStateMutation(FolderId);
 
 /// <summary>Stores what the Voice's reference audio actually says — what a cloning TTS is given with it.</summary>
 public sealed record SetVoiceTranscriptMutation(
-    ProjectFolderId FolderId, Guid VoiceId, string Transcript) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid VoiceId, string Transcript) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// Points a Voice at reference audio.
@@ -433,7 +483,7 @@ public sealed record SetVoiceTranscriptMutation(
 /// </para>
 /// </summary>
 public sealed record SetVoiceAudioMutation(
-    ProjectFolderId FolderId, Guid VoiceId, string AudioFileName) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid VoiceId, string AudioFileName) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// Records a synthesised take of a designed Voice: the audio, the sample text it speaks, and the
@@ -445,7 +495,22 @@ public sealed record SetVoiceGeneratedMutation(
     Guid VoiceId,
     string AudioFileName,
     string Transcript,
-    string DesignPrompt) : BookMutation(FolderId);
+    string DesignPrompt) : ProjectStateMutation(FolderId);
+
+/// <summary>
+/// Records that the voice audio editor rewrote a Voice's reference audio in place. The row does not
+/// change — the edit lands on the path the Voice already names — but the audio a cloning TTS is
+/// given does, so this never reports no-change. The edited WAV, and on a first edit the stored
+/// original, are written before this commits and put back if it does not.
+/// </summary>
+public sealed record ApplyVoiceAudioEditMutation(ProjectFolderId FolderId, Guid VoiceId) : ProjectStateMutation(FolderId);
+
+/// <summary>
+/// Records that the voice audio editor put a Voice's original audio back. Like
+/// <see cref="ApplyVoiceAudioEditMutation"/> it changes the audio and not the row; the stored
+/// original is removed only once this commits.
+/// </summary>
+public sealed record RestoreVoiceAudioOriginalMutation(ProjectFolderId FolderId, Guid VoiceId) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// Switches a Voice between cloned-from-a-recording and designed-from-a-description. Turning a
@@ -453,13 +518,13 @@ public sealed record SetVoiceGeneratedMutation(
 /// with it the stored original that would otherwise claim an edit on audio that no longer exists.
 /// </summary>
 public sealed record SetVoiceSourceMutation(
-    ProjectFolderId FolderId, Guid VoiceId, bool IsGenerated) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid VoiceId, bool IsGenerated) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// Removes a Voice, its audio, its stored original and every rule that named it. The Character's
 /// default Voice Rule follows to its oldest remaining Voice, or goes too when that was the last one.
 /// </summary>
-public sealed record DeleteVoiceMutation(ProjectFolderId FolderId, Guid VoiceId) : BookMutation(FolderId);
+public sealed record DeleteVoiceMutation(ProjectFolderId FolderId, Guid VoiceId) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// Adds a positional Voice Rule below every rule the Character already has: from a node onward, up
@@ -472,17 +537,17 @@ public sealed record CreateVoiceRuleMutation(
     VoiceAnchorLevel? FromLevel,
     Guid? FromNodeId,
     VoiceAnchorLevel? ToLevel,
-    Guid? ToNodeId) : BookMutation(FolderId);
+    Guid? ToNodeId) : ProjectStateMutation(FolderId);
 
 /// <summary>Removes one positional Voice Rule. The default rule is not one of these.</summary>
-public sealed record DeleteVoiceRuleMutation(ProjectFolderId FolderId, Guid RuleId) : BookMutation(FolderId);
+public sealed record DeleteVoiceRuleMutation(ProjectFolderId FolderId, Guid RuleId) : ProjectStateMutation(FolderId);
 
 /// <summary>
 /// Moves one positional Voice Rule past its neighbour. Rules are evaluated in order, so this is how
 /// a reader decides which of two overlapping rules wins.
 /// </summary>
 public sealed record MoveVoiceRuleMutation(
-    ProjectFolderId FolderId, Guid RuleId, RuleMoveDirection Direction) : BookMutation(FolderId);
+    ProjectFolderId FolderId, Guid RuleId, RuleMoveDirection Direction) : ProjectStateMutation(FolderId);
 
 // ── imports and rereads ──────────────────────────────────────────────────────
 // Where a Book's content comes from in the first place: the initial import, the automatic reread of
@@ -516,4 +581,4 @@ public sealed record ImportBookContentMutation(
     ProjectFolderId FolderId,
     BookContent Content,
     bool ReplaceExisting,
-    string? CoverImageFileName = null) : BookMutation(FolderId);
+    string? CoverImageFileName = null) : ProjectStateMutation(FolderId);

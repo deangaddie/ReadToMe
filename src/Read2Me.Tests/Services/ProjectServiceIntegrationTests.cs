@@ -8,6 +8,7 @@ using Read2Me.Data;
 using Read2Me.Data.Enums;
 using Read2Me.Core.Models;
 using Read2Me.Services;
+using Read2Me.Services.Events;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.IO;
 using Read2Me.Tests.Infrastructure;
@@ -21,6 +22,7 @@ namespace Read2Me.Tests.Services
         private readonly ProjectService _writer;
         private readonly ProjectReader _reader;
         private readonly BookMutations _mutations;
+        private readonly EventBroadcaster<BookMutationReceipt> _receiptStream;
 
         public ProjectServiceIntegrationTests()
         {
@@ -40,6 +42,7 @@ namespace Read2Me.Tests.Services
             _writer = sp.GetRequiredService<ProjectService>();
             _reader = sp.GetRequiredService<ProjectReader>();
             _mutations = sp.GetRequiredService<BookMutations>();
+            _receiptStream = sp.GetRequiredService<EventBroadcaster<BookMutationReceipt>>();
         }
 
         public void Dispose()
@@ -228,6 +231,76 @@ namespace Read2Me.Tests.Services
             var result = await _reader.HasBookContentAsync(folderName);
 
             Assert.True(result);
+        }
+
+        // ---------------------------------------------------------------
+        // Receipts: metadata and cover commit as Book mutations
+        // ---------------------------------------------------------------
+
+        private List<BookMutationReceipt> CollectReceipts()
+        {
+            var receipts = new List<BookMutationReceipt>();
+            _receiptStream.Event += receipts.Add;
+            return receipts;
+        }
+
+        private Task<string> CreateAsync(string title) =>
+            _writer.CreateProjectAsync(title, "Title", "Author", "file.txt", new MemoryStream([1]), BookFileType.Text);
+
+        [Fact]
+        public async Task UpdateMetadataAsync_PublishesAProjectPolicyReceipt()
+        {
+            var folderName = await CreateAsync("Meta Receipt");
+            var receipts = CollectReceipts();
+
+            await _writer.UpdateMetadataAsync(folderName, "New Title", null, "New Author");
+
+            var receipt = Assert.Single(receipts);
+            Assert.Equal(nameof(UpdateProjectMetadataMutation), receipt.MutationName);
+            Assert.Equal(BookFacets.ProjectPolicy, receipt.Effects.Facets);
+            var project = await _reader.GetProjectAsync(folderName);
+            Assert.Equal(("New Title", "Title", "New Author"), (project!.Title, project.BookTitle, project.Author));
+        }
+
+        [Fact]
+        public async Task UpdateMetadataAsync_WithTheSameValues_PublishesNothing()
+        {
+            var folderName = await CreateAsync("Meta Same");
+            var receipts = CollectReceipts();
+
+            await _writer.UpdateMetadataAsync(folderName, "Meta Same", "Title", "Author");
+
+            Assert.Empty(receipts);
+        }
+
+        [Fact]
+        public async Task CoverChanges_PublishAProjectPolicyReceiptEach()
+        {
+            var folderName = await CreateAsync("Cover Receipt");
+            var receipts = CollectReceipts();
+
+            await _writer.SaveCoverImageAsync(folderName, "cover.jpg", new MemoryStream([1]));
+            // The same name again is new content at the same path, so it is still a change.
+            await _writer.SaveCoverImageAsync(folderName, "cover.jpg", new MemoryStream([2]));
+            await _writer.DeleteCoverImageAsync(folderName);
+
+            Assert.Equal(3, receipts.Count);
+            Assert.All(receipts, r =>
+            {
+                Assert.Equal(nameof(SetCoverImageMutation), r.MutationName);
+                Assert.Equal(BookFacets.ProjectPolicy, r.Effects.Facets);
+            });
+        }
+
+        [Fact]
+        public async Task SaveCoverImageAsync_SameName_KeepsTheNewContent()
+        {
+            var folderName = await CreateAsync("Cover Same Name");
+
+            await _writer.SaveCoverImageAsync(folderName, "cover.jpg", new MemoryStream([1]));
+            await _writer.SaveCoverImageAsync(folderName, "cover.jpg", new MemoryStream([2]));
+
+            Assert.Equal([2], await File.ReadAllBytesAsync(Path.Combine(_tempDir, folderName, "cover.jpg")));
         }
 
         // ---------------------------------------------------------------

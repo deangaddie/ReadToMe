@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using Read2Me.App.Live;
 using Read2Me.Core.Configuration;
@@ -103,6 +104,115 @@ public class OneConsistencyModelTests : ProjectDbTestBase
         foreach (var assembly in ProductionAssemblies)
             Assert.DoesNotContain(assembly.GetTypes(), t => t.Name == typeName);
     }
+
+    /// <summary>
+    /// History captures Project state at <see cref="BookMutations.CommitAsync"/>, and only state:
+    /// a TTS take, its review and a Pipeline checkpoint are results and progress, not choices
+    /// (context/history.md). So every mutation says which it is, by the family it derives from — a
+    /// new one that derives from <see cref="BookMutation"/> directly has made no choice.
+    /// </summary>
+    [Fact]
+    public void EveryMutation_DeclaresProjectStateOrResultsOnly()
+    {
+        var undeclared = ConcreteMutations
+            .Where(t => !typeof(ProjectStateMutation).IsAssignableFrom(t) &&
+                        !typeof(ResultsOnlyMutation).IsAssignableFrom(t))
+            .Select(t => t.Name)
+            .ToList();
+
+        Assert.Empty(undeclared);
+    }
+
+    /// <summary>
+    /// Pinned by name, so moving one of these to the state family — or a state mutation to this
+    /// one — is a decision someone made on purpose rather than a slip History would pay for.
+    /// </summary>
+    [Fact]
+    public void TheResultsOnlyMutations_AreTakesReviewsAndCheckpoints()
+    {
+        var resultsOnly = ConcreteMutations
+            .Where(t => typeof(ResultsOnlyMutation).IsAssignableFrom(t))
+            .Select(t => t.Name)
+            .Order()
+            .ToList();
+
+        Assert.Equal(
+            [
+                nameof(DismissAudioReviewMutation),
+                nameof(RecordParagraphItemAudioMutation),
+                nameof(SetAudioReviewMutation),
+                nameof(SetCheckpointMutation),
+                nameof(SetParagraphItemAudioMutation),
+            ],
+            resultsOnly);
+    }
+
+    /// <summary>
+    /// Every Project-state write commits through <see cref="BookMutations"/>, so History has one
+    /// place to capture it (ADR 0016). Read from the source because a write is a call, which
+    /// reflection cannot see: a production file that reaches the project database and saves, or runs
+    /// a bulk update or delete, is writing around the seam — unless it is the seam's own
+    /// implementations, or a system write listed below with the number of writes it is allowed.
+    /// </summary>
+    [Fact]
+    public void ProjectDatabaseWrites_HappenOnlyInsideBookMutations()
+    {
+        var offenders = ProductionSourceFiles()
+            .Select(f => (Path: Path.GetRelativePath(SourceTree.Root, f), Text: File.ReadAllText(f)))
+            .Where(f => ProjectDbAccess.IsMatch(f.Text))
+            .Where(f => !f.Path.StartsWith(MutationsFolder, StringComparison.OrdinalIgnoreCase))
+            .Select(f => (f.Path, Writes: DatabaseWrite.Count(f.Text)))
+            .Where(f => f.Writes > SystemWrites.GetValueOrDefault(f.Path))
+            .Select(f => $"{f.Path} ({f.Writes} writes)")
+            .Order()
+            .ToList();
+
+        Assert.True(offenders.Count == 0,
+            "Project-state writes must commit through BookMutations.CommitAsync as a Book mutation. " +
+            "Writing outside it: " + string.Join(", ", offenders));
+    }
+
+    [Fact]
+    public void EverySystemWriteEntry_StillExists()
+    {
+        // A stale entry is a hole nobody notices.
+        var missing = SystemWrites.Keys
+            .Where(rel => !File.Exists(Path.Combine(SourceTree.Root, rel)))
+            .ToList();
+
+        Assert.Empty(missing);
+    }
+
+    /// <summary>
+    /// Writes that are not a user's change to a project and stay outside History. Migrations at
+    /// open run through <c>Database.Migrate</c>, which the scan does not count.
+    /// </summary>
+    private static readonly Dictionary<string, int> SystemWrites = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Creating a project writes its first Project row, before there is a Book to mutate.
+        [Path.Combine("Read2Me.Services", "ProjectService.cs")] = 1,
+    };
+
+    private static readonly string MutationsFolder =
+        Path.Combine("Read2Me.Services", "Mutations") + Path.DirectorySeparatorChar;
+
+    private static readonly Regex ProjectDbAccess =
+        new(@"\b(ProjectDbSession|IProjectDbContextFactory|ProjectDbContext)\b", RegexOptions.Compiled);
+
+    private static readonly Regex DatabaseWrite =
+        new(@"\b(SaveChanges|ExecuteUpdate|ExecuteDelete|ExecuteSql\w*)(Async)?\s*\(", RegexOptions.Compiled);
+
+    private static IEnumerable<string> ProductionSourceFiles() =>
+        new[] { "Read2Me.App", "Read2Me.Services", "Read2Me.Data" }
+            .SelectMany(project => Directory.EnumerateFiles(
+                Path.Combine(SourceTree.Root, project), "*.cs", SearchOption.AllDirectories))
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}Migrations{Path.DirectorySeparatorChar}"));
+
+    private static IEnumerable<Type> ConcreteMutations =>
+        typeof(BookMutation).Assembly.GetTypes()
+            .Where(t => t is { IsAbstract: false, IsInterface: false } && typeof(BookMutation).IsAssignableFrom(t));
 
     private static Assembly[] ProductionAssemblies =>
     [

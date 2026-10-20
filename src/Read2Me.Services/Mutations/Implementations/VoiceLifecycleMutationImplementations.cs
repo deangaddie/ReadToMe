@@ -274,6 +274,33 @@ public sealed class SetVoiceGeneratedMutationImplementation
 }
 
 /// <summary>
+/// An in-place edit of a Voice's audio. No row changes — the Voice still names the same path — so
+/// all this does is confirm the Voice is still there and report the change the audio is.
+/// </summary>
+public sealed class ApplyVoiceAudioEditMutationImplementation
+    : IBookMutationImplementation<ApplyVoiceAudioEditMutation>
+{
+    public async Task<BookMutationEffects> ApplyAsync(
+        ApplyVoiceAudioEditMutation mutation, ProjectDbContext db, CancellationToken ct)
+    {
+        await VoiceEffects.VoiceAsync(db, mutation.VoiceId, ct);
+        return VoiceEffects.Exact(BookFacets.Voices);
+    }
+}
+
+/// <summary>The edit's undo: the original audio back on the same path, and again no row changes.</summary>
+public sealed class RestoreVoiceAudioOriginalMutationImplementation
+    : IBookMutationImplementation<RestoreVoiceAudioOriginalMutation>
+{
+    public async Task<BookMutationEffects> ApplyAsync(
+        RestoreVoiceAudioOriginalMutation mutation, ProjectDbContext db, CancellationToken ct)
+    {
+        await VoiceEffects.VoiceAsync(db, mutation.VoiceId, ct);
+        return VoiceEffects.Exact(BookFacets.Voices);
+    }
+}
+
+/// <summary>
 /// Switches a Voice between cloned-from-a-recording and designed-from-a-description.
 /// <para>
 /// Each direction drops what the other kind cannot use: made uploaded, the design prompt goes,
