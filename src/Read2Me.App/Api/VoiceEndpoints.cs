@@ -66,20 +66,27 @@ namespace Read2Me.App.Api
             endpoints.MapGet("/api/projects/{folder}/voices/{voiceId:guid}", GetVoiceAsync)
                 .WithSummary("One voice by id, with isEdited (its audio has been through the voice editor), both settings overrides, and referenceSeconds / referenceWarning (set over the 15 s soft Reference Limit), read from the stored WAV.");
             endpoints.MapPut("/api/projects/{folder}/voices/{voiceId:guid}/audio", UploadAudioAsync)
+                .RecordsStep("Upload voice audio")
                 .DisableAntiforgery()
                 .WithSummary("Upload or replace a voice's reference audio: multipart field 'file' (audio, 200 MB max). Normalises, stores and commits in one step; answers the updated voice. Any earlier voice-editor edit is discarded. 422 when the normalised reference is over the Reference Limit's hard limit (30 s / 5 MiB), with nothing stored; over the soft limit (15 s) it is stored and the voice's referenceWarning is set.");
             endpoints.MapPost("/api/projects/{folder}/voices/{voiceId:guid}/transcribe", TranscribeAsync)
+                .RecordsStep("Transcribe voice")
                 .WithSummary("Transcribe a voice's reference audio with the active transcription service and store the result as its transcript. 422 without audio or an active service.");
             endpoints.MapPost("/api/projects/{folder}/characters/{characterId:guid}/design-prompt/render", RenderDesignPromptAsync)
+                .RecordsNoStep("Renders a template; nothing is written.")
                 .WithSummary("The voice-design prompt template rendered for this character (book, author, name). Nothing is persisted; edit it and send it to /generate.");
             endpoints.MapPost("/api/projects/{folder}/characters/{characterId:guid}/design-prompt/generate", GenerateDesignPromptAsync)
+                .RecordsNoStep("Asks the LLM; nothing is written.")
                 .WithSummary("Ask the LLM for a voice design prompt from a rendered prompt. Synchronous; publishes the LLM run on the live hub. Nothing is persisted — set it on a voice with SetVoiceDesignPrompt.");
             endpoints.MapPost("/api/projects/{folder}/characters/{characterId:guid}/voices/{voiceId:guid}/generate-audio", GenerateAudioAsync)
+                .RecordsStep("Generate voice audio")
                 .WithSummary("Synthesise reference audio for one generated voice from its design prompt. An optional body { designPrompt } designs from that prompt instead and stores it with the take, so an unsaved prompt edit and its audio land in one request (nothing is stored if synthesis fails). Synchronous; takes tens of seconds. 503 \"TTS busy, try again\" when the TTS runtime is generating with another model; 422 when the take is over the 30 s hard Reference Limit (nothing stored). referenceWarning is set over the 15 s soft limit.")
                 .AddOpenApiOperationTransformer(OptionalJsonBody<GenerateVoiceAudioRequest>);
             endpoints.MapPost("/api/projects/{folder}/voice-batch/prompts", StartPromptBatch)
+                .RecordsNoStep("Starts the voice batch; what it commits is recorded as it lands.")
                 .WithSummary("Start the voice-plan batch: one LLM call per character without voices (regenerateAll replans every character). Poll /api/voice-batch/status.");
             endpoints.MapPost("/api/projects/{folder}/voice-batch/audio", StartAudioBatch)
+                .RecordsNoStep("Starts the voice batch; what it commits is recorded as it lands.")
                 .WithSummary("Start the voice-audio batch: synthesise every generated voice that has a design prompt but no audio. Poll /api/voice-batch/status.");
             endpoints.MapGet("/api/voice-batch/status",
                     (VoiceBatchRunner runner) => Results.Ok(new VoiceBatchStatusDto(

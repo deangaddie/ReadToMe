@@ -1204,6 +1204,8 @@ export interface HistoryStep {
   parentStepId: Guid | null;
   sequence: number;
   label: string;
+  /** What changed, in user terms ("4 paragraphs in Chapter 3"), or null when there is nothing to count or place. */
+  summary: string | null;
   author: string;
   startedAt: string;
   endedAt: string | null;

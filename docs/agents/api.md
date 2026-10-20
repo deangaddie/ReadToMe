@@ -634,7 +634,7 @@ multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.A
 | server → client | `queue` | `{ attribution, audio, escalation? }`, debounced 250 ms, everyone |
 | server → client | `nodeStatus`, `itemStatus` | per-project deltas (null value = entry gone), debounced 250 ms, project group only |
 | server → client | `receipt` | `BookMutationReceipt` with `folder` flattened and `originId` untouched, project group only |
-| server → client | `history` | a History step (`stepLanded` when it appears, `stepClosed` when it closes) with `folder` and the `step` row as `GET /history` lists it, project group only. A step recorded by one mutation lands and closes together |
+| server → client | `history` | a History step (`stepLanded` when it appears, `stepClosed` when it closes) with `folder` and the `step` row as `GET /history` lists it, project group only. A step recorded with no request open lands and closes together; a request's step lands open and closes when the request ends |
 | server → client | `assembly`, `voiceBatch`, `watchdog`, `settingsChanged` | pass-through (encode progress stepped at 1 %, batch progress debounced), everyone. Every `assembly` message names the run's `folder`; `completed` carries `outputFileName`. The snapshot's `assembly.encodePercent` is 0–100 (the REST status keeps the 0–1 fraction) |
 | server → client | `llm`, `audioGen` | stream groups only; LLM `delta` messages are 100 ms batches of `thinking` + `content` |
 | server → client | `throughput` | `ThroughputSnapshot`, once a second while a run is active plus once when it ends |
@@ -659,17 +659,29 @@ var snapshot = await conn.InvokeAsync<JsonElement>("JoinProject", "dracula");
 Every change to a project's **Project state** is recorded as a **History step** in the same
 transaction as the change (ADR 0016). Results and progress (generated audio, audio reviews,
 transcription scores, Pipeline checkpoints) never make a step, and nor does a write that changed
-nothing. For now each state mutation is a step of its own, labelled from the mutation ("Create
-character").
+nothing.
+
+One request is at most one step, whatever it commits: every write endpoint under
+`/api/projects/{folder}` opens a **step scope** for its request, labelled in user terms ("Edit with
+AI", "Split chapter", "New character", "Upload voice audio"; a `commands` request is labelled for
+its command). An agent's requests are grouped exactly as the web app's are. A request that commits
+nothing leaves no step. A write committed outside any request (the queues, until Background runs
+have their own steps) is a step of its own, labelled from the mutation ("Attribute paragraph
+items").
 
 ```bash
 curl -s http://localhost:5000/api/projects/{folder}/history
-# → { steps: [{ stepId, parentStepId, sequence, label, author, startedAt, endedAt, isOpen }],
+# → { steps: [{ stepId, parentStepId, sequence, label, summary, author, startedAt, endedAt, isOpen }],
 #     headStepId, busy: { reason } | null, restoring }
 ```
 
 - `steps` are newest first. `sequence` is for display; the line is the `parentStepId` chain from
   `headStepId`, the tip.
+- `summary` is what changed, in user terms: "4 paragraphs in Chapter 3", "12 paragraphs across 3
+  chapters", or a title ("The Storm"). Null when the step changed nothing it can count or place, such
+  as a roster or Voice change.
+- `isOpen` is true while the request that owns the step is still running; `stepLanded` then
+  `stepClosed` on the live hub bracket it.
 - `busy` names what is queued or running for the project ("Attribution: 128 paragraphs left"), or
   is null when it is idle. `restoring` is always false until Restore exists.
 - History starts the first time a project is opened (`GET /api/projects/{folder}` or this call) or

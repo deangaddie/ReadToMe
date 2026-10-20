@@ -28,8 +28,10 @@ namespace Read2Me.App.Api
         public static void MapDiscoveryEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapPost("/api/projects/{folder}/characters/discover", DiscoverAsync)
+                .RecordsNoStep("Asks the LLM; nothing is written until the roster is applied.")
                 .WithSummary("Ask the active LLM for the book's notable characters and aliases. Synchronous; takes seconds to a minute. Pass ?thinking=true to let the model think first — slower, better recall. Each row carries existingCharacterId when it resolves onto a roster character; collisions lists names two characters would share.");
             endpoints.MapPost("/api/projects/{folder}/characters/discover/apply", ApplyAsync)
+                .RecordsStep("Discover characters")
                 .WithSummary("Persist discovered characters: one create per row (idempotent on name/alias match) plus its aliases.");
         }
 

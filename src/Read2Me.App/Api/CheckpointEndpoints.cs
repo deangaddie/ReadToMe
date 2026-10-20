@@ -29,6 +29,7 @@ namespace Read2Me.App.Api
         public static void MapCheckpointEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapPut("/api/projects/{folder}/checkpoints/{step}", SetAsync)
+                .RecordsNoStep("A Pipeline checkpoint is progress, not Project state.")
                 .WithSummary("Confirm, skip or reopen a Pipeline step (state: confirmed | skipped | open). 204 on success, " +
                              "including a repeat that changed nothing; the refreshed /status arrives through the Checkpoints receipt. " +
                              "404 unknown step; 422 when the step does not take that state or the book has no content; 400 without a state.");

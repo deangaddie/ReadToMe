@@ -40,12 +40,15 @@ namespace Read2Me.App.Api
             endpoints.MapGet("/api/audio/steps/catalog", GetCatalog)
                 .WithSummary("The post-process steps a scope offers, in chain order, each with its dials (settings-form fields) and defaults. Only scope=voice is served.");
             endpoints.MapPost("/api/projects/{folder}/voices/{voiceId:guid}/editor/preview", PreviewAsync)
+                .RecordsNoStep("A preview; nothing is written.")
                 .WithSummary("Render a chain of steps over the voice's original audio. Steps run in catalog order whatever order they are sent; settings are dial values merged over the step's defaults. Answers a previewId (valid 30 minutes) and one playable stage per step.");
             endpoints.MapGet("/api/previews/{previewId}/{stepId}.wav", GetPreviewStage)
                 .WithSummary("The audio after one stage of a rendered preview. 404 once the preview has expired.");
             endpoints.MapPost("/api/projects/{folder}/voices/{voiceId:guid}/editor/apply", ApplyAsync)
+                .RecordsStep("Edit voice audio")
                 .WithSummary("Write a rendered preview's final stage over the voice's audio, keeping the original for restore. 422 when the preview is unknown, expired or belongs to another voice.");
             endpoints.MapPost("/api/projects/{folder}/voices/{voiceId:guid}/editor/restore", RestoreAsync)
+                .RecordsStep("Restore original voice audio")
                 .WithSummary("Put the voice's original audio back and forget the edit. A no-op for a voice that was never edited.");
             endpoints.MapGet("/api/projects/{folder}/voices/{voiceId:guid}/original.wav", GetOriginalAsync)
                 .WithSummary("The voice's audio as it was before the editor touched it. 404 while the voice is unedited — the live WAV is the original then.");

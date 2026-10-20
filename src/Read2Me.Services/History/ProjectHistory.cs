@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
@@ -21,8 +22,9 @@ namespace Read2Me.Services.History;
 /// Book yet gets no such step, so its import is its first step.
 /// </para>
 /// <para>
-/// No step scopes yet: each committed state mutation is a step of its own, labelled from the
-/// mutation. Results-only mutations, and state mutations that change no state table, record nothing.
+/// What a request commits is one step, through its <see cref="HistoryStepScope"/>; a state
+/// mutation committed with no scope open is a step of its own, labelled from the mutation.
+/// Results-only mutations, and state mutations that change no state table, record nothing.
 /// </para>
 /// </summary>
 public sealed partial class ProjectHistory(
@@ -31,7 +33,8 @@ public sealed partial class ProjectHistory(
     ProjectWriteLocks writeLocks,
     IOptions<BookMutationOptions> mutationOptions,
     EventBroadcaster<HistoryStepEvent> events,
-    TimeProvider clock)
+    TimeProvider clock,
+    ILogger<ProjectHistory> logger)
 {
     /// <summary>Who steps are recorded for. The app is single-user, so it is whoever runs it.</summary>
     private static readonly string Author = Environment.UserName;
@@ -93,15 +96,46 @@ public sealed partial class ProjectHistory(
             db, HistoryDatabase.FileIn(HistoryFolderOf(db)), NotStateTables(db), Author, clock, ct);
     }
 
-    /// <summary>Announces a step that landed with its commit. Call after the commit, never inside it.</summary>
-    internal void Announce(ProjectFolderId folder, HistoryStep step)
+    /// <summary>
+    /// Closes a step scope's step, and announces it. Takes the project's write lock, so the close
+    /// never races a commit extending the line, but waits only the mutation budget: a step left
+    /// open is closed by the next commit to the project instead.
+    /// </summary>
+    internal async Task CloseAsync(ProjectFolderId folder, Guid stepId)
     {
+        // Not the request's token: a request that ends, however it ends, still closes its step.
+        using var writeLock = await writeLocks.AcquireAsync(folder, mutationOptions.Value.LockWaitBudget, CancellationToken.None);
+        if (writeLock is null)
+        {
+            logger.LogWarning(
+                "History step {Step} on {Folder} stays open: the write lock was busy past {Budget}. The next commit closes it.",
+                stepId, folder.Value, mutationOptions.Value.LockWaitBudget);
+            return;
+        }
+
+        HistoryStep? closed;
+        await using (var connection = HistoryDatabase.Open(HistoryFileOf(folder), SqliteOpenMode.ReadWrite))
+        {
+            await connection.OpenAsync();
+            closed = await HistoryDatabase.CloseStepAsync(connection, null, schema: "", stepId, clock.GetUtcNow(), CancellationToken.None);
+        }
+        if (closed is not null)
+            events.Publish(new HistoryStepEvent(folder, HistoryStepEventKind.Closed, closed));
+    }
+
+    /// <summary>Announces what a commit did to History. Call after the commit, never inside it.</summary>
+    internal void Announce(ProjectFolderId folder, RecordedStep recorded)
+    {
+        if (recorded.Closed is { } closed)
+            events.Publish(new HistoryStepEvent(folder, HistoryStepEventKind.Closed, closed));
+        if (recorded.Landed is not { } step)
+            return;
         events.Publish(new HistoryStepEvent(folder, HistoryStepEventKind.Landed, step));
         if (!step.IsOpen)
             events.Publish(new HistoryStepEvent(folder, HistoryStepEventKind.Closed, step));
     }
 
-    /// <summary>"SetItemSpeakerMutation" → "Set item speaker", until step scopes name steps in user terms.</summary>
+    /// <summary>"SetItemSpeakerMutation" → "Set item speaker": the label of a step no scope names.</summary>
     internal static string LabelOf(BookMutation mutation)
     {
         var words = PascalWords().Split(mutation.Name.EndsWith("Mutation", StringComparison.Ordinal)
@@ -150,7 +184,7 @@ public sealed partial class ProjectHistory(
     private Task InsertStartedStepAsync(SqliteConnection connection, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
-        var step = new HistoryStep(Guid.NewGuid(), null, 1, HistoryDatabase.StartedLabel, Author, now, now, IsOpen: false);
+        var step = new HistoryStep(Guid.NewGuid(), null, 1, HistoryDatabase.StartedLabel, null, Author, now, now, IsOpen: false);
         return HistoryDatabase.AppendStepAsync(connection, null, schema: "", step, patchset: null, ct);
     }
 

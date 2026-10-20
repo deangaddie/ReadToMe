@@ -434,7 +434,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The project's History: steps newest first (stepId, parentStepId, display sequence, label, author, startedAt, endedAt, isOpen), headStepId (the tip; null before the first step), busy ({ reason } while anything is queued or running for the project, else null) and restoring. The first call on a project starts its History. 404 unknown project. */
+        /** The project's History: steps newest first (stepId, parentStepId, display sequence, label, summary — what changed, in user terms, or null — author, startedAt, endedAt, isOpen while its request runs), headStepId (the tip; null before the first step), busy ({ reason } while anything is queued or running for the project, else null) and restoring. The first call on a project starts its History. 404 unknown project. */
         get: {
             parameters: {
                 query?: never;
@@ -972,7 +972,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Execute a book command. Body: { "type": "<Name>", ...properties }. Type is the command record name without the Command suffix, e.g. CreateCharacter, SetParagraphCharacter. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
+        /** Execute a book command. Body: { "type": "<Name>", ...properties }. Type is the command record name without the Command suffix, e.g. CreateCharacter, SetParagraphCharacter. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. The request is one History step, labelled for the command (e.g. Edit with AI, Split chapter, Assign speaker). */
         post: {
             parameters: {
                 query?: never;
@@ -5099,6 +5099,7 @@ export interface components {
             /** Format: int32 */
             sequence: number | string;
             label: string;
+            summary: null | string;
             author: string;
             /** Format: date-time */
             startedAt: string;

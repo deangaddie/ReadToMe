@@ -2,6 +2,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Read2Me.Data;
+using Read2Me.Services.Mutations;
 
 namespace Read2Me.Services.History;
 
@@ -68,10 +69,18 @@ internal sealed class HistoryCapture : IAsyncDisposable
     }
 
     /// <summary>
-    /// Appends what the session recorded as one closed step with one chunk, at the tip, inside the
-    /// mutation's transaction. Returns null, recording nothing, when no state table changed.
+    /// Records what the session captured, inside the mutation's transaction, and answers the step it
+    /// landed in — or null, recording nothing, when no state table changed.
+    /// <para>
+    /// Inside a step scope whose step is still the open tip, the change is that step's next chunk.
+    /// Otherwise it starts a new step at the tip: open for the scope to extend and close, or closed
+    /// at once when no scope is open. A step left open at the tip by anyone else — a scope that
+    /// could not close it, or one this commit interleaves with — is closed first, so a step's chunks
+    /// are always contiguous in the line.
+    /// </para>
     /// </summary>
-    public async Task<HistoryStep?> RecordAsync(string label, CancellationToken ct)
+    public async Task<RecordedStep?> RecordAsync(
+        HistoryStepScope.OpenScope? scope, string label, BookMutationEffects effects, CancellationToken ct)
     {
         var patchset = _session.Patchset();
         if (patchset.Length == 0)
@@ -79,21 +88,40 @@ internal sealed class HistoryCapture : IAsyncDisposable
 
         const string h = HistoryDatabase.Schema;
         await using var read = Command($"""
-            SELECT (SELECT StepId FROM {h}.Head WHERE Id = 1), (SELECT COALESCE(MAX(Sequence), 0) + 1 FROM {h}.Step)
+            SELECT head.StepId, step.IsOpen, (SELECT COALESCE(MAX(Sequence), 0) + 1 FROM {h}.Step)
+            FROM (SELECT 1) LEFT JOIN {h}.Head head ON head.Id = 1 LEFT JOIN {h}.Step step ON step.StepId = head.StepId
             """);
-        Guid? parent;
+        Guid? head;
+        bool headOpen;
         int sequence;
         await using (var reader = await read.ExecuteReaderAsync(ct))
         {
             await reader.ReadAsync(ct);
-            parent = reader.IsDBNull(0) ? null : Guid.Parse(reader.GetString(0));
-            sequence = reader.GetInt32(1);
+            head = reader.IsDBNull(0) ? null : Guid.Parse(reader.GetString(0));
+            headOpen = !reader.IsDBNull(1) && reader.GetInt64(1) != 0;
+            sequence = reader.GetInt32(2);
         }
 
+        if (scope?.StepId is { } scoped && scoped == head && headOpen)
+        {
+            var extended = scope.Changes.With(effects);
+            var extendedSummary = await StepSummary.DescribeAsync(_db, extended, ct);
+            await HistoryDatabase.ExtendStepAsync(_connection, Transaction, h, scoped, extendedSummary, patchset, ct);
+            return new RecordedStep(scoped, extended, Landed: null, Closed: null);
+        }
+
+        // A new step describes only what it holds, even when a scope carries on in it.
+        var changes = StepChanges.None.With(effects);
+        var summary = await StepSummary.DescribeAsync(_db, changes, ct);
         var now = _clock.GetUtcNow();
-        var step = new HistoryStep(Guid.NewGuid(), parent, sequence, label, _author, now, now, IsOpen: false);
+        var closed = head is { } open && headOpen
+            ? await HistoryDatabase.CloseStepAsync(_connection, Transaction, h, open, now, ct)
+            : null;
+        var step = new HistoryStep(
+            Guid.NewGuid(), head, sequence, scope?.Label ?? label, summary, _author, now,
+            EndedAt: scope is null ? now : null, IsOpen: scope is not null);
         await HistoryDatabase.AppendStepAsync(_connection, Transaction, h, step, patchset, ct);
-        return step;
+        return new RecordedStep(step.StepId, changes, step, closed);
     }
 
     public async ValueTask DisposeAsync()
@@ -150,3 +178,10 @@ internal sealed class HistoryCapture : IAsyncDisposable
         }
     }
 }
+
+/// <summary>
+/// Where a commit landed in History: the step it is a chunk of, the step row when the commit
+/// created it, and a step it closed on the way — each announced once the commit stands. <c>Changes</c>
+/// is everything the step now holds, which its "what changed" describes.
+/// </summary>
+internal sealed record RecordedStep(Guid StepId, StepChanges Changes, HistoryStep? Landed, HistoryStep? Closed);

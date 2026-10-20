@@ -24,21 +24,28 @@ namespace Read2Me.App.Api
             endpoints.MapGet("/api/projects/{folder}", GetAsync)
                 .WithSummary("Project metadata for one folder.");
             endpoints.MapDelete("/api/projects/{folder}", Delete)
+                .RecordsNoStep("Removes the project, History and all.")
                 .WithSummary("Delete a project folder and everything in it.");
             endpoints.MapPost("/api/projects/{folder}/import", ImportAsync)
+                .RecordsOwnStep()
                 .WithSummary("Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. " +
                              "An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes.");
             endpoints.MapPost("/api/projects/{folder}/import/manual", ImportManuallyAsync)
+                .RecordsStep("Re-split book")
                 .WithSummary("Re-split the stored book file by hand-chosen rules (replaces existing content). " +
                              "Per level: mode Prefix (with prefix) | Arabic | Roman. 400 when a switched-on level lacks a valid rule. " +
                              "An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes.");
             endpoints.MapPatch("/api/projects/{folder}", UpdateAsync)
+                .RecordsStep("Edit project details")
                 .WithSummary("Update title, book title and/or author. Omitted fields are unchanged; the folder name never changes.");
             endpoints.MapPut("/api/projects/{folder}/narrator-only-mode", SetNarratorOnlyModeAsync)
+                .RecordsStep("Narrator-only mode")
                 .WithSummary("Set the Book-wide narrator-only policy: only narration items get audio.");
             endpoints.MapPut("/api/projects/{folder}/cover", SaveCoverAsync)
+                .RecordsStep("Change cover")
                 .WithSummary("Replace the cover image (multipart 'file': jpg/jpeg/png/webp, at most 10 MB). Served from /workspace/{folder}/{coverImage}.");
             endpoints.MapDelete("/api/projects/{folder}/cover", DeleteCoverAsync)
+                .RecordsStep("Remove cover")
                 .WithSummary("Remove the cover image; a project without one still answers 204.");
         }
 
@@ -181,7 +188,7 @@ namespace Read2Me.App.Api
 
         private static async Task<IResult> ImportAsync(
             string folder, ImportRequest? body, HttpRequest request, IFileSystem fs, BookUseCases useCases,
-            MutationOrigin origin, CancellationToken ct)
+            MutationOrigin origin, HistoryStepScope steps, CancellationToken ct)
         {
             if (!TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
@@ -189,7 +196,9 @@ namespace Read2Me.App.Api
             // An import that changed nothing is still a legal import, and the wire contract has one
             // success: 200 for a Book that was replaced and for one there was nothing to replace.
             OriginHeader.Apply(request, origin);
-            return ImportResult(await useCases.ImportAsync(folderId, body?.Reread ?? false, ct));
+            var reread = body?.Reread ?? false;
+            await using (steps.Open(folderId, reread ? "Reread book" : "Import book"))
+                return ImportResult(await useCases.ImportAsync(folderId, reread, ct));
         }
 
         private static async Task<IResult> ImportManuallyAsync(
