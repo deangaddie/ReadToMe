@@ -427,6 +427,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{folder}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The project's History: steps newest first (stepId, parentStepId, display sequence, label, author, startedAt, endedAt, isOpen), headStepId (the tip; null before the first step), busy ({ reason } while anything is queued or running for the project, else null) and restoring. The first call on a project starts its History. 404 unknown project. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HistoryDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{folder}/book": {
         parameters: {
             query?: never;
@@ -5042,6 +5080,31 @@ export interface components {
         };
         GenerateDesignPromptRequest: {
             prompt: string;
+        };
+        HistoryBusyDto: {
+            reason: string;
+        };
+        HistoryDto: {
+            steps: components["schemas"]["HistoryStep"][];
+            /** Format: uuid */
+            headStepId: null | string;
+            busy: null | components["schemas"]["HistoryBusyDto"];
+            restoring: boolean;
+        };
+        HistoryStep: {
+            /** Format: uuid */
+            stepId: string;
+            /** Format: uuid */
+            parentStepId: null | string;
+            /** Format: int32 */
+            sequence: number | string;
+            label: string;
+            author: string;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            endedAt: null | string;
+            isOpen: boolean;
         };
         ImportRequest: {
             /** @default false */

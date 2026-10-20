@@ -125,6 +125,9 @@ public static class ServiceCollectionExtensions
         services.AddOptions<Mutations.BookMutationOptions>();
         services.TryAddSingleton<Events.EventBroadcaster<Mutations.BookMutationReceipt>>();
         services.AddScoped<Mutations.BookMutations>();
+        // History (ADR 0016): every state mutation commits a step through BookMutations.
+        services.TryAddSingleton<Events.EventBroadcaster<History.HistoryStepEvent>>();
+        services.TryAddSingleton<History.ProjectHistory>();
         services.AddScoped<Mutations.MutationOrigin>();
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.InsertParagraphItemMutation>,

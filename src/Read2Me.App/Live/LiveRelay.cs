@@ -8,6 +8,7 @@ using Read2Me.Services.Audio.Assembly;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Events;
 using Read2Me.Services.Health;
+using Read2Me.Services.History;
 using Read2Me.Services.Llm;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.NodeStatus;
@@ -20,7 +21,7 @@ namespace Read2Me.App.Live;
 /// nothing) and does <em>no work on the publisher's thread beyond a channel write</em>: a single
 /// drain loop applies the relay policy (research/live-events.md §8) and performs the sends.
 /// <list type="bullet">
-/// <item>Pass-through: receipts (project group), watchdog, assembly phases, voice batch control,
+/// <item>Pass-through: receipts and History steps (project group), watchdog, assembly phases, voice batch control,
 /// LLM control events and every audio-gen phase (stream groups), settings changes.</item>
 /// <item><see cref="DeltaBatcher"/>: LLM thinking/content text, one message per 100 ms.</item>
 /// <item><see cref="Debouncer"/>: queue roll-ups and per-project node/item status, 250 ms.</item>
@@ -40,6 +41,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private sealed record WatchdogItem(WatchdogEvent Event) : Item;
     private sealed record ServiceStatusItem(ServiceStatusChanged Change) : Item;
     private sealed record ReceiptItem(BookMutationReceipt Receipt) : Item;
+    private sealed record HistoryItem(HistoryStepEvent Event) : Item;
     private sealed record SettingsItem(SettingsChanged Change) : Item;
     private sealed record QueuePulse : Item;
     private sealed record StatusPulse : Item;
@@ -62,6 +64,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private readonly EventBroadcaster<WatchdogEvent> _watchdog;
     private readonly EventBroadcaster<ServiceStatusChanged> _serviceStatus;
     private readonly EventBroadcaster<BookMutationReceipt> _receipts;
+    private readonly EventBroadcaster<HistoryStepEvent> _history;
     private readonly EventBroadcaster<SettingsChanged> _settings;
     private readonly CharacterQueueService _attributionQueue;
     private readonly AudioQueueService _audioQueue;
@@ -109,6 +112,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         EventBroadcaster<WatchdogEvent> watchdog,
         EventBroadcaster<ServiceStatusChanged> serviceStatus,
         EventBroadcaster<BookMutationReceipt> receipts,
+        EventBroadcaster<HistoryStepEvent> history,
         EventBroadcaster<SettingsChanged> settings,
         CharacterQueueService attributionQueue,
         AudioQueueService audioQueue,
@@ -131,6 +135,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         _watchdog = watchdog;
         _serviceStatus = serviceStatus;
         _receipts = receipts;
+        _history = history;
         _settings = settings;
         _attributionQueue = attributionQueue;
         _audioQueue = audioQueue;
@@ -150,6 +155,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         _watchdog.Event += OnWatchdog;
         _serviceStatus.Event += OnServiceStatus;
         _receipts.Event += OnReceipt;
+        _history.Event += OnHistory;
         _settings.Event += OnSettings;
         _attributionQueue.Changed += OnQueueChanged;
         _audioQueue.Changed += OnQueueChanged;
@@ -173,6 +179,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private void OnWatchdog(WatchdogEvent e) => Post(new WatchdogItem(e));
     private void OnServiceStatus(ServiceStatusChanged c) => Post(new ServiceStatusItem(c));
     private void OnReceipt(BookMutationReceipt r) => Post(new ReceiptItem(r));
+    private void OnHistory(HistoryStepEvent e) => Post(new HistoryItem(e));
     private void OnSettings(SettingsChanged c) => Post(new SettingsItem(c));
     private void OnProgressChanged() => Post(new QueuePulse());
 
@@ -229,6 +236,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         _watchdog.Event -= OnWatchdog;
         _serviceStatus.Event -= OnServiceStatus;
         _receipts.Event -= OnReceipt;
+        _history.Event -= OnHistory;
         _settings.Event -= OnSettings;
         _attributionQueue.Changed -= OnQueueChanged;
         _audioQueue.Changed -= OnQueueChanged;
@@ -354,6 +362,10 @@ public sealed class LiveRelay : IHostedService, IDisposable
 
             case ReceiptItem { Receipt: var r }:
                 await SendAsync(() => _hub.Clients.Group(LiveGroups.Project(r.FolderId.Value)).Receipt(ReceiptMessage.From(r)));
+                break;
+
+            case HistoryItem { Event: var e }:
+                await SendAsync(() => _hub.Clients.Group(LiveGroups.Project(e.FolderId.Value)).History(LiveMessageMapper.Map(e)));
                 break;
 
             case SettingsItem { Change: var c }:

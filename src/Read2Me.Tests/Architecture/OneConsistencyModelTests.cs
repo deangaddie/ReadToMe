@@ -191,6 +191,9 @@ public class OneConsistencyModelTests : ProjectDbTestBase
     {
         // Creating a project writes its first Project row, before there is a Book to mutate.
         [Path.Combine("Read2Me.Services", "ProjectService.cs")] = 1,
+        // Starting History copies the project into its base snapshot with VACUUM INTO: it reads
+        // project.db and writes only the copy.
+        [Path.Combine("Read2Me.Services", "History", "ProjectHistory.cs")] = 1,
     };
 
     private static readonly string MutationsFolder =

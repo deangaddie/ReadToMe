@@ -10,6 +10,7 @@ import {
   AiServiceStatus,
   BookEditRow,
   Guid,
+  HistoryStep,
   NodeStatusSummaryDto,
   QueueItemStatus,
 } from '@app/api';
@@ -32,6 +33,7 @@ export const LIVE_FAMILIES = [
   'settingsChanged',
   'bookEdit',
   'llmTest',
+  'history',
 ] as const;
 
 export type LiveFamily = (typeof LIVE_FAMILIES)[number];
@@ -75,6 +77,7 @@ export const LIVE_KINDS = {
   ],
   bookEdit: ['progress', 'done', 'failed'],
   llmTest: ['done', 'failed', 'cancelled'],
+  history: ['stepLanded', 'stepClosed'],
   preflight: ['stage', 'done'],
 } as const;
 
@@ -85,6 +88,7 @@ export type LlmKind = (typeof LIVE_KINDS.llm)[number];
 export type AudioGenKind = (typeof LIVE_KINDS.audioGen)[number];
 export type BookEditKind = (typeof LIVE_KINDS.bookEdit)[number];
 export type LlmTestKind = (typeof LIVE_KINDS.llmTest)[number];
+export type HistoryKind = (typeof LIVE_KINDS.history)[number];
 export type PreflightKind = (typeof LIVE_KINDS.preflight)[number];
 
 // ---- queue (group global, debounced) ------------------------------------------------------------
@@ -450,6 +454,18 @@ export interface LlmTestMessage {
   reason?: string | null;
 }
 
+// ---- history (group project) --------------------------------------------------------------------
+
+/**
+ * A step that appeared in a project's History, or one that closed, with its row as
+ * `GET /api/projects/{folder}/history` lists it. A one-mutation step lands and closes together.
+ */
+export interface HistoryMessage {
+  kind: HistoryKind;
+  folder: string;
+  step: HistoryStep;
+}
+
 // ---- snapshots ----------------------------------------------------------------------------------
 
 /** Answer to `JoinProject` and one entry of {@link LiveSnapshot.projects}. */
@@ -491,4 +507,5 @@ export interface LiveMessageMap {
   settingsChanged: SettingsChangedMessage;
   bookEdit: BookEditMessage;
   llmTest: LlmTestMessage;
+  history: HistoryMessage;
 }

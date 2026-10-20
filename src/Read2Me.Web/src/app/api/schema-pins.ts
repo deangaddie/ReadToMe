@@ -18,6 +18,7 @@ import type {
   FfmpegTestRequest,
   GenerateDesignPromptRequest,
   GenerateVoiceAudioRequest,
+  HistoryDto,
   ItemsEnqueueRequest,
   LlmServerConfig,
   LlmTestRequest,
@@ -93,6 +94,7 @@ export type SchemaPins = [
   Pin<VoiceDesignTestRequest, Schema['VoiceDesignTestRequest']>,
   Pin<SimilarityTestRequest, Schema['SimilarityTestRequest']>,
   Pin<BookOverviewDto, Schema['BookOverviewDto']>,
+  Pin<HistoryDto, Schema['HistoryDto']>,
   Pin<StructureRuleDto, Schema['StructureRuleDto']>,
   // Inline in the document (the handler reads it by hand), so pinned to its operation.
   Pin<
