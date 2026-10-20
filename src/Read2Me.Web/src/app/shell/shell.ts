@@ -5,6 +5,7 @@ import { Router, fill, titleOf } from '@app/core/router';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
+import { HistorySheetState } from '@app/history/history-sheet-state';
 import { LiveService } from '@app/live/live.service';
 import { shellContext } from '@app/route-meta';
 import { type SchemePreference, ThemeService } from '@app/theme/theme.service';
@@ -16,6 +17,7 @@ import { GLOBAL_NAV_ITEMS, type NavItem, contextNavItems, isActive } from './she
 import '@app/core/outlet';
 import '@app/activity/activity-bar';
 import '@app/activity/activity-drawer';
+import '@app/history/history-sheet';
 import shellCss from './shell.css' with { type: 'text' };
 
 adoptStyles(shellCss);
@@ -38,8 +40,10 @@ interface Crumb {
  * Application shell (design §5): app bar with breadcrumbs from the matched route chain, the live
  * connection dot and the theme quick menu; the nav rail with the context group for "here" and the
  * global group; the main outlet; the activity bar below and the activity drawer beside the content
- * (both read {@link ActivityStore}). Below 900 px the rail becomes a modal drawer and the activity
- * bar collapses to one summary pill.
+ * (both read {@link ActivityStore}); on a project's pages, the History button and the History sheet
+ * docked beside the content (both read {@link HistorySheetState}). Below 900 px the rail becomes a
+ * modal drawer, the History sheet covers the page body and the activity bar collapses to one
+ * summary pill.
  */
 export class AppShell extends R2mElement {
   private readonly router = use(Router);
@@ -48,12 +52,19 @@ export class AppShell extends R2mElement {
   private readonly live = use(LiveService);
   private readonly activity = use(ActivityStore);
   private readonly guide = use(ProjectGuide);
+  private readonly historySheet = use(HistorySheetState);
 
   /** The activity drawer (design §5); pills and the ▲ open it through the store. */
   readonly drawerOpen = this.activity.drawerOpen;
 
   private readonly context = computed(() => shellContext(this.router.match()));
   private readonly contextItems = computed(() => contextNavItems(this.context()));
+
+  /** The route's project's History, for the app-bar button and the sheet; null off a project's pages. */
+  private readonly history = computed(() => {
+    const entry = this.historySheet.current();
+    return entry && entry.folder === this.context().folder ? entry.store : null;
+  });
 
   /** The next-step pill's entry: the route's project, on any of its pages but the Overview (spec §4). */
   private readonly nextStep = computed<GuideEntry | null>(() => {
@@ -147,7 +158,7 @@ export class AppShell extends R2mElement {
 
         <span class="shell__spacer"></span>
 
-        ${this.nextStepPill()}
+        ${this.nextStepPill()} ${this.historyButton()}
 
         <span
           class="shell__conn shell__conn--${connection}"
@@ -208,6 +219,13 @@ export class AppShell extends R2mElement {
           </nav>
         </aside>
         <main class="shell__main"><r2m-outlet></r2m-outlet></main>
+        ${
+          this.history() && this.historySheet.open()
+            ? html`<aside class="shell__history" aria-labelledby="history-sheet-title">
+                <r2m-history-sheet .store=${this.history()}></r2m-history-sheet>
+              </aside>`
+            : nothing
+        }
         ${
           this.drawerOpen()
             ? html`<aside class="shell__drawer" aria-label="Activity">
@@ -283,6 +301,21 @@ export class AppShell extends R2mElement {
         ${icon('list')}
       </button>
     </div>`;
+  }
+
+  private historyButton() {
+    if (!this.history()) return nothing;
+    const open = this.historySheet.open();
+    return html`<button
+      type="button"
+      class="r2m-icon-button shell__history-toggle ${open ? 'shell__history-toggle--on' : ''}"
+      aria-label="History"
+      aria-pressed=${open}
+      data-tooltip="History"
+      @click=${() => this.historySheet.toggle()}
+    >
+      ${icon('history')}
+    </button>`;
   }
 
   private schemeItem(preference: SchemePreference, label: string) {

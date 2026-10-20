@@ -119,7 +119,7 @@ public sealed class VoiceBatchRunner
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         // What the batch commits is its project's Background run step in History.
-        scope.ServiceProvider.GetRequiredService<HistoryStepScope>().JoinBackgroundRuns();
+        scope.ServiceProvider.GetRequiredService<HistoryStepScope>().JoinBackgroundRuns(BackgroundRunKind.VoiceBatch);
         var deps = new PhaseDeps(
             scope.ServiceProvider.GetRequiredService<IProjectReader>(),
             scope.ServiceProvider.GetRequiredService<BookMutations>(),

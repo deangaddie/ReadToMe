@@ -3,6 +3,7 @@ using Read2Me.Core.Configuration;
 using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Services;
+using Read2Me.Services.Events;
 using Read2Me.Services.History;
 using Read2Me.Services.Mutations;
 using Read2Me.Tests.Infrastructure;
@@ -112,17 +113,52 @@ public class BackgroundRunStepsTests : ProjectDbTestBase
         await History.ListAsync(_folder);
 
         Runs.Started(_folder, BackgroundRunKind.Attribution);
-        await RunCommitAsync(new CreateCharacterMutation(_folder, "Alice"));
+        await RunCommitAsync(new CreateCharacterMutation(_folder, "Alice"), BackgroundRunKind.Attribution);
         Runs.Started(_folder, BackgroundRunKind.VoiceBatch);
-        await RunCommitAsync(new CreateCharacterMutation(_folder, "Bob"));
+        await RunCommitAsync(new CreateCharacterMutation(_folder, "Bob"), BackgroundRunKind.VoiceBatch);
         await Runs.EndedAsync(_folder, BackgroundRunKind.Attribution);
-        await RunCommitAsync(new CreateCharacterMutation(_folder, "Carol"));
+        await RunCommitAsync(new CreateCharacterMutation(_folder, "Carol"), BackgroundRunKind.VoiceBatch);
         Assert.True((await History.ListAsync(_folder)).Steps[0].IsOpen); // the voice batch keeps it open
         await Runs.EndedAsync(_folder, BackgroundRunKind.VoiceBatch);
 
         var steps = (await History.ListAsync(_folder)).Steps;
         Assert.Equal(["Attribution and voice batch", "History started"], steps.Select(s => s.Label));
         Assert.False(steps[0].IsOpen);
+    }
+
+    [Fact]
+    public async Task ARunThatJoinsButCommitsNothing_IsNotInTheLabel()
+    {
+        await SeedOneItemAsync();
+        await History.ListAsync(_folder);
+
+        Runs.Started(_folder, BackgroundRunKind.Attribution);
+        Runs.Started(_folder, BackgroundRunKind.VoiceBatch);
+        await RunCommitAsync(new CreateCharacterMutation(_folder, "Alice"), BackgroundRunKind.Attribution);
+        await Runs.EndedAsync(_folder, BackgroundRunKind.VoiceBatch);
+        await Runs.EndedAsync(_folder, BackgroundRunKind.Attribution);
+
+        Assert.Equal("Attribution", (await History.ListAsync(_folder)).Steps[0].Label);
+    }
+
+    [Fact]
+    public async Task EachPartOfARun_IsLabelledFromTheWorkThatLandedInIt()
+    {
+        var b = await SeedOneItemAsync();
+        await History.ListAsync(_folder);
+
+        Runs.Started(_folder, BackgroundRunKind.Attribution);
+        Runs.Started(_folder, BackgroundRunKind.VoiceBatch);
+        await RunCommitAsync(new CreateCharacterMutation(_folder, "Alice"), BackgroundRunKind.Attribution);
+        await RunCommitAsync(new CreateCharacterMutation(_folder, "Bob"), BackgroundRunKind.VoiceBatch);
+        await InScopeAsync("Edit text", m => m.CommitAsync(new UpdateParagraphItemTextMutation(_folder, b.ItemId("item"), "Edited.")));
+        await RunCommitAsync(new CreateCharacterMutation(_folder, "Carol"), BackgroundRunKind.VoiceBatch);
+        await Runs.EndedAsync(_folder, BackgroundRunKind.Attribution);
+        await Runs.EndedAsync(_folder, BackgroundRunKind.VoiceBatch);
+
+        var steps = (await History.ListAsync(_folder)).Steps;
+        Assert.Equal(
+            ["Voice batch", "Edit text", "Attribution and voice batch", "History started"], steps.Select(s => s.Label));
     }
 
     [Fact]
@@ -133,11 +169,11 @@ public class BackgroundRunStepsTests : ProjectDbTestBase
 
         Runs.Started(_folder, BackgroundRunKind.Attribution);
         await RunCommitAsync(new CreateCharacterMutation(_folder, "Alice"));
-        await Runs.EndedAsync(_folder, BackgroundRunKind.Attribution, "212 of 340 paragraphs (cancelled)");
+        await Runs.EndedAsync(_folder, BackgroundRunKind.Attribution, "212 of 340 paragraphs, cancelled");
 
         var run = (await History.ListAsync(_folder)).Steps[0];
         Assert.False(run.IsOpen);
-        Assert.Equal("212 of 340 paragraphs (cancelled)", run.Note);
+        Assert.Equal("212 of 340 paragraphs, cancelled", run.Note);
     }
 
     [Fact]
@@ -150,9 +186,9 @@ public class BackgroundRunStepsTests : ProjectDbTestBase
         await RunCommitAsync(new CreateCharacterMutation(_folder, "Alice"));
         await InScopeAsync("Edit text", m => m.CommitAsync(new UpdateParagraphItemTextMutation(_folder, b.ItemId("item"), "Edited.")));
         await RunCommitAsync(new CreateCharacterMutation(_folder, "Bob"));
-        await Runs.EndedAsync(_folder, BackgroundRunKind.VoiceBatch, "3 of 7 voices (failed)");
+        await Runs.EndedAsync(_folder, BackgroundRunKind.VoiceBatch, "3 of 7 voices, failed");
 
-        Assert.Equal("part 2 · 3 of 7 voices (failed)", (await History.ListAsync(_folder)).Steps[0].Note);
+        Assert.Equal("part 2 · 3 of 7 voices, failed", (await History.ListAsync(_folder)).Steps[0].Note);
     }
 
     [Fact]
@@ -163,7 +199,7 @@ public class BackgroundRunStepsTests : ProjectDbTestBase
 
         Runs.Started(_folder, BackgroundRunKind.Attribution);
         await RunCommitAsync(new SetParagraphItemAudioMutation(_folder, b.ItemId("item"), "audio/take.wav")); // a result
-        await Runs.EndedAsync(_folder, BackgroundRunKind.Attribution, "0 of 3 paragraphs (cancelled)");
+        await Runs.EndedAsync(_folder, BackgroundRunKind.Attribution, "0 of 3 paragraphs, cancelled");
 
         Assert.Equal(before.Steps, (await History.ListAsync(_folder)).Steps);
     }
@@ -199,6 +235,49 @@ public class BackgroundRunStepsTests : ProjectDbTestBase
     }
 
     [Fact]
+    public async Task AnOpenStepsEndTime_IsItsLastChange()
+    {
+        await SeedOneItemAsync();
+        await History.ListAsync(_folder);
+
+        Runs.Started(_folder, BackgroundRunKind.Attribution);
+        await RunCommitAsync(new CreateCharacterMutation(_folder, "Alice"));
+        var first = (await History.ListAsync(_folder)).Steps[0];
+        await Task.Delay(20);
+        await RunCommitAsync(new CreateCharacterMutation(_folder, "Bob"));
+        var second = (await History.ListAsync(_folder)).Steps[0];
+        await Runs.EndedAsync(_folder, BackgroundRunKind.Attribution);
+
+        Assert.True(first.IsOpen);
+        Assert.Equal(first.StartedAt, first.EndedAt);
+        Assert.True(second.EndedAt > first.EndedAt);
+    }
+
+    [Fact]
+    public async Task EachLaterChunkOfAnOpenStep_AnnouncesItsRowAsItNowStands()
+    {
+        await SeedOneItemAsync();
+        await History.ListAsync(_folder);
+        var announced = new List<HistoryStepEvent>();
+        _root.GetRequiredService<EventBroadcaster<HistoryStepEvent>>().Event += announced.Add;
+
+        Runs.Started(_folder, BackgroundRunKind.Attribution);
+        Runs.Started(_folder, BackgroundRunKind.VoiceBatch);
+        await RunCommitAsync(new CreateCharacterMutation(_folder, "Alice"), BackgroundRunKind.Attribution);
+        await Task.Delay(20);
+        await RunCommitAsync(new CreateCharacterMutation(_folder, "Bob"), BackgroundRunKind.VoiceBatch);
+
+        Assert.Equal([HistoryStepEventKind.Landed, HistoryStepEventKind.Changed], announced.Select(e => e.Kind));
+        var (landed, changed) = (announced[0].Step, announced[1].Step);
+        Assert.Equal(landed.StepId, changed.StepId);
+        Assert.True(changed.IsOpen);
+        Assert.Equal("Attribution and voice batch", changed.Label);
+        Assert.True(changed.EndedAt > landed.EndedAt);
+        await Runs.EndedAsync(_folder, BackgroundRunKind.Attribution);
+        await Runs.EndedAsync(_folder, BackgroundRunKind.VoiceBatch);
+    }
+
+    [Fact]
     public async Task OnAppStart_EveryOpenStepClosesAsInterrupted()
     {
         var b = await SeedOneItemAsync();
@@ -207,7 +286,8 @@ public class BackgroundRunStepsTests : ProjectDbTestBase
         await RunCommitAsync(new CreateCharacterMutation(_folder, "Alice"));
         await InScopeAsync("Edit text", m => m.CommitAsync(new UpdateParagraphItemTextMutation(_folder, b.ItemId("item"), "Edited.")));
         await RunCommitAsync(new CreateCharacterMutation(_folder, "Bob"));
-        Assert.True((await History.ListAsync(_folder)).Steps[0].IsOpen);
+        var lastChange = (await History.ListAsync(_folder)).Steps[0];
+        Assert.True(lastChange.IsOpen);
 
         // The app stops with the run open, and starts again.
         await _root.DisposeAsync();
@@ -218,7 +298,7 @@ public class BackgroundRunStepsTests : ProjectDbTestBase
         Assert.Equal("Attribution", run.Label);
         Assert.False(run.IsOpen);
         Assert.Equal("part 2 · interrupted", run.Note);
-        Assert.Null(run.EndedAt);
+        Assert.Equal(lastChange.EndedAt, run.EndedAt); // when it really ended is not known; its last change is
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────
@@ -233,10 +313,11 @@ public class BackgroundRunStepsTests : ProjectDbTestBase
     }
 
     /// <summary>Run work: a DI scope that joined the background runs, as the queue worker's and the voice batch's do.</summary>
-    private async Task<BookMutationOutcome> RunCommitAsync(BookMutation mutation)
+    private async Task<BookMutationOutcome> RunCommitAsync(
+        BookMutation mutation, BackgroundRunKind kind = BackgroundRunKind.Attribution)
     {
         await using var scope = _root.CreateAsyncScope();
-        scope.ServiceProvider.GetRequiredService<HistoryStepScope>().JoinBackgroundRuns();
+        scope.ServiceProvider.GetRequiredService<HistoryStepScope>().JoinBackgroundRuns(kind);
         return await scope.ServiceProvider.GetRequiredService<BookMutations>().CommitAsync(mutation);
     }
 

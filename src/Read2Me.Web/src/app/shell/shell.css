@@ -1,4 +1,4 @@
-@scope (app-root) to (r2m-outlet > *, r2m-activity-bar, r2m-activity-drawer) {
+@scope (app-root) to (r2m-outlet > *, r2m-activity-bar, r2m-activity-drawer, r2m-history-sheet) {
   :scope {
     display: flex;
     flex-direction: column;
@@ -246,6 +246,20 @@
     overflow: hidden;
   }
 
+  /* ---- History sheet (spec, "The History sheet"): docked beside the page ---------------------- */
+  .shell__history {
+    flex: 0 0 auto;
+    width: min(380px, 100vw);
+    min-height: 0;
+    background: var(--r2m-surface);
+    border-left: 1px solid var(--r2m-outline);
+    box-shadow: var(--r2m-shadow-2);
+    overflow: auto;
+  }
+  .shell__history-toggle--on {
+    background: var(--r2m-accent-container);
+  }
+
   /* ---- activity bar ------------------------------------------------------------------------- */
   .shell__activity {
     flex: 0 0 var(--r2m-activity-bar-height);
@@ -273,6 +287,14 @@
       inset: 0 0 0 auto;
       z-index: 2;
       box-shadow: var(--r2m-shadow-3);
+    }
+    /* The sheet covers the page body; the app bar (and, later, the viewing banner) stay above it. */
+    .shell__history {
+      position: absolute;
+      inset: 0;
+      width: auto;
+      z-index: 2;
+      border-left: 0;
     }
     .shell__rail--closed {
       display: none;

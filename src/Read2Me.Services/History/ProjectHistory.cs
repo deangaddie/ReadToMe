@@ -98,8 +98,8 @@ public sealed partial class ProjectHistory(
 
     /// <summary>
     /// Closes a step scope's current step, if a commit created one, and announces it.
-    /// <paramref name="ending"/> is how a Background run ended early ("212 of 340 paragraphs
-    /// (cancelled)"); it goes in the note even when another commit already closed the step. Takes
+    /// <paramref name="ending"/> is how a Background run ended early ("212 of 340 paragraphs,
+    /// cancelled"); it goes in the note even when another commit already closed the step. Takes
     /// the project's write lock, so the close never races a commit extending the line, but waits
     /// only the mutation budget: a step left open is closed by the next commit to the project
     /// instead.
@@ -162,6 +162,8 @@ public sealed partial class ProjectHistory(
     {
         foreach (var closed in recorded.Closed)
             events.Publish(new HistoryStepEvent(folder, HistoryStepEventKind.Closed, closed));
+        if (recorded.Changed is { } changed)
+            events.Publish(new HistoryStepEvent(folder, HistoryStepEventKind.Changed, changed));
         if (recorded.Landed is not { } step)
             return;
         events.Publish(new HistoryStepEvent(folder, HistoryStepEventKind.Landed, step));

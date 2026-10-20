@@ -132,7 +132,7 @@ public sealed class BookMutations(
         // Declared before the transaction so it is disposed after it: the capture attaches
         // history.db, which cannot be detached while a transaction is open.
         await using var capture = mutation.ChangesProjectState ? await history.BeginCaptureAsync(db, ct) : null;
-        var scope = stepScope.For(mutation.FolderId);
+        var scope = stepScope.For(mutation.FolderId, out var runKind);
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
         var effects = await implementation(mutation, db, ct);
@@ -146,7 +146,7 @@ public sealed class BookMutations(
 
         effects = await MarkCheckpointsStaleAsync(mutation, effects, db, ct);
         await db.SaveChangesAsync(ct);
-        var step = capture is null ? null : await capture.RecordAsync(scope, ProjectHistory.LabelOf(mutation), effects, ct);
+        var step = capture is null ? null : await capture.RecordAsync(scope, runKind, ProjectHistory.LabelOf(mutation), effects, ct);
 
         // The last point at which cancellation is still honourable. Past it the change is real, so
         // the commit runs to completion regardless: a committed mutation must never be reported as
@@ -159,6 +159,7 @@ public sealed class BookMutations(
             scope.StepId = step.StepId;
             scope.Part = step.Part;
             scope.Changes = step.Changes;
+            scope.Kinds = step.Kinds;
         }
         return new CommittedChange(effects, step);
     }

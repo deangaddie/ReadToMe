@@ -564,7 +564,26 @@ namespace Read2Me.Tests.Services.Characters
             var run = (await history.ListAsync(Folder)).Steps[0];
             Assert.Equal("Voice batch", run.Label);
             Assert.False(run.IsOpen);
-            Assert.Equal($"{h.Sut.Processed} of 10 voices (cancelled)", run.Note);
+            Assert.Equal($"{h.Sut.Processed} of 10 voices, cancelled", run.Note);
+        }
+
+        [Fact]
+        public async Task ABatchWithFailedVoices_SaysHowManyFailed()
+        {
+            var c1 = MakeCharacter("Eve");
+            var c2 = MakeCharacter("Frank");
+            var voices = new Dictionary<Guid, List<VoiceEntity>> { [c1.Id] = [], [c2.Id] = [] };
+            SeedProject([c1, c2], voices);
+            var h = BuildRunner(
+                new FakeProjectReader2([c1, c2], voices, "Book", "Author"),
+                new SequencedFakeVoiceOrchestrator([true, false], "good prompt"));
+            var history = _root!.GetRequiredService<ProjectHistory>();
+            await history.ListAsync(Folder);
+
+            h.Sut.StartGeneratePrompts(Folder);
+            await WaitForRunClosedAsync(h);
+
+            Assert.Equal("1 voice failed", (await history.ListAsync(Folder)).Steps[0].Note);
         }
 
         /// <summary>Waits for the batch's terminal event, then for History to close the run's step.</summary>

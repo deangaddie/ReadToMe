@@ -1,0 +1,97 @@
+/* The History sheet (prototype variant A): the step list the app shell docks beside the page. */
+
+@scope (r2m-history-sheet) {
+  :scope {
+    display: block;
+    padding: var(--r2m-space-2) var(--r2m-space-3) var(--r2m-space-4);
+  }
+
+  .history-sheet__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .history-sheet__title {
+    margin: 0;
+    font-size: var(--r2m-text-lg);
+  }
+  .history-sheet__loading {
+    display: grid;
+    place-items: center;
+    padding: var(--r2m-space-6);
+  }
+  .history-sheet__error {
+    color: var(--r2m-status-error);
+  }
+
+  .history-sheet__day-title {
+    margin: var(--r2m-space-3) 0 var(--r2m-space-1);
+    font-size: var(--r2m-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--r2m-text-muted);
+  }
+  .history-sheet__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .history-sheet__row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--r2m-space-2);
+    padding: var(--r2m-space-2);
+    border-radius: var(--r2m-radius-md);
+  }
+  .history-sheet__icon {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--r2m-surface-high);
+    color: var(--r2m-text-muted);
+  }
+  /* A Background run is automatic work; a Restore is where you went back. */
+  .history-sheet__row--backgroundRun .history-sheet__icon {
+    background: var(--r2m-status-busy-soft);
+    color: var(--r2m-status-busy);
+  }
+  .history-sheet__row--restore .history-sheet__icon {
+    background: var(--r2m-status-info-soft);
+    color: var(--r2m-status-info);
+  }
+  .history-sheet__text {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .history-sheet__note {
+    color: var(--r2m-text-muted);
+  }
+  .history-sheet__summary,
+  .history-sheet__cant-open {
+    font-size: var(--r2m-text-sm);
+    color: var(--r2m-text-muted);
+    overflow-wrap: anywhere;
+  }
+  .history-sheet__cant-open {
+    font-style: italic;
+  }
+  .history-sheet__when {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex: 0 0 auto;
+    font-size: var(--r2m-text-sm);
+    color: var(--r2m-text-muted);
+    white-space: nowrap;
+  }
+  .history-sheet__current {
+    color: var(--r2m-status-ok);
+    font-weight: 600;
+  }
+}

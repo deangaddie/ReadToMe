@@ -58,6 +58,27 @@ public class BackgroundRunTrackerTests : ProjectDbTestBase
     {
         await SeedOneItemAsync();
         await History.ListAsync(_folder);
+        var paragraphs = Paragraphs(_folder, 2);
+
+        _queue.Enqueue(paragraphs);
+        await AttributeAsync(new CreateCharacterMutation(_folder, "Alice"));
+        _queue.Apply(paragraphs[0], new Disposition.Complete(1));
+        await AttributeAsync(new CreateCharacterMutation(_folder, "Bob"));
+        Assert.True((await History.ListAsync(_folder)).Steps[0].IsOpen);
+        _queue.Apply(paragraphs[1], new Disposition.Complete(1));
+        await _tracker.ClosedAsync();
+
+        var steps = (await History.ListAsync(_folder)).Steps;
+        Assert.Equal(["Attribution", "History started"], steps.Select(s => s.Label));
+        Assert.False(steps[0].IsOpen);
+        Assert.Null(steps[0].Note);
+    }
+
+    [Fact]
+    public async Task AQueueThatDrainsWithFailedParagraphs_SaysHowManyFailed()
+    {
+        await SeedOneItemAsync();
+        await History.ListAsync(_folder);
         var paragraphs = Paragraphs(_folder, 3);
 
         _queue.Enqueue(paragraphs);
@@ -72,7 +93,7 @@ public class BackgroundRunTrackerTests : ProjectDbTestBase
         var steps = (await History.ListAsync(_folder)).Steps;
         Assert.Equal(["Attribution", "History started"], steps.Select(s => s.Label));
         Assert.False(steps[0].IsOpen);
-        Assert.Null(steps[0].Note);
+        Assert.Equal("1 paragraph failed", steps[0].Note);
     }
 
     [Fact]
@@ -110,7 +131,24 @@ public class BackgroundRunTrackerTests : ProjectDbTestBase
         var run = (await History.ListAsync(_folder)).Steps[0];
         Assert.Equal("Attribution", run.Label);
         Assert.False(run.IsOpen);
-        Assert.Equal("1 of 3 paragraphs (cancelled)", run.Note);
+        Assert.Equal("1 of 3 paragraphs, cancelled", run.Note);
+    }
+
+    [Fact]
+    public async Task ACancelledQueueWithFailedParagraphs_SaysBoth()
+    {
+        await SeedOneItemAsync();
+        await History.ListAsync(_folder);
+        var paragraphs = Paragraphs(_folder, 4);
+
+        _queue.Enqueue(paragraphs);
+        await AttributeAsync(new CreateCharacterMutation(_folder, "Alice"));
+        _queue.Apply(paragraphs[0], new Disposition.Complete(1));
+        _queue.Apply(paragraphs[1], new Disposition.Failed("no answer"));
+        _queue.CancelAll();
+        await _tracker.ClosedAsync();
+
+        Assert.Equal("2 of 4 paragraphs, cancelled · 1 failed", (await History.ListAsync(_folder)).Steps[0].Note);
     }
 
     [Fact]
@@ -135,7 +173,7 @@ public class BackgroundRunTrackerTests : ProjectDbTestBase
 
         var steps = (await History.ListAsync(_folder)).Steps;
         Assert.Equal(["Attribution", "History started"], steps.Select(s => s.Label));
-        Assert.Equal("0 of 2 paragraphs (cancelled)", steps[0].Note);
+        Assert.Equal("0 of 2 paragraphs, cancelled", steps[0].Note);
         Assert.False(steps[0].IsOpen);
     }
 
@@ -203,7 +241,7 @@ public class BackgroundRunTrackerTests : ProjectDbTestBase
     private async Task AttributeAsync(BookMutation mutation)
     {
         await using var scope = _root.CreateAsyncScope();
-        scope.ServiceProvider.GetRequiredService<HistoryStepScope>().JoinBackgroundRuns();
+        scope.ServiceProvider.GetRequiredService<HistoryStepScope>().JoinBackgroundRuns(BackgroundRunKind.Attribution);
         await scope.ServiceProvider.GetRequiredService<BookMutations>().CommitAsync(mutation);
     }
 

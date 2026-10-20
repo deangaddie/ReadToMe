@@ -29,7 +29,7 @@ namespace Read2Me.App.Characters
         {
             // What attribution commits — the stamps, and the characters and aliases it creates for
             // itself — is its project's Background run step in History.
-            stepScope.JoinBackgroundRuns();
+            stepScope.JoinBackgroundRuns(BackgroundRunKind.Attribution);
 
             // One narrator read per drained batch, per folder — never per item. A drain spans
             // folders, so the cache is keyed by folder; it lives no longer than this batch, so a
