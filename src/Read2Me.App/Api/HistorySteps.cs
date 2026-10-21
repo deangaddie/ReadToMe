@@ -22,7 +22,8 @@ namespace Read2Me.App.Api
     /// <summary>
     /// How a project write endpoint declares its place in History. Every non-GET endpoint under
     /// <c>/api/projects/{folder}</c> declares one or the other, so a new write cannot forget to.
-    /// Either way it answers 400 to <c>?at=</c>: writes only ever go to the tip.
+    /// Either way it answers 400 to <c>?at=</c>, since writes only ever go to the tip, and 409
+    /// "Project is restoring" while a Restore of the project runs.
     /// </summary>
     public static class HistorySteps
     {
@@ -34,6 +35,7 @@ namespace Read2Me.App.Api
             builder
                 .WithMetadata(new RecordsHistoryStep(label))
                 .RefusesAt(StepReads.WritesGoToTheTip)
+                .RefusesWhileRestoring()
                 .AddEndpointFilter(async (context, next) =>
                 {
                     var http = context.HttpContext;
@@ -47,9 +49,27 @@ namespace Read2Me.App.Api
 
         /// <summary>The handler opens the step scope itself, with a label it reads from the request.</summary>
         public static RouteHandlerBuilder RecordsOwnStep(this RouteHandlerBuilder builder) =>
-            builder.WithMetadata(new RecordsHistoryStep(null)).RefusesAt(StepReads.WritesGoToTheTip);
+            builder.WithMetadata(new RecordsHistoryStep(null)).RefusesAt(StepReads.WritesGoToTheTip).RefusesWhileRestoring();
 
         public static RouteHandlerBuilder RecordsNoStep(this RouteHandlerBuilder builder, string why) =>
-            builder.WithMetadata(new RecordsNoHistoryStep(why)).RefusesAt(StepReads.WritesGoToTheTip);
+            builder.WithMetadata(new RecordsNoHistoryStep(why)).RefusesAt(StepReads.WritesGoToTheTip).RefusesWhileRestoring();
+
+        /// <summary>
+        /// Answers 409 "Project is restoring" at once while a Restore of the project runs: every write
+        /// and enqueue waits for the Restore to finish rather than racing it. A write that slips past
+        /// this as a Restore begins is refused by <c>BookMutations</c> with the same reason.
+        /// </summary>
+        private static RouteHandlerBuilder RefusesWhileRestoring(this RouteHandlerBuilder builder) =>
+            builder
+                .ProducesProblem(StatusCodes.Status409Conflict)
+                .AddEndpointFilter(async (context, next) =>
+                {
+                    var http = context.HttpContext;
+                    return http.Request.RouteValues["folder"] is string folder
+                           && ProjectEndpoints.TryResolve(folder, http.RequestServices.GetRequiredService<IFileSystem>(), out var folderId)
+                           && http.RequestServices.GetRequiredService<RestoringProjects>().IsRestoring(folderId)
+                        ? StepReads.Restoring()
+                        : await next(context);
+                });
     }
 }

@@ -58,6 +58,10 @@ namespace Read2Me.App.Api
                 BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } cancelled
                     => throw new OperationCanceledException(cancelled.Message, ct),
 
+                // A Restore began after the request passed the endpoint's own check: the same 409.
+                BookMutationOutcome.Rejected { Reason: BookMutationRejection.Restoring } restoring
+                    => Results.Problem(restoring.Message, statusCode: StatusCodes.Status409Conflict),
+
                 // Every other expected refusal the command did not soften: the same 422 an agent has
                 // always seen, now carrying the mutation's own reason as the message.
                 BookMutationOutcome.Rejected rejected

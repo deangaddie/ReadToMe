@@ -22,7 +22,7 @@ namespace Read2Me.App.Live;
 /// nothing) and does <em>no work on the publisher's thread beyond a channel write</em>: a single
 /// drain loop applies the relay policy (research/live-events.md §8) and performs the sends.
 /// <list type="bullet">
-/// <item>Pass-through: receipts and History steps (project group), watchdog, assembly phases, voice batch control,
+/// <item>Pass-through: receipts, History steps and Restores (project group), watchdog, assembly phases, voice batch control,
 /// LLM control events and every audio-gen phase (stream groups), settings changes.</item>
 /// <item><see cref="DeltaBatcher"/>: LLM thinking/content text, one message per 100 ms.</item>
 /// <item><see cref="Debouncer"/>: queue roll-ups and per-project node/item status, 250 ms.</item>
@@ -43,6 +43,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private sealed record ServiceStatusItem(ServiceStatusChanged Change) : Item;
     private sealed record ReceiptItem(BookMutationReceipt Receipt) : Item;
     private sealed record HistoryItem(HistoryStepEvent Event) : Item;
+    private sealed record RestoreItem(RestoreEvent Event) : Item;
     private sealed record SettingsItem(SettingsChanged Change) : Item;
     private sealed record QueuePulse : Item;
     private sealed record StatusPulse : Item;
@@ -67,6 +68,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private readonly EventBroadcaster<ServiceStatusChanged> _serviceStatus;
     private readonly EventBroadcaster<BookMutationReceipt> _receipts;
     private readonly EventBroadcaster<HistoryStepEvent> _history;
+    private readonly EventBroadcaster<RestoreEvent> _restores;
     private readonly EventBroadcaster<SettingsChanged> _settings;
     private readonly CharacterQueueService _attributionQueue;
     private readonly AudioQueueService _audioQueue;
@@ -116,6 +118,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         EventBroadcaster<ServiceStatusChanged> serviceStatus,
         EventBroadcaster<BookMutationReceipt> receipts,
         EventBroadcaster<HistoryStepEvent> history,
+        EventBroadcaster<RestoreEvent> restores,
         EventBroadcaster<SettingsChanged> settings,
         CharacterQueueService attributionQueue,
         AudioQueueService audioQueue,
@@ -140,6 +143,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         _serviceStatus = serviceStatus;
         _receipts = receipts;
         _history = history;
+        _restores = restores;
         _settings = settings;
         _attributionQueue = attributionQueue;
         _audioQueue = audioQueue;
@@ -161,6 +165,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         _serviceStatus.Event += OnServiceStatus;
         _receipts.Event += OnReceipt;
         _history.Event += OnHistory;
+        _restores.Event += OnRestore;
         _settings.Event += OnSettings;
         _attributionQueue.Changed += OnQueueChanged;
         _audioQueue.Changed += OnQueueChanged;
@@ -195,6 +200,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private void OnServiceStatus(ServiceStatusChanged c) => Post(new ServiceStatusItem(c));
     private void OnReceipt(BookMutationReceipt r) => Post(new ReceiptItem(r));
     private void OnHistory(HistoryStepEvent e) => Post(new HistoryItem(e));
+    private void OnRestore(RestoreEvent e) => Post(new RestoreItem(e));
     private void OnSettings(SettingsChanged c) => Post(new SettingsItem(c));
     private void OnProgressChanged() => Post(new QueuePulse());
 
@@ -252,6 +258,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         _serviceStatus.Event -= OnServiceStatus;
         _receipts.Event -= OnReceipt;
         _history.Event -= OnHistory;
+        _restores.Event -= OnRestore;
         _settings.Event -= OnSettings;
         _attributionQueue.Changed -= OnQueueChanged;
         _audioQueue.Changed -= OnQueueChanged;
@@ -381,6 +388,14 @@ public sealed class LiveRelay : IHostedService, IDisposable
 
             case HistoryItem { Event: var e }:
                 await SendAsync(() => _hub.Clients.Group(LiveGroups.Project(e.FolderId.Value)).History(LiveMessageMapper.Map(e)));
+                break;
+
+            // A Restore's finish follows its dropped Edit with AI sessions, so a dialog says why it closed
+            // before its tab rebuilds.
+            case RestoreItem { Event: var e }:
+                foreach (var program in e.DroppedEditSessions)
+                    await SendAsync(() => _hub.Clients.Group(LiveGroups.Project(e.FolderId.Value)).BookEdit(LiveMessageMapper.BookEditDropped(program)));
+                await SendAsync(() => _hub.Clients.Group(LiveGroups.Project(e.FolderId.Value)).History(LiveMessageMapper.Restoring(e)));
                 break;
 
             case SettingsItem { Change: var c }:

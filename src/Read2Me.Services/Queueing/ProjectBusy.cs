@@ -1,3 +1,5 @@
+using Read2Me.Core.Models;
+
 namespace Read2Me.Services.Queueing;
 
 /// <summary>The kinds of work that make a project busy, in the order a busy answer names them.</summary>
@@ -17,4 +19,10 @@ public sealed record BusySource(BusySourceKind Kind, string Reason)
 public sealed record ProjectBusy(IReadOnlyList<BusySource> Sources)
 {
     public string Reason => string.Join(" · ", Sources.Select(s => s.Reason));
+}
+
+/// <summary>"Is anything queued or running for this project, and what?" Null means the project is idle.</summary>
+public interface IProjectBusyAnswer
+{
+    ProjectBusy? For(ProjectFolderId folder);
 }

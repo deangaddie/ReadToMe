@@ -161,4 +161,13 @@ public static class LiveMessageMapper
     /// <summary>The project's busy reason moved; null when it went idle.</summary>
     public static HistoryMessage BusyChanged(string folder, string? reason) =>
         new HistoryMessage("busyChanged", folder, Reason: reason);
+
+    /// <summary>A Restore started, or finished with the step it added.</summary>
+    public static HistoryMessage Restoring(RestoreEvent e) =>
+        new HistoryMessage("restoring", e.FolderId.Value, e.Step, Phase: e.Kind == RestoreEventKind.Started ? "started" : "finished");
+
+    /// <summary>Why a dropped Edit with AI session is gone: what its open dialog says.</summary>
+    public const string RestoredReason = "The project was restored — run it again";
+
+    public static BookEditMessage BookEditDropped(string program) => new BookEditMessage("dropped", program, Reason: RestoredReason);
 }

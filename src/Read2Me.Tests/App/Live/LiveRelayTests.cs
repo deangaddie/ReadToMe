@@ -37,6 +37,7 @@ public class LiveRelayTests : IAsyncLifetime
     private readonly EventBroadcaster<ServiceStatusChanged> _serviceStatus = new();
     private readonly EventBroadcaster<BookMutationReceipt> _receipts = new();
     private readonly EventBroadcaster<HistoryStepEvent> _history = new();
+    private readonly EventBroadcaster<RestoreEvent> _restores = new();
     private readonly EventBroadcaster<SettingsChanged> _settings = new();
     private readonly CharacterQueueService _attribution = new();
     private readonly AudioQueueService _audio = new();
@@ -57,7 +58,7 @@ public class LiveRelayTests : IAsyncLifetime
         var throughput = new ThroughputAggregator(_llm, new EventBroadcaster<LlmTimingsSample>());
         var status = new ProjectStatusSource(_nodes, _attribution, _audio, _reviews, new BookRevisionSequence());
 
-        _relay = new LiveRelay(_hub, _registry, status, _llm, _audioGen, _assembly, _voiceBatch, _watchdog, _serviceStatus, _receipts, _history,
+        _relay = new LiveRelay(_hub, _registry, status, _llm, _audioGen, _assembly, _voiceBatch, _watchdog, _serviceStatus, _receipts, _history, _restores,
             _settings, _attribution, _audio, _nodes, _reviews, progress, assemblyService, batchRunner, throughput,
             new ProjectBusyAnswer(_attribution, _audio, batchRunner, assemblyService), NullLogger<LiveRelay>.Instance);
         await _relay.StartAsync(CancellationToken.None);
@@ -123,6 +124,28 @@ public class LiveRelayTests : IAsyncLifetime
         Assert.Equal(
             [new HistoryMessage("stepLanded", "folder-a", step), new HistoryMessage("stepClosed", "folder-a", step)],
             sent.Select(s => Assert.IsType<HistoryMessage>(s.Payload)));
+    }
+
+    [Fact]
+    public async Task A_Restore_tells_its_project_it_started_and_finished_after_the_Edit_with_AI_sessions_it_dropped()
+    {
+        var folder = new ProjectFolderId("folder-a");
+        var at = DateTimeOffset.Parse("2026-10-21T14:02:00Z");
+        var step = new HistoryStep(Guid.NewGuid(), Guid.NewGuid(), 9, "Restore to 'Split chapter' (14:02)", null, "dean", at, at,
+            IsOpen: false, Note: null, RestoredFromStepId: Guid.NewGuid());
+        _restores.Publish(new RestoreEvent(folder, RestoreEventKind.Started, null, []));
+        _restores.Publish(new RestoreEvent(folder, RestoreEventKind.Finished, step, ["session-1"]));
+
+        await WaitForAsync(() => _hub.Method("history").Count == 2);
+
+        Assert.All(_hub.Messages, s => Assert.Equal("project:folder-a", s.Target));
+        Assert.Equal(
+            [
+                ("history", (object)new HistoryMessage("restoring", "folder-a", Phase: "started")),
+                ("bookEdit", new BookEditMessage("dropped", "session-1", Reason: "The project was restored — run it again")),
+                ("history", new HistoryMessage("restoring", "folder-a", step, Phase: "finished")),
+            ],
+            _hub.Messages.Select(s => (s.Method, s.Payload)));
     }
 
     /// <summary>

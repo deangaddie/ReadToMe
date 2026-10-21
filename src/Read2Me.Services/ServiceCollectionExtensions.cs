@@ -132,6 +132,16 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<History.BackgroundRuns>();
         services.AddScoped<Mutations.MutationOrigin>();
         services.AddScoped<History.HistoryStepScope>();
+        // Restore: the restoring flag every write checks, the run, and its started/finished signal.
+        services.TryAddSingleton<History.RestoringProjects>();
+        services.TryAddSingleton<Events.EventBroadcaster<History.RestoreEvent>>();
+        services.AddScoped<History.HistoryRestore>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<History.RestoreStepMutation>,
+            Mutations.Implementations.RestoreStepMutationImplementation>();
+        // Process-wide, not request-scoped: the HTTP API plans in one request and proposes/applies
+        // in others, and a Restore drops a project's sessions.
+        services.TryAddSingleton<BookEdits.IBookEditSessionStore>(_ => new BookEdits.BookEditSessionStore(TimeProvider.System));
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.InsertParagraphItemMutation>,
             Mutations.Implementations.InsertParagraphItemMutationImplementation>();

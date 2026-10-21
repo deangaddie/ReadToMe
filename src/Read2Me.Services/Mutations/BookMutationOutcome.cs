@@ -13,6 +13,11 @@ public enum BookMutationRejection
     Stale,
     /// <summary>Cancellation was observed before the commit point.</summary>
     Cancelled,
+    /// <summary>
+    /// A Restore of the project is in progress, so every other write is refused at once, without
+    /// waiting for the write lock: the Restore is about to replace what the write was based on.
+    /// </summary>
+    Restoring,
 }
 
 /// <summary>

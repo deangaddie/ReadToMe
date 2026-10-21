@@ -75,9 +75,9 @@ export const LIVE_KINDS = {
     'failed',
     'modelLoading',
   ],
-  bookEdit: ['progress', 'done', 'failed'],
+  bookEdit: ['progress', 'done', 'failed', 'dropped'],
   llmTest: ['done', 'failed', 'cancelled'],
-  history: ['stepLanded', 'stepChanged', 'stepClosed', 'busyChanged'],
+  history: ['stepLanded', 'stepChanged', 'stepClosed', 'busyChanged', 'restoring'],
   preflight: ['stage', 'done'],
 } as const;
 
@@ -434,6 +434,8 @@ export interface SettingsChangedMessage {
 /**
  * One proposal run, sent only to the connection that started it. `done` carries every row the run
  * landed — all of them, or the partial set a cancel kept, with `cancelled` saying which.
+ * `dropped` goes to the project group instead: a Restore dropped the session, and `reason` says so
+ * ("The project was restored — run it again").
  */
 export interface BookEditMessage {
   kind: BookEditKind;
@@ -462,7 +464,7 @@ export interface LlmTestMessage {
  * `GET /api/projects/{folder}/history` lists it. A one-mutation step lands and closes together.
  */
 export interface HistoryStepMessage {
-  kind: Exclude<HistoryKind, 'busyChanged'>;
+  kind: Exclude<HistoryKind, 'busyChanged' | 'restoring'>;
   folder: string;
   step: LiveHistoryStep;
 }
@@ -477,7 +479,19 @@ export interface HistoryBusyMessage {
   reason?: string | null;
 }
 
-export type HistoryMessage = HistoryStepMessage | HistoryBusyMessage;
+/**
+ * A Restore of the project started or finished; every write is refused in between. `finished`
+ * carries the Restore step it added, which also lands and closes like any step; no `step` when it
+ * added none or failed.
+ */
+export interface HistoryRestoringMessage {
+  kind: 'restoring';
+  folder: string;
+  phase: 'started' | 'finished';
+  step?: LiveHistoryStep;
+}
+
+export type HistoryMessage = HistoryStepMessage | HistoryBusyMessage | HistoryRestoringMessage;
 
 type NullableHistoryField = 'parentStepId' | 'summary' | 'endedAt' | 'note' | 'restoredFromStepId';
 

@@ -94,6 +94,10 @@ namespace Read2Me.App.Api
         internal static IResult Busy(ProjectBusy busy) =>
             Results.Problem(busy.Reason, statusCode: StatusCodes.Status409Conflict);
 
+        /// <summary>409: a Restore of the project is running.</summary>
+        internal static IResult Restoring() =>
+            Results.Problem(RestoringProjects.Reason, statusCode: StatusCodes.Status409Conflict);
+
         internal static IResult UnknownStep(Guid stepId) =>
             Results.Problem($"The project's History has no step {stepId}.", statusCode: StatusCodes.Status404NotFound);
 

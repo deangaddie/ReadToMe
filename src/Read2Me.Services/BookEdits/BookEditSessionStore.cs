@@ -135,6 +135,9 @@ namespace Read2Me.Services.BookEdits
 
         /// <summary>Drops the session, cancelling any run in flight. False when there was none.</summary>
         bool Remove(ProjectFolderId folder, string id);
+
+        /// <summary>Drops every session of <paramref name="folder"/>, cancelling their runs, and answers their ids.</summary>
+        IReadOnlyList<string> RemoveAll(ProjectFolderId folder);
     }
 
     /// <summary>
@@ -182,6 +185,18 @@ namespace Read2Me.Services.BookEdits
 
             Evict(id);
             return true;
+        }
+
+        public IReadOnlyList<string> RemoveAll(ProjectFolderId folder)
+        {
+            var dropped = new List<string>();
+            foreach (var (id, session) in _sessions)
+                if (session.Folder == folder && _sessions.TryRemove(id, out _))
+                {
+                    session.Drop();
+                    dropped.Add(id);
+                }
+            return dropped;
         }
 
         private void Evict(string id)

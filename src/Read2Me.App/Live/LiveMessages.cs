@@ -177,6 +177,8 @@ public sealed record SettingsChangedMessage(string Area);
 /// <c>kind</c>: progress | done | failed — one AI book-edit proposal run (Angular ticket 19), sent
 /// to the connection that started it. <c>program</c> is the session id the run belongs to;
 /// <c>done</c> carries every row the run landed (all of them, or the partial set a cancel kept).
+/// <c>dropped</c>: a Restore of the project dropped the session, with the <c>reason</c> to show; sent
+/// to the project group, since the session outlives its runs.
 /// </summary>
 public sealed record BookEditMessage(
     string Kind,
@@ -200,8 +202,11 @@ public sealed record LlmTestMessage(string Kind, int ConfigId, string? Reason = 
 /// <c>busyChanged</c> carries no step: the project's busy reason ("Attribution: 128 paragraphs left")
 /// moved, or went null (omitted on the wire) when the project went idle. A busy project can't be
 /// viewed at a step.
+/// <c>restoring</c>: a Restore of the project <c>phase</c> started | finished; <c>finished</c> carries the
+/// Restore step it added, or no step when it added none or failed. Writes are refused in between.
 /// </summary>
-public sealed record HistoryMessage(string Kind, string Folder, HistoryStep? Step = null, string? Reason = null);
+public sealed record HistoryMessage(
+    string Kind, string Folder, HistoryStep? Step = null, string? Reason = null, string? Phase = null);
 
 /// <summary>
 /// <see cref="ProposedEdit"/> on the wire; enums as member names. Shared with the REST reads of a

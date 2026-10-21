@@ -272,7 +272,7 @@ public sealed partial class ProjectHistory(
     }
 
     /// <summary>The project's tables History never records: results (AudioReviews) and progress (StepCheckpoints).</summary>
-    private static string[] NotStateTables(ProjectDbContext db) =>
+    internal static string[] NotStateTables(ProjectDbContext db) =>
     [
         db.Model.FindEntityType(typeof(AudioReview))!.GetTableName()!,
         db.Model.FindEntityType(typeof(StepCheckpoint))!.GetTableName()!,

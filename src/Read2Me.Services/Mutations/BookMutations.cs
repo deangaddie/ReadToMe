@@ -37,6 +37,7 @@ public sealed class BookMutations(
     MutationOrigin origin,
     ProjectHistory history,
     HistoryStepScope stepScope,
+    RestoringProjects restoring,
     ILogger<BookMutations> logger)
 {
     private BookMutationOptions Options => options.Value;
@@ -56,6 +57,8 @@ public sealed class BookMutations(
 
         if (ct.IsCancellationRequested)
             return Cancelled();
+        if (RefusedWhileRestoring(mutation) is { } refused)
+            return refused;
 
         IDisposable? writeLock;
         try
@@ -83,6 +86,9 @@ public sealed class BookMutations(
         RecordedStep? step;
         try
         {
+            // Again under the lock: a Restore may have begun while this waited for it.
+            if (RefusedWhileRestoring(mutation) is { } refusedLate)
+                return refusedLate;
             if (await ApplyInOneTransactionAsync(mutation, implementation, ct) is not { } committed)
                 return new BookMutationOutcome.NoChange();
 
@@ -150,7 +156,7 @@ public sealed class BookMutations(
         effects = await MarkCheckpointsStaleAsync(mutation, effects, db, ct);
         await db.SaveChangesAsync(ct);
         var step = capture is null || mutation is not ProjectStateMutation state ? null : await capture.RecordAsync(
-            scope, runKind, ProjectHistory.LabelOf(mutation), effects, state.WritesFiles, ct);
+            scope, runKind, state, effects, ct);
 
         // The last point at which cancellation is still honourable. Past it the change is real, so
         // the commit runs to completion regardless: a committed mutation must never be reported as
@@ -226,6 +232,12 @@ public sealed class BookMutations(
                 receipt.MutationName, receipt.FolderId.Value);
         }
     }
+
+    /// <summary>Every mutation but the Restore's own is refused while the project is restoring.</summary>
+    private BookMutationOutcome? RefusedWhileRestoring(BookMutation mutation) =>
+        mutation is not RestoreStepMutation && restoring.IsRestoring(mutation.FolderId)
+            ? new BookMutationOutcome.Rejected(BookMutationRejection.Restoring, RestoringProjects.Reason)
+            : null;
 
     private BookMutationOutcome Cancelled() =>
         new BookMutationOutcome.Rejected(BookMutationRejection.Cancelled, "The mutation was cancelled before it committed.");
