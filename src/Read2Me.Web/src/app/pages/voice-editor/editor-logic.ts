@@ -4,7 +4,7 @@ import {
   type StepCatalogEntryDto,
   type VoiceDto,
   voiceOriginalUrl,
-  workspaceUrl,
+  stateFileUrl,
 } from '@app/api';
 import { toFormField } from '@app/shared/settings-schema';
 import type { SettingsSchema, SettingsValues } from '@app/ui/settings-form';
@@ -83,5 +83,5 @@ export function originalAudioUrl(folder: string, voice: VoiceDto): string | null
   if (!voice.audioFileName) return null;
   return voice.isEdited
     ? voiceOriginalUrl(folder, voice.id)
-    : workspaceUrl(folder, voice.audioFileName);
+    : stateFileUrl(folder, voice.audioFileName);
 }

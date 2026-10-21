@@ -197,8 +197,11 @@ public sealed record LlmTestMessage(string Kind, int ConfigId, string? Reason = 
 /// <c>kind</c>: stepLanded | stepChanged | stepClosed — a step that appeared in a project's History,
 /// an open one a later commit extended, or one that closed, with its row as <c>GET /api/projects/{folder}/history</c> lists it. Sent to the project
 /// group. A step recorded by one mutation lands and closes together, so both arrive back to back.
+/// <c>busyChanged</c> carries no step: the project's busy reason ("Attribution: 128 paragraphs left")
+/// moved, or went null (omitted on the wire) when the project went idle. A busy project can't be
+/// viewed at a step.
 /// </summary>
-public sealed record HistoryMessage(string Kind, string Folder, HistoryStep Step);
+public sealed record HistoryMessage(string Kind, string Folder, HistoryStep? Step = null, string? Reason = null);
 
 /// <summary>
 /// <see cref="ProposedEdit"/> on the wire; enums as member names. Shared with the REST reads of a

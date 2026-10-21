@@ -146,6 +146,33 @@
     min-width: 180px;
   }
 
+  /* ---- viewing a History step: the amber banner over the body, the page greyed and inert ------ */
+  .shell__viewing {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    flex: 0 0 auto;
+    gap: var(--r2m-space-2);
+    padding: var(--r2m-space-2) var(--r2m-space-4);
+    background: var(--r2m-status-warn-soft);
+    color: var(--r2m-text);
+    border-bottom: 1px solid var(--r2m-status-warn);
+
+    & > .r2m-icon {
+      color: var(--r2m-status-warn);
+    }
+  }
+  .shell__viewing-text {
+    flex: 1 1 16em;
+  }
+  .shell__viewing-back {
+    background: var(--r2m-surface);
+  }
+  .shell__main--viewing {
+    filter: saturate(0.4);
+    opacity: 0.85;
+  }
+
   /* ---- body: rail + content ----------------------------------------------------------------- */
   .shell__body {
     position: relative;
@@ -288,7 +315,7 @@
       z-index: 2;
       box-shadow: var(--r2m-shadow-3);
     }
-    /* The sheet covers the page body; the app bar (and, later, the viewing banner) stay above it. */
+    /* The sheet covers the page body; the app bar and the viewing banner stay above it. */
     .shell__history {
       position: absolute;
       inset: 0;

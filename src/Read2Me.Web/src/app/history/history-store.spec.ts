@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { HistoryDto, HistoryStep } from '@app/api';
-import { resetServices } from '@app/core/services';
+import { BookApi, type HistoryDto, type HistoryStep, StepView } from '@app/api';
+import { override, resetServices, use } from '@app/core/services';
+import { ToastService } from '@app/ui/toast';
 import { FakeApi } from '../../testing/fake-api';
 import { FakeLive } from '../../testing/fake-live';
 import { HistoryStore } from './history-store';
@@ -33,11 +34,14 @@ describe('HistoryStore', () => {
   let api: FakeApi;
   let live: FakeLive;
   let store: HistoryStore;
+  const toasts: string[] = [];
 
   beforeEach(() => {
     api = new FakeApi();
     api.install();
     live = new FakeLive().install();
+    toasts.length = 0;
+    override(ToastService, { info: (m: string) => toasts.push(m) } as unknown as ToastService);
     store = new HistoryStore();
     store.open('dune');
   });
@@ -205,5 +209,111 @@ describe('HistoryStore', () => {
 
     expect(store.error()).toBe('boom');
     expect(store.loaded()).toBe(false);
+  });
+
+  describe('viewing a step', () => {
+    const BOOK = '/api/projects/dune/book';
+    const readBook = async () => {
+      await use(BookApi).overview('dune');
+      return api.calls('GET', BOOK).at(-1)?.search;
+    };
+    const busyChanged = (reason?: string, folder = 'dune') =>
+      live.emit('history', { kind: 'busyChanged', folder, ...(reason ? { reason } : {}) });
+
+    beforeEach(async () => {
+      api.on('GET', BOOK, {});
+      api.on('GET', PATH, dto([step(3, { label: 'Assign speaker' }), step(2), step(1)]));
+      await store.load();
+    });
+
+    it('starts on the current project, reading without ?at=', async () => {
+      expect(store.viewing()).toBeNull();
+      expect(await readBook()).toBe('');
+    });
+
+    it('reads every Project state read at the viewed step, and names that step', async () => {
+      expect(store.view('s2')).toBe(true);
+
+      expect(store.viewing()).toBe('s2');
+      expect(store.viewedStep()?.stepId).toBe('s2');
+      expect(await readBook()).toBe('?at=s2');
+    });
+
+    it('follows the viewed row as the hub replaces it by id', () => {
+      store.view('s2');
+      closed(step(2, { note: 'part 1' }));
+
+      expect(store.viewedStep()?.note).toBe('part 1');
+    });
+
+    it('returns to the current project on Back to current', async () => {
+      store.view('s2');
+      store.backToCurrent();
+
+      expect(store.viewing()).toBeNull();
+      expect(await readBook()).toBe('');
+    });
+
+    it('returns to the current project when the tip is clicked', async () => {
+      store.view('s2');
+      store.view('s3');
+
+      expect(store.viewing()).toBeNull();
+      expect(await readBook()).toBe('');
+    });
+
+    it("can't view a step while the project is busy, and says why", async () => {
+      busyChanged('Attribution: 128 paragraphs left');
+
+      expect(store.busy()).toBe('Attribution: 128 paragraphs left');
+      expect(store.view('s2')).toBe(false);
+      expect(store.viewing()).toBeNull();
+      expect(await readBook()).toBe('');
+    });
+
+    it('reads the busy reason with the list', async () => {
+      store.close();
+      store.open('dune');
+      api.on('GET', PATH, { ...dto([step(1)]), busy: { reason: 'Assembly running' } });
+      await store.load();
+
+      expect(store.busy()).toBe('Assembly running');
+    });
+
+    it('sends a viewing tab back to current with a toast when background work starts', async () => {
+      store.view('s2');
+      busyChanged('Attribution: 128 paragraphs left');
+
+      expect(store.viewing()).toBeNull();
+      expect(await readBook()).toBe('');
+      expect(toasts).toEqual([
+        'Back to the current project: background work started (Attribution: 128 paragraphs left).',
+      ]);
+    });
+
+    it('reads busyChanged without a reason as idle, so steps can be viewed again', () => {
+      busyChanged('Voice batch running');
+      busyChanged();
+
+      expect(store.busy()).toBeNull();
+      expect(store.view('s2')).toBe(true);
+      expect(toasts).toEqual([]);
+    });
+
+    it("ignores another project's busy change", () => {
+      store.view('s2');
+      busyChanged('Voice batch running', 'arrakis');
+
+      expect(store.viewing()).toBe('s2');
+      expect(store.busy()).toBeNull();
+    });
+
+    it('stops viewing when the project closes', async () => {
+      store.view('s2');
+      store.close();
+
+      expect(use(StepView).at('dune')).toBeNull();
+      expect(await readBook()).toBe('');
+    });
   });
 });

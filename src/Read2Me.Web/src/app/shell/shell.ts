@@ -5,6 +5,7 @@ import { Router, fill, titleOf } from '@app/core/router';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
+import { dayLabel, stepTime } from '@app/history/history-rows';
 import { HistorySheetState } from '@app/history/history-sheet-state';
 import { LiveService } from '@app/live/live.service';
 import { shellContext } from '@app/route-meta';
@@ -41,9 +42,10 @@ interface Crumb {
  * connection dot and the theme quick menu; the nav rail with the context group for "here" and the
  * global group; the main outlet; the activity bar below and the activity drawer beside the content
  * (both read {@link ActivityStore}); on a project's pages, the History button and the History sheet
- * docked beside the content (both read {@link HistorySheetState}). Below 900 px the rail becomes a
- * modal drawer, the History sheet covers the page body and the activity bar collapses to one
- * summary pill.
+ * docked beside the content (both read {@link HistorySheetState}). While the project is viewed at a
+ * History step, the amber banner sits above the body, the page is inert and greyed, and the
+ * next-step pill is hidden. Below 900 px the rail becomes a modal drawer, the History sheet covers
+ * the page body (the banner stays above it) and the activity bar collapses to one summary pill.
  */
 export class AppShell extends R2mElement {
   private readonly router = use(Router);
@@ -66,12 +68,20 @@ export class AppShell extends R2mElement {
     return entry && entry.folder === this.context().folder ? entry.store : null;
   });
 
-  /** The next-step pill's entry: the route's project, on any of its pages but the Overview (spec §4). */
+  /** Whether the route's project is viewed at a History step, and that step's row. */
+  private readonly viewing = computed(() => (this.history()?.viewing() ?? null) !== null);
+  private readonly viewedStep = computed(() => this.history()?.viewedStep() ?? null);
+
+  /**
+   * The next-step pill's entry: the route's project, on any of its pages but the Overview (spec §4).
+   * Hidden while viewing a History step, which it would send you to work on.
+   */
   private readonly nextStep = computed<GuideEntry | null>(() => {
     const entry = this.guide.current();
     const leaf = this.router.match()?.chain.at(-1)?.tag;
     if (!entry || entry.folder !== this.context().folder || leaf === 'r2m-overview-page')
       return null;
+    if (this.viewing()) return null;
     return entry;
   });
 
@@ -130,6 +140,8 @@ export class AppShell extends R2mElement {
     this.setAttribute('data-live-state', connection);
     const connectionLabel = this.live.statusLabel();
     const preference = this.theme.preference();
+    // The page body while viewing a History step: visible, greyed, and nothing in it can be used.
+    const viewing = this.viewing();
     return html`
       <header class="shell__appbar">
         <button
@@ -193,6 +205,8 @@ export class AppShell extends R2mElement {
         >
       </header>
 
+      ${this.viewingBanner()}
+
       <div class="shell__body">
         ${
           narrow && this.railOpen()
@@ -218,7 +232,9 @@ export class AppShell extends R2mElement {
             </ul>
           </nav>
         </aside>
-        <main class="shell__main"><r2m-outlet></r2m-outlet></main>
+        <main class="shell__main ${viewing ? 'shell__main--viewing' : ''}" .inert=${viewing}>
+          <r2m-outlet></r2m-outlet>
+        </main>
         ${
           this.history() && this.historySheet.open()
             ? html`<aside class="shell__history" aria-labelledby="history-sheet-title">
@@ -299,6 +315,37 @@ export class AppShell extends R2mElement {
         @click=${openOverview}
       >
         ${icon('list')}
+      </button>
+    </div>`;
+  }
+
+  /**
+   * The amber banner while viewing a History step (spec, "Viewing a step"): it names the step and
+   * its time, and holds Back to current. Full width above the body, so the narrow-width sheet that
+   * covers the body leaves it in view.
+   */
+  private viewingBanner() {
+    const store = this.history();
+    const step = this.viewedStep();
+    if (!store || !this.viewing()) return nothing;
+    const name = step
+      ? `#${step.sequence} ${step.label}${step.note ? ` (${step.note})` : ''}`
+      : 'a past step';
+    const when = step
+      ? ` · ${dayLabel(new Date(step.startedAt), new Date())} ${stepTime(step)}`
+      : '';
+    return html`<div class="shell__viewing" role="status">
+      ${icon('lock')}
+      <span class="shell__viewing-text"
+        ><strong>Viewing ${name}</strong>${step?.summary ? ` — ${step.summary}` : ''}${when}. The
+        project as it was after this step; read-only.</span
+      >
+      <button
+        type="button"
+        class="r2m-button r2m-button--stroked shell__viewing-back"
+        @click=${() => store.backToCurrent()}
+      >
+        Back to current
       </button>
     </div>`;
   }

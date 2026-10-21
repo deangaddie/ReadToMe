@@ -3,7 +3,7 @@ import {
   type Guid,
   type VoiceDto,
   type VoiceSource,
-  workspaceUrl,
+  stateFileUrl,
 } from '@app/api';
 import type { VoiceBatchMessage } from '@app/live/live-messages';
 import type { SettingsValues } from '@app/ui/settings-form';
@@ -142,6 +142,6 @@ export function voiceAudioUrl(
   versions: Record<Guid, number>,
 ): string | null {
   return voice.audioFileName
-    ? workspaceUrl(folder, voice.audioFileName, versions[voice.id] ?? 0)
+    ? stateFileUrl(folder, voice.audioFileName, versions[voice.id] ?? 0)
     : null;
 }

@@ -7,7 +7,7 @@ import {
   ProjectsApi,
   type UpdateProjectRequest,
   toApiError,
-  workspaceUrl,
+  stateFileUrl,
 } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
@@ -46,7 +46,7 @@ export class ProjectDetailsPanel extends R2mElement {
     this.store = use(ProjectStore, this);
     this.coverUrl = computed(() => {
       const d = this.store.detail();
-      return d?.coverImage ? workspaceUrl(d.folderName, d.coverImage, this.coverVersion()) : null;
+      return d?.coverImage ? stateFileUrl(d.folderName, d.coverImage, this.coverVersion()) : null;
     });
   }
 

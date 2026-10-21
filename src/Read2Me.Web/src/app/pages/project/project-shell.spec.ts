@@ -8,6 +8,7 @@ import { ProjectGuide } from '@app/shell/project-guide';
 import { FakeApi } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';
 import { installNavigation, settle } from '../../../testing/fake-navigation';
+import { HistoryStore } from '@app/history/history-store';
 import { ProjectStore } from './project-store';
 import './project-shell';
 
@@ -119,5 +120,45 @@ describe('r2m-project-shell', () => {
     const { shell } = await start('projects/dune/book');
     shell.remove();
     expect(live.left).toEqual(['dune']);
+  });
+
+  it('rereads the project at a viewed step and mounts the page afresh, and again back at current', async () => {
+    api.on('GET', '/api/projects/dune/status', EMPTY_STATUS);
+    const { shell } = await start('projects/dune/book');
+    const history = use(HistoryStore, shell.querySelector('x-project-child')!);
+    const page = shell.querySelector('x-project-child');
+
+    history.view('s1');
+    await settle();
+
+    expect(api.calls('GET', '/api/projects/dune').map((r) => r.search)).toEqual(['', '?at=s1']);
+    expect(api.calls('GET', '/api/projects/dune/status').at(-1)?.search).toBe('?at=s1');
+    const viewed = shell.querySelector('x-project-child');
+    expect(viewed).not.toBeNull();
+    expect(viewed).not.toBe(page);
+
+    history.backToCurrent();
+    await settle();
+
+    expect(api.calls('GET', '/api/projects/dune').at(-1)?.search).toBe('');
+    expect(shell.querySelector('x-project-child')).not.toBe(viewed);
+  });
+
+  it('keeps the past detail when a current read lands after it', async () => {
+    let answerCurrent!: (r: unknown) => void;
+    api.on('GET', '/api/projects/dune', (_body, url) =>
+      url.search
+        ? { folderName: 'dune', title: 'Past' }
+        : new Promise((resolve) => (answerCurrent = resolve)),
+    );
+    const { shell } = await start('projects/dune/book');
+    const child = shell.querySelector('x-project-child')!;
+
+    use(HistoryStore, child).view('s1');
+    await settle();
+    answerCurrent({ folderName: 'dune', title: 'Current' });
+    await settle();
+
+    expect(use(ProjectStore, shell.querySelector('x-project-child')!).detail()?.title).toBe('Past');
   });
 });

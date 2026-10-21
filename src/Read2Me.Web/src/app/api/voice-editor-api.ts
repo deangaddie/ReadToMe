@@ -10,10 +10,11 @@ import type {
   VoiceDto,
 } from './dtos';
 import { projectUrl } from './projects-api';
+import { withViewedStep } from './step-view';
 
-/** The stored original of an edited voice (404 while the voice is unedited). */
+/** The stored original of an edited voice (404 while the voice is unedited), at the viewed step if any. */
 export function voiceOriginalUrl(folder: string, voiceId: Guid): string {
-  return `${projectUrl(folder)}/voices/${voiceId}/original.wav`;
+  return withViewedStep(`${projectUrl(folder)}/voices/${voiceId}/original.wav`, folder);
 }
 
 /**
