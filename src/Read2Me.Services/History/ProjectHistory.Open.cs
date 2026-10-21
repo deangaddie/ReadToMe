@@ -118,7 +118,8 @@ public sealed partial class ProjectHistory
                 // replayed parent delete would remove those rows first and the child deletes conflict.
                 await ExecuteAsync(connection, "PRAGMA foreign_keys = OFF", ct);
                 await ExecuteAsync(connection, "BEGIN", ct);
-                foreach (var chunk in chunks.OrderByDescending(c => c.Depth).ThenBy(c => c.Sequence))
+                // A chunk that changed only files has an empty patchset: nothing to replay.
+                foreach (var chunk in chunks.Where(c => c.Patchset.Length > 0).OrderByDescending(c => c.Depth).ThenBy(c => c.Sequence))
                     SqliteSession.Apply(connection, chunk.Patchset);
                 await ExecuteAsync(connection, "COMMIT", ct);
 

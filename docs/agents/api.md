@@ -733,10 +733,15 @@ curl -s "http://localhost:5000/api/projects/{folder}/characters?at={stepId}"
   `cantOpen`, 400 when `at` is not a step id. A step recorded before a schema upgrade is migrated
   as it opens; one whose old schema fails to migrate is marked `cantOpen` for good (the read that
   found out answers 422, and the hub sends `stepChanged` with the row).
-- Reads of live results, progress or files refuse `?at=` with 400, saying why: `/history`, audio
-  reviews, queue status, Edit with AI runs, Assembly outputs and the voice editor's original WAV.
-  Voice audio and the cover are still served as they are now, and so is a Voice's `referenceSeconds`,
-  read from its WAV. `revision` on `/book` and `/status` is the current one, not the step's.
+- State files read at a step too: `/workspace/{folder}/{path}?at={stepId}` serves a Voice's
+  reference audio, the cover or the source book file as it was after that step, and
+  `/voices/{voiceId}/original.wav?at=` the voice editor's original. 404 when the file didn't
+  exist then (an item's take is a result, so it never exists at a step), with the same 400/404/409
+  as the other `?at=` reads. Without `?at=` the live file is served as before.
+- Reads of live results, progress or scratch refuse `?at=` with 400, saying why: `/history`, audio
+  reviews, queue status, Edit with AI runs, Assembly outputs and `/preview-source`. A Voice's
+  `referenceSeconds` is still read from its live WAV. `revision` on `/book` and `/status` is the
+  current one, not the step's.
 - Writes only ever go to the current project: any write with `?at=` answers 400 and writes nothing.
 - At a step, `/status` reports nothing in flight and no Pipeline checkpoints or reviews, since
   results and progress are not History. For the same reason an item's `audioFileName` at a step

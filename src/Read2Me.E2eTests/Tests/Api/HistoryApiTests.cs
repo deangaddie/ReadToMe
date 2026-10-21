@@ -236,6 +236,50 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         }
     }
 
+    // ── state files at a step ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_state_file_with_at_is_served_as_it_was_after_that_step_and_404_when_it_wasnt_there()
+    {
+        var folder = $"api-history-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "History Book", "Author");
+        var started = (await HistoryAsync(folder)).GetProperty("headStepId").GetGuid();
+        await PutCoverAsync(folder, "first cover");
+        var first = (await HistoryAsync(folder)).GetProperty("headStepId").GetGuid();
+        await PutCoverAsync(folder, "second cover");
+        var cover = $"{app.BaseUrl}/workspace/{folder}/cover.png";
+
+        var then = await Http.GetAsync($"{cover}?at={first}");
+
+        Assert.Equal(HttpStatusCode.OK, then.StatusCode);
+        Assert.Equal("image/png", then.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("first cover", await then.Content.ReadAsStringAsync());
+        Assert.True(then.Headers.CacheControl?.Extensions.Any(e => e.Name == "immutable")); // a closed step never changes
+        Assert.Equal("second cover", await Http.GetStringAsync(cover));
+        Assert.Equal(HttpStatusCode.NotFound, (await Http.GetAsync($"{cover}?at={started}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Http.GetAsync($"{cover}?at={Guid.NewGuid()}")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Http.GetAsync($"{cover}?at=yesterday")).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_preview_source_with_at_is_400_since_it_is_a_result()
+    {
+        var folder = $"api-history-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "History Book", "Author");
+        var started = (await HistoryAsync(folder)).GetProperty("headStepId").GetGuid();
+
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await Http.GetAsync($"{app.BaseUrl}/preview-source/{folder}/{Guid.NewGuid()}?at={started}")).StatusCode);
+    }
+
+    private async Task PutCoverAsync(string folder, string content)
+    {
+        using var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(Encoding.UTF8.GetBytes(content)), "file", "cover.png");
+        var saved = await Http.PutAsync($"{app.BaseUrl}/api/projects/{folder}/cover", form);
+        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+    }
+
     private async Task CreateCharacterAsync(string folder, string name)
     {
         var created = await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/commands",

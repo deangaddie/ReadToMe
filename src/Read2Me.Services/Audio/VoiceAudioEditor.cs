@@ -78,15 +78,19 @@ namespace Read2Me.Services.Audio
 
             var previous = await ReadLiveAsync(voice, ct);
             await WriteLiveAsync(voice, original);
+            // Before the commit, like the audio, so History records the original gone with it. It
+            // comes back if the commit doesn't follow: until then the edit is still the recorded
+            // state, and the original is what claims it. A crash in between loses the live copy, but
+            // History's blobs still hold it at the edit's step.
+            originals.Delete(voice.Folder, voice.CharacterId, voice.VoiceId);
 
             var outcome = await mutations.CommitAsync(
                 new RestoreVoiceAudioOriginalMutation(voice.Folder, voice.VoiceId), ct);
             if (outcome is not BookMutationOutcome.Committed)
+            {
+                await PutBackOriginalAsync(voice, original);
                 throw await PutBackAsync(voice, previous, outcome, ct);
-
-            // Only after the commit: until then the edit is still the recorded state, and the original
-            // is what claims it.
-            originals.Delete(voice.Folder, voice.CharacterId, voice.VoiceId);
+            }
 
             logger.LogInformation("Voice {VoiceId} audio restored to its original", voice.VoiceId);
         }
@@ -113,6 +117,21 @@ namespace Read2Me.Services.Audio
             var failure = UncommittedArtifact.AsException(outcome, $"voice {voice.VoiceId} audio", ct);
             logger.LogWarning("Voice {Id} audio edit was not recorded: {Reason}", voice.VoiceId, failure.Message);
             return failure;
+        }
+
+        /// <summary>Writes the original back after a restore that didn't commit. Best-effort, like <see cref="PutBackAsync"/>.</summary>
+        private async Task PutBackOriginalAsync(VoiceAudioRef voice, byte[] original)
+        {
+            try
+            {
+                using var source = new MemoryStream(original);
+                await fs.WriteFileAsync(
+                    fs.ProjectFilePath(voice.Folder, originals.RelativePath(voice.CharacterId, voice.VoiceId)), source);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Could not put back the original audio of voice {Id}.", voice.VoiceId);
+            }
         }
 
         private async Task<byte[]?> ReadLiveAsync(VoiceAudioRef voice, CancellationToken ct)

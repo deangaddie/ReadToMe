@@ -2709,7 +2709,10 @@ export interface paths {
         /** The voice's audio as it was before the editor touched it. 404 while the voice is unedited — the live WAV is the original then. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
                 header?: never;
                 path: {
                     folder: string;
@@ -2719,12 +2722,41 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Bad Request */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };

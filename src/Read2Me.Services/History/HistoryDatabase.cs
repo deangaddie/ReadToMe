@@ -21,8 +21,11 @@ internal static class HistoryDatabase
 
     public const string StartedLabel = "History started";
 
-    /// <summary>Bumped by any later change to the tables below, so an older history.db can be told apart.</summary>
-    private const int Version = 1;
+    /// <summary>
+    /// Bumped by any later change to what history.db holds, so an older one can be told apart: 2 is
+    /// the first whose chunks and snapshots record the state files.
+    /// </summary>
+    public const int Version = 2;
 
     public static string FolderOf(string projectFolderPath) => Path.Combine(projectFolderPath, FolderName);
     public static string FileIn(string historyFolder) => Path.Combine(historyFolder, FileName);
@@ -82,13 +85,23 @@ internal static class HistoryDatabase
             """);
     }
 
+    /// <summary>The <c>user_version</c> of an existing history.db: which <see cref="Version"/> wrote it.</summary>
+    public static async Task<long> ReadVersionAsync(string file, CancellationToken ct)
+    {
+        await using var connection = Open(file, SqliteOpenMode.ReadOnly);
+        await connection.OpenAsync(ct);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA user_version";
+        return (long)(await command.ExecuteScalarAsync(ct))!;
+    }
+
     /// <summary>
-    /// Appends <paramref name="step"/> at the tip — its row, the chunk when there is a patchset, and
-    /// the Head moved onto it. <paramref name="schema"/> qualifies the tables: the attached name on
-    /// a mutation's connection, or empty on a connection to history.db itself.
+    /// Appends <paramref name="step"/> at the tip — its row, the chunk when there is one, and the
+    /// Head moved onto it. <paramref name="schema"/> qualifies the tables: the attached name on a
+    /// mutation's connection, or empty on a connection to history.db itself.
     /// </summary>
     public static async Task AppendStepAsync(
-        SqliteConnection connection, SqliteTransaction? transaction, string schema, HistoryStep step, byte[]? patchset,
+        SqliteConnection connection, SqliteTransaction? transaction, string schema, HistoryStep step, Chunk? chunk,
         CancellationToken ct)
     {
         var q = Qualifier(schema);
@@ -97,7 +110,7 @@ internal static class HistoryDatabase
         command.CommandText = $"""
             INSERT INTO {q}Step ({InsertedColumns})
                 VALUES ($id, $parent, $sequence, $label, $summary, $author, $startedAt, $endedAt, $isOpen, $note);
-            {(patchset is null ? "" : $"INSERT INTO {q}Chunk (StepId, Sequence, Patchset) VALUES ($id, 1, $patchset);")}
+            {(chunk is null ? "" : $"INSERT INTO {q}Chunk (StepId, Sequence, Patchset, FileChanges) VALUES ($id, 1, $patchset, $files);")}
             INSERT INTO {q}Head (Id, StepId) VALUES (1, $id) ON CONFLICT (Id) DO UPDATE SET StepId = excluded.StepId;
             """;
         command.Parameters.AddWithValue("$id", Stored(step.StepId));
@@ -110,27 +123,33 @@ internal static class HistoryDatabase
         command.Parameters.AddWithValue("$endedAt", step.EndedAt is { } e ? Stored(e) : DBNull.Value);
         command.Parameters.AddWithValue("$isOpen", step.IsOpen ? 1 : 0);
         command.Parameters.AddWithValue("$note", (object?)step.Note ?? DBNull.Value);
-        if (patchset is not null)
-            command.Parameters.AddWithValue("$patchset", patchset);
+        if (chunk is not null)
+            AddChunkParameters(command, chunk);
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    private static void AddChunkParameters(SqliteCommand command, Chunk chunk)
+    {
+        command.Parameters.AddWithValue("$patchset", chunk.Patchset);
+        command.Parameters.AddWithValue("$files", chunk.FileChanges is { Count: > 0 } files ? StateFiles.Serialise(files) : DBNull.Value);
+    }
+
     /// <summary>
-    /// Appends <paramref name="patchset"/> as the next chunk of the open step <paramref name="stepId"/>
+    /// Appends <paramref name="chunk"/> as the next chunk of the open step <paramref name="stepId"/>
     /// and rewrites its label — a Background run's grows when another run's work lands in it — its
     /// "what changed", and its end time: an open step's is its last change, <paramref name="at"/>.
     /// The Head already points at it. Answers the step's row as it now stands.
     /// </summary>
     public static async Task<HistoryStep> ExtendStepAsync(
         SqliteConnection connection, SqliteTransaction? transaction, string schema, Guid stepId, string label,
-        string? summary, DateTimeOffset at, byte[] patchset, CancellationToken ct)
+        string? summary, DateTimeOffset at, Chunk chunk, CancellationToken ct)
     {
         var q = Qualifier(schema);
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = $"""
-            INSERT INTO {q}Chunk (StepId, Sequence, Patchset)
-                VALUES ($id, (SELECT MAX(Sequence) + 1 FROM {q}Chunk WHERE StepId = $id), $patchset);
+            INSERT INTO {q}Chunk (StepId, Sequence, Patchset, FileChanges)
+                VALUES ($id, (SELECT MAX(Sequence) + 1 FROM {q}Chunk WHERE StepId = $id), $patchset, $files);
             UPDATE {q}Step SET Label = $label, Summary = $summary, EndedAt = $at WHERE StepId = $id
                 RETURNING {StepColumns};
             """;
@@ -138,7 +157,7 @@ internal static class HistoryDatabase
         command.Parameters.AddWithValue("$label", label);
         command.Parameters.AddWithValue("$summary", (object?)summary ?? DBNull.Value);
         command.Parameters.AddWithValue("$at", Stored(at));
-        command.Parameters.AddWithValue("$patchset", patchset);
+        AddChunkParameters(command, chunk);
         await using var reader = await command.ExecuteReaderAsync(ct);
         await reader.ReadAsync(ct);
         return ReadStep(reader);
@@ -262,6 +281,29 @@ internal static class HistoryDatabase
         return chunks;
     }
 
+    /// <summary>
+    /// The state file changes of the chunks <see cref="ReadChunksAsync"/> reads, in replay order:
+    /// deepest first, each step's in sequence. Chunks that changed no file are left out.
+    /// </summary>
+    public static async Task<List<Dictionary<string, string?>>> ReadFileChangesAsync(
+        SqliteConnection connection, Guid stepId, int depth, CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            {LineOf}
+            SELECT c.FileChanges FROM line JOIN Chunk c ON c.StepId = line.StepId
+                WHERE line.Depth < $depth AND c.FileChanges IS NOT NULL
+                ORDER BY line.Depth DESC, c.Sequence
+            """;
+        command.Parameters.AddWithValue("$id", Stored(stepId));
+        command.Parameters.AddWithValue("$depth", depth);
+        var changes = new List<Dictionary<string, string?>>();
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            changes.Add(StateFiles.Deserialise(reader.GetString(0)));
+        return changes;
+    }
+
     /// <summary>The step <c>$id</c> and its parents to the root, each with its depth below it.</summary>
     private const string LineOf = """
         WITH RECURSIVE line (StepId, ParentStepId, Depth) AS (
@@ -296,6 +338,12 @@ internal static class HistoryDatabase
 
     /// <summary>The columns <see cref="AppendStepAsync"/> writes; the rest keep their defaults until a later ticket sets them.</summary>
     private const string InsertedColumns = "StepId, ParentStepId, Sequence, Label, Summary, Author, StartedAt, EndedAt, IsOpen, Note";
+
+    /// <summary>
+    /// One commit's record: the patchset of its rows, empty when only files changed, and the state
+    /// files it changed, path to new hash or null for gone.
+    /// </summary>
+    public sealed record Chunk(byte[] Patchset, Dictionary<string, string?>? FileChanges);
 
     private static void Execute(SqliteConnection connection, string sql)
     {

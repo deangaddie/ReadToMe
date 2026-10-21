@@ -22,25 +22,29 @@ internal sealed class HistoryCapture : IAsyncDisposable
     private readonly SqliteSession _session;
     private readonly string _author;
     private readonly TimeProvider _clock;
+    private readonly IReadOnlyDictionary<string, string?> _tipFiles;
 
     private HistoryCapture(
-        ProjectDbContext db, SqliteConnection connection, SqliteSession session, string author, TimeProvider clock)
+        ProjectDbContext db, SqliteConnection connection, SqliteSession session, string author, TimeProvider clock,
+        IReadOnlyDictionary<string, string?> tipFiles)
     {
         _db = db;
         _connection = connection;
         _session = session;
         _author = author;
         _clock = clock;
+        _tipFiles = tipFiles;
     }
 
     /// <summary>
     /// Attaches <paramref name="historyFile"/> and starts a session over every project table except
     /// <paramref name="notState"/> and SQLite's and EF's own bookkeeping. The connection is held open
-    /// until disposal, because a session lives on one native handle.
+    /// until disposal, because a session lives on one native handle. <paramref name="tipFiles"/> is the
+    /// state files' list at the tip, which the commit's file changes are taken against.
     /// </summary>
     public static async Task<HistoryCapture> BeginAsync(
         ProjectDbContext db, string historyFile, IReadOnlyCollection<string> notState, string author, TimeProvider clock,
-        CancellationToken ct)
+        IReadOnlyDictionary<string, string?> tipFiles, CancellationToken ct)
     {
         await db.Database.OpenConnectionAsync(ct);
         var connection = (SqliteConnection)db.Database.GetDbConnection();
@@ -58,7 +62,7 @@ internal sealed class HistoryCapture : IAsyncDisposable
             session = SqliteSession.Create(connection);
             foreach (var table in stateTables)
                 session.Attach(table);
-            return new HistoryCapture(db, connection, session, author, clock);
+            return new HistoryCapture(db, connection, session, author, clock, tipFiles);
         }
         catch
         {
@@ -78,14 +82,24 @@ internal sealed class HistoryCapture : IAsyncDisposable
     /// could not close it, or one this commit interleaves with — is closed first, so a step's chunks
     /// are always contiguous in the line.
     /// </para>
+    /// <para>
+    /// The state files changed too: those the rows stop or start naming, and those the mutation
+    /// <paramref name="writesFiles"/> over in place, each hashed into the blobs before the chunk
+    /// that names it. A commit that changed only a file — an edit of a Voice's audio — is still a
+    /// step.
+    /// </para>
     /// </summary>
     public async Task<RecordedStep?> RecordAsync(
         HistoryStepScope.OpenScope? scope, BackgroundRunKind? runKind, string label, BookMutationEffects effects,
-        CancellationToken ct)
+        StateFileOwners writesFiles, CancellationToken ct)
     {
         var patchset = _session.Patchset();
-        if (patchset.Length == 0)
+        var projectFolder = Path.GetDirectoryName(_connection.DataSource)!;
+        var files = await StateFiles.ChangesAsync(
+            _db, projectFolder, HistoryDatabase.FolderOf(projectFolder), _tipFiles, writesFiles, ct);
+        if (patchset.Length == 0 && files.Count == 0)
             return null;
+        var chunk = new HistoryDatabase.Chunk(patchset, files);
 
         const string h = HistoryDatabase.Schema;
         await using var read = Command($"""
@@ -110,7 +124,7 @@ internal sealed class HistoryCapture : IAsyncDisposable
             var extendedKinds = Including(scope.Kinds, runKind);
             var extendedSummary = await StepSummary.DescribeAsync(_db, extended, ct);
             var row = await HistoryDatabase.ExtendStepAsync(
-                _connection, Transaction, h, scoped, LabelOf(scope, extendedKinds), extendedSummary, now, patchset, ct);
+                _connection, Transaction, h, scoped, LabelOf(scope, extendedKinds), extendedSummary, now, chunk, ct);
             return new RecordedStep(scoped, extended, extendedKinds, scope.Part, Landed: null, Changed: row, Closed: []);
         }
 
@@ -138,7 +152,7 @@ internal sealed class HistoryCapture : IAsyncDisposable
         var step = new HistoryStep(
             Guid.NewGuid(), head, sequence, scope is null ? label : LabelOf(scope, kinds), summary, _author, now,
             EndedAt: now, IsOpen: scope is not null, Note: StepNotes.Of(part, ending: null));
-        await HistoryDatabase.AppendStepAsync(_connection, Transaction, h, step, patchset, ct);
+        await HistoryDatabase.AppendStepAsync(_connection, Transaction, h, step, chunk, ct);
         return new RecordedStep(step.StepId, changes, kinds, part, step, Changed: null, closed);
     }
 
