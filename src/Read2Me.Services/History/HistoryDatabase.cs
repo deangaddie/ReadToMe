@@ -28,6 +28,10 @@ internal static class HistoryDatabase
     public static string FileIn(string historyFolder) => Path.Combine(historyFolder, FileName);
     public static string SnapshotsIn(string historyFolder) => Path.Combine(historyFolder, "snapshots");
 
+    /// <summary>The snapshot of the state after <paramref name="stepId"/>, or the base one for none.</summary>
+    public static string SnapshotOf(string historyFolder, Guid? stepId) =>
+        Path.Combine(SnapshotsIn(historyFolder), stepId is { } id ? $"{id:N}.db" : BaseSnapshotName);
+
     /// <summary>Throwaway materialised steps: deleting the folder loses nothing.</summary>
     public static string CacheIn(string historyFolder) => Path.Combine(historyFolder, "cache");
 
@@ -197,29 +201,75 @@ internal static class HistoryDatabase
     }
 
     /// <summary>
-    /// Every chunk of <paramref name="stepId"/> and of each step along its parents to the root, in
-    /// one statement so a commit landing meanwhile cannot tear it. <c>Depth</c> is 0 for the step
-    /// itself, 1 for its parent and so on: replay deepest first, each step's chunks in sequence.
+    /// Marks <paramref name="stepId"/> can't-be-opened, on a connection to history.db itself, and
+    /// answers its row as it now stands; null when there is no such step.
     /// </summary>
-    public static async Task<List<(int Depth, int Sequence, byte[] Patchset)>> ReadChunksToRootAsync(
-        SqliteConnection connection, Guid stepId, CancellationToken ct)
+    public static async Task<HistoryStep?> MarkCantOpenAsync(SqliteConnection connection, Guid stepId, CancellationToken ct)
     {
         await using var command = connection.CreateCommand();
-        command.CommandText = """
-            WITH RECURSIVE line (StepId, ParentStepId, Depth) AS (
-                SELECT StepId, ParentStepId, 0 FROM Step WHERE StepId = $id
-                UNION ALL
-                SELECT s.StepId, s.ParentStepId, line.Depth + 1 FROM Step s JOIN line ON s.StepId = line.ParentStepId
-            )
+        command.CommandText = $"UPDATE Step SET CantOpen = 1 WHERE StepId = $id RETURNING {StepColumns}";
+        command.Parameters.AddWithValue("$id", Stored(stepId));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct) ? ReadStep(reader) : null;
+    }
+
+    /// <summary>The Head's step and whether it is still open; null on a History with no steps yet.</summary>
+    public static async Task<(Guid StepId, bool IsOpen)?> ReadHeadAsync(SqliteConnection connection, CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT head.StepId, step.IsOpen FROM Head head JOIN Step step ON step.StepId = head.StepId WHERE head.Id = 1";
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct) ? (Guid.Parse(reader.GetString(0)), reader.GetInt64(1) != 0) : null;
+    }
+
+    /// <summary>
+    /// <paramref name="stepId"/> and each step along its parents to the root, the step itself
+    /// first: index <c>i</c> is the step at depth <c>i</c>.
+    /// </summary>
+    public static async Task<List<Guid>> ReadLineAsync(SqliteConnection connection, Guid stepId, CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"{LineOf} SELECT StepId FROM line ORDER BY Depth";
+        command.Parameters.AddWithValue("$id", Stored(stepId));
+        var line = new List<Guid>();
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            line.Add(Guid.Parse(reader.GetString(0)));
+        return line;
+    }
+
+    /// <summary>
+    /// Every chunk of the steps along <paramref name="stepId"/>'s line shallower than
+    /// <paramref name="depth"/>, the depth of the snapshot they replay onto. <c>Depth</c> is 0 for
+    /// the step itself, 1 for its parent and so on: replay deepest first, each step's chunks in
+    /// sequence.
+    /// </summary>
+    public static async Task<List<(int Depth, int Sequence, byte[] Patchset)>> ReadChunksAsync(
+        SqliteConnection connection, Guid stepId, int depth, CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            {LineOf}
             SELECT line.Depth, c.Sequence, c.Patchset FROM line JOIN Chunk c ON c.StepId = line.StepId
+                WHERE line.Depth < $depth
             """;
         command.Parameters.AddWithValue("$id", Stored(stepId));
+        command.Parameters.AddWithValue("$depth", depth);
         var chunks = new List<(int, int, byte[])>();
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
             chunks.Add((reader.GetInt32(0), reader.GetInt32(1), (byte[])reader.GetValue(2)));
         return chunks;
     }
+
+    /// <summary>The step <c>$id</c> and its parents to the root, each with its depth below it.</summary>
+    private const string LineOf = """
+        WITH RECURSIVE line (StepId, ParentStepId, Depth) AS (
+            SELECT StepId, ParentStepId, 0 FROM Step WHERE StepId = $id
+            UNION ALL
+            SELECT s.StepId, s.ParentStepId, line.Depth + 1 FROM Step s JOIN line ON s.StepId = line.ParentStepId
+        )
+        """;
 
     /// <summary>"history." for the attached name, nothing on a connection to history.db itself.</summary>
     private static string Qualifier(string schema) => schema.Length == 0 ? "" : schema + ".";

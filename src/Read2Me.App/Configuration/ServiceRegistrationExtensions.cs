@@ -27,6 +27,7 @@ using Read2Me.Services.Characters;
 using Read2Me.Services.Characters.ChapterPass;
 using Read2Me.Services.Events;
 using Read2Me.Services.Health;
+using Read2Me.Services.History;
 using Read2Me.Services.IO;
 using Read2Me.Services.NodeStatus;
 using Read2Me.Services.Llm;
@@ -57,6 +58,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IVoiceRulePreview, VoiceRulePreview>();
         services.AddBookCommandHandlers();
         services.Configure<BookMutationOptions>(configuration.GetSection(BookMutationOptions.SectionName));
+        services.Configure<HistoryOptions>(configuration.GetSection(HistoryOptions.SectionName));
         
         services.AddScoped<BookCommandApiAdapter>();
 

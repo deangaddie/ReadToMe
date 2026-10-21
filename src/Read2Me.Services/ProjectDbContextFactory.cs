@@ -5,7 +5,7 @@ namespace Read2Me.Services
 {
     public class ProjectDbContextProvider : IProjectDbContextFactory
     {
-        private const string DbFileName = "project.db";
+        internal const string DbFileName = "project.db";
 
         public async Task<ProjectDbContext> CreateAsync(string folderPath)
         {
