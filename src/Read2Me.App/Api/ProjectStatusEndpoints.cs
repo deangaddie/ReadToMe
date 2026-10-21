@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Routing;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services;
+using Read2Me.Services.Characters;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.NodeStatus;
 
@@ -44,20 +45,23 @@ namespace Read2Me.App.Api
         public static void MapProjectStatusEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapGet("/api/projects/{folder}/status", GetProjectStatusAsync)
+                .ReadsAt()
                 .WithSummary("Whole-project roll-up: content, cast and voice counts, item/attribution/audio/review remaining, per-node summaries, " +
                              "pause paragraphs, the confirmed or skipped Pipeline step checkpoints (step id → state, stale, at; only steps with a row) " +
                              "and the book revision they were read at.");
             endpoints.MapGet("/api/projects/{folder}/nodes/{level}/{id:guid}/status", GetNodeStatusAsync)
+                .ReadsAt()
                 .WithSummary("Roll-up for one volume/part/chapter: attribution/audio/review paragraphs remaining and attribution in flight. A node with no speech paragraphs answers zeros.");
         }
 
         private static async Task<IResult> GetProjectStatusAsync(
             string folder, IFileSystem fs, IProjectCatalogReader catalog, IBookContentReader content, IAudioItemReader audio,
-            ICharacterReader characters, NodeStatusService nodeStatus, BookRevisionSequence revisions,
+            ICharacterReader characters, NodeStatusService liveStatus, ProjectDbSession session, BookRevisionSequence revisions,
             CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
+            var nodeStatus = RollUpFor(folderId, session, liveStatus);
 
             // Stamped before the reads, like a projection snapshot: a mutation that commits during
             // them carries a higher revision, so the client's gap check still refetches.
@@ -95,16 +99,35 @@ namespace Read2Me.App.Api
         }
 
         private static async Task<IResult> GetNodeStatusAsync(
-            string folder, string level, Guid id, IFileSystem fs, IAudioItemReader audio, NodeStatusService nodeStatus)
+            string folder, string level, Guid id, IFileSystem fs, IAudioItemReader audio, NodeStatusService liveStatus,
+            ProjectDbSession session)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
+            var nodeStatus = RollUpFor(folderId, session, liveStatus);
             if (!Enum.TryParse<BookNodeLevel>(level, ignoreCase: true, out _))
                 return Results.Problem($"Unknown level '{level}'. Expected volume, part or chapter.",
                     statusCode: StatusCodes.Status400BadRequest);
 
             await SeedAsync(folderId, audio, nodeStatus);
             return Results.Ok(nodeStatus.StatusForNode(folderId, id));
+        }
+
+        /// <summary>
+        /// The live roll-up for the tip; for a read at a History step, a throwaway one, so seeding it
+        /// from the past never pushes past counts to hub members. Nothing is in flight at a step: a
+        /// busy project can't be read at one.
+        /// </summary>
+        private static NodeStatusService RollUpFor(ProjectFolderId folderId, ProjectDbSession session, NodeStatusService live) =>
+            session.StateOf(folderId) is null ? live : new NodeStatusService(NothingQueued.Instance);
+
+        private sealed class NothingQueued : IParagraphQueueProbe
+        {
+            public static readonly NothingQueued Instance = new();
+
+            public ParagraphQueueStatus? StatusOf(ProjectFolderId folder, Guid paragraphId) => null;
+
+            public event Action? Changed { add { } remove { } }
         }
 
         /// <summary>

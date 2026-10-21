@@ -22,6 +22,7 @@ namespace Read2Me.App.Api
     /// <summary>
     /// How a project write endpoint declares its place in History. Every non-GET endpoint under
     /// <c>/api/projects/{folder}</c> declares one or the other, so a new write cannot forget to.
+    /// Either way it answers 400 to <c>?at=</c>: writes only ever go to the tip.
     /// </summary>
     public static class HistorySteps
     {
@@ -32,6 +33,7 @@ namespace Read2Me.App.Api
         public static RouteHandlerBuilder RecordsStep(this RouteHandlerBuilder builder, string label) =>
             builder
                 .WithMetadata(new RecordsHistoryStep(label))
+                .RefusesAt(StepReads.WritesGoToTheTip)
                 .AddEndpointFilter(async (context, next) =>
                 {
                     var http = context.HttpContext;
@@ -45,9 +47,9 @@ namespace Read2Me.App.Api
 
         /// <summary>The handler opens the step scope itself, with a label it reads from the request.</summary>
         public static RouteHandlerBuilder RecordsOwnStep(this RouteHandlerBuilder builder) =>
-            builder.WithMetadata(new RecordsHistoryStep(null));
+            builder.WithMetadata(new RecordsHistoryStep(null)).RefusesAt(StepReads.WritesGoToTheTip);
 
         public static RouteHandlerBuilder RecordsNoStep(this RouteHandlerBuilder builder, string why) =>
-            builder.WithMetadata(new RecordsNoHistoryStep(why));
+            builder.WithMetadata(new RecordsNoHistoryStep(why)).RefusesAt(StepReads.WritesGoToTheTip);
     }
 }

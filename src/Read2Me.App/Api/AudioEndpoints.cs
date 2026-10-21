@@ -31,8 +31,10 @@ namespace Read2Me.App.Api
                 .RecordsNoStep("Enqueues a Background run; takes are results.")
                 .WithSummary("Queue TTS audio generation for an explicit list of item ids (a selection, or one item to retry). Unknown ids are ignored; the count answers with what was queued. 409 when no paragraph TTS service is active.");
             endpoints.MapGet("/api/projects/{folder}/audio/items/{itemId:guid}", GetItemStatus)
+                .ReadsLive("an item's place in the Audio Queue is live progress.")
                 .WithSummary("Per-item audio state: queued/processing status, failure outcome, or the audio version stamp once complete.");
             endpoints.MapGet("/api/projects/{folder}/audio/reviews", GetReviewsAsync)
+                .ReadsLive("audio reviews are results, which History doesn't record.")
                 .WithSummary("Items whose audio needs review or had it dismissed: { itemId: { state, normalizeOk, normalizeReason, verifyOk, wer, verifyReason, transcript, originalTextSnapshot } }. Sparse: an item with no entry passed both checks.");
             endpoints.MapPost("/api/audio/cancel",
                     (AudioQueueService queue) => { queue.CancelAll(); return Results.Ok(); })

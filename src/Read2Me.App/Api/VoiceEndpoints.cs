@@ -62,8 +62,10 @@ namespace Read2Me.App.Api
         public static void MapVoiceEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapGet("/api/projects/{folder}/characters/{characterId:guid}/voices", GetVoicesAsync)
+                .ReadsAt()
                 .WithSummary("A character's voices and its default voice id.");
             endpoints.MapGet("/api/projects/{folder}/voices/{voiceId:guid}", GetVoiceAsync)
+                .ReadsAt()
                 .WithSummary("One voice by id, with isEdited (its audio has been through the voice editor), both settings overrides, and referenceSeconds / referenceWarning (set over the 15 s soft Reference Limit), read from the stored WAV.");
             endpoints.MapPut("/api/projects/{folder}/voices/{voiceId:guid}/audio", UploadAudioAsync)
                 .RecordsStep("Upload voice audio")

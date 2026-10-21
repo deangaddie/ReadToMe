@@ -51,6 +51,7 @@ namespace Read2Me.App.Api
                 .RecordsStep("Restore original voice audio")
                 .WithSummary("Put the voice's original audio back and forget the edit. A no-op for a voice that was never edited.");
             endpoints.MapGet("/api/projects/{folder}/voices/{voiceId:guid}/original.wav", GetOriginalAsync)
+                .ReadsLive("voice files aren't read at a step yet.")
                 .WithSummary("The voice's audio as it was before the editor touched it. 404 while the voice is unedited — the live WAV is the original then.");
         }
 

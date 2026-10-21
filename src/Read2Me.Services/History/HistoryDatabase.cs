@@ -28,6 +28,9 @@ internal static class HistoryDatabase
     public static string FileIn(string historyFolder) => Path.Combine(historyFolder, FileName);
     public static string SnapshotsIn(string historyFolder) => Path.Combine(historyFolder, "snapshots");
 
+    /// <summary>Throwaway materialised steps: deleting the folder loses nothing.</summary>
+    public static string CacheIn(string historyFolder) => Path.Combine(historyFolder, "cache");
+
     public static SqliteConnection Open(string path, SqliteOpenMode mode) => new(new SqliteConnectionStringBuilder
     {
         DataSource = path,
@@ -181,6 +184,41 @@ internal static class HistoryDatabase
         while (await reader.ReadAsync(ct))
             closed.Add(ReadStep(reader));
         return closed;
+    }
+
+    /// <summary>One step's row, on a connection to history.db itself; null when there is no such step.</summary>
+    public static async Task<HistoryStep?> ReadStepAsync(SqliteConnection connection, Guid stepId, CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT {StepColumns} FROM Step WHERE StepId = $id";
+        command.Parameters.AddWithValue("$id", Stored(stepId));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct) ? ReadStep(reader) : null;
+    }
+
+    /// <summary>
+    /// Every chunk of <paramref name="stepId"/> and of each step along its parents to the root, in
+    /// one statement so a commit landing meanwhile cannot tear it. <c>Depth</c> is 0 for the step
+    /// itself, 1 for its parent and so on: replay deepest first, each step's chunks in sequence.
+    /// </summary>
+    public static async Task<List<(int Depth, int Sequence, byte[] Patchset)>> ReadChunksToRootAsync(
+        SqliteConnection connection, Guid stepId, CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            WITH RECURSIVE line (StepId, ParentStepId, Depth) AS (
+                SELECT StepId, ParentStepId, 0 FROM Step WHERE StepId = $id
+                UNION ALL
+                SELECT s.StepId, s.ParentStepId, line.Depth + 1 FROM Step s JOIN line ON s.StepId = line.ParentStepId
+            )
+            SELECT line.Depth, c.Sequence, c.Patchset FROM line JOIN Chunk c ON c.StepId = line.StepId
+            """;
+        command.Parameters.AddWithValue("$id", Stored(stepId));
+        var chunks = new List<(int, int, byte[])>();
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            chunks.Add((reader.GetInt32(0), reader.GetInt32(1), (byte[])reader.GetValue(2)));
+        return chunks;
     }
 
     /// <summary>"history." for the attached name, nothing on a connection to history.db itself.</summary>

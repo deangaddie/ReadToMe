@@ -2,15 +2,27 @@ using Microsoft.Extensions.Logging;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Data;
+using Read2Me.Services.History;
 
 namespace Read2Me.Services
 {
+    /// <summary>
+    /// The project DB contexts one scope reads and writes through, one per folder.
+    /// <para>
+    /// Each folder has a <b>state reference</b> (spec, "Read side: a state reference"): the tip by
+    /// default, or a History step set by <see cref="ReadAt"/>, which a request reading at
+    /// <c>?at=</c> sets before its handler runs. The session resolves it, so the readers only open
+    /// the folder as usual and read the past without knowing. Writes only ever go to the tip: a
+    /// step's context is read-only.
+    /// </para>
+    /// </summary>
     public class ProjectDbSession : IAsyncDisposable
     {
         private readonly IFileSystem _fs;
         private readonly IProjectDbContextFactory _dbFactory;
         private readonly ILogger<ProjectDbSession> _logger;
         private readonly Dictionary<string, ProjectDbContext> _contextCache = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, StepState> _states = new(StringComparer.OrdinalIgnoreCase);
 
         public ProjectDbSession(IFileSystem fs, IProjectDbContextFactory dbFactory, ILogger<ProjectDbSession> logger)
         {
@@ -26,11 +38,33 @@ namespace Read2Me.Services
             var folderPath = _fs.GetProjectFolderPath(folderId);
             if (_contextCache.TryGetValue(folderId, out var cached))
                 return cached;
-            _logger.LogDebug("Opening project DB: {FolderPath}", folderPath);
-            var ctx = await _dbFactory.CreateAsync(folderPath);
+            ProjectDbContext ctx;
+            if (_states.TryGetValue(folderId, out var state))
+            {
+                _logger.LogDebug("Opening project DB at History step {Step}: {FolderPath}", state.Step.StepId, folderPath);
+                ctx = state.OpenContext();
+            }
+            else
+            {
+                _logger.LogDebug("Opening project DB: {FolderPath}", folderPath);
+                ctx = await _dbFactory.CreateAsync(folderPath);
+            }
             _contextCache[folderId] = ctx;
             return ctx;
         }
+
+        /// <summary>
+        /// Points the folder's state reference at an opened History step: every later
+        /// <see cref="OpenAsync"/> in this scope reads that step's state instead of the tip.
+        /// </summary>
+        public void ReadAt(ProjectFolderId folderId, StepState state)
+        {
+            Evict(folderId);
+            _states[folderId] = state;
+        }
+
+        /// <summary>The History step the folder is read at, or null when it reads the tip.</summary>
+        public StepState? StateOf(ProjectFolderId folderId) => _states.GetValueOrDefault(folderId);
 
         public void Evict(ProjectFolderId folderId)
         {

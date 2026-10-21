@@ -66,7 +66,10 @@ export interface paths {
         /** Project metadata for one folder. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
                 header?: never;
                 path: {
                     folder: string;
@@ -75,12 +78,41 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Bad Request */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -322,7 +354,10 @@ export interface paths {
         /** Whole-project roll-up: content, cast and voice counts, item/attribution/audio/review remaining, per-node summaries, pause paragraphs, the confirmed or skipped Pipeline step checkpoints (step id → state, stale, at; only steps with a row) and the book revision they were read at. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
                 header?: never;
                 path: {
                     folder: string;
@@ -331,12 +366,41 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Bad Request */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -358,7 +422,10 @@ export interface paths {
         /** Roll-up for one volume/part/chapter: attribution/audio/review paragraphs remaining and attribution in flight. A node with no speech paragraphs answers zeros. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
                 header?: never;
                 path: {
                     folder: string;
@@ -369,12 +436,41 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Bad Request */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -465,6 +561,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{folder}/history/{stepId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One History step, in the shape GET /history lists it. 404 unknown project or step; 409 while anything is queued or running for the project (detail says what), since a busy project can't be viewed at a step. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    stepId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HistoryStep"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{folder}/book": {
         parameters: {
             query?: never;
@@ -475,7 +628,10 @@ export interface paths {
         /** Book overview: volumes, characters and structure counts, the book revision they were read at, and the Structure rules (structureRules: per anchor kind, the placements it allows, the kind each creates, whether text is required, and the minimum count the book keeps). hasContent=false means import has not run. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
                 header?: never;
                 path: {
                     folder: string;
@@ -491,6 +647,42 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["BookOverviewDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
                     };
                 };
             };
@@ -513,7 +705,10 @@ export interface paths {
         /** Ordered children of a node. level=volume gives parts, part gives chapters, chapter gives paragraphs with their items. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
                 header?: never;
                 path: {
                     folder: string;
@@ -524,12 +719,41 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Bad Request */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -551,7 +775,10 @@ export interface paths {
         /** Resolved voice per speech item of a chapter: { itemId: { voiceName, narratedBy } }. voiceName null = no voice resolves; narratedBy = the linked narrator's name on narration items. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
                 header?: never;
                 path: {
                     folder: string;
@@ -561,12 +788,41 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Bad Request */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -590,6 +846,8 @@ export interface paths {
             parameters: {
                 query?: {
                     unprocessedOnly?: boolean;
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
                 };
                 header?: never;
                 path: {
@@ -601,12 +859,41 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Bad Request */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -631,6 +918,8 @@ export interface paths {
                 query?: {
                     needsAudioOnly?: boolean;
                     narratorOnlyMode?: boolean;
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
                 };
                 header?: never;
                 path: {
@@ -642,12 +931,41 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Bad Request */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -669,7 +987,10 @@ export interface paths {
         /** All characters with their aliases. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
                 header?: never;
                 path: {
                     folder: string;
@@ -678,12 +999,41 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Bad Request */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -785,7 +1135,10 @@ export interface paths {
         /** A character's voice rules in evaluation order (default first): voice, anchor levels/ids/titles, dangling flags. Empty for an unknown character. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
                 header?: never;
                 path: {
                     folder: string;
@@ -795,12 +1148,41 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Bad Request */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -822,7 +1204,10 @@ export interface paths {
         /** The voice the character's rules pick at the start of every chapter, in book order (null voiceName = none resolves). Rules anchored inside a chapter are below this grain. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
                 header?: never;
                 path: {
                     folder: string;
@@ -832,12 +1217,41 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Bad Request */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -859,7 +1273,10 @@ export interface paths {
         /** Every character as a cast-list row (narrator first, then by name): aliases, line count, planned vs ready voices, isNarrator (the seed row) and narratesBook (the linked narrator). */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
                 header?: never;
                 path: {
                     folder: string;
@@ -868,12 +1285,41 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Bad Request */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -895,7 +1341,10 @@ export interface paths {
         /** The items a character speaks, in book order, with their paragraph and chapter ids. Empty for an unknown character. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
                 header?: never;
                 path: {
                     folder: string;
@@ -905,12 +1354,41 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Bad Request */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -936,6 +1414,8 @@ export interface paths {
                     chapterId: string;
                     before?: number | string;
                     after?: number | string;
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
                 };
                 header?: never;
                 path: {
@@ -946,12 +1426,41 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Bad Request */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -1530,7 +2039,10 @@ export interface paths {
         /** A character's voices and its default voice id. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
                 header?: never;
                 path: {
                     folder: string;
@@ -1540,12 +2052,41 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Bad Request */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -1567,7 +2108,10 @@ export interface paths {
         /** One voice by id, with isEdited (its audio has been through the voice editor), both settings overrides, and referenceSeconds / referenceWarning (set over the 15 s soft Reference Limit), read from the stored WAV. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
                 header?: never;
                 path: {
                     folder: string;
@@ -1577,12 +2121,41 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Bad Request */
+                400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
                 };
             };
         };
@@ -5227,6 +5800,14 @@ export interface components {
         PreviewStepRequest: {
             stepId: null | string;
             settings: null | components["schemas"]["JsonElement"];
+        };
+        ProblemDetails: {
+            type?: null | string;
+            title?: null | string;
+            /** Format: int32 */
+            status?: null | number | string;
+            detail?: null | string;
+            instance?: null | string;
         };
         PromptPreviewRequest: {
             template: string;
