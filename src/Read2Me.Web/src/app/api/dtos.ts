@@ -1226,3 +1226,16 @@ export interface HistoryDto {
   busy: { reason: string } | null;
   restoring: boolean;
 }
+
+/** `GET /api/projects/{folder}/history/{stepId}`: the step plus what a Restore to it would cost now. */
+export interface HistoryStepDto extends HistoryStep {
+  /** Items that would lose their audio; null for a step that can't be opened. */
+  restorePreview: { audioDiscardCount: number } | null;
+}
+
+/** `POST /api/projects/{folder}/history/{stepId}/restore`. */
+export interface RestoreResultDto {
+  /** The Restore step added; null when the project already was that state. */
+  step: HistoryStep | null;
+  audioDiscardCount: number;
+}

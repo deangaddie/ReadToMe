@@ -7,12 +7,21 @@ export interface ProblemLike {
   status?: number;
 }
 
+/** A button on a toast; clicking it runs `run` and dismisses the toast. */
+export interface ToastAction {
+  label: string;
+  run: () => void;
+}
+
 const DURATION_MS: Record<ToastSeverity, number> = {
   success: 3000,
   info: 3000,
   warn: 6000,
   error: 6000,
 };
+
+/** A toast with actions stays long enough to read them and choose. */
+const WITH_ACTIONS_MS = 12000;
 
 /**
  * Global toasts (design §7, §8). A `popover="manual"` stack in the top layer replaces MatSnackBar:
@@ -25,8 +34,9 @@ export class ToastService {
     this.show('success', message);
   }
 
-  info(message: string): void {
-    this.show('info', message);
+  /** With `actions`, the toast offers them as buttons and stays up longer. */
+  info(message: string, actions?: ToastAction[]): void {
+    this.show('info', message, actions);
   }
 
   warn(message: string): void {
@@ -43,20 +53,40 @@ export class ToastService {
     this.show('error', message);
   }
 
-  private show(severity: ToastSeverity, message: string): void {
+  private show(severity: ToastSeverity, message: string, actions: ToastAction[] = []): void {
     const stack = this.stack();
     const toast = document.createElement('div');
     toast.className = `r2m-toast r2m-toast--${severity}`;
     toast.setAttribute('role', severity === 'error' ? 'alert' : 'status');
-    toast.textContent = message;
+    const dismiss = () => {
+      toast.remove();
+      if (!stack.childElementCount) stack.hidePopover();
+    };
+    if (actions.length === 0) toast.textContent = message;
+    else {
+      const text = document.createElement('p');
+      text.className = 'r2m-toast__text';
+      text.textContent = message;
+      const row = document.createElement('div');
+      row.className = 'r2m-toast__actions';
+      for (const action of actions) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'r2m-button r2m-toast__action';
+        button.textContent = action.label;
+        button.addEventListener('click', () => {
+          dismiss();
+          action.run();
+        });
+        row.append(button);
+      }
+      toast.append(text, row);
+    }
     stack.append(toast);
     // Re-show so the stack moves above a dialog opened after it.
     stack.hidePopover();
     stack.showPopover();
-    setTimeout(() => {
-      toast.remove();
-      if (!stack.childElementCount) stack.hidePopover();
-    }, DURATION_MS[severity]);
+    setTimeout(dismiss, actions.length ? WITH_ACTIONS_MS : DURATION_MS[severity]);
   }
 
   private stack(): HTMLElement {

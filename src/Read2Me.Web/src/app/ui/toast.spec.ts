@@ -73,6 +73,25 @@ describe('ToastService', () => {
     expect(popover).toEqual(['hide']);
   });
 
+  it('offers actions as buttons, runs the clicked one and dismisses, and stays up longer', () => {
+    const ran: string[] = [];
+    new ToastService().info('Restored to #2 Edit text.', [
+      { label: 'Show in Book', run: () => ran.push('book') },
+      { label: 'Undo restore', run: () => ran.push('undo') },
+    ]);
+    const toast = toasts()[0]!;
+    const buttons = Array.from(toast.querySelectorAll<HTMLButtonElement>('button'));
+    expect(toast.querySelector('.r2m-toast__text')?.textContent).toBe('Restored to #2 Edit text.');
+    expect(buttons.map((b) => b.textContent)).toEqual(['Show in Book', 'Undo restore']);
+    expect(timers.map((t) => t.ms)).toEqual([12000]);
+
+    buttons[1]?.click();
+
+    expect(ran).toEqual(['undo']);
+    expect(toasts()).toEqual([]);
+    expect(popover.at(-1)).toBe('hide');
+  });
+
   it('problem() shows the detail, else the title, else a generic message', () => {
     const service = new ToastService();
     service.problem({ title: 'Conflict', detail: ' Audio is still generating. ' });

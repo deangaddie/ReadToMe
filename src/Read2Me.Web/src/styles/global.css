@@ -622,6 +622,18 @@ dialog.r2m-dialog--fullscreen {
 .r2m-toast--error {
   background: var(--r2m-status-error-soft);
 }
+.r2m-toast__text {
+  margin: 0 0 var(--r2m-space-2);
+}
+.r2m-toast__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--r2m-space-2);
+}
+.r2m-toast__action {
+  background: var(--r2m-surface);
+}
 
 /* ---- status chip + empty state -------------------------------------------------------------- */
 .r2m-status-chip {

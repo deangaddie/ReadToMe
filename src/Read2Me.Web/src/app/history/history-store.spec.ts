@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { BookApi, type HistoryDto, type HistoryStep, StepView } from '@app/api';
+import { Router } from '@app/core/router';
 import { override, resetServices, use } from '@app/core/services';
-import { ToastService } from '@app/ui/toast';
-import { FakeApi } from '../../testing/fake-api';
+import { type ProblemLike, type ToastAction, ToastService } from '@app/ui/toast';
+import { FakeApi, problem } from '../../testing/fake-api';
 import { FakeLive } from '../../testing/fake-live';
 import { HistoryStore } from './history-store';
 
@@ -35,13 +36,27 @@ describe('HistoryStore', () => {
   let live: FakeLive;
   let store: HistoryStore;
   const toasts: string[] = [];
+  /** The actions of the last toast that offered any. */
+  let actions: ToastAction[] = [];
+  const errors: string[] = [];
+  const navigated: string[] = [];
 
   beforeEach(() => {
     api = new FakeApi();
     api.install();
     live = new FakeLive().install();
     toasts.length = 0;
-    override(ToastService, { info: (m: string) => toasts.push(m) } as unknown as ToastService);
+    actions = [];
+    errors.length = 0;
+    navigated.length = 0;
+    override(ToastService, {
+      info: (m: string, offered?: ToastAction[]) => {
+        toasts.push(m);
+        if (offered) actions = offered;
+      },
+      problem: (p: ProblemLike) => errors.push(p.detail ?? ''),
+    } as unknown as ToastService);
+    override(Router, { navigate: (path: string) => navigated.push(path) } as unknown as Router);
     store = new HistoryStore();
     store.open('dune');
   });
@@ -325,6 +340,157 @@ describe('HistoryStore', () => {
 
       expect(use(StepView).at('dune')).toBeNull();
       expect(await readBook()).toBe('');
+    });
+  });
+
+  describe('Restore', () => {
+    const STEP2 = `${PATH}/s2`;
+    const RESTORE2 = `${STEP2}/restore`;
+    const restoreStep = (sequence: number, from: string) =>
+      step(sequence, { label: `Restore to 'Edit text' (09:00)`, restoredFromStepId: from });
+    const restoring = (phase: 'started' | 'finished', s?: HistoryStep, folder = 'dune') =>
+      live.emit('history', { kind: 'restoring', folder, phase, ...(s ? { step: s } : {}) });
+
+    beforeEach(async () => {
+      api.on('GET', PATH, dto([step(3), step(2), step(1)]));
+      api.on('GET', STEP2, { ...step(2), restorePreview: { audioDiscardCount: 60 } });
+      api.on('POST', RESTORE2, { step: restoreStep(4, 's2'), audioDiscardCount: 60 });
+      await store.load();
+    });
+
+    it('reads what a Restore would cost when a step is viewed, and forgets it on Back to current', async () => {
+      store.view('s2');
+      expect(store.restorePreview()).toBeNull();
+      await store.settled();
+
+      expect(store.restorePreview()).toBe(60);
+
+      store.backToCurrent();
+      expect(store.restorePreview()).toBeNull();
+    });
+
+    it('restores the viewed step: back to current, the new step at the tip, and a toast with Show in Book and Undo restore', async () => {
+      store.view('s2');
+      await store.settled();
+
+      const done = store.restore();
+      restoring('started');
+      expect(store.restoring()).toBe(true);
+      await done;
+      landed(restoreStep(4, 's2'));
+      restoring('finished', restoreStep(4, 's2'));
+
+      expect(api.calls('POST', RESTORE2)).toHaveLength(1);
+      expect(store.viewing()).toBeNull();
+      expect(store.restoring()).toBe(false);
+      expect(store.headStepId()).toBe('s4');
+      expect(toasts).toEqual([
+        'Restored to #2 Edit text. The later steps stay in History; 60 items need generating.',
+      ]);
+      expect(actions.map((a) => a.label)).toEqual(['Show in Book', 'Undo restore']);
+    });
+
+    it('Show in Book goes to the Book page', async () => {
+      store.view('s2');
+      await store.restore();
+
+      actions.find((a) => a.label === 'Show in Book')?.run();
+
+      expect(navigated).toEqual(['projects/dune/book']);
+    });
+
+    it('Undo restore restores the step that was the tip before', async () => {
+      api.on('POST', `${PATH}/s3/restore`, { step: restoreStep(5, 's3'), audioDiscardCount: 2 });
+      store.view('s2');
+      await store.restore();
+      landed(restoreStep(4, 's2'));
+
+      actions.find((a) => a.label === 'Undo restore')?.run();
+      await store.settled();
+
+      expect(api.calls('POST', `${PATH}/s3/restore`)).toHaveLength(1);
+      expect(toasts.at(-1)).toBe(
+        'Restored to #3 Edit text. The later steps stay in History; 2 items need generating.',
+      );
+    });
+
+    it('says when the project already was that state', async () => {
+      api.on('POST', RESTORE2, { step: null, audioDiscardCount: 0 });
+      store.view('s2');
+
+      await store.restore();
+
+      expect(store.viewing()).toBeNull();
+      expect(toasts).toEqual(['The project already is as it was after #2 Edit text.']);
+      expect(actions).toEqual([]);
+    });
+
+    it('reports a refused Restore and stays on the step', async () => {
+      api.on('POST', RESTORE2, () => problem(409, 'Project is restoring'));
+      store.view('s2');
+
+      await store.restore();
+
+      expect(store.viewing()).toBe('s2');
+      expect(errors).toEqual(['Project is restoring']);
+    });
+
+    it('tells a tab that did not restore that another one did, once the Restore finished', () => {
+      const s4 = step(4, { label: "Restore to 'Split chapter' (14:02)", restoredFromStepId: 's2' });
+      restoring('started');
+      expect(store.restoring()).toBe(true);
+      landed(s4);
+      restoring('finished', s4);
+
+      expect(store.restoring()).toBe(false);
+      expect(toasts).toEqual(['Project restored to #2 Edit text in another tab']);
+    });
+
+    it('recognises its own Restore when the hub finishes before the answer lands', async () => {
+      let answer!: (value: unknown) => void;
+      api.on('POST', RESTORE2, () => new Promise((resolve) => (answer = resolve)));
+      store.view('s2');
+      const done = store.restore();
+      await Promise.resolve();
+
+      restoring('started');
+      landed(restoreStep(4, 's2'));
+      restoring('finished', restoreStep(4, 's2'));
+      answer({ step: restoreStep(4, 's2'), audioDiscardCount: 60 });
+      await done;
+
+      expect(toasts).toEqual([
+        'Restored to #2 Edit text. The later steps stay in History; 60 items need generating.',
+      ]);
+    });
+
+    it('sends a viewing tab back to current when a Restore starts elsewhere', async () => {
+      store.view('s2');
+      restoring('started');
+
+      expect(store.viewing()).toBeNull();
+      expect(store.restoring()).toBe(true);
+    });
+
+    it('names the Restore step itself when the list has never been read', async () => {
+      store.close();
+      store.open('dune');
+      const s4 = step(4, { label: "Restore to 'Split chapter' (14:02)", restoredFromStepId: 's2' });
+
+      restoring('finished', s4);
+
+      expect(toasts).toEqual([
+        "Project restored to #4 Restore to 'Split chapter' (14:02) in another tab",
+      ]);
+    });
+
+    it('reads the restoring flag with the list', async () => {
+      store.close();
+      store.open('dune');
+      api.on('GET', PATH, { ...dto([step(1)]), restoring: true });
+      await store.load();
+
+      expect(store.restoring()).toBe(true);
     });
   });
 });

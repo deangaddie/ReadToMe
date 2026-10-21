@@ -26,6 +26,13 @@ adoptStyles(shellCss);
 const NARROW_QUERY = '(max-width: 899.98px)';
 const THEME_MENU_ID = 'r2m-theme-menu';
 
+/** What a Restore to the viewed step costs, said before the click; "" until the preview has read. */
+function restoreCost(audioDiscardCount: number | null): string {
+  if (audioDiscardCount === null) return '';
+  if (audioDiscardCount === 0) return 'Restoring discards no audio.';
+  return `Restoring discards audio on ${audioDiscardCount} item${audioDiscardCount === 1 ? '' : 's'}.`;
+}
+
 const SCHEME_ICONS: Record<SchemePreference, IconName> = {
   light: 'light_mode',
   dark: 'dark_mode',
@@ -321,8 +328,10 @@ export class AppShell extends R2mElement {
 
   /**
    * The amber banner while viewing a History step (spec, "Viewing a step"): it names the step and
-   * its time, and holds Back to current. Full width above the body, so the narrow-width sheet that
-   * covers the body leaves it in view.
+   * its time, says what restoring it costs, and holds Restore this step and Back to current. Full
+   * width above the body, so the narrow-width sheet that covers the body leaves it in view.
+   * Restore has no confirm: the cost is stated before the click, and nothing is lost (the later
+   * steps stay in History), so Restore waits only for the cost to be known.
    */
   private viewingBanner() {
     const store = this.history();
@@ -334,12 +343,23 @@ export class AppShell extends R2mElement {
     const when = step
       ? ` · ${dayLabel(new Date(step.startedAt), new Date())} ${stepTime(step)}`
       : '';
+    const cost = store.restorePreview();
+    const restoring = store.restoring();
     return html`<div class="shell__viewing" role="status">
       ${icon('lock')}
       <span class="shell__viewing-text"
         ><strong>Viewing ${name}</strong>${step?.summary ? ` — ${step.summary}` : ''}${when}. The
-        project as it was after this step; read-only.</span
+        project as it was after this step; read-only.
+        ${restoring ? 'The project is restoring.' : restoreCost(cost)}</span
       >
+      <button
+        type="button"
+        class="r2m-button r2m-button--stroked shell__viewing-restore"
+        ?disabled=${cost === null || restoring}
+        @click=${() => void store.restore()}
+      >
+        Restore this step
+      </button>
       <button
         type="button"
         class="r2m-button r2m-button--stroked shell__viewing-back"
