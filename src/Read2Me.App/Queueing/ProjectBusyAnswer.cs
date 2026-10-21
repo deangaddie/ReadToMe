@@ -18,7 +18,7 @@ public sealed class ProjectBusyAnswer(
     CharacterQueueService characterQueue,
     AudioQueueService audioQueue,
     VoiceBatchRunner voiceBatch,
-    AudiobookAssemblyService assembly)
+    AudiobookAssemblyService assembly) : IProjectBusyAnswer
 {
     public ProjectBusy? For(ProjectFolderId folder)
     {

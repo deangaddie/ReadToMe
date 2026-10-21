@@ -188,7 +188,7 @@ internal enum FileKind
 /// <summary>Whose a state file is: a Voice's audio or original (with the Voice), the cover, the source.</summary>
 internal readonly record struct FileOwner(FileKind Kind, Guid? VoiceId)
 {
-    public bool IsIn(StateFileOwners declared) => Kind switch
+    public bool IsIn(StateFileOwners declared) => declared.Every || Kind switch
     {
         FileKind.VoiceAudio or FileKind.VoiceOriginal => declared.Voices.Contains(VoiceId!.Value),
         FileKind.Cover => declared.Cover,

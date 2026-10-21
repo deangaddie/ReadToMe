@@ -89,7 +89,7 @@ namespace Read2Me.App.Api
             BookMutationOutcome.Committed or BookMutationOutcome.NoChange => Results.NoContent(),
             BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } cancelled
                 => throw new OperationCanceledException(cancelled.Message, ct),
-            BookMutationOutcome.Rejected { Reason: BookMutationRejection.Conflict or BookMutationRejection.Stale } conflict
+            BookMutationOutcome.Rejected { Reason: BookMutationRejection.Conflict or BookMutationRejection.Stale or BookMutationRejection.Restoring } conflict
                 => Results.Problem(conflict.Message, statusCode: StatusCodes.Status409Conflict),
             BookMutationOutcome.Rejected { Reason: BookMutationRejection.NotFound } missing
                 => Results.Problem(missing.Message, statusCode: StatusCodes.Status404NotFound),

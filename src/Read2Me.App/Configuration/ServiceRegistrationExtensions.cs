@@ -220,14 +220,13 @@ public static class ServiceRegistrationExtensions
         services.AddHostedService(sp => sp.GetRequiredService<BackgroundRunTracker>());
         // Reads the queues, the voice batch and the Assembly, all singletons registered in this file.
         services.AddSingleton<ProjectBusyAnswer>();
+        services.AddSingleton<IProjectBusyAnswer>(sp => sp.GetRequiredService<ProjectBusyAnswer>());
 
         // AI book edits
         services.AddScoped<Read2Me.Services.Llm.ChapterOutlineBuilder>();
         services.AddScoped<Read2Me.Services.BookEdits.ScopeResolver>();
         services.AddScoped<Read2Me.Services.BookEdits.BookEditPlanner>();
         services.AddScoped<Read2Me.Services.BookEdits.BookEditProposalService>();
-        // Process-wide, not request-scoped: the HTTP API plans in one request and proposes/applies in others.
-        services.AddSingleton<Read2Me.Services.BookEdits.IBookEditSessionStore>(_ => new Read2Me.Services.BookEdits.BookEditSessionStore(TimeProvider.System));
         services.AddSingleton<Read2Me.App.Live.BookEditRunCoordinator>();
         services.AddSingleton<Read2Me.App.Live.LlmTestRunCoordinator>();
 

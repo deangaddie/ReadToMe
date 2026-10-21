@@ -58,13 +58,26 @@ public abstract record ProjectStateMutation(ProjectFolderId FolderId) : BookMuta
     /// seen only through this, so a file staged for another commit is never pinned on this one.
     /// </summary>
     public virtual StateFileOwners WritesFiles => StateFileOwners.None;
+
+    /// <summary>The History step a <b>Restore</b> brings back, which its step records; null for any other mutation.</summary>
+    internal virtual Guid? RestoresStepId => null;
+
+    /// <summary>
+    /// The step's "what changed" when the mutation says it better than its receipt's ids can — read
+    /// after the mutation applied, so it can count what it did. Null describes the step from the receipt.
+    /// </summary>
+    internal virtual string? StepSummary => null;
 }
 
-/// <summary>Whose state files a mutation writes over: some Voices' audio and originals, and the cover.</summary>
-public sealed record StateFileOwners(IReadOnlyCollection<Guid> Voices, bool Cover = false)
+/// <summary>
+/// Whose state files a mutation writes over: some Voices' audio and originals, and the cover — or
+/// every state file, the source book file included, for a Restore.
+/// </summary>
+public sealed record StateFileOwners(IReadOnlyCollection<Guid> Voices, bool Cover = false, bool Every = false)
 {
     public static readonly StateFileOwners None = new([]);
     public static readonly StateFileOwners TheCover = new([], Cover: true);
+    public static readonly StateFileOwners All = new([], Cover: true, Every: true);
 
     public static StateFileOwners Voice(Guid voiceId) => new([voiceId]);
 }

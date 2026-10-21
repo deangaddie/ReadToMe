@@ -84,19 +84,19 @@ internal sealed class HistoryCapture : IAsyncDisposable
     /// </para>
     /// <para>
     /// The state files changed too: those the rows stop or start naming, and those the mutation
-    /// <paramref name="writesFiles"/> over in place, each hashed into the blobs before the chunk
+    /// writes over in place (<see cref="ProjectStateMutation.WritesFiles"/>), each hashed into the blobs before the chunk
     /// that names it. A commit that changed only a file — an edit of a Voice's audio — is still a
     /// step.
     /// </para>
     /// </summary>
     public async Task<RecordedStep?> RecordAsync(
-        HistoryStepScope.OpenScope? scope, BackgroundRunKind? runKind, string label, BookMutationEffects effects,
-        StateFileOwners writesFiles, CancellationToken ct)
+        HistoryStepScope.OpenScope? scope, BackgroundRunKind? runKind, ProjectStateMutation mutation,
+        BookMutationEffects effects, CancellationToken ct)
     {
         var patchset = _session.Patchset();
         var projectFolder = Path.GetDirectoryName(_connection.DataSource)!;
         var files = await StateFiles.ChangesAsync(
-            _db, projectFolder, HistoryDatabase.FolderOf(projectFolder), _tipFiles, writesFiles, ct);
+            _db, projectFolder, HistoryDatabase.FolderOf(projectFolder), _tipFiles, mutation.WritesFiles, ct);
         if (patchset.Length == 0 && files.Count == 0)
             return null;
         var chunk = new HistoryDatabase.Chunk(patchset, files);
@@ -122,7 +122,7 @@ internal sealed class HistoryCapture : IAsyncDisposable
         {
             var extended = scope.Changes.With(effects);
             var extendedKinds = Including(scope.Kinds, runKind);
-            var extendedSummary = await StepSummary.DescribeAsync(_db, extended, ct);
+            var extendedSummary = mutation.StepSummary ?? await StepSummary.DescribeAsync(_db, extended, ct);
             var row = await HistoryDatabase.ExtendStepAsync(
                 _connection, Transaction, h, scoped, LabelOf(scope, extendedKinds), extendedSummary, now, chunk, ct);
             return new RecordedStep(scoped, extended, extendedKinds, scope.Part, Landed: null, Changed: row, Closed: []);
@@ -132,7 +132,7 @@ internal sealed class HistoryCapture : IAsyncDisposable
         // and the Background run work in it, which its label names.
         var changes = StepChanges.None.With(effects);
         var kinds = Including(new HashSet<BackgroundRunKind>(), runKind);
-        var summary = await StepSummary.DescribeAsync(_db, changes, ct);
+        var summary = mutation.StepSummary ?? await StepSummary.DescribeAsync(_db, changes, ct);
         var closed = new List<HistoryStep>();
         if (head is { } open && headOpen
             && await HistoryDatabase.CloseStepAsync(_connection, Transaction, h, open, now, note: null, ct) is { } interrupted)
@@ -150,8 +150,8 @@ internal sealed class HistoryCapture : IAsyncDisposable
         }
 
         var step = new HistoryStep(
-            Guid.NewGuid(), head, sequence, scope is null ? label : LabelOf(scope, kinds), summary, _author, now,
-            EndedAt: now, IsOpen: scope is not null, Note: StepNotes.Of(part, ending: null));
+            Guid.NewGuid(), head, sequence, scope is null ? ProjectHistory.LabelOf(mutation) : LabelOf(scope, kinds), summary, _author, now,
+            EndedAt: now, IsOpen: scope is not null, Note: StepNotes.Of(part, ending: null), RestoredFromStepId: mutation.RestoresStepId);
         await HistoryDatabase.AppendStepAsync(_connection, Transaction, h, step, chunk, ct);
         return new RecordedStep(step.StepId, changes, kinds, part, step, Changed: null, closed);
     }

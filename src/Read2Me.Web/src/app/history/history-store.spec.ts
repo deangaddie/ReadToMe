@@ -159,6 +159,17 @@ describe('HistoryStore', () => {
     expect(ids()).toEqual(['s1']);
   });
 
+  it('takes the Restore step from its landing, not from the restoring messages around it', async () => {
+    api.on('GET', PATH, dto([step(1)]));
+    await store.load();
+
+    live.emit('history', { kind: 'restoring', folder: 'dune', phase: 'started' });
+    landed(step(2));
+    live.emit('history', { kind: 'restoring', folder: 'dune', phase: 'finished', step: step(2) });
+
+    expect(ids()).toEqual(['s2', 's1']);
+  });
+
   it('keeps a step that lands while the list is still loading', async () => {
     let answer!: (value: HistoryDto) => void;
     api.on('GET', PATH, () => new Promise<HistoryDto>((resolve) => (answer = resolve)));

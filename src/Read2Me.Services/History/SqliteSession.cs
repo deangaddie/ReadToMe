@@ -68,6 +68,46 @@ internal sealed class SqliteSession : IDisposable
         Check(rc, "sqlite3changeset_apply");
     }
 
+    /// <summary>
+    /// Records into this session the changes that turn <paramref name="table"/> in the attached
+    /// database <paramref name="fromSchema"/> into the same table in main, its rows compared by
+    /// primary key: what <see cref="Patchset"/> then answers is the difference. Both tables must
+    /// have the same columns and primary key.
+    /// </summary>
+    public void Diff(string fromSchema, string table)
+    {
+        var rc = NativeMethods.sqlite3session_diff(Live, fromSchema, table, out var error);
+        try
+        {
+            if (rc != SqliteOk)
+                throw new InvalidOperationException(
+                    $"sqlite3session_diff of {table} failed with SQLite error {rc}: {Marshal.PtrToStringUTF8(error)}");
+        }
+        finally
+        {
+            NativeMethods.sqlite3_free(error);
+        }
+    }
+
+    /// <summary>
+    /// Applies a <see cref="Diff"/> patchset onto a database with foreign keys on, inside the
+    /// caller's transaction. A row a change expects that is already gone was removed by the cascade
+    /// of a delete earlier in the same patchset, which the patchset removes too: it is skipped. Any
+    /// other conflict aborts the apply and throws.
+    /// </summary>
+    public static void ApplyOverCascades(SqliteConnection connection, byte[] patchset)
+    {
+        var db = connection.Handle?.DangerousGetHandle()
+            ?? throw new InvalidOperationException("Applying a patchset needs an open connection.");
+        NativeMethods.ConflictHandler handler = (_, conflict, _) =>
+            conflict == SqliteChangesetNotFound ? SqliteChangesetOmit : SqliteChangesetAbort;
+        var rc = NativeMethods.sqlite3changeset_apply(db, patchset.Length, patchset, IntPtr.Zero, handler, IntPtr.Zero);
+        GC.KeepAlive(handler);
+        Check(rc, "sqlite3changeset_apply");
+    }
+
+    private const int SqliteChangesetNotFound = 2;
+    private const int SqliteChangesetOmit = 0;
     private const int SqliteChangesetAbort = 2;
 
     public void Dispose()
@@ -100,6 +140,11 @@ internal sealed class SqliteSession : IDisposable
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         public static extern int sqlite3session_patchset(IntPtr session, out int size, out IntPtr buffer);
+
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int sqlite3session_diff(
+            IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string fromDb,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string table, out IntPtr error);
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         public static extern void sqlite3session_delete(IntPtr session);

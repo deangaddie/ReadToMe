@@ -109,7 +109,7 @@ internal static class HistoryDatabase
         command.Transaction = transaction;
         command.CommandText = $"""
             INSERT INTO {q}Step ({InsertedColumns})
-                VALUES ($id, $parent, $sequence, $label, $summary, $author, $startedAt, $endedAt, $isOpen, $note);
+                VALUES ($id, $parent, $sequence, $label, $summary, $author, $startedAt, $endedAt, $isOpen, $note, $restoredFrom);
             {(chunk is null ? "" : $"INSERT INTO {q}Chunk (StepId, Sequence, Patchset, FileChanges) VALUES ($id, 1, $patchset, $files);")}
             INSERT INTO {q}Head (Id, StepId) VALUES (1, $id) ON CONFLICT (Id) DO UPDATE SET StepId = excluded.StepId;
             """;
@@ -123,6 +123,7 @@ internal static class HistoryDatabase
         command.Parameters.AddWithValue("$endedAt", step.EndedAt is { } e ? Stored(e) : DBNull.Value);
         command.Parameters.AddWithValue("$isOpen", step.IsOpen ? 1 : 0);
         command.Parameters.AddWithValue("$note", (object?)step.Note ?? DBNull.Value);
+        command.Parameters.AddWithValue("$restoredFrom", step.RestoredFromStepId is { } r ? Stored(r) : DBNull.Value);
         if (chunk is not null)
             AddChunkParameters(command, chunk);
         await command.ExecuteNonQueryAsync(ct);
@@ -334,10 +335,10 @@ internal static class HistoryDatabase
         r.GetInt64(11) != 0);
 
     /// <summary>The columns <see cref="ReadStep"/> reads, in its order.</summary>
-    public const string StepColumns = InsertedColumns + ", RestoredFromStepId, CantOpen";
+    public const string StepColumns = InsertedColumns + ", CantOpen";
 
     /// <summary>The columns <see cref="AppendStepAsync"/> writes; the rest keep their defaults until a later ticket sets them.</summary>
-    private const string InsertedColumns = "StepId, ParentStepId, Sequence, Label, Summary, Author, StartedAt, EndedAt, IsOpen, Note";
+    private const string InsertedColumns = "StepId, ParentStepId, Sequence, Label, Summary, Author, StartedAt, EndedAt, IsOpen, Note, RestoredFromStepId";
 
     /// <summary>
     /// One commit's record: the patchset of its rows, empty when only files changed, and the state

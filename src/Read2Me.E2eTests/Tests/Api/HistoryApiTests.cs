@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Read2Me.App.Api;
 using Read2Me.Data;
 using Read2Me.E2eTests.Infrastructure;
+using Read2Me.Services.History;
 
 namespace Read2Me.E2eTests.Tests.Api;
 
@@ -200,6 +201,80 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             (await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/history/{Guid.NewGuid()}")).StatusCode);
     }
 
+    // ── Restore ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_step_says_what_restoring_it_costs_and_Restore_adds_a_step_from_it()
+    {
+        var folder = $"api-history-{Guid.NewGuid():N}";
+        var book = await app.SeedProjectAsync(folder, "History Book", "Author");
+        var alice = await CharacterIdAsync(folder, "Alice");
+        await app.SeedItemAudioAsync(folder, book.ItemId("n1"), alice);
+        var started = (await HistoryAsync(folder)).GetProperty("headStepId").GetGuid();
+        var edited = await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
+            new StringContent($$"""{ "type": "UpdateParagraphItemText", "itemId": "{{book.ItemId("n1")}}", "text": "A bright morning." }""",
+                Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
+        await app.SeedItemAudioAsync(folder, book.ItemId("n1"), alice); // generated again for the new words
+
+        var step = JsonDocument.Parse(await Http.GetStringAsync($"{app.BaseUrl}/api/projects/{folder}/history/{started}")).RootElement;
+        var restore = await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/history/{started}/restore", null);
+
+        Assert.Equal(1, step.GetProperty("restorePreview").GetProperty("audioDiscardCount").GetInt32());
+        Assert.Equal(HttpStatusCode.OK, restore.StatusCode);
+        var restored = JsonDocument.Parse(await restore.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal(1, restored.GetProperty("audioDiscardCount").GetInt32());
+        var restoreStep = restored.GetProperty("step");
+        Assert.Equal(started, restoreStep.GetProperty("restoredFromStepId").GetGuid());
+        Assert.StartsWith("Restore to 'History started' (", restoreStep.GetProperty("label").GetString());
+
+        var history = await HistoryAsync(folder);
+        Assert.Equal(restoreStep.GetProperty("stepId").GetGuid(), history.GetProperty("headStepId").GetGuid());
+        Assert.Equal(3, history.GetProperty("steps").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Restoring_an_unknown_step_is_404_and_with_at_400()
+    {
+        var folder = $"api-history-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "History Book", "Author");
+        var started = (await HistoryAsync(folder)).GetProperty("headStepId").GetGuid();
+
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/history/{Guid.NewGuid()}/restore", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/history/{started}/restore?at={started}", null)).StatusCode);
+    }
+
+    [Fact]
+    public async Task While_a_Restore_runs_every_write_and_another_Restore_is_409_Project_is_restoring()
+    {
+        var folder = $"api-history-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "History Book", "Author");
+        var started = (await HistoryAsync(folder)).GetProperty("headStepId").GetGuid();
+        var restoring = app.Services.GetRequiredService<RestoringProjects>();
+        var folderId = new Read2Me.Core.Models.ProjectFolderId(folder);
+
+        Assert.True(restoring.TryBegin(folderId));
+        try
+        {
+            var write = await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
+                new StringContent("""{ "type": "CreateCharacter", "name": "Ganondorf" }""", Encoding.UTF8, "application/json"));
+            var restore = await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/history/{started}/restore", null);
+
+            Assert.Equal(HttpStatusCode.Conflict, write.StatusCode);
+            Assert.Equal(HttpStatusCode.Conflict, restore.StatusCode);
+            Assert.Equal("Project is restoring",
+                JsonDocument.Parse(await write.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
+            Assert.True((await HistoryAsync(folder)).GetProperty("restoring").GetBoolean());
+        }
+        finally
+        {
+            restoring.End(folderId);
+        }
+        Assert.DoesNotContain("Ganondorf", await CharacterNamesAsync($"/api/projects/{folder}/characters"));
+    }
+
     [Fact]
     public async Task While_the_project_is_busy_a_step_cannot_be_read_or_viewed_and_409_says_why()
     {
@@ -222,9 +297,11 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 
             var read = await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/book?at={started}");
             var step = await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/history/{started}");
+            var restore = await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/history/{started}/restore", null);
 
             Assert.Equal(HttpStatusCode.Conflict, read.StatusCode);
             Assert.Equal(HttpStatusCode.Conflict, step.StatusCode);
+            Assert.Equal(HttpStatusCode.Conflict, restore.StatusCode);
             var detail = JsonDocument.Parse(await read.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString();
             Assert.StartsWith("Assembly", detail);
         }
@@ -286,6 +363,10 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             new StringContent($$"""{ "type": "CreateCharacter", "name": "{{name}}" }""", Encoding.UTF8, "application/json"));
         Assert.Equal(HttpStatusCode.OK, created.StatusCode);
     }
+
+    private async Task<Guid> CharacterIdAsync(string folder, string name) =>
+        JsonDocument.Parse(await Http.GetStringAsync($"{app.BaseUrl}/api/projects/{folder}/characters"))
+            .RootElement.EnumerateArray().First(c => c.GetProperty("name").GetString() == name).GetProperty("id").GetGuid();
 
     private async Task<List<string?>> CharacterNamesAsync(string path) =>
         JsonDocument.Parse(await Http.GetStringAsync(app.BaseUrl + path)).RootElement

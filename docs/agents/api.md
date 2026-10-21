@@ -634,7 +634,8 @@ multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.A
 | server → client | `queue` | `{ attribution, audio, escalation? }`, debounced 250 ms, everyone |
 | server → client | `nodeStatus`, `itemStatus` | per-project deltas (null value = entry gone), debounced 250 ms, project group only |
 | server → client | `receipt` | `BookMutationReceipt` with `folder` flattened and `originId` untouched, project group only |
-| server → client | `history` | a History step (`stepLanded` when it appears, `stepChanged` when a later commit extends it while open, `stepClosed` when it closes or its note changes once closed) with `folder` and the `step` row as `GET /history` lists it, project group only. A step recorded with no request or run open lands and closes together; a request's or Background run's step lands open and closes when it ends. `busyChanged` carries no step: the project's busy `reason` moved ("Attribution: 128 paragraphs left"), or went idle, when `reason` is omitted. Only folders someone has joined get it, and only on a change; the `GET /history` list carries the busy answer for a fresh reader |
+| server → client | `history` | a History step (`stepLanded` when it appears, `stepChanged` when a later commit extends it while open, `stepClosed` when it closes or its note changes once closed) with `folder` and the `step` row as `GET /history` lists it, project group only. A step recorded with no request or run open lands and closes together; a request's or Background run's step lands open and closes when it ends. `busyChanged` carries no step: the project's busy `reason` moved ("Attribution: 128 paragraphs left"), or went idle, when `reason` is omitted. Only folders someone has joined get it, and only on a change; the `GET /history` list carries the busy answer for a fresh reader. `restoring` brackets a Restore: `phase` `started`, then `finished` with the Restore `step` it added (none when it added none or failed) |
+| server → client | `bookEdit` (`dropped`) | a Restore dropped an Edit with AI session: `program` is its id, `reason` "The project was restored — run it again"; project group, unlike the run's other `bookEdit` messages, which go to the connection that started it |
 | server → client | `assembly`, `voiceBatch`, `watchdog`, `settingsChanged` | pass-through (encode progress stepped at 1 %, batch progress debounced), everyone. Every `assembly` message names the run's `folder`; `completed` carries `outputFileName`. The snapshot's `assembly.encodePercent` is 0–100 (the REST status keeps the 0–1 fraction) |
 | server → client | `llm`, `audioGen` | stream groups only; LLM `delta` messages are 100 ms batches of `thinking` + `content` |
 | server → client | `throughput` | `ThroughputSnapshot`, once a second while a run is active plus once when it ends |
@@ -682,7 +683,8 @@ request the same way.
 
 ```bash
 curl -s http://localhost:5000/api/projects/{folder}/history
-# → { steps: [{ stepId, parentStepId, sequence, label, summary, author, startedAt, endedAt, isOpen, note }],
+# → { steps: [{ stepId, parentStepId, sequence, label, summary, author, startedAt, endedAt, isOpen, note,
+#               restoredFromStepId, cantOpen }],
 #     headStepId, busy: { reason } | null, restoring }
 ```
 
@@ -705,7 +707,7 @@ curl -s http://localhost:5000/api/projects/{folder}/history
   interrupted)". A step whose note is set
   after it closed ("part 1", once part 2 lands) is sent again as `stepClosed`.
 - `busy` names what is queued or running for the project ("Attribution: 128 paragraphs left"), or
-  is null when it is idle. `restoring` is always false until Restore exists.
+  is null when it is idle. `restoring` is true while a Restore of the project runs.
 - History starts the first time a project is opened (`GET /api/projects/{folder}` or this call) or
   written. An existing project starts with a "History started" step; a new one starts at its
   import step.
@@ -719,7 +721,8 @@ Nothing else about the call changes, so an agent inspects the past with the call
 
 ```bash
 curl -s http://localhost:5000/api/projects/{folder}/history/{stepId}
-# → the step, as GET /history lists it; 404 unknown step, 409 while the project is busy
+# → the step, as GET /history lists it, plus restorePreview: { audioDiscardCount } (null for a cantOpen step);
+#   404 unknown step, 409 while the project is busy or restoring
 
 curl -s "http://localhost:5000/api/projects/{folder}/characters?at={stepId}"
 ```
@@ -747,3 +750,37 @@ curl -s "http://localhost:5000/api/projects/{folder}/characters?at={stepId}"
   results and progress are not History. For the same reason an item's `audioFileName` at a step
   is not a record of its audio then: generating audio never makes a step. The live project stays
   writable while a step is read.
+
+### Restore
+
+**Restore** makes the project as it stood after a step current, as a **new** step. Every later step
+stays in History, so nothing is lost: a Restore can itself be restored over, and Undo restore is a
+Restore to the step that was the tip before.
+
+```bash
+curl -s -X POST http://localhost:5000/api/projects/{folder}/history/{stepId}/restore
+# → { step, audioDiscardCount }; 404 unknown step, 409 busy or restoring (detail says why), 422 cantOpen
+```
+
+- The project changes exactly as the equivalent hand edits would. Records keep their original ids,
+  so Voice Rules and other links to them still hold. Items whose text, speaker or delivery cue
+  changes lose their audio and its review; items in both states that didn't change keep their
+  current audio; items brought back return without audio. The Pipeline checkpoints it disturbs go
+  stale as the equivalent edits would stale them (Structure, Titles and Pauses for a changed Volume,
+  Part or Chapter; Text for changed item text).
+- Voices, their reference audio (and the voice editor's original), the cover and the source book
+  file come back as they were. App-wide LLM and TTS settings are not part of a project and are
+  untouched.
+- `step` is the Restore step: labelled "Restore to 'Split chapter' (14:02)" (the step's label and
+  local time), `restoredFromStepId` the step brought back, and `summary` the audio it cost
+  ("Discarded audio on 60 items", null when none). It lands and closes on the hub like any step.
+  `step` is null when the project already was that state: nothing changed, and no step is added.
+- `GET /history/{stepId}` answers `restorePreview.audioDiscardCount` beforehand, so a client can say
+  what a Restore costs before the click; the Restore counts again as it applies.
+- Refused with 409 while anything is queued or running for the project (`detail` is the busy
+  reason) or a Restore of it is already running. While one runs, every other write and enqueue for
+  the project answers 409 "Project is restoring" at once, and `GET /history` says `restoring: true`.
+- Open Edit with AI sessions for the project are dropped: they were planned against the project as
+  it was, so their apply can't write over the restored text blind. Their dialogs hear it on the hub
+  (`bookEdit` `dropped`).
+- The receipt is whole-project, so every open view rebuilds.

@@ -162,6 +162,8 @@ export class HistoryStore {
       this.setBusy(message.reason ?? null);
       return;
     }
+    // The Restore step itself lands and closes like any other; the restoring phase is not a row.
+    if (message.kind === 'restoring') return;
     const incoming = fromHub(message.step);
     const steps = this._steps();
     const at = steps.findIndex((s) => s.stepId === incoming.stepId);

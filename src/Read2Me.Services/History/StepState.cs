@@ -21,6 +21,9 @@ public sealed class StepState
 
     public HistoryStep Step { get; }
 
+    /// <summary>The materialised copy in the cache: read it, never write it.</summary>
+    internal string DatabaseFile => _databaseFile;
+
     /// <summary>A read-only context over the materialised step: reads only, never written. Caller owns dispose.</summary>
     public ProjectDbContext OpenContext() => new(new DbContextOptionsBuilder<ProjectDbContext>()
         .UseSqlite($"Data Source={_databaseFile};Mode=ReadOnly;Pooling=false")
