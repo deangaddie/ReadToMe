@@ -8,6 +8,8 @@ export interface FakeRequest {
   method: string;
   path: string;
   body: unknown;
+  /** The query string, `?at=s8`, or empty. */
+  search: string;
 }
 
 /**
@@ -42,10 +44,10 @@ export class FakeApi {
       const url = new URL(input, 'http://localhost');
       const method = (init.method ?? 'GET').toUpperCase();
       const body = typeof init.body === 'string' ? (JSON.parse(init.body) as unknown) : init.body;
-      this.requests.push({ method, path: url.pathname, body });
+      this.requests.push({ method, path: url.pathname, body, search: url.search });
       const route = this.#routes.get(`${method} ${url.pathname}`);
       if (!route) {
-        this.unrouted.push({ method, path: url.pathname, body });
+        this.unrouted.push({ method, path: url.pathname, body, search: url.search });
         return Response.json(
           {
             title: 'Not Found',

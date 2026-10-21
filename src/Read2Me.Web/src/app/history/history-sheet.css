@@ -38,12 +38,55 @@
     padding: 0;
   }
 
-  .history-sheet__row {
+  /* Steps can't be viewed while the project is busy: why, and where to see it. */
+  .history-sheet__busy {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--r2m-space-2);
+    margin-top: var(--r2m-space-2);
+    padding: var(--r2m-space-2);
+    border-radius: var(--r2m-radius-md);
+    background: var(--r2m-status-busy-soft);
+
+    & > .r2m-icon {
+      color: var(--r2m-status-busy);
+    }
+  }
+  .history-sheet__busy-text {
+    flex: 1 1 12em;
+    font-size: var(--r2m-text-sm);
+  }
+
+  /* The row is a button that views its step. */
+  .history-sheet__step {
     display: flex;
     align-items: flex-start;
     gap: var(--r2m-space-2);
+    width: 100%;
     padding: var(--r2m-space-2);
+    border: 0;
     border-radius: var(--r2m-radius-md);
+    background: none;
+    color: var(--r2m-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      background: var(--r2m-surface-high);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--r2m-accent);
+      outline-offset: -2px;
+    }
+    &:disabled {
+      cursor: default;
+    }
+  }
+  .history-sheet__row--viewing .history-sheet__step {
+    background: var(--r2m-status-warn-soft);
+    outline: 1px solid var(--r2m-status-warn);
   }
   .history-sheet__icon {
     display: inline-grid;

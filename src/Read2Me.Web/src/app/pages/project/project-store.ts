@@ -58,6 +58,8 @@ export class ProjectStore {
   private readonly titles = use(ProjectTitles);
 
   private subscriptions: Unsubscribe[] = [];
+  /** Bumped per detail + status read, so a read overtaken by a newer one (at another step) lands nowhere. */
+  private loads = 0;
   private readonly statusRefetch = new Debounced(() => this.refreshStatus());
   private readonly detailRefetch = new Debounced(() => this.refreshDetail());
   /** The highest snapshot revision that arrived before `/status` answered, compared once it does. */
@@ -136,20 +138,33 @@ export class ProjectStore {
     ];
     void this.live.joinProject(folder).then(() => this.seedItemsFromLive());
     void this.loadLastOutput();
+    await this.load(folder);
+  }
 
+  /**
+   * Reads detail + status again, staying in the group: viewing a History step, or going back to
+   * current, changes what every read answers (`?at=`).
+   */
+  async reload(): Promise<void> {
+    const folder = this._folder();
+    if (folder !== null) await this.load(folder);
+  }
+
+  private async load(folder: string): Promise<void> {
+    const load = ++this.loads;
     this._loading.set(true);
     try {
       const [detail, status] = await Promise.allSettled([
         this.api.get(folder),
         this.api.status(folder),
       ]);
-      if (this._folder() !== folder) return;
+      if (this._folder() !== folder || load !== this.loads) return;
       if (detail.status === 'fulfilled') this.setDetail(detail.value);
       if (status.status === 'fulfilled') this.applyStatus(status.value);
       const failure = [detail, status].find((r) => r.status === 'rejected');
       if (failure) this._error.set(messageOf(failure.reason));
     } finally {
-      this._loading.set(false);
+      if (load === this.loads) this._loading.set(false);
     }
   }
 

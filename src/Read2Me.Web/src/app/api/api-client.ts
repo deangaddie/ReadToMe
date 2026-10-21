@@ -1,4 +1,5 @@
 import { ApiError } from './api-error';
+import { readsAtStep } from './step-view';
 
 /**
  * Stable per-tab origin id (ticket 05 / spec D6): sent as `X-Origin-Id` on every call so the hub
@@ -18,8 +19,10 @@ export type QueryParams = Record<string, string | number | boolean | null | unde
 export class ApiClient {
   constructor(private readonly fetchFn: FetchFn = (input, init) => fetch(input, init)) {}
 
+  /** A Project state read of the project being viewed at a History step carries `?at=` ({@link readsAtStep}). */
   get<T>(url: string, params?: QueryParams): Promise<T> {
-    return this.send<T>('GET', url, undefined, params);
+    const at = readsAtStep(url);
+    return this.send<T>('GET', url, undefined, at === null ? params : { ...params, at });
   }
 
   post<T>(url: string, body?: unknown, params?: QueryParams): Promise<T> {

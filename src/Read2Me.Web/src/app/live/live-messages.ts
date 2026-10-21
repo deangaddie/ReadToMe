@@ -77,7 +77,7 @@ export const LIVE_KINDS = {
   ],
   bookEdit: ['progress', 'done', 'failed'],
   llmTest: ['done', 'failed', 'cancelled'],
-  history: ['stepLanded', 'stepChanged', 'stepClosed'],
+  history: ['stepLanded', 'stepChanged', 'stepClosed', 'busyChanged'],
   preflight: ['stage', 'done'],
 } as const;
 
@@ -461,11 +461,23 @@ export interface LlmTestMessage {
  * summary and `endedAt` move on), or one that closed, with its row as
  * `GET /api/projects/{folder}/history` lists it. A one-mutation step lands and closes together.
  */
-export interface HistoryMessage {
-  kind: HistoryKind;
+export interface HistoryStepMessage {
+  kind: Exclude<HistoryKind, 'busyChanged'>;
   folder: string;
   step: LiveHistoryStep;
 }
+
+/**
+ * The project's busy reason moved ("Attribution: 128 paragraphs left"). Idle arrives with no
+ * `reason` key at all: the hub omits nulls.
+ */
+export interface HistoryBusyMessage {
+  kind: 'busyChanged';
+  folder: string;
+  reason?: string | null;
+}
+
+export type HistoryMessage = HistoryStepMessage | HistoryBusyMessage;
 
 type NullableHistoryField = 'parentStepId' | 'summary' | 'endedAt' | 'note' | 'restoredFromStepId';
 

@@ -9,6 +9,8 @@ import type { StepRunner } from '@app/pages/project/step-runner';
 import { ProjectGuide } from '@app/shell/project-guide';
 import { ProjectTitles } from '@app/shell/project-titles';
 import { ThemeService } from '@app/theme/theme.service';
+import { ToastService } from '@app/ui/toast';
+import { ActivityStore } from '@app/activity/activity-store';
 import { FakeApi } from '../../testing/fake-api';
 import { FakeLive } from '../../testing/fake-live';
 import { installNavigation, settle } from '../../testing/fake-navigation';
@@ -489,5 +491,120 @@ describe('History sheet', () => {
     await settle();
 
     expect(shell.querySelector('.shell__history r2m-history-sheet')).not.toBeNull();
+  });
+});
+
+describe('viewing a History step', () => {
+  const at = new Date().toISOString();
+  const row = (sequence: number, label: string, summary: string | null) => ({
+    stepId: `s${sequence}`,
+    parentStepId: sequence > 1 ? `s${sequence - 1}` : null,
+    sequence,
+    label,
+    summary,
+    author: 'dean',
+    startedAt: at,
+    endedAt: at,
+    isOpen: false,
+    note: null,
+    restoredFromStepId: null,
+    cantOpen: false,
+  });
+  let api: FakeApi;
+  let toasts: string[];
+
+  beforeEach(() => {
+    toasts = [];
+    override(ToastService, { info: (m: string) => toasts.push(m) } as unknown as ToastService);
+    api = new FakeApi().on('GET', '/api/projects/foundation/history', {
+      steps: [row(2, 'Assign speaker', null), row(1, 'Split chapter', 'Chapter 3 at paragraph 41')],
+      headStepId: 's2',
+      busy: null,
+      restoring: false,
+    });
+    api.install();
+  });
+
+  async function openSheet(path = 'projects/foundation/book') {
+    const mounted = await mount(path);
+    use(ProjectGuide).publish(
+      'foundation',
+      { kind: 'allDone', label: 'All done', tint: 'done' } as unknown as NextStep,
+      { busy: signal(null) } as unknown as StepRunner,
+    );
+    mounted.shell.querySelector<HTMLButtonElement>('.shell__history-toggle')?.click();
+    await settle();
+    await tick();
+    await settle();
+    return mounted;
+  }
+
+  const stepButton = (shell: Element, id: string) =>
+    shell.querySelector<HTMLButtonElement>(`[data-step-id="${id}"] .history-sheet__step`);
+  const main = (shell: Element) => shell.querySelector<HTMLElement>('.shell__main');
+
+  it('shows the banner above the body over an inert, greyed page, and hides the next-step pill', async () => {
+    const { shell } = await openSheet();
+    expect(shell.querySelector('.shell__next')).not.toBeNull();
+
+    stepButton(shell, 's1')?.click();
+    await settle();
+
+    const banner = shell.querySelector('.shell__viewing');
+    expect(banner?.nextElementSibling?.classList.contains('shell__body')).toBe(true);
+    expect(banner?.textContent).toContain('#1 Split chapter');
+    expect(banner?.textContent).toContain('Chapter 3 at paragraph 41');
+    expect(banner?.textContent).toContain('Today');
+    expect(main(shell)?.inert).toBe(true);
+    expect(main(shell)?.classList.contains('shell__main--viewing')).toBe(true);
+    expect(shell.querySelector('.shell__next')).toBeNull();
+    expect(stepButton(shell, 's1')?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('returns to the current project from the banner, or by clicking the tip', async () => {
+    const { shell } = await openSheet();
+
+    stepButton(shell, 's1')?.click();
+    await settle();
+    shell.querySelector<HTMLButtonElement>('.shell__viewing-back')?.click();
+    await settle();
+    expect(shell.querySelector('.shell__viewing')).toBeNull();
+    expect(main(shell)?.inert).toBe(false);
+
+    stepButton(shell, 's1')?.click();
+    await settle();
+    stepButton(shell, 's2')?.click();
+    await settle();
+    expect(shell.querySelector('.shell__viewing')).toBeNull();
+  });
+
+  it("can't view while busy: the sheet says why and opens the activity drawer", async () => {
+    const { shell } = await openSheet();
+    live.emit('history', {
+      kind: 'busyChanged',
+      folder: 'foundation',
+      reason: 'Attribution: 128 paragraphs left',
+    });
+    await settle();
+
+    expect(stepButton(shell, 's1')?.disabled).toBe(true);
+    expect(shell.querySelector('.history-sheet__busy')?.textContent).toContain(
+      'Attribution: 128 paragraphs left',
+    );
+    shell.querySelector<HTMLButtonElement>('.history-sheet__busy button')?.click();
+    await settle();
+    expect(use(ActivityStore).drawerOpen()).toBe(true);
+  });
+
+  it('goes back to current with a toast when background work starts', async () => {
+    const { shell } = await openSheet();
+    stepButton(shell, 's1')?.click();
+    await settle();
+
+    live.emit('history', { kind: 'busyChanged', folder: 'foundation', reason: 'Voice batch' });
+    await settle();
+
+    expect(shell.querySelector('.shell__viewing')).toBeNull();
+    expect(toasts).toHaveLength(1);
   });
 });

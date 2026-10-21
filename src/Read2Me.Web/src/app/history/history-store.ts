@@ -1,8 +1,9 @@
-import { type Guid, HistoryApi, type HistoryStep } from '@app/api';
+import { type Guid, HistoryApi, type HistoryStep, StepView } from '@app/api';
 import { use } from '@app/core/services';
-import { signal } from '@app/core/signals';
+import { computed, signal } from '@app/core/signals';
 import type { HistoryMessage, LiveHistoryStep } from '@app/live/live-messages';
 import { LiveService, type Unsubscribe } from '@app/live/live.service';
+import { ToastService } from '@app/ui/toast';
 
 /**
  * One project's **History** (context/history.md) for the History sheet: the step list newest first
@@ -14,10 +15,18 @@ import { LiveService, type Unsubscribe } from '@app/live/live.service';
  * Rows are replaced by `stepId`, never appended blindly: a step lands open and is sent again when
  * it closes, and a closed step is sent again when its note changes ("part 1" is written once part 2
  * starts).
+ * <p>
+ * It also drives **View a step**: the step the whole web app shows the project at ({@link viewing},
+ * a step id so it follows the row as the hub replaces it), kept in the app-wide {@link StepView}
+ * so every Project state read carries `?at=`. A busy project can't be viewed
+ * ({@link busy}, from the list and the hub's `busyChanged`); background work starting while a tab
+ * views a step sends it back to current with a toast.
  */
 export class HistoryStore {
   private readonly api = use(HistoryApi);
   private readonly live = use(LiveService);
+  private readonly stepView = use(StepView);
+  private readonly toast = use(ToastService);
 
   private subscriptions: Unsubscribe[] = [];
   /** Hub messages that arrived while the list was being read, applied over it once it lands. */
@@ -30,6 +39,7 @@ export class HistoryStore {
   private readonly _loaded = signal(false);
   private readonly _loading = signal(false);
   private readonly _error = signal<string | null>(null);
+  private readonly _busy = signal<string | null>(null);
 
   readonly folder = this._folder.asReadonly();
   /** Newest first. */
@@ -39,6 +49,18 @@ export class HistoryStore {
   readonly loaded = this._loaded.asReadonly();
   readonly loading = this._loading.asReadonly();
   readonly error = this._error.asReadonly();
+  /** The step the project is viewed at, or null for the current project. */
+  readonly viewing = computed(() => {
+    const folder = this._folder();
+    return folder === null ? null : this.stepView.at(folder);
+  });
+  /** Why the project is busy ("Attribution: 128 paragraphs left"), or null when idle. */
+  readonly busy = this._busy.asReadonly();
+  /** The viewed step's row, as the hub last sent it. */
+  readonly viewedStep = computed(() => {
+    const id = this.viewing();
+    return id === null ? null : (this._steps().find((s) => s.stepId === id) ?? null);
+  });
 
   /** Follows `folder`'s History on the hub; the project shell has joined its group. Reads nothing yet. */
   open(folder: string): void {
@@ -58,11 +80,13 @@ export class HistoryStore {
   close(): void {
     for (const unsubscribe of this.subscriptions) unsubscribe();
     this.subscriptions = [];
+    this.backToCurrent();
     this._folder.set(null);
     this._steps.set([]);
     this._headStepId.set(null);
     this._loaded.set(false);
     this._error.set(null);
+    this._busy.set(null);
     this.held = null;
   }
 
@@ -77,6 +101,26 @@ export class HistoryStore {
     return this.reading;
   }
 
+  /**
+   * Shows the project as it stood after `stepId`; the tip is the current project. False, and
+   * nothing changes, while the project is busy.
+   */
+  view(stepId: Guid): boolean {
+    const folder = this._folder();
+    if (folder === null || this._busy() !== null) return false;
+    if (stepId === this._headStepId()) {
+      this.backToCurrent();
+      return true;
+    }
+    this.stepView.view(folder, stepId);
+    return true;
+  }
+
+  backToCurrent(): void {
+    const folder = this._folder();
+    if (folder !== null) this.stepView.clear(folder);
+  }
+
   private async read(): Promise<void> {
     const folder = this._folder();
     if (folder === null) return;
@@ -89,6 +133,7 @@ export class HistoryStore {
       this.held = null;
       this._steps.set(list.steps);
       this._headStepId.set(list.headStepId);
+      this.setBusy(list.busy?.reason ?? null);
       for (const message of held) this.apply(message, { overList: true });
       this._loaded.set(true);
       this._error.set(null);
@@ -102,7 +147,9 @@ export class HistoryStore {
 
   private receive(message: HistoryMessage): void {
     if (this.held) this.held.push(message);
-    else if (this._loaded()) this.apply(message, { overList: false });
+    // The busy answer gates viewing whether or not the list was ever read.
+    else if (this._loaded() || message.kind === 'busyChanged')
+      this.apply(message, { overList: false });
   }
 
   /**
@@ -111,6 +158,10 @@ export class HistoryStore {
    * never reopens a row the list has closed.
    */
   private apply(message: HistoryMessage, { overList }: { overList: boolean }): void {
+    if (message.kind === 'busyChanged') {
+      this.setBusy(message.reason ?? null);
+      return;
+    }
     const incoming = fromHub(message.step);
     const steps = this._steps();
     const at = steps.findIndex((s) => s.stepId === incoming.stepId);
@@ -121,6 +172,14 @@ export class HistoryStore {
     }
     if (overList && incoming.isOpen && !steps[at]!.isOpen) return;
     this._steps.set(steps.with(at, incoming));
+  }
+
+  /** A viewing tab can't stay on a past step the work is racing past. */
+  private setBusy(reason: string | null): void {
+    this._busy.set(reason);
+    if (reason === null || this.viewing() === null) return;
+    this.backToCurrent();
+    this.toast.info(`Back to the current project: background work started (${reason}).`);
   }
 }
 

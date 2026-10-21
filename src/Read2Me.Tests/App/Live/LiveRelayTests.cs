@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Read2Me.App.Characters;
 using Read2Me.App.Live;
+using Read2Me.App.Queueing;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
@@ -15,6 +16,7 @@ using Read2Me.Services.History;
 using Read2Me.Services.Llm;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.NodeStatus;
+using Read2Me.Services.Queueing;
 using Xunit;
 
 namespace Read2Me.Tests.App.Live;
@@ -57,7 +59,7 @@ public class LiveRelayTests : IAsyncLifetime
 
         _relay = new LiveRelay(_hub, _registry, status, _llm, _audioGen, _assembly, _voiceBatch, _watchdog, _serviceStatus, _receipts, _history,
             _settings, _attribution, _audio, _nodes, _reviews, progress, assemblyService, batchRunner, throughput,
-            NullLogger<LiveRelay>.Instance);
+            new ProjectBusyAnswer(_attribution, _audio, batchRunner, assemblyService), NullLogger<LiveRelay>.Instance);
         await _relay.StartAsync(CancellationToken.None);
     }
 
@@ -219,6 +221,29 @@ public class LiveRelayTests : IAsyncLifetime
         Assert.Equal(ParagraphQueueStatus.Queued, itemStatus.Paragraphs[paragraph.ToString()]!.Status);
         Assert.Single(itemStatus.Items);
         Assert.NotNull(itemStatus.Items.Values.Single()!.Review);
+    }
+
+    [Fact]
+    public async Task Busy_changes_go_to_joined_project_groups_with_the_reason_then_null_when_idle()
+    {
+        var a = new ProjectFolderId("proj-a");
+        var b = new ProjectFolderId("proj-b");
+        _registry.Connected("c1");
+        _registry.JoinProject("c1", a.Value);
+
+        var queued = Paragraph(a);
+        _attribution.Enqueue([queued, Paragraph(b)]);
+        await WaitForAsync(() => _hub.Method("history").Count >= 1);
+
+        _attribution.Apply(queued, new Disposition.Complete(null));
+        await WaitForAsync(() => _hub.Method("history").Count >= 2);
+        await Task.Delay(400); // nothing moved since: no repeat
+
+        var sent = _hub.Method("history");
+        Assert.All(sent, s => Assert.Equal("project:proj-a", s.Target));
+        Assert.Equal(
+            [new HistoryMessage("busyChanged", "proj-a", Reason: "Attribution: 1 paragraph left"), new HistoryMessage("busyChanged", "proj-a")],
+            sent.Select(s => (HistoryMessage)s.Payload));
     }
 
     [Fact]

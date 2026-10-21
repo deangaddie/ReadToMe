@@ -157,4 +157,8 @@ public static class LiveMessageMapper
         HistoryStepEventKind.Closed => new HistoryMessage("stepClosed", e.FolderId.Value, e.Step),
         _ => throw new NotSupportedException($"Unhandled History step event {e.Kind}."),
     };
+
+    /// <summary>The project's busy reason moved; null when it went idle.</summary>
+    public static HistoryMessage BusyChanged(string folder, string? reason) =>
+        new HistoryMessage("busyChanged", folder, Reason: reason);
 }

@@ -24,3 +24,4 @@ export * from './settings-api';
 export * from './prompts-api';
 export * from './voice-editor-api';
 export * from './workspace-url';
+export * from './step-view';

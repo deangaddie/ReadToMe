@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.SignalR;
 using Read2Me.App.Characters;
+using Read2Me.App.Queueing;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Assembly;
@@ -50,7 +51,8 @@ public sealed class LiveRelay : IHostedService, IDisposable
         IReadOnlyDictionary<string, NodeStatusSummary?> Nodes,
         int FolderAudioRemaining,
         IReadOnlyDictionary<string, ParagraphStatusEntry?> Paragraphs,
-        IReadOnlyDictionary<string, ItemStatusEntry?> Items);
+        IReadOnlyDictionary<string, ItemStatusEntry?> Items,
+        string? Busy);
 
     public const int ChannelCapacity = 8192;
 
@@ -74,6 +76,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private readonly AudiobookAssemblyService _assemblyService;
     private readonly VoiceBatchRunner _batchRunner;
     private readonly ThroughputAggregator _throughput;
+    private readonly ProjectBusyAnswer _busy;
     private readonly ILogger<LiveRelay> _logger;
     private readonly TimeProvider _clock;
 
@@ -122,6 +125,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         AudiobookAssemblyService assemblyService,
         VoiceBatchRunner batchRunner,
         ThroughputAggregator throughput,
+        ProjectBusyAnswer busy,
         ILogger<LiveRelay> logger,
         TimeProvider? clock = null)
     {
@@ -145,6 +149,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         _assemblyService = assemblyService;
         _batchRunner = batchRunner;
         _throughput = throughput;
+        _busy = busy;
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
 
@@ -174,8 +179,18 @@ public sealed class LiveRelay : IHostedService, IDisposable
 
     private void OnLlm(LlmStreamEvent e) => Post(new LlmItem(e));
     private void OnAudioGen(AudioGenEvent e) => Post(new AudioGenItem(e));
-    private void OnAssembly(AssemblyEvent e) => Post(new AssemblyItem(e));
-    private void OnVoiceBatch(VoiceBatchEvent e) => Post(new VoiceBatchItem(e));
+    // An Assembly or a voice batch starting or ending moves its project's busy answer.
+    private void OnAssembly(AssemblyEvent e)
+    {
+        Post(new AssemblyItem(e));
+        Post(new StatusPulse());
+    }
+
+    private void OnVoiceBatch(VoiceBatchEvent e)
+    {
+        Post(new VoiceBatchItem(e));
+        Post(new StatusPulse());
+    }
     private void OnWatchdog(WatchdogEvent e) => Post(new WatchdogItem(e));
     private void OnServiceStatus(ServiceStatusChanged c) => Post(new ServiceStatusItem(c));
     private void OnReceipt(BookMutationReceipt r) => Post(new ReceiptItem(r));
@@ -407,8 +422,9 @@ public sealed class LiveRelay : IHostedService, IDisposable
     }
 
     /// <summary>
-    /// Recomputes the status maps for every folder somebody has joined, sends only what moved since
-    /// the last send, and forgets folders nobody watches any more.
+    /// Recomputes the status maps and the busy answer for every folder somebody has joined, sends
+    /// only what moved since the last send, and forgets folders nobody watches any more. A folder
+    /// first seen idle sends no <c>busyChanged</c>: the History list it reads says so already.
     /// </summary>
     private async Task SendStatusDeltasAsync()
     {
@@ -425,7 +441,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
             var items = _status.Items(id);
             var last = _lastSent.GetValueOrDefault(folder)
                        ?? new LastSent(new Dictionary<string, NodeStatusSummary?>(), -1,
-                           new Dictionary<string, ParagraphStatusEntry?>(), new Dictionary<string, ItemStatusEntry?>());
+                           new Dictionary<string, ParagraphStatusEntry?>(), new Dictionary<string, ItemStatusEntry?>(), null);
 
             var nodeDelta = ProjectStatusSource.Diff(last.Nodes, nodes);
             if (nodeDelta.Count > 0 || audioRemaining != last.FolderAudioRemaining)
@@ -438,7 +454,12 @@ public sealed class LiveRelay : IHostedService, IDisposable
                 await SendAsync(() => _hub.Clients.Group(LiveGroups.Project(folder))
                     .ItemStatus(new ItemStatusMessage(folder, paragraphDelta, itemDelta)));
 
-            _lastSent[folder] = new LastSent(nodes, audioRemaining, paragraphs, items);
+            var busy = _busy.For(id)?.Reason;
+            if (busy != last.Busy)
+                await SendAsync(() => _hub.Clients.Group(LiveGroups.Project(folder))
+                    .History(LiveMessageMapper.BusyChanged(folder, busy)));
+
+            _lastSent[folder] = new LastSent(nodes, audioRemaining, paragraphs, items, busy);
         }
     }
 
