@@ -55,14 +55,19 @@ namespace Read2Me.App.Api
         public static void MapCharacterEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapGet("/api/projects/{folder}/characters/{id:guid}/voice-rules", GetVoiceRulesAsync)
+                .ReadsAt()
                 .WithSummary("A character's voice rules in evaluation order (default first): voice, anchor levels/ids/titles, dangling flags. Empty for an unknown character.");
             endpoints.MapGet("/api/projects/{folder}/characters/{id:guid}/voice-rules/preview", GetVoiceRulePreviewAsync)
+                .ReadsAt()
                 .WithSummary("The voice the character's rules pick at the start of every chapter, in book order (null voiceName = none resolves). Rules anchored inside a chapter are below this grain.");
             endpoints.MapGet("/api/projects/{folder}/characters/summary", GetSummaryAsync)
+                .ReadsAt()
                 .WithSummary("Every character as a cast-list row (narrator first, then by name): aliases, line count, planned vs ready voices, isNarrator (the seed row) and narratesBook (the linked narrator).");
             endpoints.MapGet("/api/projects/{folder}/characters/{id:guid}/lines", GetLinesAsync)
+                .ReadsAt()
                 .WithSummary("The items a character speaks, in book order, with their paragraph and chapter ids. Empty for an unknown character.");
             endpoints.MapGet("/api/projects/{folder}/paragraphs/{paragraphId:guid}/context", GetContextAsync)
+                .ReadsAt()
                 .WithSummary("A paragraph with up to before/after neighbouring paragraphs of the same chapter (each 0..10, default 3/2) and the speaker name per item. 404 when the paragraph is not in the chapter.");
         }
 

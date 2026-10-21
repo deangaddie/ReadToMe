@@ -22,6 +22,7 @@ namespace Read2Me.App.Api
             endpoints.MapPost("/api/projects", CreateAsync)
                 .WithSummary("Create a project from an uploaded book file (multipart: title, bookTitle, author, file).");
             endpoints.MapGet("/api/projects/{folder}", GetAsync)
+                .ReadsAt()
                 .WithSummary("Project metadata for one folder.");
             endpoints.MapDelete("/api/projects/{folder}", Delete)
                 .RecordsNoStep("Removes the project, History and all.")

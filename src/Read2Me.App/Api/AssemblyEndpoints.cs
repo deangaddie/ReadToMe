@@ -24,6 +24,8 @@ namespace Read2Me.App.Api
 
     public static class AssemblyEndpoints
     {
+        private const string OutputsAreNotState = "Assembly outputs are files made from the project, not Project state.";
+
         public static void MapAssemblyEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapPost("/api/projects/{folder}/assembly", StartAsync)
@@ -39,8 +41,10 @@ namespace Read2Me.App.Api
                 .WithSummary("Cancel the running assembly.");
 
             endpoints.MapGet("/api/projects/{folder}/assembly/outputs", ListOutputs)
+                .ReadsLive(OutputsAreNotState)
                 .WithSummary("Assembled audiobooks under the project's output folder, newest first. isPartial marks a build that skipped items without audio.");
             endpoints.MapGet("/api/projects/{folder}/assembly/outputs/{fileName}", DownloadOutput)
+                .ReadsLive(OutputsAreNotState)
                 .WithSummary("Download one assembled audiobook (audio/mp4 attachment; Range requests supported).");
             endpoints.MapDelete("/api/projects/{folder}/assembly/outputs/{fileName}", DeleteOutput)
                 .RecordsNoStep("An output file is not Project state.")

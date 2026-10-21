@@ -53,6 +53,7 @@ namespace Read2Me.App.Api
                 .RecordsNoStep("Proposes an Edit with AI; nothing commits until it is applied.")
                 .WithSummary("Start computing a proposed new value per matched item (202). Progress and the finished rows arrive on /hubs/live as bookEdit { kind: progress | done | failed } on the connectionId in the body; GET the session to read them back. Deterministic transforms finish at once; Llm ones send one request per 8 items. 409 while a run is already in flight.");
             endpoints.MapGet("/api/projects/{folder}/book-edits/{program}", GetRun)
+                .ReadsLive("an Edit with AI run is a live proposal, not Project state.")
                 .WithSummary("The session's proposal run: status Idle | Running | Completed | Cancelled | Failed, progress and the rows landed so far (a cancelled run keeps the rows it computed).");
             endpoints.MapPost("/api/projects/{folder}/book-edits/{program}/propose-one", ProposeOneAsync)
                 .RecordsNoStep("Proposes an Edit with AI; nothing commits until it is applied.")

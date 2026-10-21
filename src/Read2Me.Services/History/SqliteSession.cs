@@ -53,6 +53,23 @@ internal sealed class SqliteSession : IDisposable
         }
     }
 
+    /// <summary>
+    /// Applies a <see cref="Patchset"/> to the main database of an open connection, in order. Any
+    /// conflict — a row a change expects that is not there, or a constraint it breaks — aborts the
+    /// apply and throws: a patchset replayed onto the state it was recorded against has none.
+    /// </summary>
+    public static void Apply(SqliteConnection connection, byte[] patchset)
+    {
+        var db = connection.Handle?.DangerousGetHandle()
+            ?? throw new InvalidOperationException("Applying a patchset needs an open connection.");
+        NativeMethods.ConflictHandler abort = (_, _, _) => SqliteChangesetAbort;
+        var rc = NativeMethods.sqlite3changeset_apply(db, patchset.Length, patchset, IntPtr.Zero, abort, IntPtr.Zero);
+        GC.KeepAlive(abort);
+        Check(rc, "sqlite3changeset_apply");
+    }
+
+    private const int SqliteChangesetAbort = 2;
+
     public void Dispose()
     {
         if (_session == IntPtr.Zero)
@@ -89,5 +106,12 @@ internal sealed class SqliteSession : IDisposable
 
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         public static extern void sqlite3_free(IntPtr buffer);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int ConflictHandler(IntPtr context, int conflict, IntPtr iterator);
+
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int sqlite3changeset_apply(
+            IntPtr db, int size, byte[] changeset, IntPtr filter, ConflictHandler conflict, IntPtr context);
     }
 }

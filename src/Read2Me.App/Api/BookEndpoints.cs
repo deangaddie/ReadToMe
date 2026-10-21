@@ -91,17 +91,23 @@ namespace Read2Me.App.Api
         public static void MapBookEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapGet("/api/projects/{folder}/book", GetOverviewAsync)
+                .ReadsAt()
                 .Produces<BookOverviewDto>()
                 .WithSummary("Book overview: volumes, characters and structure counts, the book revision they were read at, and the Structure rules (structureRules: per anchor kind, the placements it allows, the kind each creates, whether text is required, and the minimum count the book keeps). hasContent=false means import has not run.");
             endpoints.MapGet("/api/projects/{folder}/nodes/{level}/{id:guid}/children", GetChildrenAsync)
+                .ReadsAt()
                 .WithSummary("Ordered children of a node. level=volume gives parts, part gives chapters, chapter gives paragraphs with their items.");
             endpoints.MapGet("/api/projects/{folder}/nodes/chapter/{id:guid}/voices", GetChapterVoicesAsync)
+                .ReadsAt()
                 .WithSummary("Resolved voice per speech item of a chapter: { itemId: { voiceName, narratedBy } }. voiceName null = no voice resolves; narratedBy = the linked narrator's name on narration items.");
             endpoints.MapGet("/api/projects/{folder}/nodes/{level}/{id:guid}/paragraph-ids", GetParagraphIdsAsync)
+                .ReadsAt()
                 .WithSummary("The Character paragraphs under a node (level: volume|part|chapter) with their chapter/part/volume ids; unprocessedOnly=true keeps those still holding an unattributed line. What 'Select unprocessed' selects.");
             endpoints.MapGet("/api/projects/{folder}/nodes/{level}/{id:guid}/item-ids", GetItemIdsAsync)
+                .ReadsAt()
                 .WithSummary("The speech items under a node (level: volume|part|chapter) that have a speaker to read them, with their paragraph/chapter/part/volume ids; needsAudioOnly=true keeps those still missing a WAV; narratorOnlyMode=true counts unattributed lines as readable. What an audio tree checkbox or 'Select needs audio' selects.");
             endpoints.MapGet("/api/projects/{folder}/characters", GetCharactersAsync)
+                .ReadsAt()
                 .WithSummary("All characters with their aliases.");
             endpoints.MapPost("/api/projects/{folder}/characters/bulk-assign-preview", BulkAssignPreviewAsync)
                 .RecordsNoStep("A preview; nothing is written.")
