@@ -316,6 +316,22 @@ describe('r2m-edit-with-ai-dialog', () => {
     expect(text('edit-error')).toContain('the model went away');
   });
 
+  it('drops an open proposal when a Restore dropped its session, and says to run it again', async () => {
+    await reachReview();
+
+    await push({
+      kind: 'dropped',
+      program: 'prog-1',
+      reason: 'The project was restored — run it again',
+    });
+
+    expect(phase()).toBe('instruct');
+    expect(text('edit-error')).toContain('The project was restored — run it again');
+    expect(rows()).toHaveLength(0);
+    // The session is gone on the host: nothing to discard when the dialog closes.
+    plan = { ...PLAN, program: null };
+  });
+
   it('polls the run when there is no hub connection to push to', async () => {
     connectionId = null;
     const running: BookEditRunDto = {

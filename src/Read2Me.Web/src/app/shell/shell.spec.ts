@@ -607,4 +607,35 @@ describe('viewing a History step', () => {
     expect(shell.querySelector('.shell__viewing')).toBeNull();
     expect(toasts).toHaveLength(1);
   });
+
+  it('states what a Restore costs before the click, then restores with no confirm', async () => {
+    api.on('GET', '/api/projects/foundation/history/s1', {
+      ...row(1, 'Split chapter', null),
+      restorePreview: { audioDiscardCount: 60 },
+    });
+    api.on('POST', '/api/projects/foundation/history/s1/restore', {
+      step: { ...row(3, "Restore to 'Split chapter' (14:02)", null), restoredFromStepId: 's1' },
+      audioDiscardCount: 60,
+    });
+    const { shell } = await openSheet();
+    stepButton(shell, 's1')?.click();
+    await settle();
+    const restore = () => shell.querySelector<HTMLButtonElement>('.shell__viewing-restore');
+    await tick();
+    await settle();
+
+    expect(shell.querySelector('.shell__viewing')?.textContent).toContain(
+      'Restoring discards audio on 60 items',
+    );
+    expect(restore()?.disabled).toBe(false);
+
+    restore()?.click();
+    await tick();
+    await settle();
+
+    expect(api.calls('POST', '/api/projects/foundation/history/s1/restore')).toHaveLength(1);
+    expect(shell.querySelector('.shell__viewing')).toBeNull();
+    expect(main(shell)?.inert).toBe(false);
+    expect(toasts.at(-1)).toContain('Restored to #1 Split chapter');
+  });
 });

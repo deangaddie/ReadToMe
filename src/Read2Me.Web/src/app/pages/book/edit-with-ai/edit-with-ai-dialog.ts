@@ -136,8 +136,19 @@ export class EditWithAiDialog extends R2mElement {
   protected override connected(): void {
     this.classList.add('edit-with-ai');
     this.feed.acquire();
+    // A Restore of the project drops the session, whatever phase it is in (the plan and its rows
+    // were made against text the Restore replaced): back to Instruct, with the host's reason, so
+    // the instruction can be run again over the restored text.
+    const dropped = this.live.on('bookEdit', (message) => {
+      if (message.kind !== 'dropped' || message.program !== this.program) return;
+      this.program = null;
+      this.stopWatching();
+      this.backToInstruct();
+      this.error.set(message.reason ?? 'The project was restored — run it again');
+    });
     this.onDisconnect(() => {
       this.closed = true;
+      dropped();
       this.stopWatching();
       this.feed.release();
       // The host keeps the plan until it expires; say we are done with it so it goes now.

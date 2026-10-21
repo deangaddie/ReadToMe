@@ -1,4 +1,5 @@
-import { type Guid, HistoryApi, type HistoryStep, StepView } from '@app/api';
+import { type Guid, HistoryApi, type HistoryStep, StepView, toApiError } from '@app/api';
+import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import type { HistoryMessage, LiveHistoryStep } from '@app/live/live-messages';
@@ -21,6 +22,13 @@ import { ToastService } from '@app/ui/toast';
  * so every Project state read carries `?at=`. A busy project can't be viewed
  * ({@link busy}, from the list and the hub's `busyChanged`); background work starting while a tab
  * views a step sends it back to current with a toast.
+ * <p>
+ * And **Restore** (spec, "Restore"): viewing a step reads what restoring it would cost
+ * ({@link restorePreview}, for the banner to say before the click); {@link restore} makes the
+ * viewed step current as a new step, returns the tab to current and toasts Show in Book and Undo
+ * restore (a Restore to the tip before). A Restore another tab or an agent made is toasted when
+ * the hub says it finished; the page itself rebuilds from the Restore's receipt as it does for any
+ * other write.
  */
 export class HistoryStore {
   private readonly api = use(HistoryApi);
@@ -32,6 +40,12 @@ export class HistoryStore {
   /** Hub messages that arrived while the list was being read, applied over it once it lands. */
   private held: HistoryMessage[] | null = null;
   private reading: Promise<void> = Promise.resolve();
+  /** The preview reads and Restores in flight, for {@link settled}. */
+  private pending: Promise<void> = Promise.resolve();
+  /** This tab's own Restore is in flight: its finish on the hub is not "another tab". */
+  private restoringHere = false;
+  /** The Restore steps this tab added, whose finish may reach the hub after the answer did. */
+  private readonly ownRestoreSteps = new Set<Guid>();
 
   private readonly _folder = signal<string | null>(null);
   private readonly _steps = signal<HistoryStep[]>([]);
@@ -40,6 +54,8 @@ export class HistoryStore {
   private readonly _loading = signal(false);
   private readonly _error = signal<string | null>(null);
   private readonly _busy = signal<string | null>(null);
+  private readonly _restoring = signal(false);
+  private readonly _restorePreview = signal<number | null>(null);
 
   readonly folder = this._folder.asReadonly();
   /** Newest first. */
@@ -56,6 +72,10 @@ export class HistoryStore {
   });
   /** Why the project is busy ("Attribution: 128 paragraphs left"), or null when idle. */
   readonly busy = this._busy.asReadonly();
+  /** A Restore of the project is running, here or elsewhere; every other write is refused meanwhile. */
+  readonly restoring = this._restoring.asReadonly();
+  /** How many items would lose their audio if the viewed step were restored now; null until read. */
+  readonly restorePreview = this._restorePreview.asReadonly();
   /** The viewed step's row, as the hub last sent it. */
   readonly viewedStep = computed(() => {
     const id = this.viewing();
@@ -87,6 +107,7 @@ export class HistoryStore {
     this._loaded.set(false);
     this._error.set(null);
     this._busy.set(null);
+    this._restoring.set(false);
     this.held = null;
   }
 
@@ -96,9 +117,14 @@ export class HistoryStore {
     return this.reading;
   }
 
-  /** Resolves once the read in flight, if any, has landed. */
+  /** Resolves once the reads and writes in flight, if any, have landed. */
   settled(): Promise<void> {
-    return this.reading;
+    return Promise.all([this.reading, this.pending]).then(() => undefined);
+  }
+
+  /** Follows a preview read or a Restore, so {@link settled} covers it; the list read keeps its own handle. */
+  private track(work: Promise<void>): void {
+    this.pending = Promise.all([this.pending, work]).then(() => undefined);
   }
 
   /**
@@ -113,12 +139,71 @@ export class HistoryStore {
       return true;
     }
     this.stepView.view(folder, stepId);
+    this._restorePreview.set(null);
+    this.track(this.readPreview(folder, stepId));
     return true;
   }
 
   backToCurrent(): void {
     const folder = this._folder();
     if (folder !== null) this.stepView.clear(folder);
+    this._restorePreview.set(null);
+  }
+
+  /**
+   * Restores `stepId` (the viewed step by default): the project as it stood after it becomes
+   * current, as a new step, and the later steps stay. The tab returns to current, and the toast
+   * offers Show in Book and Undo restore. A refusal (busy, already restoring) is toasted and the
+   * tab stays where it was.
+   */
+  async restore(stepId: Guid | null = this.viewing()): Promise<void> {
+    const folder = this._folder();
+    if (folder === null || stepId === null) return;
+    const previousTip = this._headStepId();
+    this.restoringHere = true;
+    try {
+      const result = await this.api.restore(folder, stepId);
+      if (this._folder() !== folder) return;
+      this.backToCurrent();
+      const name = this.stepName(stepId);
+      if (result.step === null) {
+        this.toast.info(`The project already is as it was after ${name}.`);
+        return;
+      }
+      this.ownRestoreSteps.add(result.step.stepId);
+      const count = result.audioDiscardCount;
+      this.toast.info(
+        `Restored to ${name}. The later steps stay in History; ${count} item${count === 1 ? '' : 's'} need${count === 1 ? 's' : ''} generating.`,
+        [
+          {
+            label: 'Show in Book',
+            run: () => use(Router).navigate(`projects/${encodeURIComponent(folder)}/book`),
+          },
+          { label: 'Undo restore', run: () => this.track(this.restore(previousTip)) },
+        ],
+      );
+    } catch (e) {
+      this.toast.problem(toApiError(e).toProblem());
+    } finally {
+      this.restoringHere = false;
+    }
+  }
+
+  /** "#8 Split chapter", or "a past step" for one the list doesn't hold. */
+  private stepName(stepId: Guid): string {
+    const step = this._steps().find((s) => s.stepId === stepId);
+    return step ? stepName(step) : 'a past step';
+  }
+
+  private async readPreview(folder: string, stepId: Guid): Promise<void> {
+    try {
+      const step = await this.api.step(folder, stepId);
+      if (this.viewing() === stepId)
+        this._restorePreview.set(step.restorePreview?.audioDiscardCount ?? null);
+    } catch {
+      // The banner keeps its Restore disabled: the cost can't be stated. A busy answer also
+      // arrives as busyChanged, which sends the tab back to current.
+    }
   }
 
   private async read(): Promise<void> {
@@ -133,6 +218,7 @@ export class HistoryStore {
       this.held = null;
       this._steps.set(list.steps);
       this._headStepId.set(list.headStepId);
+      this._restoring.set(list.restoring);
       this.setBusy(list.busy?.reason ?? null);
       for (const message of held) this.apply(message, { overList: true });
       this._loaded.set(true);
@@ -147,8 +233,8 @@ export class HistoryStore {
 
   private receive(message: HistoryMessage): void {
     if (this.held) this.held.push(message);
-    // The busy answer gates viewing whether or not the list was ever read.
-    else if (this._loaded() || message.kind === 'busyChanged')
+    // The busy and restoring answers matter whether or not the list was ever read.
+    else if (this._loaded() || message.kind === 'busyChanged' || message.kind === 'restoring')
       this.apply(message, { overList: false });
   }
 
@@ -163,7 +249,10 @@ export class HistoryStore {
       return;
     }
     // The Restore step itself lands and closes like any other; the restoring phase is not a row.
-    if (message.kind === 'restoring') return;
+    if (message.kind === 'restoring') {
+      this.setRestoring(message.phase === 'started', message.step);
+      return;
+    }
     const incoming = fromHub(message.step);
     const steps = this._steps();
     const at = steps.findIndex((s) => s.stepId === incoming.stepId);
@@ -176,6 +265,25 @@ export class HistoryStore {
     this._steps.set(steps.with(at, incoming));
   }
 
+  /**
+   * A Restore finishing elsewhere (another tab, an agent) is said so, naming the step it brought
+   * back (by the Restore step's own label when the list doesn't hold it); the page rebuilds from
+   * the Restore's receipt. This tab's own Restore toasts from its answer instead, which carries the
+   * audio count. A tab viewing a step when a Restore starts goes back to current: the step it
+   * shows is about to stop being the past of the current project.
+   */
+  private setRestoring(restoring: boolean, step: LiveHistoryStep | undefined): void {
+    this._restoring.set(restoring);
+    if (restoring) {
+      if (!this.restoringHere) this.backToCurrent();
+      return;
+    }
+    if (!step || this.restoringHere || this.ownRestoreSteps.delete(step.stepId)) return;
+    const from = step.restoredFromStepId;
+    const fromStep = from ? this._steps().find((s) => s.stepId === from) : undefined;
+    this.toast.info(`Project restored to ${stepName(fromStep ?? step)} in another tab`);
+  }
+
   /** A viewing tab can't stay on a past step the work is racing past. */
   private setBusy(reason: string | null): void {
     this._busy.set(reason);
@@ -183,6 +291,11 @@ export class HistoryStore {
     this.backToCurrent();
     this.toast.info(`Back to the current project: background work started (${reason}).`);
   }
+}
+
+/** "#8 Split chapter": how toasts name a step. */
+function stepName(step: Pick<HistoryStep, 'sequence' | 'label'>): string {
+  return `#${step.sequence} ${step.label}`;
 }
 
 /** The hub omits null fields; the list and the sheet read them as null. */
