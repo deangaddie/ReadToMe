@@ -29,19 +29,20 @@ public sealed partial class ProjectHistory
         try
         {
             Guid head;
-            List<Guid> line;
+            Dictionary<string, string?> files;
             await using (var connection = HistoryDatabase.Open(HistoryDatabase.FileIn(historyFolder), SqliteOpenMode.ReadOnly))
             {
                 await connection.OpenAsync(CancellationToken.None);
                 if (await HistoryDatabase.ReadHeadAsync(connection, CancellationToken.None) is not ({ } tip, false))
                     return;
                 head = tip;
-                line = await HistoryDatabase.ReadLineAsync(connection, head, CancellationToken.None);
+                var line = await HistoryDatabase.ReadLineAsync(connection, head, CancellationToken.None);
+                if (NearestSnapshot(historyFolder, line).Depth < options.Value.SnapshotEvery)
+                    return;
+                files = await FilesAtAsync(connection, historyFolder, head, CancellationToken.None);
             }
 
-            if (NearestSnapshot(historyFolder, line).Depth < options.Value.SnapshotEvery)
-                return;
-            await TakeSnapshotAsync(Path.Combine(projectFolder, ProjectDbContextProvider.DbFileName), historyFolder, head, CancellationToken.None);
+            await TakeSnapshotAsync(Path.Combine(projectFolder, ProjectDbContextProvider.DbFileName), historyFolder, head, files, CancellationToken.None);
         }
         catch (Exception ex) when (ex is SqliteException or IOException or UnauthorizedAccessException)
         {
@@ -78,8 +79,9 @@ public sealed partial class ProjectHistory
             {
                 logger.LogInformation(
                     "{Folder} was migrated since its last History snapshot; snapshotting it at the new schema.", folder.Value);
+                var files = await FilesAtAsync(connection, historyFolder, head?.StepId, ct);
                 closed = await HistoryDatabase.CloseInterruptedAsync(connection, ct);
-                await TakeSnapshotAsync(projectDb, historyFolder, head?.StepId, ct);
+                await TakeSnapshotAsync(projectDb, historyFolder, head?.StepId, files, ct);
             }
             _atLiveSchema[folder.Value] = true;
         }
@@ -109,11 +111,14 @@ public sealed partial class ProjectHistory
 
     /// <summary>
     /// <c>VACUUM INTO</c> a temporary file and moved into place, so a snapshot that exists is
-    /// always whole. Its own <c>__EFMigrationsHistory</c> tags it with its schema.
+    /// always whole. Its own <c>__EFMigrationsHistory</c> tags it with its schema. The state files'
+    /// <paramref name="files"/> list is written beside it first, so a snapshot always has its list.
     /// </summary>
-    private static async Task TakeSnapshotAsync(string projectDb, string historyFolder, Guid? stepId, CancellationToken ct)
+    private static async Task TakeSnapshotAsync(
+        string projectDb, string historyFolder, Guid? stepId, Dictionary<string, string?> files, CancellationToken ct)
     {
         var target = HistoryDatabase.SnapshotOf(historyFolder, stepId);
+        await StateFiles.WriteListAsync(target, files, ct);
         var pending = target + ".tmp";
         File.Delete(pending); // a leftover from a snapshot that never finished; VACUUM INTO will not overwrite
         await using (var connection = HistoryDatabase.Open(projectDb, SqliteOpenMode.ReadOnly))

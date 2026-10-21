@@ -74,6 +74,8 @@ namespace Read2Me.App
 
             var workspacePath = workspaceOptions.Value.FolderPath;
             Directory.CreateDirectory(workspacePath);
+            // Ahead of the mount: with ?at=<stepId>, a state file is served as it was at that step.
+            app.UseStateFilesAtStep("/workspace");
             app.UseStaticFiles(new StaticFileOptions
             {
                 FileProvider = new PhysicalFileProvider(workspacePath),
@@ -169,6 +171,15 @@ namespace Read2Me.App
         {
             var folder = (string?)context.Request.RouteValues["folder"];
             var id = (string?)context.Request.RouteValues["id"];
+
+            // A Preview Source is scratch audio of an item's take: a result, which History doesn't record.
+            if (context.Request.Query.ContainsKey(StepReads.Parameter))
+            {
+                await Results.Problem(
+                    $"?{StepReads.Parameter}= isn't accepted here: a Preview Source is scratch audio of an item's take, which History doesn't record.",
+                    statusCode: StatusCodes.Status400BadRequest).ExecuteAsync(context);
+                return;
+            }
 
             // Both route values are parsed before either can reach a file path, so a traversal
             // attempt is a 404 rather than a read.

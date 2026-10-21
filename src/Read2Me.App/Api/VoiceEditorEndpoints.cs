@@ -7,6 +7,7 @@ using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
+using Read2Me.Services.History;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 
 namespace Read2Me.App.Api
@@ -51,7 +52,7 @@ namespace Read2Me.App.Api
                 .RecordsStep("Restore original voice audio")
                 .WithSummary("Put the voice's original audio back and forget the edit. A no-op for a voice that was never edited.");
             endpoints.MapGet("/api/projects/{folder}/voices/{voiceId:guid}/original.wav", GetOriginalAsync)
-                .ReadsLive("voice files aren't read at a step yet.")
+                .ReadsAt()
                 .WithSummary("The voice's audio as it was before the editor touched it. 404 while the voice is unedited — the live WAV is the original then.");
         }
 
@@ -172,7 +173,7 @@ namespace Read2Me.App.Api
 
         private static async Task<IResult> GetOriginalAsync(
             string folder, Guid voiceId, HttpResponse response, IFileSystem fs, ICharacterReader reader,
-            IVoiceOriginalStore originals, CancellationToken ct)
+            IVoiceOriginalStore originals, ProjectDbSession session, ProjectHistory history, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
@@ -180,6 +181,13 @@ namespace Read2Me.App.Api
             var voice = await reader.GetVoiceAsync(folderId, voiceId);
             if (voice is null)
                 return Results.NotFound();
+
+            // At a step (?at=, which opened it for this request), the original as it was then.
+            if (session.StateOf(folderId) is { } state)
+            {
+                var path = originals.RelativePath(voice.CharacterId, voiceId);
+                return StepFileReads.Serve(response, await history.ReadFileAsync(folderId, state.Step.StepId, path, ct), path);
+            }
 
             var original = await originals.TryReadAsync(folderId, voice.CharacterId, voiceId, ct);
             return original is null ? Results.NotFound() : Wav(response, original);

@@ -49,6 +49,24 @@ public abstract record BookMutation(ProjectFolderId FolderId)
 public abstract record ProjectStateMutation(ProjectFolderId FolderId) : BookMutation(FolderId)
 {
     public sealed override bool ChangesProjectState => true;
+
+    /// <summary>
+    /// The state files this mutation's producer wrote over in place before it commits — a Voice's
+    /// reference audio or stored original, the cover — which History hashes into its blobs with
+    /// the commit (ADR 0016, "Files"). A file the Book names for the first time, or stops naming,
+    /// is seen from the rows and needs no declaration; one rewritten under a name it already had is
+    /// seen only through this, so a file staged for another commit is never pinned on this one.
+    /// </summary>
+    public virtual StateFileOwners WritesFiles => StateFileOwners.None;
+}
+
+/// <summary>Whose state files a mutation writes over: some Voices' audio and originals, and the cover.</summary>
+public sealed record StateFileOwners(IReadOnlyCollection<Guid> Voices, bool Cover = false)
+{
+    public static readonly StateFileOwners None = new([]);
+    public static readonly StateFileOwners TheCover = new([], Cover: true);
+
+    public static StateFileOwners Voice(Guid voiceId) => new([voiceId]);
 }
 
 /// <summary>
@@ -364,7 +382,10 @@ public sealed record UpdateProjectMetadataMutation(
 /// </para>
 /// </summary>
 public sealed record SetCoverImageMutation(
-    ProjectFolderId FolderId, string? CoverImageFileName) : ProjectStateMutation(FolderId);
+    ProjectFolderId FolderId, string? CoverImageFileName) : ProjectStateMutation(FolderId)
+{
+    public override StateFileOwners WritesFiles => StateFileOwners.TheCover;
+}
 
 // ── manual and AI book edits ─────────────────────────────────────────────────
 // What a person rewrites by hand, and what an approved AI edit program rewrites for them. The two
@@ -483,7 +504,10 @@ public sealed record SetVoiceTranscriptMutation(
 /// </para>
 /// </summary>
 public sealed record SetVoiceAudioMutation(
-    ProjectFolderId FolderId, Guid VoiceId, string AudioFileName) : ProjectStateMutation(FolderId);
+    ProjectFolderId FolderId, Guid VoiceId, string AudioFileName) : ProjectStateMutation(FolderId)
+{
+    public override StateFileOwners WritesFiles => StateFileOwners.Voice(VoiceId);
+}
 
 /// <summary>
 /// Records a synthesised take of a designed Voice: the audio, the sample text it speaks, and the
@@ -495,7 +519,10 @@ public sealed record SetVoiceGeneratedMutation(
     Guid VoiceId,
     string AudioFileName,
     string Transcript,
-    string DesignPrompt) : ProjectStateMutation(FolderId);
+    string DesignPrompt) : ProjectStateMutation(FolderId)
+{
+    public override StateFileOwners WritesFiles => StateFileOwners.Voice(VoiceId);
+}
 
 /// <summary>
 /// Records that the voice audio editor rewrote a Voice's reference audio in place. The row does not
@@ -503,14 +530,21 @@ public sealed record SetVoiceGeneratedMutation(
 /// given does, so this never reports no-change. The edited WAV, and on a first edit the stored
 /// original, are written before this commits and put back if it does not.
 /// </summary>
-public sealed record ApplyVoiceAudioEditMutation(ProjectFolderId FolderId, Guid VoiceId) : ProjectStateMutation(FolderId);
+public sealed record ApplyVoiceAudioEditMutation(ProjectFolderId FolderId, Guid VoiceId) : ProjectStateMutation(FolderId)
+{
+    public override StateFileOwners WritesFiles => StateFileOwners.Voice(VoiceId);
+}
 
 /// <summary>
 /// Records that the voice audio editor put a Voice's original audio back. Like
-/// <see cref="ApplyVoiceAudioEditMutation"/> it changes the audio and not the row; the stored
-/// original is removed only once this commits.
+/// <see cref="ApplyVoiceAudioEditMutation"/> it changes the audio and not the row. The stored
+/// original is removed before this commits, so History records it gone with the step, and put
+/// back if it doesn't.
 /// </summary>
-public sealed record RestoreVoiceAudioOriginalMutation(ProjectFolderId FolderId, Guid VoiceId) : ProjectStateMutation(FolderId);
+public sealed record RestoreVoiceAudioOriginalMutation(ProjectFolderId FolderId, Guid VoiceId) : ProjectStateMutation(FolderId)
+{
+    public override StateFileOwners WritesFiles => StateFileOwners.Voice(VoiceId);
+}
 
 /// <summary>
 /// Switches a Voice between cloned-from-a-recording and designed-from-a-description. Turning a

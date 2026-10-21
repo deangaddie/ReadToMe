@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -96,8 +97,11 @@ public sealed partial class ProjectHistory(
     {
         await StartUnderLockAsync(db, ct);
         await SnapshotIfMigratedAsync(folder, db, ct);
+        var historyFolder = HistoryFolderOf(db);
+        // Read before the transaction and under the lock, so no commit can move the tip meanwhile.
+        var tipFiles = await TipFilesAsync(historyFolder, ct);
         return await HistoryCapture.BeginAsync(
-            db, HistoryDatabase.FileIn(HistoryFolderOf(db)), NotStateTables(db), Author, clock, ct);
+            db, HistoryDatabase.FileIn(historyFolder), NotStateTables(db), Author, clock, tipFiles, ct);
     }
 
     /// <summary>
@@ -190,17 +194,20 @@ public sealed partial class ProjectHistory(
 
     /// <summary>
     /// The snapshot first, then history.db written under a temporary name and moved into place, so
-    /// a history.db that exists always has its base snapshot beside it.
+    /// a history.db that exists always has its base snapshot beside it. The base snapshot's file
+    /// list hashes every state file on disk into the blobs.
     /// </summary>
     private async Task StartUnderLockAsync(ProjectDbContext db, CancellationToken ct)
     {
         var folder = HistoryFolderOf(db);
         var file = HistoryDatabase.FileIn(folder);
-        if (File.Exists(file))
+        if (File.Exists(file) && !await RecordedByAnOlderBuildAsync(folder, ct))
             return;
 
         Directory.CreateDirectory(HistoryDatabase.SnapshotsIn(folder));
-        await TakeSnapshotAsync(((SqliteConnection)db.Database.GetDbConnection()).DataSource, folder, stepId: null, ct);
+        var projectDb = ((SqliteConnection)db.Database.GetDbConnection()).DataSource;
+        var files = await StateFiles.ListAllAsync(db, Path.GetDirectoryName(projectDb)!, folder, ct);
+        await TakeSnapshotAsync(projectDb, folder, stepId: null, files, ct);
 
         // A project with a Book is an existing one meeting History for the first time; one without
         // has not been imported yet, and its import will be its first step.
@@ -216,6 +223,41 @@ public sealed partial class ProjectHistory(
                 await InsertStartedStepAsync(connection, ct);
         }
         File.Move(pending, file);
+        _atCurrentVersion[folder] = true;
+    }
+
+    /// <summary>The History folders this process has seen at <see cref="HistoryDatabase.Version"/>, as a set.</summary>
+    private readonly ConcurrentDictionary<string, bool> _atCurrentVersion = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether the History in <paramref name="historyFolder"/> was recorded by a build before
+    /// <see cref="HistoryDatabase.Version"/>, and so deleted for History to start again: an older
+    /// one lacks what this build reads, such as the state files' lists, and keeping it would read
+    /// wrongly. The project itself is untouched. A folder that can't be deleted — something still
+    /// reads a cached step — is kept and tried again on the next commit.
+    /// </summary>
+    private async Task<bool> RecordedByAnOlderBuildAsync(string historyFolder, CancellationToken ct)
+    {
+        if (_atCurrentVersion.ContainsKey(historyFolder))
+            return false;
+        var version = await HistoryDatabase.ReadVersionAsync(HistoryDatabase.FileIn(historyFolder), ct);
+        if (version >= HistoryDatabase.Version)
+        {
+            _atCurrentVersion[historyFolder] = true;
+            return false;
+        }
+
+        try
+        {
+            Directory.Delete(historyFolder, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "{Folder} holds History from an older build (version {Version}) that couldn't be deleted; it is kept until the next try.", historyFolder, version);
+            return false;
+        }
+        logger.LogInformation("{Folder} held History from an older build (version {Version}); History starts again.", historyFolder, version);
+        return true;
     }
 
     /// <summary>
@@ -226,7 +268,7 @@ public sealed partial class ProjectHistory(
     {
         var now = clock.GetUtcNow();
         var step = new HistoryStep(Guid.NewGuid(), null, 1, HistoryDatabase.StartedLabel, null, Author, now, now, IsOpen: false, Note: null);
-        return HistoryDatabase.AppendStepAsync(connection, null, schema: "", step, patchset: null, ct);
+        return HistoryDatabase.AppendStepAsync(connection, null, schema: "", step, chunk: null, ct);
     }
 
     /// <summary>The project's tables History never records: results (AudioReviews) and progress (StepCheckpoints).</summary>

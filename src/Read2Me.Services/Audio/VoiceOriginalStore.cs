@@ -44,7 +44,10 @@ namespace Read2Me.Services.Audio
 
     public sealed class VoiceOriginalStore(IFileSystem fs) : IVoiceOriginalStore
     {
-        public string RelativePath(Guid characterId, Guid voiceId) =>
+        public string RelativePath(Guid characterId, Guid voiceId) => PathOf(characterId, voiceId);
+
+        /// <summary>The same path for callers with no store to hand: History, which records the original as a state file.</summary>
+        internal static string PathOf(Guid characterId, Guid voiceId) =>
             $"voices/{characterId}/{voiceId}.orig.wav";
 
         public bool Exists(ProjectFolderId folder, Guid characterId, Guid voiceId) =>
