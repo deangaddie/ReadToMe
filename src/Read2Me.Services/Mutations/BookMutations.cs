@@ -93,6 +93,9 @@ public sealed class BookMutations(
                 OriginId = mutation.OriginId,
             };
             step = committed.Step;
+            // Under the lock, so the snapshot is the state after the step just committed.
+            if (step is not null)
+                await history.SnapshotIfDueAsync(mutation.FolderId);
         }
         catch (OperationCanceledException)
         {
@@ -131,7 +134,7 @@ public sealed class BookMutations(
         var db = await session.OpenAsync(mutation.FolderId);
         // Declared before the transaction so it is disposed after it: the capture attaches
         // history.db, which cannot be detached while a transaction is open.
-        await using var capture = mutation.ChangesProjectState ? await history.BeginCaptureAsync(db, ct) : null;
+        await using var capture = mutation.ChangesProjectState ? await history.BeginCaptureAsync(mutation.FolderId, db, ct) : null;
         var scope = stepScope.For(mutation.FolderId, out var runKind);
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
 

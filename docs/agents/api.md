@@ -730,7 +730,9 @@ curl -s "http://localhost:5000/api/projects/{folder}/characters?at={stepId}"
   `/paragraphs/{id}/context` and the `/nodes/...` reads. The OpenAPI document lists `at` on each.
 - 404 for a step the project's History doesn't have, 409 while anything is queued or running for
   the project (`detail` carries the reason, as `busy.reason` does), 422 for a step marked
-  `cantOpen`, 400 when `at` is not a step id.
+  `cantOpen`, 400 when `at` is not a step id. A step recorded before a schema upgrade is migrated
+  as it opens; one whose old schema fails to migrate is marked `cantOpen` for good (the read that
+  found out answers 422, and the hub sends `stepChanged` with the row).
 - Reads of live results, progress or files refuse `?at=` with 400, saying why: `/history`, audio
   reviews, queue status, Edit with AI runs, Assembly outputs and the voice editor's original WAV.
   Voice audio and the cover are still served as they are now, and so is a Voice's `referenceSeconds`,

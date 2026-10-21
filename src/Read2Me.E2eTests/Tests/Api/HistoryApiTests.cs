@@ -2,8 +2,12 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
 using Read2Me.App.Api;
+using Read2Me.Data;
 using Read2Me.E2eTests.Infrastructure;
 
 namespace Read2Me.E2eTests.Tests.Api;
@@ -134,6 +138,34 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             (await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/book?at={Guid.NewGuid()}")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest,
             (await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/book?at=yesterday")).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_read_at_a_step_whose_old_schema_fails_to_migrate_is_422_and_History_says_it_cant_be_opened()
+    {
+        var folder = $"api-history-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "History Book", "Author");
+        var started = (await HistoryAsync(folder)).GetProperty("headStepId").GetGuid();
+        await BreakBaseSnapshotAsync(folder);
+
+        var read = await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/book?at={started}");
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, read.StatusCode);
+        Assert.True(Assert.Single((await HistoryAsync(folder)).GetProperty("steps").EnumerateArray())
+            .GetProperty("cantOpen").GetBoolean());
+    }
+
+    /// <summary>
+    /// The base snapshot taken back a migration, with the table the next one creates already
+    /// there: every step opened from it fails to migrate.
+    /// </summary>
+    private async Task BreakBaseSnapshotAsync(string folder)
+    {
+        var snapshot = Path.Combine(app.WorkspaceDir, folder, "history", "snapshots", "base.db");
+        await using var db = new ProjectDbContext(new DbContextOptionsBuilder<ProjectDbContext>()
+            .UseSqlite($"Data Source={snapshot};Pooling=false").Options);
+        await db.GetService<IMigrator>().MigrateAsync("20260831131907_CollapseSpeechItemType");
+        await db.Database.ExecuteSqlRawAsync("CREATE TABLE StepCheckpoints (Step TEXT NOT NULL PRIMARY KEY)");
     }
 
     [Fact]

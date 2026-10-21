@@ -32,6 +32,7 @@ public sealed partial class ProjectHistory(
     IProjectDbContextFactory dbFactory,
     ProjectWriteLocks writeLocks,
     IOptions<BookMutationOptions> mutationOptions,
+    IOptions<HistoryOptions> options,
     EventBroadcaster<HistoryStepEvent> events,
     TimeProvider clock,
     ILogger<ProjectHistory> logger)
@@ -68,14 +69,15 @@ public sealed partial class ProjectHistory(
     }
 
     /// <summary>
-    /// Starts the project's History if it has none: what opening a project does. Takes the
-    /// project's write lock, so the base snapshot never races a commit History would miss — but
-    /// waits only the mutation budget for it. A writer that holds the lock longer is itself a
+    /// Starts the project's History if it has none: what opening a project does. Opening also
+    /// migrates the project, and a project a new build migrated is snapshotted at its new schema.
+    /// Takes the project's write lock, so the base snapshot never races a commit History would miss
+    /// — but waits only the mutation budget for it. A writer that holds the lock longer is itself a
     /// commit, and starts History before it writes, so nothing is missed by giving up.
     /// </summary>
     public async Task StartAsync(ProjectFolderId folder, CancellationToken ct = default)
     {
-        if (File.Exists(HistoryFileOf(folder)))
+        if (_atLiveSchema.ContainsKey(folder.Value) && File.Exists(HistoryFileOf(folder)))
             return;
 
         using var writeLock = await writeLocks.AcquireAsync(folder, mutationOptions.Value.LockWaitBudget, ct);
@@ -83,15 +85,17 @@ public sealed partial class ProjectHistory(
             return;
         await using var db = await dbFactory.CreateAsync(fs.GetProjectFolderPath(folder));
         await StartUnderLockAsync(db, ct);
+        await SnapshotIfMigratedAsync(folder, db, ct);
     }
 
     /// <summary>
     /// Starts History if needed, then begins capturing one state mutation on its connection. The
     /// caller holds the project's write lock and has not yet begun its transaction.
     /// </summary>
-    internal async Task<HistoryCapture> BeginCaptureAsync(ProjectDbContext db, CancellationToken ct)
+    internal async Task<HistoryCapture> BeginCaptureAsync(ProjectFolderId folder, ProjectDbContext db, CancellationToken ct)
     {
         await StartUnderLockAsync(db, ct);
+        await SnapshotIfMigratedAsync(folder, db, ct);
         return await HistoryCapture.BeginAsync(
             db, HistoryDatabase.FileIn(HistoryFolderOf(db)), NotStateTables(db), Author, clock, ct);
     }
@@ -128,8 +132,10 @@ public sealed partial class ProjectHistory(
             closed = await HistoryDatabase.CloseStepAsync(
                 connection, null, schema: "", stepId, clock.GetUtcNow(), note, CancellationToken.None);
         }
-        if (closed is not null)
-            events.Publish(new HistoryStepEvent(folder, HistoryStepEventKind.Closed, closed));
+        if (closed is null)
+            return;
+        events.Publish(new HistoryStepEvent(folder, HistoryStepEventKind.Closed, closed));
+        await SnapshotIfDueAsync(folder);
     }
 
     /// <summary>
@@ -155,6 +161,8 @@ public sealed partial class ProjectHistory(
         }
         foreach (var step in closed)
             events.Publish(new HistoryStepEvent(folder, HistoryStepEventKind.Closed, step));
+        if (closed.Count > 0)
+            await SnapshotIfDueAsync(folder);
     }
 
     /// <summary>Announces what a commit did to History. Call after the commit, never inside it.</summary>
@@ -191,11 +199,8 @@ public sealed partial class ProjectHistory(
         if (File.Exists(file))
             return;
 
-        var snapshots = HistoryDatabase.SnapshotsIn(folder);
-        Directory.CreateDirectory(snapshots);
-        var snapshot = Path.Combine(snapshots, HistoryDatabase.BaseSnapshotName);
-        File.Delete(snapshot); // a leftover from a start that never finished; VACUUM INTO will not overwrite
-        await db.Database.ExecuteSqlRawAsync("VACUUM INTO {0}", [snapshot], ct);
+        Directory.CreateDirectory(HistoryDatabase.SnapshotsIn(folder));
+        await TakeSnapshotAsync(((SqliteConnection)db.Database.GetDbConnection()).DataSource, folder, stepId: null, ct);
 
         // A project with a Book is an existing one meeting History for the first time; one without
         // has not been imported yet, and its import will be its first step.
