@@ -1,7 +1,3 @@
-using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.Core.Configuration;
@@ -26,9 +22,6 @@ namespace Read2Me.Tests.Services.History;
 /// </summary>
 public class SnapshotTests : ProjectDbTestBase
 {
-    /// <summary>The project schema before the latest migration, which only adds a results table (StepCheckpoints).</summary>
-    private const string PriorMigration = "20260831131907_CollapseSpeechItemType";
-
     private readonly ProjectFolderId _folder;
     private readonly ManualTimeProvider _clock = new();
     private ServiceProvider _root;
@@ -189,40 +182,21 @@ public class SnapshotTests : ProjectDbTestBase
 
     /// <summary>
     /// As if everything so far was recorded by the app before its latest migration, which is then
-    /// started again: the project, its snapshots and its cached steps taken back to <see cref="PriorMigration"/>.
-    /// The state tables are the same on both sides of it, so the chunks hold for either.
+    /// started again: the project, its snapshots and its cached steps taken back to <see cref="PriorSchema.MigrationId"/>.
+    /// The state tables are the same on both sides of it (PriorSchema guards that), so the chunks hold for either.
     /// </summary>
     private async Task RestartOnPriorSchemaAsync()
     {
         await _root.DisposeAsync();
-        await MigrateToPriorAsync(Path.Combine(FolderPath, "project.db"));
+        await PriorSchema.MigrateAsync(Path.Combine(FolderPath, "project.db"));
         var cache = Path.Combine(HistoryFolder, "cache");
         foreach (var copy in Snapshots().Concat(Directory.Exists(cache) ? Directory.GetFiles(cache, "*.db") : []))
-            await MigrateToPriorAsync(copy);
+            await PriorSchema.MigrateAsync(copy);
         _root = NewApp(snapshotEvery: 50);
     }
 
-    /// <summary>
-    /// The base snapshot taken back to <see cref="PriorMigration"/> with the table the next
-    /// migration creates already there, so migrating any step opened from it fails.
-    /// </summary>
-    private async Task BreakBaseSnapshotAsync()
-    {
-        var snapshot = Path.Combine(HistoryFolder, "snapshots", "base.db");
-        await MigrateToPriorAsync(snapshot);
-        await using var connection = new SqliteConnection($"Data Source={snapshot};Pooling=false");
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = "CREATE TABLE StepCheckpoints (Step TEXT NOT NULL PRIMARY KEY)";
-        await command.ExecuteNonQueryAsync();
-    }
-
-    private static async Task MigrateToPriorAsync(string databaseFile)
-    {
-        await using var db = new ProjectDbContext(new DbContextOptionsBuilder<ProjectDbContext>()
-            .UseSqlite($"Data Source={databaseFile};Pooling=false").Options);
-        await db.GetService<IMigrator>().MigrateAsync(PriorMigration);
-    }
+    /// <summary>The base snapshot broken so that migrating any step opened from it fails.</summary>
+    private Task BreakBaseSnapshotAsync() => PriorSchema.BreakAsync(Path.Combine(HistoryFolder, "snapshots", "base.db"));
 
     private async Task SeedAsync()
     {
