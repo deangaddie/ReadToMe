@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { ChapterVoicePreviewDto, CharacterSummaryDto, VoiceRuleDto } from '@app/api';
-import { override, provide, resetServices } from '@app/core/services';
+import {
+  type ChapterVoicePreviewDto,
+  type CharacterSummaryDto,
+  StepView,
+  VIEWING_READ_ONLY,
+  type VoiceRuleDto,
+} from '@app/api';
+import { override, provide, resetServices, use } from '@app/core/services';
 import { LiveService } from '@app/live/live.service';
 import { ConfirmService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
@@ -200,6 +206,24 @@ describe('r2m-voice-rules-section', () => {
       { type: 'MoveVoiceRule', ruleId: 'r2', direction: 'Up' },
       { type: 'DeleteVoiceRule', ruleId: 'r1' },
     ]);
+  });
+
+  it('viewing a History step, Add rule, Move and Delete are off with the reason; the preview shows (ticket 32)', async () => {
+    use(StepView).view('dune', 's8');
+    const section = await mount({ ...row('Alice'), voiceCount: 1 }, [DEFAULT, ONWARD, SINGLE]);
+    const reason = (el: Element | null) =>
+      el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
+    const add = section.querySelector<HTMLButtonElement>('[data-action=add-rule]')!;
+    expect(add.disabled).toBe(true);
+    expect(reason(add)).toBe(VIEWING_READ_ONLY);
+    for (const action of ['move-up', 'move-down', 'delete-rule']) {
+      const control = rows(section)[2]!.querySelector<HTMLButtonElement>(
+        `[data-action=${action}]`,
+      )!;
+      expect(control.disabled).toBe(true);
+      expect(reason(control)).toBe(VIEWING_READ_ONLY);
+    }
+    expect(section.querySelectorAll('table.voice-rules__preview tbody tr')).toHaveLength(1);
   });
 
   it('flags a dangling rule', async () => {

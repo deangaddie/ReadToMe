@@ -146,7 +146,7 @@
     min-width: 180px;
   }
 
-  /* ---- viewing a History step: the amber banner over the body, the page greyed and inert ------ */
+  /* ---- viewing a History step: the amber banner over the body, the page greyed -------------- */
   .shell__viewing {
     display: flex;
     flex-wrap: wrap;

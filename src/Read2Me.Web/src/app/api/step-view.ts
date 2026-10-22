@@ -3,6 +3,12 @@ import { signal } from '@app/core/signals';
 import type { Guid } from './dtos';
 import type { paths } from './schema';
 
+/** Why an edit control is off while a History step is viewed (story 40). */
+export const VIEWING_READ_ONLY = 'Viewing a past step. Restore it to change anything';
+
+/** Why an item's play button is off while viewing: takes aren't Project state, so it would play today's. */
+export const ITEM_AUDIO_NOT_KEPT = "Item audio isn't kept in History";
+
 export interface ViewedStep {
   folder: string;
   stepId: Guid;
@@ -34,6 +40,14 @@ export class StepView {
   at(folder: string): Guid | null {
     const viewing = this._viewing();
     return viewing?.folder === folder ? viewing.stepId : null;
+  }
+
+  /**
+   * The shared read-only flag every edit control reads: why `folder` can't be changed right now
+   * ({@link VIEWING_READ_ONLY} while it is viewed at a step), or null on the current project.
+   */
+  readOnly(folder: string | null): string | null {
+    return folder !== null && this.at(folder) !== null ? VIEWING_READ_ONLY : null;
   }
 }
 

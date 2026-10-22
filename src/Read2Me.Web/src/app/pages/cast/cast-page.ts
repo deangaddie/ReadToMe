@@ -16,7 +16,7 @@ import { adoptStyles } from '@app/core/styles';
 import { LiveService } from '@app/live/live.service';
 import { Preflight } from '@app/shared/preflight';
 import { ConfirmService, PromptService } from '@app/ui/dialogs';
-import { emptyState, icon, statusChip } from '@app/ui/partials';
+import { blockable, emptyState, icon, statusChip } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
 import { ProjectStore } from '../project/project-store';
 import {
@@ -72,9 +72,12 @@ export class CastPage extends R2mElement {
   );
   /** `?discover=1`: open the discovery dialog on arrival, then drop the param. */
   private readonly discover = computed(() => this.router.query().get('discover'));
-  /** Discovery and creation are off while a write is in flight or a voice batch runs (research §4). */
+  /**
+   * Discovery and creation are off while a write is in flight or a voice batch runs (research §4),
+   * and while a History step is viewed.
+   */
   private readonly toolbarLocked = computed(
-    () => this.store.busy() || this.live.voiceBatch().isRunning,
+    () => this.store.busy() || this.live.voiceBatch().isRunning || this.store.readOnly() !== null,
   );
 
   /** Built in `connected()`, once the shell's store is reachable through the DOM. */
@@ -132,6 +135,7 @@ export class CastPage extends R2mElement {
     const rows = this.store.rows();
     const busy = this.store.busy();
     const toolbarLocked = this.toolbarLocked();
+    const readOnly = this.store.readOnly();
     return html`
       <header class="r2m-page-header">
         <h1 class="r2m-page-header__title">Cast</h1>
@@ -147,44 +151,56 @@ export class CastPage extends R2mElement {
       <div class="cast ${characterId ? 'cast--detail' : ''}">
         <section class="cast__list" aria-label="Characters">
           <div class="cast__toolbar">
-            <button
-              type="button"
-              class="r2m-button r2m-button--filled"
-              data-action="discover"
-              ?disabled=${toolbarLocked}
-              @click=${() => void this.runDiscovery()}
-            >
-              ${icon('auto_awesome')} Discover
-            </button>
-            <button
-              type="button"
-              class="r2m-button r2m-button--stroked"
-              data-action="generate-prompts"
-              ?disabled=${toolbarLocked}
-              data-tooltip="One LLM voice plan per character; progress in the activity centre"
-              @click=${() => void this.generatePrompts()}
-            >
-              ${icon('record_voice_over')} Generate voice prompts
-            </button>
-            <button
-              type="button"
-              class="r2m-button r2m-button--stroked"
-              data-action="generate-audio"
-              ?disabled=${toolbarLocked}
-              data-tooltip="Synthesise every prompt voice without audio; progress in the activity centre"
-              @click=${() => void this.generateAudio()}
-            >
-              ${icon('graphic_eq')} Generate audio
-            </button>
-            <button
-              type="button"
-              class="r2m-button r2m-button--stroked"
-              data-action="add-character"
-              ?disabled=${toolbarLocked}
-              @click=${() => void this.addCharacter()}
-            >
-              ${icon('person_add')} Add character
-            </button>
+            ${blockable(
+              readOnly,
+              html`<button
+                type="button"
+                class="r2m-button r2m-button--filled"
+                data-action="discover"
+                ?disabled=${toolbarLocked}
+                @click=${() => void this.runDiscovery()}
+              >
+                ${icon('auto_awesome')} Discover
+              </button>`,
+            )}
+            ${blockable(
+              readOnly,
+              html`<button
+                type="button"
+                class="r2m-button r2m-button--stroked"
+                data-action="generate-prompts"
+                ?disabled=${toolbarLocked}
+                data-tooltip="One LLM voice plan per character; progress in the activity centre"
+                @click=${() => void this.generatePrompts()}
+              >
+                ${icon('record_voice_over')} Generate voice prompts
+              </button>`,
+            )}
+            ${blockable(
+              readOnly,
+              html`<button
+                type="button"
+                class="r2m-button r2m-button--stroked"
+                data-action="generate-audio"
+                ?disabled=${toolbarLocked}
+                data-tooltip="Synthesise every prompt voice without audio; progress in the activity centre"
+                @click=${() => void this.generateAudio()}
+              >
+                ${icon('graphic_eq')} Generate audio
+              </button>`,
+            )}
+            ${blockable(
+              readOnly,
+              html`<button
+                type="button"
+                class="r2m-button r2m-button--stroked"
+                data-action="add-character"
+                ?disabled=${toolbarLocked}
+                @click=${() => void this.addCharacter()}
+              >
+                ${icon('person_add')} Add character
+              </button>`,
+            )}
           </div>
 
           ${
@@ -193,6 +209,7 @@ export class CastPage extends R2mElement {
                   .narrator=${narrator}
                   .rows=${rows}
                   .busy=${busy}
+                  .readOnly=${readOnly}
                   @narrator-changed=${(e: Event) =>
                     void this.setNarrator((e as CustomEvent<Guid | null>).detail)}
                 ></r2m-narrator-banner>`

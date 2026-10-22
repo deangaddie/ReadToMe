@@ -18,7 +18,7 @@ import { ConfirmService, confirmPermanent } from '@app/ui/dialogs';
 import type { IconName } from '@app/ui/icons';
 import type { MeasuredList } from '@app/ui/measured-list';
 import { menuHeading, menuItem } from '@app/ui/menu';
-import { adviceLine, emptyState, icon, statusChip } from '@app/ui/partials';
+import { adviceLine, blockable, emptyState, icon, statusChip } from '@app/ui/partials';
 import type { SpeakerMenu } from '@app/ui/speaker-menu';
 import { ToastService } from '@app/ui/toast';
 import { rereadConfirm } from '../project/permanent-changes';
@@ -190,6 +190,7 @@ export class BookPage extends R2mElement {
       ancestry: store.ancestry(),
       roster: this.roster(),
       locked: editor.locked(),
+      readOnly: editor.readOnly(),
       generating: generator.working(),
     }));
 
@@ -216,18 +217,21 @@ export class BookPage extends R2mElement {
 
     // `?action=` (from the Overview's rows): once the book and its Pipeline steps have loaded (the
     // dialog shows their advice) and nothing locks the editor, drop the param and open what the
-    // overflow entry opens. Unknown, or no content: drop only.
+    // overflow entry opens. Unknown, no content, or a viewed History step: drop only, so the
+    // dialog doesn't open by itself on Back to current.
     this.effect(() => {
       const action = this.router.query().get('action');
       const overview = store.overview();
-      if (action === null || !overview || !project.pipeline() || editor.locked()) return;
+      if (action === null || !overview || !project.pipeline()) return;
+      const viewing = editor.readOnly() !== null;
+      if (editor.locked() && !viewing) return;
       untracked(() => {
         const query = Object.fromEntries(this.router.query());
         this.router.navigate(this.router.path(), {
           replace: true,
           query: { ...query, action: null },
         });
-        const open = overview.hasContent ? this.deepLinks.get(action) : undefined;
+        const open = overview.hasContent && !viewing ? this.deepLinks.get(action) : undefined;
         if (open) void open();
       });
     });
@@ -335,6 +339,7 @@ export class BookPage extends R2mElement {
                         .selection=${this.selectionKind()}
                         .nodeStates=${this.nodeStates()}
                         .locked=${this.editor.locked()}
+                        .readOnly=${this.editor.readOnly()}
                         @expanded-change=${this.onExpandedChange}
                         @select-chapter=${this.onSelectChapter}
                         @toggle-node=${this.onToggleNode}
@@ -379,6 +384,7 @@ export class BookPage extends R2mElement {
     const count = this.selection.count();
     const busy = this.working() || this.editor.locked();
     const queueBusy = this.queueBusy();
+    const readOnly = this.editor.readOnly();
     return html`<div
       class="book__selection"
       role="group"
@@ -388,27 +394,33 @@ export class BookPage extends R2mElement {
       <span class="book__selection-count" data-testid="selection-count"
         >${count} paragraph${count === 1 ? '' : 's'}</span
       >
-      <button
-        type="button"
-        class="r2m-button r2m-button--filled"
-        data-action="attribute-selection"
-        ?disabled=${busy}
-        @click=${this.attributeSelection}
-      >
-        ${icon('auto_awesome')} Attribute
-      </button>
-      <span class="book__bulk">
-        <button
+      ${blockable(
+        readOnly,
+        html`<button
           type="button"
-          class="r2m-button r2m-button--stroked"
-          data-action="bulk-assign"
-          popovertarget=${BULK_MENU_ID}
-          aria-haspopup="listbox"
-          ?disabled=${busy || queueBusy}
-          data-tooltip=${queueBusy ? 'Bulk assign waits until attribution has finished' : nothing}
+          class="r2m-button r2m-button--filled"
+          data-action="attribute-selection"
+          ?disabled=${busy}
+          @click=${this.attributeSelection}
         >
-          ${icon('groups')} Bulk assign speaker ${icon('expand_more')}
-        </button>
+          ${icon('auto_awesome')} Attribute
+        </button>`,
+      )}
+      <span class="book__bulk">
+        ${blockable(
+          readOnly,
+          html`<button
+            type="button"
+            class="r2m-button r2m-button--stroked"
+            data-action="bulk-assign"
+            popovertarget=${BULK_MENU_ID}
+            aria-haspopup="listbox"
+            ?disabled=${busy || queueBusy}
+            data-tooltip=${queueBusy ? 'Bulk assign waits until attribution has finished' : nothing}
+          >
+            ${icon('groups')} Bulk assign speaker ${icon('expand_more')}
+          </button>`,
+        )}
         <div
           id=${BULK_MENU_ID}
           popover
@@ -448,15 +460,18 @@ export class BookPage extends R2mElement {
       <span class="book__selection-count" data-testid="selection-count"
         >${count} item${count === 1 ? '' : 's'}</span
       >
-      <button
-        type="button"
-        class="r2m-button r2m-button--filled"
-        data-action="generate-audio-selection"
-        ?disabled=${this.working() || this.generator.working() || this.editor.locked()}
-        @click=${this.generateSelection}
-      >
-        ${icon('graphic_eq')} Generate audio
-      </button>
+      ${blockable(
+        this.editor.readOnly(),
+        html`<button
+          type="button"
+          class="r2m-button r2m-button--filled"
+          data-action="generate-audio-selection"
+          ?disabled=${this.working() || this.generator.working() || this.editor.locked()}
+          @click=${this.generateSelection}
+        >
+          ${icon('graphic_eq')} Generate audio
+        </button>`,
+      )}
       ${adviceLine(this.advice('generateAudio'))}
       <button
         type="button"
@@ -481,17 +496,20 @@ export class BookPage extends R2mElement {
       run: () => void,
       hint: string | null = null,
     ) => menuItem({ action, label, icon: glyph, run, ...(hint === null ? {} : { hint }) });
-    return html`<button
-        type="button"
-        class="r2m-icon-button"
-        aria-label="Book actions"
-        aria-haspopup="menu"
-        data-testid="book-actions"
-        popovertarget=${ACTIONS_MENU_ID}
-        ?disabled=${this.editor.locked() || !this.store.overview()}
-      >
-        ${icon('more_vert')}
-      </button>
+    return html`${blockable(
+        this.editor.readOnly(),
+        html`<button
+          type="button"
+          class="r2m-icon-button"
+          aria-label="Book actions"
+          aria-haspopup="menu"
+          data-testid="book-actions"
+          popovertarget=${ACTIONS_MENU_ID}
+          ?disabled=${this.editor.locked() || !this.store.overview()}
+        >
+          ${icon('more_vert')}
+        </button>`,
+      )}
       <div id=${ACTIONS_MENU_ID} popover class="r2m-menu" role="menu" aria-label="Book actions">
         ${menuHeading('Structure')}
         ${entry('reread', 'Reread… (auto splits)', 'restart_alt', () => void this.reread())}
@@ -558,7 +576,10 @@ export class BookPage extends R2mElement {
           <span class="book__pause-label">${row.label}</span>
           <span class="book__pause-rule"></span>
           <span class="book__pause-menu"
-            >${nodeMenuTrigger(target, { disabled: this.ctx().locked })}</span
+            >${nodeMenuTrigger(target, {
+              disabled: this.ctx().locked,
+              reason: this.ctx().readOnly,
+            })}</span
           >
         </div>`;
       }
@@ -577,6 +598,7 @@ export class BookPage extends R2mElement {
       selection: this.selectionKind(),
       status: this.project.nodes()[id] ?? null,
       locked: this.ctx().locked,
+      readOnly: this.ctx().readOnly,
     });
     return html`<div class="book__heading-row book__row">
       <div
@@ -586,7 +608,7 @@ export class BookPage extends R2mElement {
       >
         <h2 class="book__${level} ${placeholderTitleClass(heading)}">${heading.title}</h2>
         <span class="book__heading-menu"
-          >${nodeMenuTrigger(menu.target, { disabled: menu.disabled })}</span
+          >${nodeMenuTrigger(menu.target, { disabled: menu.disabled, reason: menu.reason })}</span
         >
       </div>
     </div>`;
@@ -1055,6 +1077,7 @@ const EMPTY_CONTEXT: RowContext = {
   ancestry: {},
   roster: [],
   locked: false,
+  readOnly: null,
   generating: false,
 };
 

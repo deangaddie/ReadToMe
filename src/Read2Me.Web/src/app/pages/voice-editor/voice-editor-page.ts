@@ -91,6 +91,7 @@ export class VoiceEditorPage extends R2mElement {
   });
   readonly applyBlocked = computed(() =>
     applyBlockedReason({
+      readOnly: this.project.readOnly(),
       anyTicked: this.anyTicked(),
       hasRender: this.lastRender() !== null,
       stale: this.stale(),
@@ -151,20 +152,25 @@ export class VoiceEditorPage extends R2mElement {
 
   private editorTemplate(voice: VoiceDto) {
     const busy = this.busy();
+    // Viewing a History step: Preview would render today's audio, and Apply and Restore change it.
+    const readOnly = this.project.readOnly();
     const applyBlocked = this.applyBlocked();
     const actionError = this.actionError();
     const actionNote = this.actionNote();
     return html`
       <div class="voice-editor__toolbar">
-        <button
-          type="button"
-          class="r2m-button r2m-button--filled"
-          data-action="preview"
-          ?disabled=${!this.anyTicked() || busy}
-          @click=${() => void this.preview()}
-        >
-          ${this.rendering() ? spinner(18) : icon('play_circle')} Preview
-        </button>
+        ${blockable(
+          readOnly,
+          html`<button
+            type="button"
+            class="r2m-button r2m-button--filled"
+            data-action="preview"
+            ?disabled=${!this.anyTicked() || busy || readOnly !== null}
+            @click=${() => void this.preview()}
+          >
+            ${this.rendering() ? spinner(18) : icon('play_circle')} Preview
+          </button>`,
+        )}
         ${blockable(
           applyBlocked,
           html`<button
@@ -195,15 +201,18 @@ export class VoiceEditorPage extends R2mElement {
             ? html`<span data-testid="edited-chip"
                   >${statusChip({ status: 'warn', label: 'Edited', icon: 'tune', compact: true })}</span
                 >
-                <button
-                  type="button"
-                  class="r2m-button voice-editor__danger"
-                  data-action="restore"
-                  ?disabled=${busy}
-                  @click=${() => void this.restore()}
-                >
-                  ${icon('history')} Restore original
-                </button>`
+                ${blockable(
+                  readOnly,
+                  html`<button
+                    type="button"
+                    class="r2m-button voice-editor__danger"
+                    data-action="restore"
+                    ?disabled=${busy || readOnly !== null}
+                    @click=${() => void this.restore()}
+                  >
+                    ${icon('history')} Restore original
+                  </button>`,
+                )}`
             : nothing
         }
         ${

@@ -1,7 +1,7 @@
 import { type TemplateResult, html, nothing } from 'lit-html';
-import { type ParagraphItemDto, workspaceUrl } from '@app/api';
+import { ITEM_AUDIO_NOT_KEPT, type ParagraphItemDto, workspaceUrl } from '@app/api';
 import { use } from '@app/core/services';
-import { icon, statusChip } from '@app/ui/partials';
+import { blockable, icon, statusChip } from '@app/ui/partials';
 import { nodeMenuTrigger, runMenuEntry } from './node-menu';
 import type { NodeMenuTarget } from './node-menu-entries';
 import {
@@ -68,12 +68,17 @@ export function itemRow(
     ...position,
   };
   const editingBlocked = busy || paragraphBusy || ctx.locked;
-  const cue = deliveryCue(menuTarget, editingBlocked);
+  const cue = deliveryCue(menuTarget, editingBlocked, ctx.readOnly);
   // Somebody can read the line, so it may be picked for generation (ticket 13).
   const voiced = isVoicedItem(item, ctx.narratorOnlyMode);
   const selected = ctx.itemSelectable && ctx.selectedItems.has(item.id);
-  // Speakers mode only; a paragraph the queue holds is the server's to stamp.
-  const assignable = ctx.mode === 'speakers' && !paragraphBusy && !busy && ctx.roster.length > 0;
+  // Speakers mode only; a paragraph the queue holds is the server's to stamp, a viewed step nobody's.
+  const assignable =
+    ctx.mode === 'speakers' &&
+    !paragraphBusy &&
+    !busy &&
+    ctx.readOnly === null &&
+    ctx.roster.length > 0;
   const classes = [
     'r2m-item',
     speaker.state === 'unknown' ? 'r2m-item--unknown' : '',
@@ -119,7 +124,7 @@ export function itemRow(
       <span class="r2m-item__text">${item.text}</span>
       ${busy ? icon('lock', 'r2m-item__lock') : nothing}
       <span class="r2m-item__menu"
-        >${nodeMenuTrigger(menuTarget, { disabled: editingBlocked })}</span
+        >${nodeMenuTrigger(menuTarget, { disabled: editingBlocked, reason: ctx.readOnly })}</span
       >
     </div>
     ${
@@ -188,7 +193,9 @@ function audioLine(item: ParagraphItemDto, ctx: RowContext, voiced: boolean, cue
                 >${reviewView.icon}</span
               >`
             : html`${chipOf(reviewView)}
-                <button
+              ${blockable(
+                ctx.readOnly,
+                html`<button
                   type="button"
                   class="r2m-item__action"
                   data-action="dismiss-review"
@@ -196,34 +203,48 @@ function audioLine(item: ParagraphItemDto, ctx: RowContext, voiced: boolean, cue
                   @click=${(e: Event) => void generator(e).dismissReview(item.id)}
                 >
                   Dismiss
-                </button>`
+                </button>`,
+              )}`
           : nothing
       }
       ${queue ? chipOf(queue) : nothing}
       ${
         queue && outcome && voiced
-          ? html`<button
-              type="button"
-              class="r2m-item__action"
-              data-action="retry-audio"
-              ?disabled=${ctx.generating || ctx.locked}
-              @click=${(e: Event) => void generator(e).retry(item.id)}
-            >
-              Retry
-            </button>`
+          ? blockable(
+              ctx.readOnly,
+              html`<button
+                type="button"
+                class="r2m-item__action"
+                data-action="retry-audio"
+                ?disabled=${ctx.generating || ctx.locked}
+                @click=${(e: Event) => void generator(e).retry(item.id)}
+              >
+                Retry
+              </button>`,
+            )
           : nothing
       }
     </span>
-    ${
-      audioSrc
-        ? html`<r2m-audio-player
-            .compact=${true}
-            .src=${audioSrc}
-            .cacheKey=${status?.audioVersion ?? undefined}
-          ></r2m-audio-player>`
-        : nothing
-    }
+    ${audioSrc ? itemPlayer(audioSrc, status?.audioVersion, ctx.readOnly !== null) : nothing}
   </div>`;
+}
+
+/**
+ * The generated take's player. Takes aren't Project state, so while a History step is viewed a
+ * past item would play today's take: the player shows with its play button off and says why.
+ */
+function itemPlayer(src: string, audioVersion: number | null | undefined, viewing: boolean) {
+  if (viewing) {
+    return blockable(
+      ITEM_AUDIO_NOT_KEPT,
+      html`<r2m-audio-player .compact=${true} .src=${null}></r2m-audio-player>`,
+    );
+  }
+  return html`<r2m-audio-player
+    .compact=${true}
+    .src=${src}
+    .cacheKey=${audioVersion ?? undefined}
+  ></r2m-audio-player>`;
 }
 
 type DeliveryCueView = TemplateResult | typeof nothing;
@@ -234,10 +255,14 @@ type DeliveryCueView = TemplateResult | typeof nothing;
  * cue. Clicking it runs the menu's Edit delivery cue… (delivery-cue-editing 03), so it is off
  * whenever the item's menu is.
  */
-function deliveryCue(target: NodeMenuTarget, disabled: boolean): DeliveryCueView {
+function deliveryCue(
+  target: NodeMenuTarget,
+  disabled: boolean,
+  readOnly: string | null,
+): DeliveryCueView {
   const cue = target.cue;
   if (!cue) return nothing;
-  return html`<button
+  const button = html`<button
     type="button"
     class="r2m-item__instructions"
     data-testid="delivery-cue"
@@ -247,4 +272,5 @@ function deliveryCue(target: NodeMenuTarget, disabled: boolean): DeliveryCueView
   >
     ${cue}
   </button>`;
+  return readOnly === null ? button : blockable(readOnly, button);
 }

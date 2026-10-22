@@ -6,7 +6,7 @@ import { adoptStyles } from '@app/core/styles';
 import { statusChip } from '@app/ui/partials';
 import { pipeline } from '@app/ui/pipeline';
 import { helpPanel } from './help-panel';
-import type { StepId } from './pipeline-steps';
+import { type StepId, readOnlyPipeline } from './pipeline-steps';
 import { ProjectStore } from './project-store';
 import { StepRunner } from './step-runner';
 import './project-details-panel';
@@ -38,7 +38,13 @@ export class OverviewPage extends R2mElement {
   protected template() {
     const detail = this.store.detail();
     const error = this.store.error();
-    const steps = this.store.pipeline();
+    const readOnly = this.store.readOnly();
+    const pipelineSteps = this.store.pipeline();
+    // Viewing a History step: the rows still open pages, but nothing on them changes the project.
+    const steps =
+      pipelineSteps && readOnly !== null
+        ? readOnlyPipeline(pipelineSteps, readOnly)
+        : pipelineSteps;
     const author = detail?.author;
     const helpStep = steps?.find((s) => s.id === this.helpOpen()) ?? null;
     const closeHelp = () => this.helpOpen.set(null);

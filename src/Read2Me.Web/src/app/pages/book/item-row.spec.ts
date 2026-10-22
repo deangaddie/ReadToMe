@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { render } from 'lit-html';
-import type { ParagraphItemDto } from '@app/api';
+import { ITEM_AUDIO_NOT_KEPT, type ParagraphItemDto, VIEWING_READ_ONLY } from '@app/api';
 import { provide } from '@app/core/services';
 import {
   type ConfirmOptions,
@@ -62,6 +62,7 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
     narratorOnlyMode: false,
     ancestry: { c1: { partId: 'pt1', volumeId: 'v1' } },
     locked: false,
+    readOnly: null,
     generating: false,
     roster: [],
     ...overrides,
@@ -382,6 +383,60 @@ describe('itemRow (audio)', () => {
         'r2m-audio-player',
       ),
     ).toBeNull();
+  });
+
+  describe('viewing a History step (ticket 32)', () => {
+    const viewing = (overrides: Partial<RowContext> = {}) =>
+      ctx({ locked: true, readOnly: VIEWING_READ_ONLY, ...overrides });
+    const tooltip = (el: Element | null) =>
+      el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
+
+    it('item play is off and says item audio is not kept, never playing the current take', async () => {
+      const el = await mount(viewing({ itemStatus: { d: { audioVersion: 3 } } }), DIALOG);
+      const player = el.querySelector('r2m-audio-player')!;
+      await player.rendered();
+      expect(player.querySelector('audio')?.getAttribute('src') ?? null).toBeNull();
+      expect(player.querySelector<HTMLButtonElement>('button')!.disabled).toBe(true);
+      expect(tooltip(player)).toBe(ITEM_AUDIO_NOT_KEPT);
+    });
+
+    it('the node menu, Retry and Dismiss are off with the viewing reason', async () => {
+      const el = await mount(
+        viewing({
+          itemStatus: { d: { outcome: { kind: 'Failed' } } },
+          reviews: {
+            d: {
+              state: 'NeedsReview',
+              normalizeOk: true,
+              normalizeReason: null,
+              verifyOk: false,
+              wer: 0.3,
+              verifyReason: 'transcript drifted',
+              transcript: null,
+              originalTextSnapshot: null,
+            },
+          },
+        }),
+        DIALOG,
+      );
+      for (const selector of [
+        '.r2m-node-menu__trigger',
+        '[data-action=retry-audio]',
+        '[data-action=dismiss-review]',
+      ]) {
+        const control = el.querySelector<HTMLButtonElement>(selector)!;
+        expect(control.disabled).toBe(true);
+        expect(tooltip(control)).toBe(VIEWING_READ_ONLY);
+      }
+    });
+
+    it('the speaker chip offers no menu', async () => {
+      const el = await mount(
+        viewing({ mode: 'speakers', itemSelectable: false, roster: ROSTER }),
+        DIALOG,
+      );
+      expect(el.querySelector('r2m-speaker-chip button')).toBeNull();
+    });
   });
 
   it('carries the item id and tints a selected row', async () => {

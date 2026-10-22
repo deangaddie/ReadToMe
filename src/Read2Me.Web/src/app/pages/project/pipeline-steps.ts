@@ -6,7 +6,7 @@ import type {
 } from '@app/api';
 import type { NodeStatusSummary } from '@app/live/live-messages';
 import type { StatusKind } from '@app/ui/partials';
-import type { PipelineAction, PipelineStepView } from '@app/ui/pipeline';
+import type { PipelineAction, PipelineCheckpointPill, PipelineStepView } from '@app/ui/pipeline';
 
 /**
  * The nine Pipeline steps on the project overview (guidance-primitives spec §2), derived from the
@@ -49,7 +49,7 @@ export interface StepAction extends PipelineAction {
 export type CheckpointPillId = 'confirm' | 'skip' | 'reopen' | 'reconfirm' | 'reconfirmSkip';
 
 /** One checkpoint pill beside the chip: its click PUTs `state`. */
-export interface CheckpointPill {
+export interface CheckpointPill extends PipelineCheckpointPill {
   id: CheckpointPillId;
   label: string;
   state: CheckpointRequestState;
@@ -500,6 +500,30 @@ export function derivePipeline(input: PipelineInput): PipelineStep[] {
     step.advice = lines.length ? lines.join(' ') : null;
   }
   return derived;
+}
+
+/** The actions that only open a page: a viewed History step still offers them (ticket 32). */
+const BROWSING_ACTIONS: ReadonlySet<StepActionId> = new Set([
+  'checkStructure',
+  'reviewText',
+  'openSpeakers',
+  'openCast',
+  'openAudioMode',
+  'assemble',
+]);
+
+/**
+ * The Pipeline while a History step is viewed (ticket 32): every action and checkpoint pill that
+ * would change the project is blocked with `reason`; the actions that only open a page stay.
+ */
+export function readOnlyPipeline(steps: readonly PipelineStep[], reason: string): PipelineStep[] {
+  return steps.map((step) => ({
+    ...step,
+    actions: step.actions.map((a) =>
+      BROWSING_ACTIONS.has(a.id) ? a : { ...a, blockedReason: reason },
+    ),
+    checkpoint: step.checkpoint.map((p) => ({ ...p, blockedReason: reason })),
+  }));
 }
 
 /** A step with no row, or a stale one, or a derived count still unmet: not done in any sense. */

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { CharacterSummaryDto } from '@app/api';
+import { type CharacterSummaryDto, StepView, VIEWING_READ_ONLY } from '@app/api';
 import { Router } from '@app/core/router';
-import { override, provide, resetServices } from '@app/core/services';
+import { override, provide, resetServices, use } from '@app/core/services';
 import { LiveService } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast';
 import { FakeApi } from '../../../testing/fake-api';
@@ -105,6 +105,27 @@ describe('r2m-character-detail', () => {
     expect(narrator.querySelector('h2')?.textContent).toBe('Narrator');
     expect(narrator.querySelector('[aria-label="Aliases"]')).toBeNull();
     expect(button(narrator, 'delete')).toBeNull();
+  });
+
+  it('viewing a History step, rename, Merge, Delete and the aliases are off with the reason (ticket 32)', async () => {
+    use(StepView).view('dune', 's8');
+    const detail = await mount(ALICE);
+    const reason = (el: Element | null) =>
+      el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
+
+    expect(detail.querySelector('r2m-inline-edit')?.readOnly).toBe(VIEWING_READ_ONLY);
+    const removeAlias = detail.querySelector<HTMLButtonElement>('.character-detail__alias-remove')!;
+    for (const control of [
+      button(detail, 'merge'),
+      button(detail, 'delete'),
+      button(detail, 'add-alias'),
+      removeAlias,
+    ]) {
+      expect(control.disabled).toBe(true);
+      expect(reason(control)).toBe(VIEWING_READ_ONLY);
+    }
+    // The lines still open the reader.
+    expect(detail.querySelector('r2m-character-lines')?.textContent).toContain('Hello there.');
   });
 
   it('flags the character that narrates the book', async () => {

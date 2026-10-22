@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { AssemblyOutputDto, ProjectDetailDto, ProjectStatusDto } from '@app/api';
+import {
+  type AssemblyOutputDto,
+  type ProjectDetailDto,
+  type ProjectStatusDto,
+  StepView,
+  VIEWING_READ_ONLY,
+} from '@app/api';
 import { Router, type RouteDef } from '@app/core/router';
-import { override, resetServices } from '@app/core/services';
+import { override, resetServices, use } from '@app/core/services';
 import type { AssemblyMessage, AssemblyState } from '@app/live/live-messages';
 import { IDLE_ASSEMBLY } from '@app/live/live-state';
 import { ConfirmService, type ConfirmOptions } from '@app/ui/dialogs';
@@ -179,6 +185,20 @@ describe('r2m-export-page', () => {
       '/api/projects/dune/assembly/outputs/Dune.m4b',
     );
     expect(page.querySelector('[data-card="progress"]')).toBeNull();
+  });
+
+  it('viewing a History step, Assemble and Delete are off with the reason; downloads stay (ticket 32)', async () => {
+    use(StepView).view('dune', 's8');
+    const page = await render();
+    const reason = (el: Element | null) =>
+      el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
+
+    expect(button(page, 'assemble').disabled).toBe(true);
+    expect(reason(button(page, 'assemble'))).toBe(VIEWING_READ_ONLY);
+    const remove = page.querySelector<HTMLButtonElement>('[data-action="delete-output"]')!;
+    expect(remove.disabled).toBe(true);
+    expect(reason(remove)).toBe(VIEWING_READ_ONLY);
+    expect(page.querySelector('a[data-action="download-output"]')).not.toBeNull();
   });
 
   it('says there are no audiobooks yet once the empty list has arrived', async () => {

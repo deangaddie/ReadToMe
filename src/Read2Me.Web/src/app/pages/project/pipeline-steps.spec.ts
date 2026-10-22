@@ -8,6 +8,7 @@ import {
   type StepId,
   adviceFor,
   derivePipeline,
+  readOnlyPipeline,
 } from './pipeline-steps';
 
 const VOL = 'v1';
@@ -547,6 +548,41 @@ describe('derivePipeline', () => {
       for (const s of derivePipeline(stale))
         for (const a of s.actions) expect(`${a.id}:${a.blockedReason}`).toBe(`${a.id}:null`);
     });
+  });
+});
+
+describe('readOnlyPipeline (ticket 32)', () => {
+  const steps = () => readOnlyPipeline(derivePipeline(settled()), 'Viewing');
+
+  it.each<[StepActionId, string | null]>([
+    ['reread', 'Viewing'],
+    ['manualReread', 'Viewing'],
+    ['attribute', 'Viewing'],
+    ['editWithAi', 'Viewing'],
+    ['addTitles', 'Viewing'],
+    ['addPauses', 'Viewing'],
+    ['generateAudio', 'Viewing'],
+    ['checkStructure', null],
+    ['reviewText', null],
+    ['openSpeakers', null],
+    ['openCast', null],
+    ['openAudioMode', null],
+    ['assemble', null],
+  ])('%s is blocked with %p', (id, reason) => {
+    const found = steps()
+      .flatMap((s) => s.actions)
+      .filter((a) => a.id === id);
+    expect(found.length).toBeGreaterThan(0);
+    for (const a of found) {
+      if (reason === null) expect(a.blockedReason).not.toBe('Viewing');
+      else expect(a.blockedReason).toBe(reason);
+    }
+  });
+
+  it('blocks every checkpoint pill with the reason', () => {
+    const all = steps().flatMap((s) => s.checkpoint);
+    expect(all.length).toBeGreaterThan(0);
+    expect(all.every((p) => p.blockedReason === 'Viewing')).toBe(true);
   });
 });
 

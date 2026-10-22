@@ -4,6 +4,7 @@ import {
   type ProjectDetailDto,
   type ProjectStatusDto,
   ProjectsApi,
+  StepView,
 } from '@app/api';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
@@ -56,6 +57,7 @@ export class ProjectStore {
   private readonly assembly = use(AssemblyApi);
   private readonly live = use(LiveService);
   private readonly titles = use(ProjectTitles);
+  private readonly stepView = use(StepView);
 
   private subscriptions: Unsubscribe[] = [];
   /** Bumped per detail + status read, so a read overtaken by a newer one (at another step) lands nowhere. */
@@ -90,6 +92,11 @@ export class ProjectStore {
   readonly items = this._items.asReadonly();
   readonly loading = this._loading.asReadonly();
   readonly error = this._error.asReadonly();
+  /**
+   * Why nothing in the project can be changed (ticket 32): it is viewed at a History step. Null on
+   * the current project. Every edit control renders disabled with this as its reason.
+   */
+  readonly readOnly = computed(() => this.stepView.readOnly(this._folder()));
 
   /** Items the audio queue reports queued or processing for this project. */
   readonly audioInFlight = computed(
@@ -143,11 +150,14 @@ export class ProjectStore {
 
   /**
    * Reads detail + status again, staying in the group: viewing a History step, or going back to
-   * current, changes what every read answers (`?at=`).
+   * current, changes what every read answers (`?at=`). The item status is taken from the live
+   * snapshot again, since a viewing tab dropped its deltas.
    */
   async reload(): Promise<void> {
     const folder = this._folder();
-    if (folder !== null) await this.load(folder);
+    if (folder === null) return;
+    this.seedItemsFromLive();
+    await this.load(folder);
   }
 
   private async load(folder: string): Promise<void> {
@@ -220,14 +230,15 @@ export class ProjectStore {
     if (held !== null && held > status.revision) this.scheduleStatus();
   }
 
+  /** A viewing tab shows the past project: live status deltas would move its pills on with today's. */
   private applyNodeStatus(m: NodeStatusMessage): void {
-    if (!this.isMine(m.folder)) return;
+    if (!this.isMine(m.folder) || this.readOnly() !== null) return;
     this._nodes.update((nodes) => mergeDeltas(nodes, m.nodes));
     this._folderAudioRemaining.set(m.folderAudioRemaining);
   }
 
   private applyItemStatus(m: ItemStatusMessage): void {
-    if (!this.isMine(m.folder)) return;
+    if (!this.isMine(m.folder) || this.readOnly() !== null) return;
     this._paragraphs.update((p) => mergeDeltas(p, m.paragraphs));
     this._items.update((i) => mergeDeltas(i, m.items));
   }

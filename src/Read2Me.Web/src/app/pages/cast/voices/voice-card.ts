@@ -13,7 +13,7 @@ import { type ReadonlySignal, computed, signal, untracked } from '@app/core/sign
 import { Preflight } from '@app/shared/preflight';
 import { ConfirmService, confirmPermanent } from '@app/ui/dialogs';
 import type { RejectedFile } from '@app/ui/file-drop';
-import { icon, statusChip } from '@app/ui/partials';
+import { blockable, icon, statusChip } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
 import { CastStore } from '../cast-store';
 import { openGeneratePromptDialog } from './generate-prompt-dialog';
@@ -141,6 +141,9 @@ export class VoiceCard extends R2mElement {
     // A write is in flight: every Save is off until the reload lands.
     if (busy) this.setAttribute('aria-busy', 'true');
     else this.removeAttribute('aria-busy');
+    // Viewing a History step: every edit control is off too, with the reason as its tooltip.
+    const readOnly = this.store.readOnly();
+    const off = busy || readOnly !== null;
     return html`
       <details class="r2m-expansion voice-card__panel">
         <summary class="voice-card__header">
@@ -153,20 +156,23 @@ export class VoiceCard extends R2mElement {
                   >
                     ${icon('star', 'r2m-icon--filled')}
                   </span>`
-                : html`<button
-                    type="button"
-                    class="r2m-icon-button voice-card__star"
-                    data-action="set-default"
-                    data-tooltip="Set as default"
-                    aria-label="Set as default voice"
-                    ?disabled=${busy}
-                    @click=${(e: Event) => {
-                      this.stop(e);
-                      void this.setDefault();
-                    }}
-                  >
-                    ${icon('star')}
-                  </button>`
+                : blockable(
+                    readOnly,
+                    html`<button
+                      type="button"
+                      class="r2m-icon-button voice-card__star"
+                      data-action="set-default"
+                      data-tooltip="Set as default"
+                      aria-label="Set as default voice"
+                      ?disabled=${off}
+                      @click=${(e: Event) => {
+                        this.stop(e);
+                        void this.setDefault();
+                      }}
+                    >
+                      ${icon('star')}
+                    </button>`,
+                  )
             }
             <span
               class="voice-card__name"
@@ -179,6 +185,7 @@ export class VoiceCard extends R2mElement {
                 .value=${voice.name}
                 .placeholder=${'Voice name'}
                 .required=${true}
+                .readOnly=${readOnly}
                 @save=${(e: Event) => void this.rename((e as CustomEvent<string>).detail)}
               ></r2m-inline-edit>
               ${
@@ -227,17 +234,20 @@ export class VoiceCard extends R2mElement {
                   </a>`
                 : nothing
             }
-            <button
-              type="button"
-              class="r2m-icon-button voice-card__delete"
-              data-tooltip="Delete voice"
-              aria-label="Delete voice"
-              data-action="delete-voice"
-              ?disabled=${busy}
-              @click=${() => void this.deleteVoice()}
-            >
-              ${icon('delete')}
-            </button>
+            ${blockable(
+              readOnly,
+              html`<button
+                type="button"
+                class="r2m-icon-button voice-card__delete"
+                data-tooltip="Delete voice"
+                aria-label="Delete voice"
+                data-action="delete-voice"
+                ?disabled=${off}
+                @click=${() => void this.deleteVoice()}
+              >
+                ${icon('delete')}
+              </button>`,
+            )}
           </span>
         </summary>
 
@@ -250,58 +260,68 @@ export class VoiceCard extends R2mElement {
               <textarea
                 aria-label="Voice description"
                 rows="2"
+                ?readonly=${readOnly !== null}
                 .value=${this.description()}
                 @input=${(e: Event) => this.descriptionDraft.set(valueOf(e))}
               ></textarea>
             </label>
-            <button
-              type="button"
-              class="r2m-button r2m-button--stroked"
-              data-action="save-description"
-              ?disabled=${busy || !this.descriptionDirty()}
-              @click=${() => void this.saveDescription()}
-            >
-              ${icon('save')} Save description
-            </button>
+            ${blockable(
+              readOnly,
+              html`<button
+                type="button"
+                class="r2m-button r2m-button--stroked"
+                data-action="save-description"
+                ?disabled=${off || !this.descriptionDirty()}
+                @click=${() => void this.saveDescription()}
+              >
+                ${icon('save')} Save description
+              </button>`,
+            )}
           </section>
 
-          <fieldset
-            class="r2m-segmented voice-card__source"
-            role="radiogroup"
-            aria-label="Voice source"
-          >
-            <label data-source="Uploaded">
-              <input
-                type="radio"
-                name=${`source-${voice.id}`}
-                value="Uploaded"
-                .checked=${live(voice.source === 'Uploaded')}
-                ?disabled=${busy}
-                @change=${() => void this.switchSource('Uploaded')}
-              />
-              Reference audio
-            </label>
-            <label data-source="Generated">
-              <input
-                type="radio"
-                name=${`source-${voice.id}`}
-                value="Generated"
-                .checked=${live(voice.source === 'Generated')}
-                ?disabled=${busy}
-                @change=${() => void this.switchSource('Generated')}
-              />
-              Prompt
-            </label>
-          </fieldset>
-
-          ${voice.source === 'Uploaded' ? this.reference(voice) : this.promptSection(voice, busy)}
+          ${blockable(
+            readOnly,
+            html`<fieldset
+              class="r2m-segmented voice-card__source"
+              role="radiogroup"
+              aria-label="Voice source"
+            >
+              <label data-source="Uploaded">
+                <input
+                  type="radio"
+                  name=${`source-${voice.id}`}
+                  value="Uploaded"
+                  .checked=${live(voice.source === 'Uploaded')}
+                  ?disabled=${off}
+                  @change=${() => void this.switchSource('Uploaded')}
+                />
+                Reference audio
+              </label>
+              <label data-source="Generated">
+                <input
+                  type="radio"
+                  name=${`source-${voice.id}`}
+                  value="Generated"
+                  .checked=${live(voice.source === 'Generated')}
+                  ?disabled=${off}
+                  @change=${() => void this.switchSource('Generated')}
+                />
+                Prompt
+              </label>
+            </fieldset>`,
+          )}
+          ${
+            voice.source === 'Uploaded'
+              ? this.reference(voice, readOnly)
+              : this.promptSection(voice, off, readOnly)
+          }
 
           <details class="r2m-expansion voice-card__sub" data-section="advanced">
             <summary><span class="r2m-expansion__title">Advanced settings</span></summary>
             <div class="r2m-expansion__body">
               ${voiceOverrides({
                 voice,
-                disabled: busy,
+                disabled: off,
                 selected: this.overrideTab(),
                 onSelect: (tab) => this.overrideTab.set(tab),
                 onSave: (save) => void this.saveOverride(save),
@@ -317,32 +337,39 @@ export class VoiceCard extends R2mElement {
                 <textarea
                   aria-label="Transcript"
                   rows="3"
+                  ?readonly=${readOnly !== null}
                   .value=${this.transcript()}
                   @input=${(e: Event) => this.transcriptDraft.set(valueOf(e))}
                 ></textarea>
               </label>
               <div class="voice-card__actions">
-                <button
-                  type="button"
-                  class="r2m-button r2m-button--stroked"
-                  data-action="save-transcript"
-                  ?disabled=${busy || !this.transcriptDirty()}
-                  @click=${() => void this.saveTranscript()}
-                >
-                  ${icon('save')} Save
-                </button>
+                ${blockable(
+                  readOnly,
+                  html`<button
+                    type="button"
+                    class="r2m-button r2m-button--stroked"
+                    data-action="save-transcript"
+                    ?disabled=${off || !this.transcriptDirty()}
+                    @click=${() => void this.saveTranscript()}
+                  >
+                    ${icon('save')} Save
+                  </button>`,
+                )}
                 ${
                   voice.audioFileName
-                    ? html`<button
-                        type="button"
-                        class="r2m-button r2m-button--stroked"
-                        data-action="transcribe"
-                        ?disabled=${busy || this.transcribing()}
-                        @click=${() => void this.transcribe()}
-                      >
-                        ${icon('record_voice_over')}
-                        ${this.transcribing() ? 'Transcribing…' : 'Send to AI'}
-                      </button>`
+                    ? blockable(
+                        readOnly,
+                        html`<button
+                          type="button"
+                          class="r2m-button r2m-button--stroked"
+                          data-action="transcribe"
+                          ?disabled=${off || this.transcribing()}
+                          @click=${() => void this.transcribe()}
+                        >
+                          ${icon('record_voice_over')}
+                          ${this.transcribing() ? 'Transcribing…' : 'Send to AI'}
+                        </button>`,
+                      )
                     : nothing
                 }
               </div>
@@ -353,7 +380,7 @@ export class VoiceCard extends R2mElement {
     `;
   }
 
-  private reference(voice: VoiceDto) {
+  private reference(voice: VoiceDto, readOnly: string | null) {
     const src = this.audioUrl();
     return html`<section class="voice-card__block" data-mode="reference">
       ${
@@ -366,21 +393,28 @@ export class VoiceCard extends R2mElement {
           : html`<p class="voice-card__hint">No audio uploaded yet.</p>`
       }
       ${
-        this.uploading()
-          ? html`<p class="voice-card__hint" role="status">Uploading and normalising…</p>`
-          : html`<r2m-file-drop
-              .accept=${'audio/*,.wav,.mp3,.flac,.ogg,.m4a,.aac,.opus,.webm'}
-              .maxBytes=${MAX_VOICE_AUDIO_BYTES}
-              .label=${voice.audioFileName ? 'Replace audio' : 'Upload audio'}
-              .hint=${'Audio file (WAV, MP3, FLAC, OGG, M4A…), 200 MB max. The reference must be 30 s or shorter; 15 s or shorter clones best. The recording is normalised on upload.'}
-              @files=${(e: Event) => void this.upload((e as CustomEvent<File[]>).detail)}
-              @rejected=${(e: Event) => this.rejected((e as CustomEvent<RejectedFile[]>).detail)}
-            ></r2m-file-drop>`
+        readOnly !== null
+          ? blockable(
+              readOnly,
+              html`<button type="button" class="r2m-button r2m-button--stroked" disabled>
+                ${voice.audioFileName ? 'Replace audio' : 'Upload audio'}
+              </button>`,
+            )
+          : this.uploading()
+            ? html`<p class="voice-card__hint" role="status">Uploading and normalising…</p>`
+            : html`<r2m-file-drop
+                .accept=${'audio/*,.wav,.mp3,.flac,.ogg,.m4a,.aac,.opus,.webm'}
+                .maxBytes=${MAX_VOICE_AUDIO_BYTES}
+                .label=${voice.audioFileName ? 'Replace audio' : 'Upload audio'}
+                .hint=${'Audio file (WAV, MP3, FLAC, OGG, M4A…), 200 MB max. The reference must be 30 s or shorter; 15 s or shorter clones best. The recording is normalised on upload.'}
+                @files=${(e: Event) => void this.upload((e as CustomEvent<File[]>).detail)}
+                @rejected=${(e: Event) => this.rejected((e as CustomEvent<RejectedFile[]>).detail)}
+              ></r2m-file-drop>`
       }
     </section>`;
   }
 
-  private promptSection(voice: VoiceDto, busy: boolean) {
+  private promptSection(voice: VoiceDto, busy: boolean, readOnly: string | null) {
     const src = this.audioUrl();
     const generating = this.generatingAudio();
     return html`<section class="voice-card__block" data-mode="prompt">
@@ -389,42 +423,52 @@ export class VoiceCard extends R2mElement {
         <textarea
           aria-label="Voice description prompt"
           rows="4"
+          ?readonly=${readOnly !== null}
           .value=${this.prompt()}
           @input=${(e: Event) => this.promptDraft.set(valueOf(e))}
         ></textarea>
       </label>
       <div class="voice-card__actions">
-        <button
-          type="button"
-          class="r2m-button r2m-button--stroked"
-          data-action="save-prompt"
-          ?disabled=${busy || !this.promptDirty()}
-          @click=${() => void this.savePrompt()}
-        >
-          ${icon('save')} Save prompt
-        </button>
-        <button
-          type="button"
-          class="r2m-button r2m-button--stroked"
-          data-action="regenerate-prompt"
-          ?disabled=${busy || this.regeneratingPrompt()}
-          @click=${() => void this.regeneratePrompt()}
-        >
-          ${icon('auto_fix_high')}
-          ${this.regeneratingPrompt() ? 'Generating…' : 'Regenerate with AI'}
-        </button>
-        <button
-          type="button"
-          class="r2m-button r2m-button--stroked voice-card__generate ${
-            voice.audioFileName ? '' : 'voice-card__generate--primary'
-          }"
-          data-action="generate-audio"
-          ?disabled=${busy || generating || !this.canGenerate()}
-          @click=${() => void this.generateAudio()}
-        >
-          ${icon('volume_up')}
-          ${generating ? 'Generating…' : voice.audioFileName ? 'Regenerate audio' : 'Generate audio'}
-        </button>
+        ${blockable(
+          readOnly,
+          html`<button
+            type="button"
+            class="r2m-button r2m-button--stroked"
+            data-action="save-prompt"
+            ?disabled=${busy || !this.promptDirty()}
+            @click=${() => void this.savePrompt()}
+          >
+            ${icon('save')} Save prompt
+          </button>`,
+        )}
+        ${blockable(
+          readOnly,
+          html`<button
+            type="button"
+            class="r2m-button r2m-button--stroked"
+            data-action="regenerate-prompt"
+            ?disabled=${busy || this.regeneratingPrompt()}
+            @click=${() => void this.regeneratePrompt()}
+          >
+            ${icon('auto_fix_high')}
+            ${this.regeneratingPrompt() ? 'Generating…' : 'Regenerate with AI'}
+          </button>`,
+        )}
+        ${blockable(
+          readOnly,
+          html`<button
+            type="button"
+            class="r2m-button r2m-button--stroked voice-card__generate ${
+              voice.audioFileName ? '' : 'voice-card__generate--primary'
+            }"
+            data-action="generate-audio"
+            ?disabled=${busy || generating || !this.canGenerate()}
+            @click=${() => void this.generateAudio()}
+          >
+            ${icon('volume_up')}
+            ${generating ? 'Generating…' : voice.audioFileName ? 'Regenerate audio' : 'Generate audio'}
+          </button>`,
+        )}
       </div>
       ${
         src

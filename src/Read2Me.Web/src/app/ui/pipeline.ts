@@ -28,6 +28,8 @@ export interface PipelineAction {
 export interface PipelineCheckpointPill {
   id: string;
   label: string;
+  /** Why the pill is off (a History step is viewed), shown as its tooltip; absent or null when on. */
+  blockedReason?: string | null;
 }
 
 export interface PipelineStepView {
@@ -108,17 +110,20 @@ export function pipeline<S extends PipelineStepView>(options: {
       </button>`,
     );
   };
-  const pill = (step: PipelineStepView, p: PipelineCheckpointPill) =>
-    html`<button
+  const pill = (step: PipelineStepView, p: PipelineCheckpointPill) => {
+    const blocked = p.blockedReason ?? null;
+    const button = html`<button
       type="button"
       class="r2m-button r2m-button--stroked r2m-pipeline__pill"
       data-checkpoint=${p.id}
-      ?disabled=${busyAction !== null}
+      ?disabled=${blocked !== null || busyAction !== null}
       @click=${() => onCheckpoint?.({ step: step.id, pill: p.id })}
     >
       ${busyAction === `${step.id}:${p.id}` ? spinner(14, 'r2m-pipeline__spinner') : nothing}
       ${p.label}
     </button>`;
+    return blocked === null ? button : blockable(blocked, button);
+  };
   const checkpointGroup = (step: PipelineStepView) =>
     step.checkpoint.length === 0 && step.laterDone === 0
       ? nothing

@@ -43,8 +43,9 @@ interface Crumb {
  * global group; the main outlet; the activity bar below and the activity drawer beside the content
  * (both read {@link ActivityStore}); on a project's pages, the History button and the History sheet
  * docked beside the content (both read {@link HistorySheetState}). While the project is viewed at a
- * History step, the amber banner sits above the body, the page is inert and greyed, and the
- * next-step pill is hidden. Below 900 px the rail becomes a modal drawer, the History sheet covers
+ * History step, the amber banner sits above the body, the page is greyed and the next-step pill is
+ * hidden; the page stays browsable, and each edit control reads the project's read-only flag
+ * (`ProjectStore.readOnly`) to render disabled (ticket 32). Below 900 px the rail becomes a modal drawer, the History sheet covers
  * the page body (the banner stays above it) and the activity bar collapses to one summary pill.
  */
 export class AppShell extends R2mElement {
@@ -140,7 +141,7 @@ export class AppShell extends R2mElement {
     this.setAttribute('data-live-state', connection);
     const connectionLabel = this.live.statusLabel();
     const preference = this.theme.preference();
-    // The page body while viewing a History step: visible, greyed, and nothing in it can be used.
+    // The page body while viewing a History step: greyed, still browsable; its edit controls are off.
     const viewing = this.viewing();
     return html`
       <header class="shell__appbar">
@@ -232,7 +233,7 @@ export class AppShell extends R2mElement {
             </ul>
           </nav>
         </aside>
-        <main class="shell__main ${viewing ? 'shell__main--viewing' : ''}" .inert=${viewing}>
+        <main class="shell__main ${viewing ? 'shell__main--viewing' : ''}">
           <r2m-outlet></r2m-outlet>
         </main>
         ${

@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import type { AssemblyOutputDto, ProjectDetailDto, ProjectStatusDto } from '@app/api';
+import {
+  type AssemblyOutputDto,
+  type ProjectDetailDto,
+  type ProjectStatusDto,
+  StepView,
+  VIEWING_READ_ONLY,
+} from '@app/api';
 import { Router, type RouteDef } from '@app/core/router';
-import { override, resetServices } from '@app/core/services';
+import { override, resetServices, use } from '@app/core/services';
 import { Preflight } from '@app/shared/preflight';
 import { type ConfirmOptions, ConfirmService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
@@ -105,8 +111,12 @@ beforeEach(() => {
 afterEach(() => document.body.replaceChildren());
 
 /** The overview under the project shell, through a root outlet as in the app. */
-async function render(s = status(), outputs: AssemblyOutputDto[] = []) {
-  api.on('GET', BASE, DETAIL).on('GET', `${BASE}/status`, s);
+async function render(
+  s = status(),
+  outputs: AssemblyOutputDto[] = [],
+  detail: ProjectDetailDto = DETAIL,
+) {
+  api.on('GET', BASE, detail).on('GET', `${BASE}/status`, s);
   api.on('GET', `${BASE}/assembly/outputs`, outputs);
   navigation = installNavigation('projects/dune');
   const router = new Router();
@@ -137,6 +147,43 @@ describe('r2m-overview-page', () => {
       'projects/dune/cast/w',
     );
     expect(details.querySelector<HTMLInputElement>('input[name=narratorOnly]')?.checked).toBe(true);
+  });
+
+  it('viewing a History step, the rows still open pages but nothing on the page changes the project (ticket 32)', async () => {
+    use(StepView).view('dune', 's8');
+    const page = await render(
+      status({
+        checkpoints: {
+          structure: { state: 'confirmed', stale: false, at: '2026-10-17T09:00:00Z' },
+        },
+      }),
+      [],
+      { ...DETAIL, coverImage: 'cover.jpg' },
+    );
+    const reason = (el: Element | null) =>
+      el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
+
+    expect(button(page, 'openCast').disabled).toBe(false);
+    for (const action of ['reread', 'attribute']) {
+      expect(button(page, action).disabled).toBe(true);
+      expect(reason(button(page, action))).toBe(VIEWING_READ_ONLY);
+    }
+    const pills = Array.from(page.querySelectorAll<HTMLButtonElement>('[data-checkpoint]'));
+    expect(pills.length).toBeGreaterThan(0);
+    expect(pills.every((p) => p.disabled && reason(p) === VIEWING_READ_ONLY)).toBe(true);
+
+    const details = page.querySelector('r2m-project-details-panel')!;
+    expect(details.querySelector('img.details__image')?.getAttribute('src')).toContain('at=s8');
+    expect(details.querySelector('r2m-file-drop')).toBeNull();
+    const remove = details.querySelector<HTMLButtonElement>('.details__remove-cover')!;
+    expect(remove.disabled).toBe(true);
+    expect(reason(remove)).toBe(VIEWING_READ_ONLY);
+    for (const edit of details.querySelectorAll('r2m-inline-edit')) {
+      expect(edit.readOnly).toBe(VIEWING_READ_ONLY);
+    }
+    expect(details.querySelector<HTMLInputElement>('input[name=narratorOnly]')?.disabled).toBe(
+      true,
+    );
   });
 
   it('Remove cover asks a red confirm first (guidance-primitives 14), then DELETEs and refetches', async () => {

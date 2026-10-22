@@ -4,7 +4,7 @@ import type { CharacterSummaryDto } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
-import { emptyState, icon } from '@app/ui/partials';
+import { blockable, emptyState, icon } from '@app/ui/partials';
 import { CastStore } from '../cast-store';
 import { openAddVoiceDialog } from './add-voice-dialog';
 import './voice-card';
@@ -35,20 +35,24 @@ export class VoicesSection extends R2mElement {
     if (!character) return nothing;
     const voices = this.store.voices();
     const busy = this.store.busy();
+    const readOnly = this.store.readOnly();
     return html`
       <div class="voices-section__header">
         <h3 class="voices-section__heading">
           Voices <span class="voices-section__count">${voices.voices.length}</span>
         </h3>
-        <button
-          type="button"
-          class="r2m-button"
-          data-action="add-voice"
-          ?disabled=${busy}
-          @click=${() => void this.addVoice()}
-        >
-          ${icon('add')} Add voice
-        </button>
+        ${blockable(
+          readOnly,
+          html`<button
+            type="button"
+            class="r2m-button"
+            data-action="add-voice"
+            ?disabled=${busy || readOnly !== null}
+            @click=${() => void this.addVoice()}
+          >
+            ${icon('add')} Add voice
+          </button>`,
+        )}
       </div>
       ${
         voices.voices.length === 0 && !this.store.voicesLoading()

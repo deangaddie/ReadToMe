@@ -5,7 +5,7 @@ import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
 import { type ReadonlySignal, computed, signal } from '@app/core/signals';
 import { ConfirmService } from '@app/ui/dialogs';
-import { icon, statusChip } from '@app/ui/partials';
+import { blockable, icon, statusChip } from '@app/ui/partials';
 import { castPath } from './cast-path';
 import { CastStore } from './cast-store';
 import { openMergeDialog } from './merge-dialog';
@@ -65,6 +65,8 @@ export class CharacterDetail extends R2mElement {
     const character = this.#character();
     if (!character) return nothing;
     const busy = this.store.busy();
+    const readOnly = this.store.readOnly();
+    const off = busy || readOnly !== null;
     return html`
       <header class="character-detail__header">
         ${
@@ -75,26 +77,33 @@ export class CharacterDetail extends R2mElement {
                   .value=${character.name}
                   .placeholder=${'Character name'}
                   .required=${true}
+                  .readOnly=${readOnly}
                   @save=${(e: Event) => void this.rename((e as CustomEvent<string>).detail)}
                 ></r2m-inline-edit>
-                <button
-                  type="button"
-                  class="r2m-button r2m-button--stroked"
-                  data-action="merge"
-                  ?disabled=${busy || this.mergeTargets() === 0}
-                  @click=${() => void this.merge()}
-                >
-                  ${icon('merge')} Merge
-                </button>
-                <button
-                  type="button"
-                  class="r2m-button r2m-button--stroked character-detail__delete"
-                  data-action="delete"
-                  ?disabled=${busy}
-                  @click=${() => void this.deleteCharacter()}
-                >
-                  ${icon('delete')} Delete
-                </button>`
+                ${blockable(
+                  readOnly,
+                  html`<button
+                    type="button"
+                    class="r2m-button r2m-button--stroked"
+                    data-action="merge"
+                    ?disabled=${off || this.mergeTargets() === 0}
+                    @click=${() => void this.merge()}
+                  >
+                    ${icon('merge')} Merge
+                  </button>`,
+                )}
+                ${blockable(
+                  readOnly,
+                  html`<button
+                    type="button"
+                    class="r2m-button r2m-button--stroked character-detail__delete"
+                    data-action="delete"
+                    ?disabled=${off}
+                    @click=${() => void this.deleteCharacter()}
+                  >
+                    ${icon('delete')} Delete
+                  </button>`,
+                )}`
         }
       </header>
 
@@ -108,7 +117,7 @@ export class CharacterDetail extends R2mElement {
             })
           : nothing
       }
-      ${character.isNarrator ? nothing : this.aliases(character, busy)}
+      ${character.isNarrator ? nothing : this.aliases(character, off, readOnly)}
 
       <section class="character-detail__section" aria-label="Voices">
         <r2m-voices-section .character=${character}></r2m-voices-section>
@@ -131,7 +140,7 @@ export class CharacterDetail extends R2mElement {
     `;
   }
 
-  private aliases(character: CharacterSummaryDto, busy: boolean) {
+  private aliases(character: CharacterSummaryDto, busy: boolean, readOnly: string | null) {
     return html`<section class="character-detail__section" aria-label="Aliases">
       <h3 class="character-detail__heading">Aliases</h3>
       <div class="character-detail__aliases">
@@ -139,15 +148,18 @@ export class CharacterDetail extends R2mElement {
           (alias) =>
             html`<span class="character-detail__alias" data-alias=${alias.name}>
               ${alias.name}
-              <button
-                type="button"
-                class="character-detail__alias-remove"
-                aria-label=${`Remove alias ${alias.name}`}
-                ?disabled=${busy}
-                @click=${() => void this.removeAlias(alias.id)}
-              >
-                ${icon('close')}
-              </button>
+              ${blockable(
+                readOnly,
+                html`<button
+                  type="button"
+                  class="character-detail__alias-remove"
+                  aria-label=${`Remove alias ${alias.name}`}
+                  ?disabled=${busy}
+                  @click=${() => void this.removeAlias(alias.id)}
+                >
+                  ${icon('close')}
+                </button>`,
+              )}
             </span>`,
         )}
         ${
@@ -160,15 +172,18 @@ export class CharacterDetail extends R2mElement {
                 @keydown=${this.#onAliasKeydown}
                 @blur=${(e: Event) => void this.commitAlias(e)}
               />`
-            : html`<button
-                type="button"
-                class="r2m-button"
-                data-action="add-alias"
-                ?disabled=${busy}
-                @click=${() => this.beginAlias()}
-              >
-                ${icon('add')} Add alias
-              </button>`
+            : blockable(
+                readOnly,
+                html`<button
+                  type="button"
+                  class="r2m-button"
+                  data-action="add-alias"
+                  ?disabled=${busy}
+                  @click=${() => this.beginAlias()}
+                >
+                  ${icon('add')} Add alias
+                </button>`,
+              )
         }
       </div>
     </section>`;

@@ -5,7 +5,7 @@ import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import { ConfirmService } from '@app/ui/dialogs';
-import { statusChip } from '@app/ui/partials';
+import { blockable, statusChip } from '@app/ui/partials';
 
 /** The unlink confirm (research §4): rendered narration will not match until regenerated. */
 export function unlinkWarning(linkedCharacterName: string): string {
@@ -49,6 +49,15 @@ export class NarratorBanner extends R2mElement {
     this.#busy.set(value);
   }
 
+  /** Why the link can't change: a History step is viewed. Its controls are off with this reason. */
+  readonly #readOnly = signal<string | null>(null);
+  get readOnly() {
+    return this.#readOnly();
+  }
+  set readOnly(value: string | null) {
+    this.#readOnly.set(value);
+  }
+
   readonly changing = signal(false);
 
   /** Every character but the seed Narrator row. */
@@ -84,6 +93,8 @@ export class NarratorBanner extends R2mElement {
       </div>`;
     }
     const ready = this.ready();
+    const readOnly = this.#readOnly();
+    const off = this.#busy() || readOnly !== null;
     return html`<div class="narrator-banner__row">
       <div class="narrator-banner__title">Narrated by <strong>${narrator.displayName}</strong></div>
       ${statusChip({
@@ -93,22 +104,28 @@ export class NarratorBanner extends R2mElement {
         compact: true,
       })}
       <span class="narrator-banner__spacer"></span>
-      <button
-        type="button"
-        class="r2m-button"
-        ?disabled=${this.#busy()}
-        @click=${() => this.changing.set(true)}
-      >
-        Change
-      </button>
-      <button
-        type="button"
-        class="r2m-button narrator-banner__unlink"
-        ?disabled=${this.#busy()}
-        @click=${() => void this.unlink()}
-      >
-        Unlink
-      </button>
+      ${blockable(
+        readOnly,
+        html`<button
+          type="button"
+          class="r2m-button"
+          ?disabled=${off}
+          @click=${() => this.changing.set(true)}
+        >
+          Change
+        </button>`,
+      )}
+      ${blockable(
+        readOnly,
+        html`<button
+          type="button"
+          class="r2m-button narrator-banner__unlink"
+          ?disabled=${off}
+          @click=${() => void this.unlink()}
+        >
+          Unlink
+        </button>`,
+      )}
     </div>`;
   }
 
@@ -116,17 +133,21 @@ export class NarratorBanner extends R2mElement {
    * link does not leave the name showing and the same name can be picked again. */
   private picker() {
     const eligible = this.eligible();
-    return html`<label class="r2m-field narrator-banner__picker">
-      <span class="r2m-field__label">Narrated by</span>
-      <select
-        .value=${live('')}
-        ?disabled=${this.#busy() || eligible.length === 0}
-        @change=${(e: Event) => this.pick((e.target as HTMLSelectElement).value)}
-      >
-        <option value="" selected disabled hidden></option>
-        ${eligible.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
-      </select>
-    </label>`;
+    const readOnly = this.#readOnly();
+    return blockable(
+      readOnly,
+      html`<label class="r2m-field narrator-banner__picker">
+        <span class="r2m-field__label">Narrated by</span>
+        <select
+          .value=${live('')}
+          ?disabled=${this.#busy() || readOnly !== null || eligible.length === 0}
+          @change=${(e: Event) => this.pick((e.target as HTMLSelectElement).value)}
+        >
+          <option value="" selected disabled hidden></option>
+          ${eligible.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
+        </select>
+      </label>`,
+    );
   }
 
   pick(id: Guid | ''): void {

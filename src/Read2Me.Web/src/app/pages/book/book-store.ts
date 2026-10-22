@@ -495,7 +495,8 @@ export class BookStore {
     if (this.lastRevision === null || receipt.revision > this.lastRevision) {
       this.lastRevision = receipt.revision;
     }
-    if (plan.toast) this.toastOnce();
+    // A tab viewing a History step rereads at the step, so nothing it shows was updated.
+    if (plan.toast && this.project.readOnly() === null) this.toastOnce();
     this.schedule(plan);
     if (receipt.isOwn) this.settleOwnWaiters(true);
   }

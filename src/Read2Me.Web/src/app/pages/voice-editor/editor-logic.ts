@@ -50,6 +50,8 @@ export function sameRender(
 }
 
 export interface ApplyGate {
+  /** Why the voice can't change: a History step is viewed (ticket 32); null on the current project. */
+  readOnly: string | null;
   anyTicked: boolean;
   hasRender: boolean;
   stale: boolean;
@@ -58,6 +60,7 @@ export interface ApplyGate {
 
 /** Why Apply is disabled, for its tooltip; null when it may run. */
 export function applyBlockedReason(gate: ApplyGate): string | null {
+  if (gate.readOnly !== null) return gate.readOnly;
   if (gate.busy) return 'Wait for the current render or write to finish.';
   if (!gate.anyTicked) return 'Tick at least one step.';
   if (!gate.hasRender) return 'Preview first — you apply what you heard.';

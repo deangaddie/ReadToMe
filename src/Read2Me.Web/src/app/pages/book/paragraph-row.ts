@@ -28,7 +28,7 @@ import '@app/ui/speaker-chip';
  * paragraph speaker chip in Read, one {@link itemRow} per item in Speakers and Audio. The Read
  * chip opens the speaker menu and assigns the whole paragraph. The status column shows the
  * attribution queue chip and a lock while queued (not in Audio mode) — a settled Failed/Unknown
- * chip is a button that forgets the outcome — then the paragraph's node-menu trigger (ticket 11),
+ * chip is a button that forgets the outcome (a plain chip while a History step is viewed) — then the paragraph's node-menu trigger (ticket 11),
  * off while the paragraph is queued or the editor is locked.
  *
  * A row holds no state of its own: the selection and the assigner are the project shell's,
@@ -60,8 +60,8 @@ export function paragraphRow(
   // Only Character paragraphs are selectable, and only where the selection is paragraphs.
   const selectable = ctx.selectable && isDialogParagraph(paragraph);
   const selected = ctx.selected.has(paragraph.id);
-  // The Read chip assigns the whole paragraph; a queued one is the server's to stamp.
-  const assignable = selectable && !queued && ctx.roster.length > 0;
+  // The Read chip assigns the whole paragraph; a queued one is the server's to stamp, a viewed step nobody's.
+  const assignable = selectable && !queued && ctx.readOnly === null && ctx.roster.length > 0;
   const classes = [
     'r2m-paragraph',
     `r2m-paragraph--${speaker.state}`,
@@ -140,7 +140,7 @@ export function paragraphRow(
 
     <div class="r2m-paragraph__status">
       ${
-        queue && outcome
+        queue && outcome && ctx.readOnly === null
           ? html`<button
               type="button"
               class="r2m-paragraph__outcome"
@@ -155,7 +155,7 @@ export function paragraphRow(
       }
       ${busy ? icon('lock', 'r2m-paragraph__lock') : nothing}
       <span class="r2m-paragraph__menu"
-        >${nodeMenuTrigger(menuTarget, { disabled: queued || ctx.locked })}</span
+        >${nodeMenuTrigger(menuTarget, { disabled: queued || ctx.locked, reason: ctx.readOnly })}</span
       >
     </div>
   </div>`;

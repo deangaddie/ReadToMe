@@ -1,9 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { ActivityStore } from '@app/activity/activity-store';
 import { LlmStreamFeed } from '@app/activity/stream-feed';
-import type { CharacterSummaryDto, ProjectDetailDto, ProjectStatusDto } from '@app/api';
+import {
+  type CharacterSummaryDto,
+  type ProjectDetailDto,
+  type ProjectStatusDto,
+  StepView,
+  VIEWING_READ_ONLY,
+} from '@app/api';
 import { Router, type RouteDef } from '@app/core/router';
-import { override, resetServices } from '@app/core/services';
+import { override, resetServices, use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { Preflight } from '@app/shared/preflight';
 import { ToastService } from '@app/ui/toast';
@@ -257,6 +263,23 @@ describe('r2m-cast-page', () => {
     liveFake.voiceBatch.set({ ...IDLE_VOICE_BATCH, isRunning: true });
     await page.rendered();
     expect(disabled()).toEqual([true, true, true, true]);
+  });
+
+  it('viewing a History step, the toolbar and the narrator banner are off with the reason; rows still select (ticket 32)', async () => {
+    use(StepView).view('dune', 's8');
+    const { page } = await render('projects/dune/cast/paul');
+    const reason = (el: Element | null) =>
+      el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
+    for (const action of ['discover', 'generate-prompts', 'generate-audio', 'add-character']) {
+      const control = page.querySelector<HTMLButtonElement>(`[data-action="${action}"]`)!;
+      expect(control.disabled).toBe(true);
+      expect(reason(control)).toBe(VIEWING_READ_ONLY);
+    }
+    const picker = page.querySelector<HTMLSelectElement>('r2m-narrator-banner select')!;
+    expect(picker.disabled).toBe(true);
+    expect(reason(picker)).toBe(VIEWING_READ_ONLY);
+    expect(page.querySelector('r2m-character-detail')).not.toBeNull();
+    expect(page.querySelector('.cast__search, input[type=search]')).not.toBeNull();
   });
 
   it('Discover is gated by preflight and opens the discovery dialog over the roster', async () => {

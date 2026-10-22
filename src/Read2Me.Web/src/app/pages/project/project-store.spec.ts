@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { ProjectDetailDto, ProjectStatusDto } from '@app/api';
+import {
+  type ProjectDetailDto,
+  type ProjectStatusDto,
+  StepView,
+  VIEWING_READ_ONLY,
+} from '@app/api';
 import { Emitter } from '@app/core/emitter';
 import { IDLE_ASSEMBLY, IDLE_VOICE_BATCH } from '@app/live/live-state';
 import { override, resetServices, use } from '@app/core/services';
@@ -322,6 +327,70 @@ describe('ProjectStore', () => {
     await settle();
     expect(store.paragraphs()['p9']).toEqual({ status: 'Queued' });
     expect(store.audioInFlight()).toBe(1);
+  });
+
+  describe('viewing a History step (ticket 32)', () => {
+    it('is read-only with the viewing reason, and not on the current project', async () => {
+      await open();
+      expect(store.readOnly()).toBeNull();
+      use(StepView).view('dune', 's8');
+      expect(store.readOnly()).toBe(VIEWING_READ_ONLY);
+      use(StepView).view('emma', 's8');
+      expect(store.readOnly()).toBeNull();
+    });
+
+    it('drops status deltas while viewing, and applies them again after Back to current', async () => {
+      await open();
+      use(StepView).view('dune', 's8');
+
+      live.nodeStatus.emit({
+        folder: 'dune',
+        nodes: { v1: null },
+        folderAudioRemaining: 0,
+      });
+      live.itemStatus.emit({
+        folder: 'dune',
+        paragraphs: {},
+        items: { i1: { status: 'Queued' } },
+      });
+      expect(store.nodes()['v1']).toBeDefined();
+      expect(store.folderAudioRemaining()).toBe(2);
+      expect(store.audioInFlight()).toBe(0);
+
+      use(StepView).clear('dune');
+      live.nodeStatus.emit({
+        folder: 'dune',
+        nodes: { v1: null },
+        folderAudioRemaining: 0,
+      });
+      live.itemStatus.emit({
+        folder: 'dune',
+        paragraphs: {},
+        items: { i1: { status: 'Queued' } },
+      });
+      expect(store.nodes()['v1']).toBeUndefined();
+      expect(store.folderAudioRemaining()).toBe(0);
+      expect(store.audioInFlight()).toBe(1);
+    });
+
+    it('back to current, the reload takes the item status the live snapshot moved to meanwhile', async () => {
+      await open();
+      use(StepView).view('dune', 's8');
+      live.projects.set({
+        dune: {
+          folder: 'dune',
+          revision: 6,
+          nodes: {},
+          folderAudioRemaining: 0,
+          paragraphs: {},
+          items: { i4: { status: 'Processing' } },
+        },
+      });
+
+      use(StepView).clear('dune');
+      await store.reload();
+      expect(store.audioInFlight()).toBe(1);
+    });
   });
 
   it('close leaves the group and stops listening', async () => {

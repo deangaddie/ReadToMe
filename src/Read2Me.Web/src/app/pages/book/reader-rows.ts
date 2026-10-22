@@ -178,6 +178,11 @@ export interface RowContext {
   roster: readonly SpeakerRosterEntry[];
   /** The editor is locked (stale view or a write in flight): every row menu is off (design §8). */
   locked: boolean;
+  /**
+   * A History step is viewed (ticket 32): why every edit control is off, shown as its tooltip
+   * (`locked` is set too); item play is off as well. Null on the current project.
+   */
+  readOnly: string | null;
   /** An audio preflight or enqueue is in flight (ticket 13): the row's Retry waits for it. */
   generating: boolean;
 }

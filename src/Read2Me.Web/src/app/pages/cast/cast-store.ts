@@ -9,6 +9,7 @@ import {
   type CommandResponse,
   type Guid,
   type VoiceRuleDto,
+  StepView,
   VoicesApi,
   toApiError,
 } from '@app/api';
@@ -55,6 +56,7 @@ export class CastStore {
   private readonly book = use(BookApi);
   private readonly live = use(LiveService);
   private readonly toast = use(ToastService);
+  private readonly stepView = use(StepView);
 
   private subscriptions: Unsubscribe[] = [];
   private readonly refetch = new Debounced(() => this.refresh());
@@ -95,6 +97,11 @@ export class CastStore {
   readonly audioVersions = this._audioVersions.asReadonly();
   /** A write is in flight; mutation affordances are off. */
   readonly busy = this._busy.asReadonly();
+  /**
+   * Why nothing can be changed (ticket 32): a History step is viewed. Every mutation affordance is
+   * off with this as its reason; null on the current project.
+   */
+  readonly readOnly = computed(() => this.stepView.readOnly(this._folder()));
 
   /** The roster as collision-check owners (what the discovery dialog folds rows onto). */
   readonly roster = computed<AliasOwner[]>(() =>
@@ -181,7 +188,7 @@ export class CastStore {
    */
   async run(command: BookCommand): Promise<CommandResponse | undefined> {
     const folder = this._folder();
-    if (!folder || this._busy()) return undefined;
+    if (!folder || this._busy() || this.readOnly() !== null) return undefined;
     this._busy.set(true);
     try {
       const response = await this.book.execute(folder, command);
