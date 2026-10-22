@@ -32,21 +32,21 @@ namespace Read2Me.App.Api
                 .WithSummary("Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. " +
                              "An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes.");
             endpoints.MapPost("/api/projects/{folder}/import/manual", ImportManuallyAsync)
-                .RecordsStep("Re-split book")
+                .RecordsStep("Re-split book", StepAction.Split)
                 .WithSummary("Re-split the stored book file by hand-chosen rules (replaces existing content). " +
                              "Per level: mode Prefix (with prefix) | Arabic | Roman. 400 when a switched-on level lacks a valid rule. " +
                              "An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes.");
             endpoints.MapPatch("/api/projects/{folder}", UpdateAsync)
-                .RecordsStep("Edit project details")
+                .RecordsStep("Edit project details", StepAction.Edit)
                 .WithSummary("Update title, book title and/or author. Omitted fields are unchanged; the folder name never changes.");
             endpoints.MapPut("/api/projects/{folder}/narrator-only-mode", SetNarratorOnlyModeAsync)
-                .RecordsStep("Narrator-only mode")
+                .RecordsStep("Narrator-only mode", StepAction.Character)
                 .WithSummary("Set the Book-wide narrator-only policy: only narration items get audio.");
             endpoints.MapPut("/api/projects/{folder}/cover", SaveCoverAsync)
-                .RecordsStep("Change cover")
+                .RecordsStep("Change cover", StepAction.Edit)
                 .WithSummary("Replace the cover image (multipart 'file': jpg/jpeg/png/webp, at most 10 MB). Served from /workspace/{folder}/{coverImage}.");
             endpoints.MapDelete("/api/projects/{folder}/cover", DeleteCoverAsync)
-                .RecordsStep("Remove cover")
+                .RecordsStep("Remove cover", StepAction.Delete)
                 .WithSummary("Remove the cover image; a project without one still answers 204.");
         }
 
@@ -198,7 +198,7 @@ namespace Read2Me.App.Api
             // success: 200 for a Book that was replaced and for one there was nothing to replace.
             OriginHeader.Apply(request, origin);
             var reread = body?.Reread ?? false;
-            await using (steps.Open(folderId, reread ? "Reread book" : "Import book"))
+            await using (steps.OpenImport(folderId, reread ? "Reread book" : "Import book"))
                 return ImportResult(await useCases.ImportAsync(folderId, reread, ct));
         }
 

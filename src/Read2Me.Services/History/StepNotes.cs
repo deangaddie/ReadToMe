@@ -11,12 +11,15 @@ internal static class StepNotes
     public const string Cancelled = "cancelled";
     public const string Failed = "failed";
 
+    /// <summary>How a Background run that failed outright ended, told apart from the items that failed on their own.</summary>
+    public const string StoppedOnError = "stopped on an error";
+
     /// <summary>
     /// How a Background run's kind ended, or null when it drained with nothing failed. Ended early
     /// (<paramref name="how"/> set), it says how far it got: "212 of 340 paragraphs, cancelled",
-    /// "3 of 7 voices, failed". Items that failed on their own add their count: "3 paragraphs
-    /// failed" for a run that drained, "212 of 340 paragraphs, cancelled · 3 failed" for one that
-    /// did not.
+    /// "3 of 7 voices, stopped on an error". Items that failed on their own add their count: "3
+    /// paragraphs failed" for a run that drained, "212 of 340 paragraphs, cancelled · 3 failed" for
+    /// one that did not.
     /// </summary>
     public static string? Ending(int done, int total, string unit, string? how, int failed = 0)
     {

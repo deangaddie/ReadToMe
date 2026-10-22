@@ -113,7 +113,8 @@ public class LiveRelayTests : IAsyncLifetime
     public async Task History_steps_go_only_to_their_project_group_as_landed_then_closed_with_the_row()
     {
         var at = DateTimeOffset.Parse("2026-10-20T09:30:00Z");
-        var step = new HistoryStep(Guid.NewGuid(), Guid.NewGuid(), 4, "New character", null, "dean", at, at, IsOpen: false, Note: null);
+        var step = new HistoryStep(Guid.NewGuid(), Guid.NewGuid(), 4, "New character", null, "dean", at, at, IsOpen: false, Note: null,
+            HistoryStepKind.Request, StepAction.Character);
         _history.Publish(new HistoryStepEvent(new ProjectFolderId("folder-a"), HistoryStepEventKind.Landed, step));
         _history.Publish(new HistoryStepEvent(new ProjectFolderId("folder-a"), HistoryStepEventKind.Closed, step));
 
@@ -132,7 +133,7 @@ public class LiveRelayTests : IAsyncLifetime
         var folder = new ProjectFolderId("folder-a");
         var at = DateTimeOffset.Parse("2026-10-21T14:02:00Z");
         var step = new HistoryStep(Guid.NewGuid(), Guid.NewGuid(), 9, "Restore to 'Split chapter' (14:02)", null, "dean", at, at,
-            IsOpen: false, Note: null, RestoredFromStepId: Guid.NewGuid());
+            IsOpen: false, Note: null, HistoryStepKind.Restore, Action: null, RestoredFromStepId: Guid.NewGuid());
         _restores.Publish(new RestoreEvent(folder, RestoreEventKind.Started, null, []));
         _restores.Publish(new RestoreEvent(folder, RestoreEventKind.Finished, step, ["session-1"]));
 

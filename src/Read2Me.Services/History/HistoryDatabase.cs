@@ -23,9 +23,10 @@ internal static class HistoryDatabase
 
     /// <summary>
     /// Bumped by any later change to what history.db holds, so an older one can be told apart: 2 is
-    /// the first whose chunks and snapshots record the state files.
+    /// the first whose chunks and snapshots record the state files, 3 the first whose steps record
+    /// their kind and action.
     /// </summary>
-    public const int Version = 2;
+    public const int Version = 3;
 
     public static string FolderOf(string projectFolderPath) => Path.Combine(projectFolderPath, FolderName);
     public static string FileIn(string historyFolder) => Path.Combine(historyFolder, FileName);
@@ -68,7 +69,9 @@ internal static class HistoryDatabase
                 RestoredFromStepId TEXT NULL,
                 Note TEXT NULL,
                 Summary TEXT NULL,
-                CantOpen INTEGER NOT NULL DEFAULT 0
+                CantOpen INTEGER NOT NULL DEFAULT 0,
+                Kind TEXT NOT NULL,
+                Action TEXT NULL
             );
             CREATE TABLE Head (
                 Id INTEGER NOT NULL PRIMARY KEY CHECK (Id = 1),
@@ -109,7 +112,7 @@ internal static class HistoryDatabase
         command.Transaction = transaction;
         command.CommandText = $"""
             INSERT INTO {q}Step ({InsertedColumns})
-                VALUES ($id, $parent, $sequence, $label, $summary, $author, $startedAt, $endedAt, $isOpen, $note, $restoredFrom);
+                VALUES ($id, $parent, $sequence, $label, $summary, $author, $startedAt, $endedAt, $isOpen, $note, $restoredFrom, $kind, $action);
             {(chunk is null ? "" : $"INSERT INTO {q}Chunk (StepId, Sequence, Patchset, FileChanges) VALUES ($id, 1, $patchset, $files);")}
             INSERT INTO {q}Head (Id, StepId) VALUES (1, $id) ON CONFLICT (Id) DO UPDATE SET StepId = excluded.StepId;
             """;
@@ -124,10 +127,15 @@ internal static class HistoryDatabase
         command.Parameters.AddWithValue("$isOpen", step.IsOpen ? 1 : 0);
         command.Parameters.AddWithValue("$note", (object?)step.Note ?? DBNull.Value);
         command.Parameters.AddWithValue("$restoredFrom", step.RestoredFromStepId is { } r ? Stored(r) : DBNull.Value);
+        command.Parameters.AddWithValue("$kind", step.Kind.ToString());
+        AddActionParameter(command, step.Action);
         if (chunk is not null)
             AddChunkParameters(command, chunk);
         await command.ExecuteNonQueryAsync(ct);
     }
+
+    private static void AddActionParameter(SqliteCommand command, StepAction? action) =>
+        command.Parameters.AddWithValue("$action", action is { } a ? a.ToString() : DBNull.Value);
 
     private static void AddChunkParameters(SqliteCommand command, Chunk chunk)
     {
@@ -137,13 +145,13 @@ internal static class HistoryDatabase
 
     /// <summary>
     /// Appends <paramref name="chunk"/> as the next chunk of the open step <paramref name="stepId"/>
-    /// and rewrites its label — a Background run's grows when another run's work lands in it — its
-    /// "what changed", and its end time: an open step's is its last change, <paramref name="at"/>.
+    /// and rewrites its label and action — a Background run's grow when another run's work lands in
+    /// it — its "what changed", and its end time: an open step's is its last change, <paramref name="at"/>.
     /// The Head already points at it. Answers the step's row as it now stands.
     /// </summary>
     public static async Task<HistoryStep> ExtendStepAsync(
         SqliteConnection connection, SqliteTransaction? transaction, string schema, Guid stepId, string label,
-        string? summary, DateTimeOffset at, Chunk chunk, CancellationToken ct)
+        StepAction? action, string? summary, DateTimeOffset at, Chunk chunk, CancellationToken ct)
     {
         var q = Qualifier(schema);
         await using var command = connection.CreateCommand();
@@ -151,11 +159,12 @@ internal static class HistoryDatabase
         command.CommandText = $"""
             INSERT INTO {q}Chunk (StepId, Sequence, Patchset, FileChanges)
                 VALUES ($id, (SELECT MAX(Sequence) + 1 FROM {q}Chunk WHERE StepId = $id), $patchset, $files);
-            UPDATE {q}Step SET Label = $label, Summary = $summary, EndedAt = $at WHERE StepId = $id
+            UPDATE {q}Step SET Label = $label, Action = $action, Summary = $summary, EndedAt = $at WHERE StepId = $id
                 RETURNING {StepColumns};
             """;
         command.Parameters.AddWithValue("$id", Stored(stepId));
         command.Parameters.AddWithValue("$label", label);
+        AddActionParameter(command, action);
         command.Parameters.AddWithValue("$summary", (object?)summary ?? DBNull.Value);
         command.Parameters.AddWithValue("$at", Stored(at));
         AddChunkParameters(command, chunk);
@@ -331,14 +340,16 @@ internal static class HistoryDatabase
         r.IsDBNull(7) ? null : DateTimeOffset.Parse(r.GetString(7), null, System.Globalization.DateTimeStyles.RoundtripKind),
         r.GetInt64(8) != 0,
         r.IsDBNull(9) ? null : r.GetString(9),
+        Enum.Parse<HistoryStepKind>(r.GetString(11)),
+        r.IsDBNull(12) ? null : Enum.Parse<StepAction>(r.GetString(12)),
         r.IsDBNull(10) ? null : Guid.Parse(r.GetString(10)),
-        r.GetInt64(11) != 0);
+        r.GetInt64(13) != 0);
 
     /// <summary>The columns <see cref="ReadStep"/> reads, in its order.</summary>
     public const string StepColumns = InsertedColumns + ", CantOpen";
 
     /// <summary>The columns <see cref="AppendStepAsync"/> writes; the rest keep their defaults until a later ticket sets them.</summary>
-    private const string InsertedColumns = "StepId, ParentStepId, Sequence, Label, Summary, Author, StartedAt, EndedAt, IsOpen, Note, RestoredFromStepId";
+    private const string InsertedColumns = "StepId, ParentStepId, Sequence, Label, Summary, Author, StartedAt, EndedAt, IsOpen, Note, RestoredFromStepId, Kind, Action";
 
     /// <summary>
     /// One commit's record: the patchset of its rows, empty when only files changed, and the state

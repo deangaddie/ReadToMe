@@ -21,6 +21,8 @@ function step(sequence: number, overrides: Partial<HistoryStep> = {}): HistorySt
     endedAt: '2026-10-20T09:00:00Z',
     isOpen: false,
     note: null,
+    kind: 'request',
+    action: 'edit',
     restoredFromStepId: null,
     cantOpen: false,
     ...overrides,
@@ -154,6 +156,7 @@ describe('HistoryStore', () => {
     const {
       note: _note,
       summary: _summary,
+      action: _action,
       restoredFromStepId: _from,
       endedAt: _end,
       ...omitted
@@ -161,7 +164,7 @@ describe('HistoryStore', () => {
     live.emit('history', { kind: 'stepLanded', folder: 'dune', step: omitted });
 
     expect(store.steps()[0]).toEqual(
-      step(2, { note: null, summary: null, restoredFromStepId: null, endedAt: null }),
+      step(2, { note: null, summary: null, action: null, restoredFromStepId: null, endedAt: null }),
     );
   });
 

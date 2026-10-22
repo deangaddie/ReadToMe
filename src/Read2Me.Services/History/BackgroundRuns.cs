@@ -32,7 +32,11 @@ public sealed class BackgroundRuns(ProjectHistory history)
         lock (_lock)
         {
             if (!_runs.TryGetValue(folder, out var run))
-                _runs[folder] = run = new Run(new HistoryStepScope.OpenScope(folder, LabelOf(new HashSet<BackgroundRunKind> { kind })));
+            {
+                var kinds = new HashSet<BackgroundRunKind> { kind };
+                _runs[folder] = run = new Run(new HistoryStepScope.OpenScope(
+                    folder, LabelOf(kinds), HistoryStepKind.BackgroundRun, ActionOf(kinds)));
+            }
             run.Busy.Add(kind);
         }
     }
@@ -73,6 +77,10 @@ public sealed class BackgroundRuns(ProjectHistory history)
         kinds.Contains(BackgroundRunKind.Attribution) && kinds.Contains(BackgroundRunKind.VoiceBatch)
             ? "Attribution and voice batch"
             : kinds.Contains(BackgroundRunKind.Attribution) ? "Attribution" : "Voice batch";
+
+    /// <summary>Attribution for a step with attribution in it, else Voice: the voice batch alone.</summary>
+    internal static StepAction ActionOf(IReadOnlySet<BackgroundRunKind> kinds) =>
+        kinds.Contains(BackgroundRunKind.Attribution) ? StepAction.Attribution : StepAction.Voice;
 
     private sealed class Run(HistoryStepScope.OpenScope scope)
     {

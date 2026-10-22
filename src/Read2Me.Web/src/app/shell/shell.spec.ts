@@ -444,6 +444,8 @@ describe('History sheet', () => {
             endedAt: new Date().toISOString(),
             isOpen: false,
             note: null,
+            kind: 'started',
+            action: null,
             restoredFromStepId: null,
             cantOpen: false,
           },
@@ -507,6 +509,8 @@ describe('viewing a History step', () => {
     endedAt: at,
     isOpen: false,
     note: null,
+    kind: 'request',
+    action: 'edit',
     restoredFromStepId: null,
     cantOpen: false,
   });

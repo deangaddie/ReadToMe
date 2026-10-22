@@ -124,7 +124,8 @@ internal sealed class HistoryCapture : IAsyncDisposable
             var extendedKinds = Including(scope.Kinds, runKind);
             var extendedSummary = mutation.StepSummary ?? await StepSummary.DescribeAsync(_db, extended, ct);
             var row = await HistoryDatabase.ExtendStepAsync(
-                _connection, Transaction, h, scoped, LabelOf(scope, extendedKinds), extendedSummary, now, chunk, ct);
+                _connection, Transaction, h, scoped, LabelOf(scope, extendedKinds), ActionOf(scope, extendedKinds),
+                extendedSummary, now, chunk, ct);
             return new RecordedStep(scoped, extended, extendedKinds, scope.Part, Landed: null, Changed: row, Closed: []);
         }
 
@@ -149,9 +150,12 @@ internal sealed class HistoryCapture : IAsyncDisposable
                 closed.Add(first);
         }
 
+        // A commit no scope holds is a request's edit of its own, named from the mutation.
         var step = new HistoryStep(
             Guid.NewGuid(), head, sequence, scope is null ? ProjectHistory.LabelOf(mutation) : LabelOf(scope, kinds), summary, _author, now,
-            EndedAt: now, IsOpen: scope is not null, Note: StepNotes.Of(part, ending: null), RestoredFromStepId: mutation.RestoresStepId);
+            EndedAt: now, IsOpen: scope is not null, Note: StepNotes.Of(part, ending: null),
+            Kind: scope?.Kind ?? HistoryStepKind.Request, Action: scope is null ? StepAction.Edit : ActionOf(scope, kinds),
+            RestoredFromStepId: mutation.RestoresStepId);
         await HistoryDatabase.AppendStepAsync(_connection, Transaction, h, step, chunk, ct);
         return new RecordedStep(step.StepId, changes, kinds, part, step, Changed: null, closed);
     }
@@ -159,6 +163,10 @@ internal sealed class HistoryCapture : IAsyncDisposable
     /// <summary>A Background run's step is named for the run work in it; a request's for the request.</summary>
     private static string LabelOf(HistoryStepScope.OpenScope scope, IReadOnlySet<BackgroundRunKind> kinds) =>
         kinds.Count > 0 ? BackgroundRuns.LabelOf(kinds) : scope.Label;
+
+    /// <summary>A Background run's action follows the run work in it too; a request's is its own.</summary>
+    private static StepAction? ActionOf(HistoryStepScope.OpenScope scope, IReadOnlySet<BackgroundRunKind> kinds) =>
+        kinds.Count > 0 ? BackgroundRuns.ActionOf(kinds) : scope.Action;
 
     private static HashSet<BackgroundRunKind> Including(IReadOnlySet<BackgroundRunKind> kinds, BackgroundRunKind? kind) =>
         kind is { } k ? [.. kinds, k] : [.. kinds];

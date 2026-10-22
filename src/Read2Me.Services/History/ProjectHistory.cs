@@ -267,7 +267,8 @@ public sealed partial class ProjectHistory(
     private Task InsertStartedStepAsync(SqliteConnection connection, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
-        var step = new HistoryStep(Guid.NewGuid(), null, 1, HistoryDatabase.StartedLabel, null, Author, now, now, IsOpen: false, Note: null);
+        var step = new HistoryStep(Guid.NewGuid(), null, 1, HistoryDatabase.StartedLabel, null, Author, now, now, IsOpen: false, Note: null,
+            HistoryStepKind.Started, Action: null);
         return HistoryDatabase.AppendStepAsync(connection, null, schema: "", step, chunk: null, ct);
     }
 

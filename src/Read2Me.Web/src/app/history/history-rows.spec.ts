@@ -1,14 +1,6 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'bun:test';
 import type { HistoryStep } from '@app/api';
-import {
-  BACKGROUND_RUN_ICONS,
-  dayLabel,
-  historyGroups,
-  historyRow,
-  stepTime,
-} from './history-rows';
+import { dayLabel, historyGroups, historyRow, stepTime } from './history-rows';
 
 /** Local time, so the specs read the same in any time zone. */
 const at = (day: number, hour: number, minute: number) =>
@@ -27,6 +19,8 @@ function step(overrides: Partial<HistoryStep> = {}): HistoryStep {
     endedAt: at(20, 14, 2),
     isOpen: false,
     note: null,
+    kind: 'request',
+    action: 'edit',
     restoredFromStepId: null,
     cantOpen: false,
     ...overrides,
@@ -85,28 +79,34 @@ describe('historyRow', () => {
   });
 
   it.each<[string, Partial<HistoryStep>, string, string]>([
-    ['attribution', { label: 'Attribution' }, 'backgroundRun', 'smart_toy'],
-    ['a voice batch', { label: 'Voice batch' }, 'backgroundRun', 'record_voice_over'],
-    ['an overlapping run', { label: 'Attribution and voice batch' }, 'backgroundRun', 'smart_toy'],
+    ['attribution', { kind: 'backgroundRun', action: 'attribution' }, 'backgroundRun', 'smart_toy'],
     [
-      'a Restore',
-      { label: "Restore to 'Split chapter' (14:02)", restoredFromStepId: 's0' },
-      'restore',
-      'restart_alt',
+      'a voice batch',
+      { kind: 'backgroundRun', action: 'voice' },
+      'backgroundRun',
+      'record_voice_over',
     ],
-    ['History started', { label: 'History started' }, 'step', 'history'],
-    ['the import', { label: 'Import book' }, 'step', 'upload_file'],
-    ['Edit with AI', { label: 'Edit with AI' }, 'step', 'auto_awesome'],
-    ['a split', { label: 'Split chapter' }, 'step', 'call_split'],
-    ['a merge', { label: 'Merge characters' }, 'step', 'merge'],
-    ['a delete', { label: 'Delete paragraph' }, 'step', 'delete'],
-    ['a voice action', { label: 'Upload voice audio' }, 'step', 'record_voice_over'],
-    ['a speaker action', { label: 'Assign speakers' }, 'step', 'person'],
-    ['a title', { label: 'Add titles' }, 'step', 'title'],
-    ['a pause', { label: 'Insert pause' }, 'step', 'pause'],
-    ['anything else', { label: 'Edit text' }, 'step', 'edit'],
+    ['a Restore', { kind: 'restore', action: null }, 'restore', 'restart_alt'],
+    ['History started', { kind: 'started', action: null }, 'step', 'history'],
+    ['the import', { kind: 'import', action: null }, 'step', 'upload_file'],
+    ['an edit', { kind: 'request', action: 'edit' }, 'step', 'edit'],
+    ['Edit with AI', { kind: 'request', action: 'editWithAi' }, 'step', 'auto_awesome'],
+    ['an insert', { kind: 'request', action: 'insert' }, 'step', 'add'],
+    ['a split', { kind: 'request', action: 'split' }, 'step', 'call_split'],
+    ['a merge', { kind: 'request', action: 'merge' }, 'step', 'merge'],
+    ['a delete', { kind: 'request', action: 'delete' }, 'step', 'delete'],
+    ['a title', { kind: 'request', action: 'title' }, 'step', 'title'],
+    ['a pause', { kind: 'request', action: 'pause' }, 'step', 'pause'],
+    ['a character action', { kind: 'request', action: 'character' }, 'step', 'person'],
+    ['a voice action', { kind: 'request', action: 'voice' }, 'step', 'record_voice_over'],
   ])('gives %s its kind and icon', (_, overrides, kind, icon) => {
     expect(historyRow(step(overrides), null)).toMatchObject({ kind, icon });
+  });
+
+  it('never reads the kind or icon from the label', () => {
+    const row = historyRow(step({ label: 'Delete voice', kind: 'request', action: 'merge' }), null);
+
+    expect(row).toMatchObject({ kind: 'step', icon: 'merge' });
   });
 
   it('marks the Head as current', () => {
@@ -139,21 +139,5 @@ describe('historyGroups', () => {
 
   it('is empty before the first step', () => {
     expect(historyGroups([], null, NOW)).toEqual([]);
-  });
-});
-
-describe('BACKGROUND_RUN_ICONS', () => {
-  it("names exactly the labels the host gives a Background run's step", () => {
-    // The wire has no kind field, so the sheet tells a Background run by its label: pin them to `BackgroundRuns.LabelOf`.
-    const host = readFileSync(
-      resolve(process.cwd(), '../Read2Me.Services/History/BackgroundRuns.cs'),
-      'utf8',
-    );
-    const labelOf = host.slice(host.indexOf('static string LabelOf'));
-    const labels = [...labelOf.slice(0, labelOf.indexOf(';')).matchAll(/"([^"]+)"/g)].map(
-      (m) => m[1],
-    );
-    expect(new Set(labels)).toEqual(new Set(Object.keys(BACKGROUND_RUN_ICONS)));
-    expect(labels).toHaveLength(3);
   });
 });

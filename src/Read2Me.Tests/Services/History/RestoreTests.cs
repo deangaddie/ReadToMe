@@ -92,6 +92,8 @@ public class RestoreTests : ProjectDbTestBase
         Assert.Equal(step, restored.Step);
         Assert.Equal(step.StepId, after.HeadStepId);
         Assert.Equal(target.StepId, step.RestoredFromStepId);
+        Assert.Equal(HistoryStepKind.Restore, step.Kind);
+        Assert.Null(step.Action);
         Assert.Equal(before.HeadStepId, step.ParentStepId);
         Assert.Matches(new Regex(@"^Restore to 'Create character' \(\d\d:\d\d\)$"), step.Label);
         Assert.False(step.IsOpen);

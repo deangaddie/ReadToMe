@@ -18,7 +18,7 @@ namespace Read2Me.App.Queueing;
 /// <summary>
 /// Tracks each project's <b>Background run</b> for History: tells <see cref="BackgroundRuns"/> when
 /// the Character Queue or the voice batch makes a project busy, and when each stops — drained, or
-/// ended early with how far it got ("212 of 340 paragraphs, cancelled", "3 of 7 voices, failed"),
+/// ended early with how far it got ("212 of 340 paragraphs, cancelled", "3 of 7 voices, stopped on an error"),
 /// and how many of its items failed on their own ("3 paragraphs failed").
 /// <para>
 /// On app start, before following anything, it closes every step a previous run of the app left
@@ -153,16 +153,22 @@ public sealed class BackgroundRunTracker(
 
                 case BatchCancelled or BatchCompleted when _batchFolder is { } folder:
                     _batchFolder = null;
-                    var how = e is BatchCancelled ? StepNotes.Cancelled
-                        : voiceBatch.LastError is not null ? StepNotes.Failed
-                        : null;
-                    // A batch that failed outright says so; counting the voices that failed before it is noise.
-                    var failed = how == StepNotes.Failed ? 0 : voiceBatch.Failed;
-                    Close(runs.EndedAsync(folder, BackgroundRunKind.VoiceBatch,
-                        StepNotes.Ending(voiceBatch.Processed, voiceBatch.Total, "voice", how, failed)));
+                    Close(runs.EndedAsync(folder, BackgroundRunKind.VoiceBatch, VoiceBatchEnding(
+                        e is BatchCancelled, voiceBatch.LastError is not null, voiceBatch.Processed, voiceBatch.Total, voiceBatch.Failed)));
                     break;
             }
         }
+    }
+
+    /// <summary>
+    /// How a voice batch ended: "3 of 7 voices, cancelled" or "3 of 7 voices, stopped on an error",
+    /// either way with the voices that failed on their own before it ("· 2 failed"), or just those
+    /// ("2 voices failed") for one that ran to the end; null for one that ran to the end clean.
+    /// </summary>
+    internal static string? VoiceBatchEnding(bool cancelled, bool stoppedOnError, int processed, int total, int failed)
+    {
+        var how = cancelled ? StepNotes.Cancelled : stoppedOnError ? StepNotes.StoppedOnError : null;
+        return StepNotes.Ending(processed, total, "voice", how, failed);
     }
 
     /// <summary>Closing waits for the project's write lock, so it runs on without holding up the queue or the batch.</summary>
