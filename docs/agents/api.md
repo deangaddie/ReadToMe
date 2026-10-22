@@ -571,6 +571,8 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/book-edits/plan \
 # (requestCount says how many) and per-row retries; RegexReplace / SetTemplate / ChangeCase run in code.
 # RegexReplace, and ChangeCase with a pattern, count only the items their pattern matches (none → NoTargets);
 # a paragraph-text ChangeCase warns "N titles also match — run again targeting <levels> titles" when titles match too.
+# 409 "Project is restoring" while a Restore runs, and also when one began while the plan was thinking:
+# the Restore drops the session, so plan again once it has finished.
 
 # start the run (202) and follow it on the hub as bookEdit { kind: progress | done | failed } —
 # pass the connectionId you want it pushed to, or leave it out and poll the session instead:

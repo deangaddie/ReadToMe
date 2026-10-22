@@ -212,6 +212,22 @@ describe('r2m-edit-with-ai-dialog', () => {
     expect(text('edit-error')).toContain('No items in the book match');
   });
 
+  it('keeps the instruction on Instruct when a Restore refuses the plan', async () => {
+    api.on('POST', `${BASE}/plan`, () => problem(409, 'Project is restoring'));
+    // No session was granted: nothing to discard when the dialog closes.
+    plan = { ...PLAN, program: null };
+    await instruct();
+
+    await analyze();
+
+    expect(phase()).toBe('instruct');
+    expect(text('edit-error')).toContain('Project is restoring');
+    expect(dialog.querySelector<HTMLTextAreaElement>('[data-testid="instruction"]')!.value).toBe(
+      'capitalise chapter titles',
+    );
+    expect(button('analyze').disabled).toBe(false);
+  });
+
   it('shows what the host understood, and its warnings, on Plan', async () => {
     plan = {
       ...PLAN,

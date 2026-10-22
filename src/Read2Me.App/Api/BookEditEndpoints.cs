@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Routing;
 using Read2Me.App.Live;
 using Read2Me.Core.IO;
 using Read2Me.Services.BookEdits;
+using Read2Me.Services.History;
 
 namespace Read2Me.App.Api
 {
@@ -48,7 +49,7 @@ namespace Read2Me.App.Api
         {
             endpoints.MapPost("/api/projects/{folder}/book-edits/plan", PlanAsync)
                 .RecordsNoStep("Plans an Edit with AI; nothing commits until it is applied.")
-                .WithSummary("Turn a plain-language instruction into an edit plan: one LLM call, then the plan's scope is resolved against the book. Answers status Ok with an opaque program id (valid 2 h after its last use), a summary, the matched item count and, for Llm transforms, the LLM request count; NoLlmConfigured / Unsupported / ServiceUnavailable / Failed / NoTargets carry a reason instead. thinking=true lets the model think first.");
+                .WithSummary("Turn a plain-language instruction into an edit plan: one LLM call, then the plan's scope is resolved against the book. Answers status Ok with an opaque program id (valid 2 h after its last use), a summary, the matched item count and, for Llm transforms, the LLM request count; NoLlmConfigured / Unsupported / ServiceUnavailable / Failed / NoTargets carry a reason instead. thinking=true lets the model think first. 409 \"Project is restoring\" while a Restore runs, or when one began while the plan was thinking.");
             endpoints.MapPost("/api/projects/{folder}/book-edits/{program}/propose", ProposeAsync)
                 .RecordsNoStep("Proposes an Edit with AI; nothing commits until it is applied.")
                 .WithSummary("Start computing a proposed new value per matched item (202). Progress and the finished rows arrive on /hubs/live as bookEdit { kind: progress | done | failed } on the connectionId in the body; GET the session to read them back. Deterministic transforms finish at once; Llm ones send one request per 8 items. 409 while a run is already in flight.");
@@ -68,7 +69,7 @@ namespace Read2Me.App.Api
 
         private static async Task<IResult> PlanAsync(
             string folder, PlanBookEditRequest? body, IFileSystem fs, BookEditPlanner planner,
-            ScopeResolver resolver, IBookEditSessionStore sessions, CancellationToken ct)
+            ScopeResolver resolver, IBookEditSessionStore sessions, RestoringProjects restoring, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
@@ -85,6 +86,13 @@ namespace Read2Me.App.Api
                 return Results.Ok(NotPlanned("NoTargets", "No items in the book match this instruction's scope."));
 
             var session = sessions.Create(folderId, program, targets, EditProgramDescriber.Describe(program));
+            // A Restore that began while the LLM was thinking drops the project's sessions as it ends,
+            // and the dialog, holding no program yet, would miss that: refuse as the Restore would have.
+            if (restoring.IsRestoring(folderId) || sessions.TryGet(folderId, session.Id) is null)
+            {
+                sessions.Remove(folderId, session.Id);
+                return StepReads.Restoring();
+            }
             // Read off the service that will send them, so the count cannot drift from the job.
             var batch = BookEditProposalService.BatchSize;
             var requestCount = session.IsLlmTransform ? (targets.Count + batch - 1) / batch : 0;
