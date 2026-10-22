@@ -155,6 +155,30 @@ public class RestoreTests : ProjectDbTestBase
     }
 
     [Fact]
+    public async Task Restore_CountsTheItemsThatNeedGenerating_TheDiscardedAndTheReturning_NotPauses()
+    {
+        await SeedAsync(pause: true); // a pause has no audio, and is never generated
+        await CommitAsync(new InsertParagraphItemMutation(_folder, _book.ItemId("i3"), InsertPosition.After, "Four"));
+        await CommitAsync(new InsertParagraphItemMutation(_folder, _book.ItemId("i3"), InsertPosition.After, "Five"));
+        var four = await ItemIdAsync("Four");
+        var five = await ItemIdAsync("Five");
+        foreach (var item in new[] { _book.ItemId("i1"), _book.ItemId("i2"), _book.ItemId("i3"), four, five })
+            await RecordTakeAsync(item, $"{item}.wav");
+        var target = await TipAsync();
+
+        // i1 and i2 change and are generated again; p3 goes with i3, Four and Five.
+        await CommitAsync(new UpdateParagraphItemTextMutation(_folder, _book.ItemId("i1"), "Changed"));
+        await RecordTakeAsync("i1", "i1-new.wav");
+        await CommitAsync(new UpdateParagraphItemTextMutation(_folder, _book.ItemId("i2"), "Changed too"));
+        await RecordTakeAsync("i2", "i2-new.wav");
+        await CommitAsync(new DeleteParagraphMutation(_folder, _book.ParagraphId("p3")));
+
+        var restored = Assert.IsType<RestoreOutcome.Restored>(await RestoreAsync(target));
+
+        Assert.Equal((2, 5), (restored.AudioDiscardCount, restored.NeedsAudioCount));
+    }
+
+    [Fact]
     public async Task AnItemTheRestoreLeavesAsItIs_KeepsItsCurrentAudioAndReview()
     {
         await SeedAsync();
@@ -434,13 +458,17 @@ public class RestoreTests : ProjectDbTestBase
     private static EditProgram Program() => new(true, null, EditTargetSelector.ParagraphText, NodeFilter.All, ParagraphFilter.All,
         new EditTransform(TransformKind.ChangeCase, CaseMode: CaseMode.Upper));
 
-    private async Task SeedAsync(string? sourceFile = null)
+    private async Task SeedAsync(string? sourceFile = null, bool pause = false)
     {
         _book = new BookHierarchyBuilder(OpenDbAsync).WithProject()
-            .AddVolume("vol", v => v.AddChapter("ch", c => c
-                .AddParagraph("p1", p => p.AddNarration("i1", "One"))
-                .AddParagraph("p2", p => p.AddNarration("i2", "Two"))
-                .AddParagraph("p3", p => p.AddNarration("i3", "Three"))));
+            .AddVolume("vol", v => v.AddChapter("ch", c =>
+            {
+                c.AddParagraph("p1", p => p.AddNarration("i1", "One"))
+                    .AddParagraph("p2", p => p.AddNarration("i2", "Two"))
+                    .AddParagraph("p3", p => p.AddNarration("i3", "Three"));
+                if (pause)
+                    c.AddParagraph("p4", p => p.AddPause("pause", ParagraphItemType.ChapterPause));
+            }));
         await _book.BuildAsync();
         if (sourceFile is not null)
         {

@@ -679,7 +679,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Restore: make the project as it stood after the step current, as a new step ("Restore to 'Split chapter' (14:02)", restoredFromStepId set) — every later step stays in History. Records keep their ids; items whose text, speaker or delivery cue changes lose their audio and its review, items brought back return without audio, the Pipeline checkpoints it disturbs go stale, and voices, voice reference audio, the cover and the source file come back too; app-wide LLM and TTS settings are untouched. Open Edit with AI sessions for the project are dropped. Answers { step, audioDiscardCount }; step is null when the project already was that state. While it runs every other write and enqueue for the project is 409 "Project is restoring". 404 unknown project or step; 409 while anything is queued or running for the project, or it is already restoring (detail says why); 422 a step that can't be opened; 503 when opening it failed for a reason that passes (try again). */
+        /** Restore: make the project as it stood after the step current, as a new step ("Restore to 'Split chapter' (14:02)", restoredFromStepId set) — every later step stays in History. Records keep their ids; items whose text, speaker or delivery cue changes lose their audio and its review, items brought back return without audio, the Pipeline checkpoints it disturbs go stale, and voices, voice reference audio, the cover and the source file come back too; app-wide LLM and TTS settings are untouched. Open Edit with AI sessions for the project are dropped. Answers { step, audioDiscardCount, needsAudioCount } — needsAudioCount is the items without audio after it, the brought-back ones included; step is null when the project already was that state. While it runs every other write and enqueue for the project is 409 "Project is restoring". 404 unknown project or step; 409 while anything is queued or running for the project, or it is already restoring (detail says why); 422 a step that can't be opened; 503 when opening it failed for a reason that passes (try again). */
         post: {
             parameters: {
                 query?: never;
@@ -6201,6 +6201,8 @@ export interface components {
             step: null | components["schemas"]["HistoryStep"];
             /** Format: int32 */
             audioDiscardCount: number | string;
+            /** Format: int32 */
+            needsAudioCount: number | string;
         };
         SemanticSimilarityServiceConfig: {
             /** Format: int32 */

@@ -35,6 +35,7 @@ internal sealed class RestoreStepMutationImplementation : IBookMutationImplement
             await target.OpenAsync(ct);
             await RestoreAudio.AttachLiveAsync(target, connection.DataSource, ct);
             discarded = await RestoreAudio.KeepUnchangedAsync(target, ct);
+            mutation.Work.NeedsAudioCount = await RestoreAudio.CountWithoutAudioAsync(target, ct);
             disturbed = await DisturbedStepsAsync(target, ct);
             using var session = SqliteSession.Create(target);
             foreach (var table in ChildrenFirst(db))

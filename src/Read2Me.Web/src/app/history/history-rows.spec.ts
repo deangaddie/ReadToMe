@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { HistoryStep } from '@app/api';
-import { dayLabel, historyGroups, historyRow, stepTime } from './history-rows';
+import { dayLabel, historyGroups, historyRow, restoreCost, stepTime } from './history-rows';
 
 /** Local time, so the specs read the same in any time zone. */
 const at = (day: number, hour: number, minute: number) =>
@@ -54,6 +54,17 @@ describe('stepTime', () => {
     ['a step from before endedAt meant last change', { endedAt: null }, '14:02'],
   ])('%s', (_, overrides, time) => {
     expect(stepTime(step(overrides))).toBe(time);
+  });
+});
+
+describe('restoreCost', () => {
+  it.each<[number | null, string]>([
+    [null, ''],
+    [0, 'Restoring discards no audio.'],
+    [1, 'Restoring discards audio on 1 item.'],
+    [60, 'Restoring discards audio on 60 items.'],
+  ])('%p says "%s"', (count, cost) => {
+    expect(restoreCost(count)).toBe(cost);
   });
 });
 

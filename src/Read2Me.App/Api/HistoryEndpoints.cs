@@ -49,9 +49,10 @@ namespace Read2Me.App.Api
 
     /// <summary>
     /// A Restore's answer: the Restore step it added — null when the project already was that state,
-    /// so nothing changed — and the items whose audio it discarded.
+    /// so nothing changed — the items whose audio it discarded, and the items without audio after
+    /// it, the brought-back ones included: what needs generating.
     /// </summary>
-    public sealed record RestoreResultDto(HistoryStep? Step, int AudioDiscardCount);
+    public sealed record RestoreResultDto(HistoryStep? Step, int AudioDiscardCount, int NeedsAudioCount);
 
     public static class HistoryEndpoints
     {
@@ -89,7 +90,8 @@ namespace Read2Me.App.Api
                              "their ids; items whose text, speaker or delivery cue changes lose their audio and its review, items brought back " +
                              "return without audio, the Pipeline checkpoints it disturbs go stale, and voices, voice reference audio, the cover " +
                              "and the source file come back too; app-wide LLM and TTS settings are untouched. Open Edit with AI sessions for the " +
-                             "project are dropped. Answers { step, audioDiscardCount }; step is null when the project already was that state. " +
+                             "project are dropped. Answers { step, audioDiscardCount, needsAudioCount } — needsAudioCount is the items " +
+                             "without audio after it, the brought-back ones included; step is null when the project already was that state. " +
                              "While it runs every other write and enqueue for the project is 409 \"Project is restoring\". 404 unknown project " +
                              "or step; 409 while anything is queued or running for the project, or it is already restoring (detail says why); " +
                              "422 a step that can't be opened; 503 when opening it failed for a reason that passes (try again).");
@@ -137,7 +139,7 @@ namespace Read2Me.App.Api
 
             return await restore.RestoreAsync(folderId, stepId, ct) switch
             {
-                RestoreOutcome.Restored restored => Results.Ok(new RestoreResultDto(restored.Step, restored.AudioDiscardCount)),
+                RestoreOutcome.Restored restored => Results.Ok(new RestoreResultDto(restored.Step, restored.AudioDiscardCount, restored.NeedsAudioCount)),
                 RestoreOutcome.UnknownStep => StepReads.UnknownStep(stepId),
                 RestoreOutcome.CantOpen => Results.Problem(
                     $"History step {stepId} can't be opened, so it can't be restored.", statusCode: StatusCodes.Status422UnprocessableEntity),

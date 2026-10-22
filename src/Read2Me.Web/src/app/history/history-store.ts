@@ -5,6 +5,7 @@ import { computed, signal } from '@app/core/signals';
 import type { HistoryMessage, LiveHistoryStep } from '@app/live/live-messages';
 import { LiveService, type Unsubscribe } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast';
+import { plural } from '@app/ui/wording';
 
 /** What the viewing banner says when the viewed step didn't open: for good, or just now. */
 const CANT_OPEN = "This step can't be opened.";
@@ -171,7 +172,6 @@ export class HistoryStore {
   async restore(stepId: Guid | null = this.viewing()): Promise<void> {
     const folder = this._folder();
     if (folder === null || stepId === null) return;
-    const previousTip = this._headStepId();
     this.restoringHere = true;
     try {
       const result = await this.api.restore(folder, stepId);
@@ -183,15 +183,19 @@ export class HistoryStore {
         return;
       }
       this.ownRestoreSteps.add(result.step.stepId);
-      const count = result.audioDiscardCount;
+      // The tip before, as the host recorded it: known whether or not this tab read the list.
+      const previousTip = result.step.parentStepId;
+      const count = result.needsAudioCount;
       this.toast.info(
-        `Restored to ${name}. The later steps stay in History; ${count} item${count === 1 ? '' : 's'} need${count === 1 ? 's' : ''} generating.`,
+        `Restored to ${name}. The later steps stay in History; ${count} item${plural(count)} need${count === 1 ? 's' : ''} generating.`,
         [
           {
             label: 'Show in Book',
             run: () => use(Router).navigate(`projects/${encodeURIComponent(folder)}/book`),
           },
-          { label: 'Undo restore', run: () => this.track(this.restore(previousTip)) },
+          ...(previousTip === null
+            ? []
+            : [{ label: 'Undo restore', run: () => this.track(this.restore(previousTip)) }]),
         ],
       );
     } catch (e) {

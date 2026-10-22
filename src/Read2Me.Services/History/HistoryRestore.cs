@@ -78,10 +78,10 @@ public sealed class HistoryRestore(
                     await WriteFilesAsync(folder);
                     landed = await history.HeadStepAsync(folder, CancellationToken.None);
                     dropped = editSessions.RemoveAll(folder);
-                    return new RestoreOutcome.Restored(landed, work.AudioDiscardCount);
+                    return new RestoreOutcome.Restored(landed, AudioDiscardCount: work.AudioDiscardCount, NeedsAudioCount: work.NeedsAudioCount);
                 case BookMutationOutcome.NoChange:
                     // The project already is the step's state: nothing to record, nothing dropped.
-                    return new RestoreOutcome.Restored(null, 0);
+                    return new RestoreOutcome.Restored(null, AudioDiscardCount: 0, NeedsAudioCount: 0);
                 case BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } cancelled:
                     throw new OperationCanceledException(cancelled.Message, ct);
                 case BookMutationOutcome.Rejected rejected:
@@ -145,9 +145,10 @@ public abstract record RestoreOutcome
     /// <summary>
     /// The project is now the step's state. <paramref name="Step"/> is the Restore step it added, or
     /// null when the project already was that state and nothing changed; <paramref name="AudioDiscardCount"/>
-    /// the items whose audio it discarded.
+    /// the items whose audio it discarded; <paramref name="NeedsAudioCount"/> the items without audio
+    /// after it, the discarded and the brought back among them. Both are 0 when nothing changed.
     /// </summary>
-    public sealed record Restored(HistoryStep? Step, int AudioDiscardCount) : RestoreOutcome;
+    public sealed record Restored(HistoryStep? Step, int AudioDiscardCount, int NeedsAudioCount) : RestoreOutcome;
 
     /// <summary>The project's History has no step with that id.</summary>
     public sealed record UnknownStep : RestoreOutcome;

@@ -1,5 +1,6 @@
 import type { NarrationReleasePreviewDto, NarrationReleaseScope } from '@app/api';
 import type { ConfirmOptions } from '@app/ui/dialogs';
+import { plural } from '@app/ui/wording';
 
 /**
  * Release narration's wording, beside the bulk assign's (`bulk-assign.ts`): the confirm says how
@@ -8,10 +9,6 @@ import type { ConfirmOptions } from '@app/ui/dialogs';
  * them. The figures come from the preview read, never from the loaded rows: a part spans chapters
  * that were never opened.
  */
-
-function plural(n: number): string {
-  return n === 1 ? '' : 's';
-}
 
 /**
  * Whether the release asks first. A single paragraph with no audio is a one-line fix with

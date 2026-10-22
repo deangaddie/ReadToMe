@@ -773,7 +773,7 @@ Restore to the step that was the tip before.
 
 ```bash
 curl -s -X POST http://localhost:5000/api/projects/{folder}/history/{stepId}/restore
-# → { step, audioDiscardCount }; 404 unknown step, 409 busy or restoring (detail says why), 422 cantOpen,
+# → { step, audioDiscardCount, needsAudioCount }; 404 unknown step, 409 busy or restoring (detail says why), 422 cantOpen,
 #   503 when opening the step failed for now (try again)
 ```
 
@@ -790,6 +790,10 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/history/{stepId}/res
   local time), `restoredFromStepId` the step brought back, and `summary` the audio it cost
   ("Discarded audio on 60 items", null when none). It lands and closes on the hub like any step.
   `step` is null when the project already was that state: nothing changed, and no step is added.
+- `audioDiscardCount` is the items whose audio the Restore discarded; `needsAudioCount` is every
+  spoken item without audio after it, which adds the items brought back and any that had none
+  already: what needs generating. Pauses never count. Both are 0 when `step` is null. `step.parentStepId` is the tip before the
+  Restore, the step Undo restore restores.
 - `GET /history/{stepId}` answers `restorePreview.audioDiscardCount` beforehand, so a client can say
   what a Restore costs before the click; the Restore counts again as it applies.
 - Refused with 409 while anything is queued or running for the project (`detail` is the busy

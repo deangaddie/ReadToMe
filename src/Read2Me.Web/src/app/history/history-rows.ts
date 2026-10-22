@@ -1,5 +1,6 @@
 import type { Guid, HistoryStep, HistoryStepKind, StepAction } from '@app/api';
 import type { IconName } from '@app/ui/icons';
+import { plural } from '@app/ui/wording';
 
 /** A Background run's step, a Restore's, or any other: the sheet draws the first two apart. */
 export type HistoryRowKind = 'backgroundRun' | 'restore' | 'step';
@@ -94,6 +95,13 @@ export function stepTime(step: HistoryStep): string {
   const end = step.endedAt === null ? start : clock(new Date(step.endedAt));
   const span = end === start ? start : `${start}–${end}`;
   return step.isOpen ? `${span}, running` : span;
+}
+
+/** What a Restore to the viewed step costs, said before the click; "" until the preview has read. */
+export function restoreCost(audioDiscardCount: number | null): string {
+  if (audioDiscardCount === null) return '';
+  if (audioDiscardCount === 0) return 'Restoring discards no audio.';
+  return `Restoring discards audio on ${audioDiscardCount} item${plural(audioDiscardCount)}.`;
 }
 
 export function dayLabel(date: Date, now: Date): string {
