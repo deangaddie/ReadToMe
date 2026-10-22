@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Events;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.Queueing;
 
 namespace Read2Me.App.Audio
@@ -118,6 +119,11 @@ namespace Read2Me.App.Audio
             {
                 throw;
             }
+            // Its project began a Restore while the take generated: generate it again afterwards.
+            catch (ProjectRestoringException)
+            {
+                return new Disposition.RetryAfterRestore();
+            }
             // The one catch that survives the pipeline going total, and it is not an AI seam:
             // recording writes the audio file and can fail on ordinary I/O.
             catch (Exception ex)
@@ -159,6 +165,10 @@ namespace Read2Me.App.Audio
                     logger.LogInformation(
                         "Audio item {ItemId} provider busy — requeuing in {Backoff:0.#}s (attempt {Attempt})",
                         itemId, retryAfter.Delay.TotalSeconds, item.Attempts.Busies + 1);
+                    break;
+
+                case Disposition.RetryAfterRestore:
+                    logger.LogInformation("Audio item {ItemId} project is restoring — requeuing after the Restore", itemId);
                     break;
             }
         }

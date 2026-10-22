@@ -48,6 +48,13 @@ namespace Read2Me.Services.Queueing
         /// <see cref="QueueDisposition.Backoff"/> — the executor only waits it out.
         /// </summary>
         public sealed record RetryAfter(TimeSpan Delay) : Disposition;
+
+        /// <summary>
+        /// The item's write was refused because its project is restoring: put it back on the queue
+        /// once the Restore ends, so it runs against the restored project. Spends neither budget —
+        /// the provider did nothing wrong.
+        /// </summary>
+        public sealed record RetryAfterRestore : Disposition;
     }
 
     /// <summary>

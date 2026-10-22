@@ -16,9 +16,13 @@ using Read2Me.Services.Queueing;
 
 namespace Read2Me.App.Characters;
 
+/// <summary>Whether a voice batch started, or why not.</summary>
+public enum VoiceBatchStart { Started, AlreadyRunning, Restoring }
+
 public sealed class VoiceBatchRunner
 {
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly RestoringProjects _restoring;
     private readonly ILogger<VoiceBatchRunner> _logger;
     private readonly EventBroadcaster<VoiceBatchEvent> _batchEvents;
     private readonly EventBroadcaster<LlmStreamEvent> _llmEvents;
@@ -41,42 +45,44 @@ public sealed class VoiceBatchRunner
         ILogger<VoiceBatchRunner> logger,
         EventBroadcaster<VoiceBatchEvent> batchEvents,
         EventBroadcaster<LlmStreamEvent> llmEvents)
-        : this(scopeFactory: null!, logger, batchEvents, llmEvents) { }
+        : this(scopeFactory: null!, new RestoringProjects(), logger, batchEvents, llmEvents) { }
 
     public VoiceBatchRunner(
         IServiceScopeFactory scopeFactory,
+        RestoringProjects restoring,
         ILogger<VoiceBatchRunner> logger,
         EventBroadcaster<VoiceBatchEvent> batchEvents,
         EventBroadcaster<LlmStreamEvent> llmEvents)
     {
         _scopeFactory = scopeFactory;
+        _restoring = restoring;
         _logger = logger;
         _batchEvents = batchEvents;
         _llmEvents = llmEvents;
     }
 
-    public bool StartGeneratePrompts(ProjectFolderId folder, bool regenerateAll = false)
-    {
-        lock (_lock)
-        {
-            if (IsRunning) return false;
-            ResetState("Generating prompts", folder);
-            var ct = _cts!.Token;
-            Task.Run(() => RunWithScopeAsync(new GeneratePromptsPhase(regenerateAll), folder, ct));
-        }
-        return true;
-    }
+    public VoiceBatchStart StartGeneratePrompts(ProjectFolderId folder, bool regenerateAll = false) =>
+        Start("Generating prompts", folder, ct => RunWithScopeAsync(new GeneratePromptsPhase(regenerateAll), folder, ct));
 
-    public bool StartGenerateAudio(ProjectFolderId folder)
+    public VoiceBatchStart StartGenerateAudio(ProjectFolderId folder) =>
+        Start("Generating audio", folder, ct => RunWithScopeAsync(new GenerateAudioPhase(), folder, ct));
+
+    /// <summary>
+    /// Starts the batch unless one is running or the project is restoring. The restoring check is
+    /// under the lock <see cref="BusyFor"/> takes, so it can't race a Restore: one that set its flag
+    /// first is seen here, and one that sets it after finds this batch running and is refused.
+    /// </summary>
+    private VoiceBatchStart Start(string operation, ProjectFolderId folder, Func<CancellationToken, Task> run)
     {
         lock (_lock)
         {
-            if (IsRunning) return false;
-            ResetState("Generating audio", folder);
+            if (IsRunning) return VoiceBatchStart.AlreadyRunning;
+            if (_restoring.IsRestoring(folder)) return VoiceBatchStart.Restoring;
+            ResetState(operation, folder);
             var ct = _cts!.Token;
-            Task.Run(() => RunWithScopeAsync(new GenerateAudioPhase(), folder, ct));
+            Task.Run(() => run(ct));
         }
-        return true;
+        return VoiceBatchStart.Started;
     }
 
     public void Cancel()

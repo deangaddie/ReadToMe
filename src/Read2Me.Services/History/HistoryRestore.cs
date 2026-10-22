@@ -41,9 +41,9 @@ public sealed class HistoryRestore(
         IReadOnlyList<string> dropped = [];
         try
         {
-            // After the flag is set, so an enqueue request that arrives from here on is refused. One
-            // already past the endpoint's check can still land; its queue writes are then refused
-            // with Restoring, and those items fail rather than race the Restore.
+            // After the flag is set, so an enqueue that arrives from here on is refused, by the
+            // endpoint or by the queue itself. One already past the queue's check can still land;
+            // its writes are then refused with Restoring, and its items run again after the Restore.
             if (busy.For(folder) is { } b)
                 return new RestoreOutcome.Refused(b.Reason);
 

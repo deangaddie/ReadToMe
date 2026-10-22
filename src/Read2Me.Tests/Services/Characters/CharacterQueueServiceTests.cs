@@ -1,5 +1,6 @@
 using Read2Me.Core.Models;
 using Read2Me.Services.Characters;
+using Read2Me.Services.History;
 using Read2Me.Services.Queueing;
 using Xunit;
 
@@ -273,6 +274,82 @@ namespace Read2Me.Tests.Services.Characters
             // spent, so a still-loading model retries indefinitely.
             Assert.Equal(1, requeued.Attempts.Busies);
             Assert.Equal(0, requeued.Attempts.Retries);
+        }
+
+        // ── While restoring ───────────────────────────────────────────────────
+
+        [Fact]
+        public void Enqueue_WhileTheProjectIsRestoring_IsRefused_AndQueuesNothing()
+        {
+            var restoring = new RestoringProjects();
+            var svc = new CharacterQueueService(restoring);
+            var changed = 0;
+            svc.Changed += () => changed++;
+            restoring.TryBegin(Folder);
+
+            var item = MakeItem();
+            Assert.False(svc.Enqueue([item]));
+
+            Assert.Null(svc.StatusOf(Folder, item.ParagraphId));
+            Assert.Null(svc.BusyFor(Folder));
+            Assert.False(svc.Reader.TryPeek(out _));
+            // Nothing told a listener (the Background run tracker) that the project went busy.
+            Assert.Equal(0, changed);
+        }
+
+        [Fact]
+        public void Enqueue_AnotherProjectRestoring_IsAccepted()
+        {
+            var restoring = new RestoringProjects();
+            var svc = new CharacterQueueService(restoring);
+            restoring.TryBegin(new ProjectFolderId("another-book"));
+
+            Assert.True(svc.Enqueue([MakeItem()]));
+        }
+
+        [Fact]
+        public async Task Apply_RetryAfterRestore_StaysQueued_AndRunsOnceTheRestoreEnds()
+        {
+            var restoring = new RestoringProjects();
+            var svc = new CharacterQueueService(restoring);
+            var item = MakeItem();
+            EnqueueAndProcess(svc, item);
+            Assert.True(svc.Reader.TryRead(out _));
+            restoring.TryBegin(Folder);
+
+            svc.Apply(item, new Disposition.RetryAfterRestore());
+
+            Assert.Equal(ParagraphQueueStatus.Queued, svc.StatusOf(Folder, item.ParagraphId));
+            Assert.Null(svc.OutcomeOf(Folder, item.ParagraphId));
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+            Assert.False(svc.Reader.TryPeek(out _));
+
+            restoring.End(Folder);
+
+            var requeued = await svc.Reader.ReadAsync(TestContext.Current.CancellationToken)
+                .AsTask().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.Equal(item.ParagraphId, requeued.ParagraphId);
+            // Waiting out a Restore spends neither budget.
+            Assert.Equal(default, requeued.Attempts);
+        }
+
+        [Fact]
+        public async Task Apply_RetryAfterRestore_CancelAllDuringTheRestore_DoesNotResurrectTheItem()
+        {
+            var restoring = new RestoringProjects();
+            var svc = new CharacterQueueService(restoring);
+            var item = MakeItem();
+            EnqueueAndProcess(svc, item);
+            Assert.True(svc.Reader.TryRead(out _));
+            restoring.TryBegin(Folder);
+
+            svc.Apply(item, new Disposition.RetryAfterRestore());
+            svc.CancelAll();
+            restoring.End(Folder);
+
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+            Assert.False(svc.Reader.TryRead(out _));
+            Assert.Null(svc.StatusOf(Folder, item.ParagraphId));
         }
 
         [Fact]

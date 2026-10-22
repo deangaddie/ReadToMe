@@ -87,6 +87,16 @@ namespace Read2Me.App.Characters
                 // item-level cancel (CancelAll) — items already removed from _status by CancelAll
                 logger.LogInformation("Cancelled paragraph {ParagraphId}", item.ParagraphId);
             }
+            // A write inside the chain (the Chapter style's character discovery) was refused because
+            // the project began a Restore: the undecided paragraphs run again after it.
+            catch (ProjectRestoringException)
+            {
+                foreach (var p in pending)
+                {
+                    Log(p, new Disposition.RetryAfterRestore());
+                    queue.Apply(p, new Disposition.RetryAfterRestore());
+                }
+            }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed processing paragraph {ParagraphId}", item.ParagraphId);
@@ -137,7 +147,15 @@ namespace Read2Me.App.Characters
             QueuedParagraph item, AttributionOutcome outcome, double elapsedSeconds,
             NarratorCache narrators, CancellationToken ct)
         {
-            await ApplyAttributionsAsync(item, outcome.Answer!, narrators, ct);
+            try
+            {
+                await ApplyAttributionsAsync(item, outcome.Answer!, narrators, ct);
+            }
+            // The project began a Restore under the answer: ask again once it has finished.
+            catch (ProjectRestoringException)
+            {
+                return new Disposition.RetryAfterRestore();
+            }
 
             var unattributed = await reader.CountUnattributedCharacterItemsAsync(item.Folder, item.ParagraphId);
             if (unattributed > 0)
@@ -174,6 +192,11 @@ namespace Read2Me.App.Characters
                     logger.LogInformation(
                         "Paragraph {ParagraphId} model still loading — requeuing in {Backoff:0.#}s (attempt {Attempt})",
                         item.ParagraphId, retryAfter.Delay.TotalSeconds, item.Attempts.Busies + 1);
+                    break;
+
+                case Disposition.RetryAfterRestore:
+                    logger.LogInformation("Paragraph {ParagraphId} project is restoring — requeuing after the Restore",
+                        item.ParagraphId);
                     break;
             }
         }
@@ -234,6 +257,10 @@ namespace Read2Me.App.Characters
             // threw here, and the drain's own handler is what turns that into "cancelled paragraph".
             if (outcome is BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } cancelled)
                 throw new OperationCanceledException(cancelled.Message, ct);
+
+            // Refused while the project restores: the caller runs the paragraph again afterwards.
+            if (outcome is BookMutationOutcome.Rejected { Reason: BookMutationRejection.Restoring })
+                throw UncommittedArtifact.AsException(outcome, $"paragraph {item.ParagraphId} attributions", ct);
 
             // Every other refusal is expected and not the queue's business to retry: the paragraph
             // the answer names can have been deleted while the ask was in flight, and an answer that

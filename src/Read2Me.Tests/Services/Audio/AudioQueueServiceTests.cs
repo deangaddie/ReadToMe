@@ -1,5 +1,6 @@
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
+using Read2Me.Services.History;
 using Read2Me.Services.Queueing;
 using Xunit;
 
@@ -173,6 +174,67 @@ namespace Read2Me.Tests.Services.Audio
             var back = await svc.Reader.ReadAsync(TestContext.Current.CancellationToken);
             Assert.Equal(0, back.Attempts.Retries);
             Assert.Equal(1, back.Attempts.Busies);
+        }
+
+        [Fact]
+        public void Enqueue_WhileTheProjectIsRestoring_IsRefused_AndQueuesNothing()
+        {
+            var restoring = new RestoringProjects();
+            var svc = new AudioQueueService(restoring);
+            var changed = 0;
+            svc.Changed += () => changed++;
+            restoring.TryBegin(Folder);
+
+            var item = MakeItem();
+            Assert.False(svc.Enqueue([item]));
+
+            Assert.Null(svc.StatusOf(Folder, IdOf(item)));
+            Assert.Null(svc.BusyFor(Folder));
+            Assert.False(svc.Reader.TryPeek(out _));
+            Assert.Equal(0, changed);
+        }
+
+        [Fact]
+        public async Task Apply_RetryAfterRestore_StaysQueued_AndRunsOnceTheRestoreEnds()
+        {
+            var restoring = new RestoringProjects();
+            var svc = new AudioQueueService(restoring);
+            var item = MakeItem();
+            EnqueueAndProcess(svc, item);
+            restoring.TryBegin(Folder);
+
+            svc.Apply(item, new Disposition.RetryAfterRestore());
+
+            Assert.Equal(AudioItemQueueStatus.Queued, svc.StatusOf(Folder, IdOf(item)));
+            Assert.Null(svc.OutcomeOf(Folder, IdOf(item)));
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+            Assert.False(svc.Reader.TryPeek(out _));
+
+            restoring.End(Folder);
+
+            var back = await svc.Reader.ReadAsync(TestContext.Current.CancellationToken)
+                .AsTask().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.Equal(IdOf(item), IdOf(back));
+            // Waiting out a Restore spends neither budget.
+            Assert.Equal(default, back.Attempts);
+        }
+
+        [Fact]
+        public async Task Apply_RetryAfterRestore_CancelAllDuringTheRestore_DoesNotResurrectTheItem()
+        {
+            var restoring = new RestoringProjects();
+            var svc = new AudioQueueService(restoring);
+            var item = MakeItem();
+            EnqueueAndProcess(svc, item);
+            restoring.TryBegin(Folder);
+
+            svc.Apply(item, new Disposition.RetryAfterRestore());
+            svc.CancelAll();
+            restoring.End(Folder);
+
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+            Assert.False(svc.Reader.TryRead(out _));
+            Assert.Equal(0, svc.Snapshot().QueuedCount);
         }
 
         /// <summary>

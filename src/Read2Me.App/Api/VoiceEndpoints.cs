@@ -360,9 +360,7 @@ namespace Read2Me.App.Api
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
 
-            return runner.StartGeneratePrompts(folderId, body?.RegenerateAll ?? false)
-                ? Results.Accepted(value: new { started = true })
-                : Results.Problem("A voice batch is already running.", statusCode: StatusCodes.Status409Conflict);
+            return BatchStarted(runner.StartGeneratePrompts(folderId, body?.RegenerateAll ?? false));
         }
 
         private static IResult StartAudioBatch(string folder, IFileSystem fs, VoiceBatchRunner runner)
@@ -370,9 +368,14 @@ namespace Read2Me.App.Api
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
 
-            return runner.StartGenerateAudio(folderId)
-                ? Results.Accepted(value: new { started = true })
-                : Results.Problem("A voice batch is already running.", statusCode: StatusCodes.Status409Conflict);
+            return BatchStarted(runner.StartGenerateAudio(folderId));
         }
+
+        private static IResult BatchStarted(VoiceBatchStart start) => start switch
+        {
+            VoiceBatchStart.Started => Results.Accepted(value: new { started = true }),
+            VoiceBatchStart.Restoring => StepReads.Restoring(),
+            _ => Results.Problem("A voice batch is already running.", statusCode: StatusCodes.Status409Conflict),
+        };
     }
 }
