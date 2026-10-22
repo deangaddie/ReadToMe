@@ -123,7 +123,8 @@ internal sealed class SqliteSession : IDisposable
     private static void Check(int rc, string call)
     {
         if (rc != SqliteOk)
-            throw new InvalidOperationException($"{call} failed with SQLite error {rc}.");
+            // The low byte is the primary result code (SQLITE_FULL, SQLITE_BUSY, …) callers classify by.
+            throw new SqliteException($"{call} failed with SQLite error {rc}.", rc & 0xFF, rc);
     }
 
     private static class NativeMethods

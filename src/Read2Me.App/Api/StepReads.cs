@@ -38,7 +38,7 @@ namespace Read2Me.App.Api
         /// <summary>
         /// Accepts <c>?at=&lt;stepId&gt;</c>: 404 for a step the project's History doesn't have, 409
         /// while the project is busy (<c>detail</c> carries the reason), 422 for a step that can't be
-        /// opened.
+        /// opened, 503 when opening it failed for a reason that passes (try again).
         /// </summary>
         public static RouteHandlerBuilder ReadsAt(this RouteHandlerBuilder builder) =>
             builder
@@ -47,6 +47,7 @@ namespace Read2Me.App.Api
                 .ProducesProblem(StatusCodes.Status404NotFound)
                 .ProducesProblem(StatusCodes.Status409Conflict)
                 .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
+                .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
                 .AddOpenApiOperationTransformer((operation, _, _) =>
                 {
                     operation.Parameters ??= [];
@@ -83,6 +84,8 @@ namespace Read2Me.App.Api
                             return UnknownStep(stepId);
                         case StepOpening.CantOpen:
                             return Results.Problem($"History step {stepId} can't be opened.", statusCode: StatusCodes.Status422UnprocessableEntity);
+                        case StepOpening.TryAgain:
+                            return TryAgain(stepId);
                         case StepOpening.Opened opened:
                             http.RequestServices.GetRequiredService<ProjectDbSession>().ReadAt(folderId, opened.State);
                             return await next(context);
@@ -117,6 +120,10 @@ namespace Read2Me.App.Api
 
         internal static IResult UnknownStep(Guid stepId) =>
             Results.Problem($"The project's History has no step {stepId}.", statusCode: StatusCodes.Status404NotFound);
+
+        /// <summary>503: opening the step failed for a reason that passes (an IO error, a full disk, a busy database).</summary>
+        internal static IResult TryAgain(Guid stepId) =>
+            Results.Problem($"History step {stepId} couldn't be opened just now. Try again.", statusCode: StatusCodes.Status503ServiceUnavailable);
 
         /// <summary>A project read of live results, progress or files: refuses <c>?at=</c> with 400.</summary>
         public static RouteHandlerBuilder ReadsLive(this RouteHandlerBuilder builder, string why) =>

@@ -350,7 +350,7 @@ export class AppShell extends R2mElement {
       <span class="shell__viewing-text"
         ><strong>Viewing ${name}</strong>${step?.summary ? ` — ${step.summary}` : ''}${when}. The
         project as it was after this step; read-only.
-        ${restoring ? 'The project is restoring.' : restoreCost(cost)}</span
+        ${restoring ? 'The project is restoring.' : (store.viewError() ?? restoreCost(cost))}</span
       >
       <button
         type="button"
