@@ -46,10 +46,10 @@ namespace Read2Me.App.Api
             endpoints.MapGet("/api/previews/{previewId}/{stepId}.wav", GetPreviewStage)
                 .WithSummary("The audio after one stage of a rendered preview. 404 once the preview has expired.");
             endpoints.MapPost("/api/projects/{folder}/voices/{voiceId:guid}/editor/apply", ApplyAsync)
-                .RecordsStep("Edit voice audio")
+                .RecordsStep("Edit voice audio", StepAction.Voice)
                 .WithSummary("Write a rendered preview's final stage over the voice's audio, keeping the original for restore. 422 when the preview is unknown, expired or belongs to another voice.");
             endpoints.MapPost("/api/projects/{folder}/voices/{voiceId:guid}/editor/restore", RestoreAsync)
-                .RecordsStep("Restore original voice audio")
+                .RecordsStep("Restore original voice audio", StepAction.Voice)
                 .WithSummary("Put the voice's original audio back and forget the edit. A no-op for a voice that was never edited.");
             endpoints.MapGet("/api/projects/{folder}/voices/{voiceId:guid}/original.wav", GetOriginalAsync)
                 .ReadsAt()

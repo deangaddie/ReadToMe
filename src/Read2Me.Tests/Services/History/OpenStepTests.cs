@@ -145,7 +145,7 @@ public class OpenStepTests : ProjectDbTestBase
 
         await using var scope = _root.CreateAsyncScope();
         var mutations = scope.ServiceProvider.GetRequiredService<BookMutations>();
-        await using (scope.ServiceProvider.GetRequiredService<HistoryStepScope>().Open(_folder, "Cast"))
+        await using (scope.ServiceProvider.GetRequiredService<HistoryStepScope>().Open(_folder, "Cast", StepAction.Character))
         {
             await mutations.CommitAsync(new CreateCharacterMutation(_folder, "Alice"));
             var open = await TipAsync();

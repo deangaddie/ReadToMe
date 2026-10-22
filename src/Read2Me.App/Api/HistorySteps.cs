@@ -29,9 +29,10 @@ namespace Read2Me.App.Api
     {
         /// <summary>
         /// Opens a step scope named <paramref name="label"/> around the request, so everything it
-        /// commits to the project is one step, and closes it when the handler returns.
+        /// commits to the project is one step, a <paramref name="action"/>, and closes it when the
+        /// handler returns.
         /// </summary>
-        public static RouteHandlerBuilder RecordsStep(this RouteHandlerBuilder builder, string label) =>
+        public static RouteHandlerBuilder RecordsStep(this RouteHandlerBuilder builder, string label, StepAction action) =>
             builder
                 .WithMetadata(new RecordsHistoryStep(label))
                 .RefusesAt(StepReads.WritesGoToTheTip)
@@ -43,7 +44,7 @@ namespace Read2Me.App.Api
                         || !ProjectEndpoints.TryResolve(folder, http.RequestServices.GetRequiredService<IFileSystem>(), out var folderId))
                         return await next(context); // the handler answers the unknown project
 
-                    await using (http.RequestServices.GetRequiredService<HistoryStepScope>().Open(folderId, label))
+                    await using (http.RequestServices.GetRequiredService<HistoryStepScope>().Open(folderId, label, action))
                         return await next(context);
                 });
 

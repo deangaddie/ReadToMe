@@ -226,6 +226,19 @@ public class BackgroundRunTrackerTests : ProjectDbTestBase
         await tracker.StopAsync(CancellationToken.None);
     }
 
+    [Theory]
+    [InlineData(false, false, 7, 7, 0, null)]
+    [InlineData(false, false, 7, 7, 2, "2 voices failed")]
+    [InlineData(true, false, 3, 7, 0, "3 of 7 voices, cancelled")]
+    [InlineData(true, false, 3, 7, 2, "3 of 7 voices, cancelled · 2 failed")]
+    [InlineData(false, true, 3, 7, 0, "3 of 7 voices, stopped on an error")]
+    [InlineData(false, true, 3, 7, 2, "3 of 7 voices, stopped on an error · 2 failed")]
+    public void AVoiceBatchsNote_SaysHowItEnded_AndCountsTheVoicesThatFailedOnTheirOwn(
+        bool cancelled, bool stoppedOnError, int processed, int total, int failed, string? note)
+    {
+        Assert.Equal(note, BackgroundRunTracker.VoiceBatchEnding(cancelled, stoppedOnError, processed, total, failed));
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     private ServiceProvider BuildRestartedRoot()

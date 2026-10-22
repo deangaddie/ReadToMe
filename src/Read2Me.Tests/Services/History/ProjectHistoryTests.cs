@@ -52,6 +52,8 @@ public class ProjectHistoryTests : ProjectDbTestBase
 
         var started = Assert.Single(list.Steps);
         Assert.Equal("History started", started.Label);
+        Assert.Equal(HistoryStepKind.Started, started.Kind);
+        Assert.Null(started.Action);
         Assert.Null(started.ParentStepId);
         Assert.Equal(1, started.Sequence);
         Assert.False(started.IsOpen);
@@ -94,6 +96,22 @@ public class ProjectHistoryTests : ProjectDbTestBase
         Assert.Equal(["Import book content"], (await _history.ListAsync(_folder)).Steps.Select(s => s.Label));
     }
 
+    [Fact]
+    public async Task AnImportsScope_RecordsAnImportStep()
+    {
+        await SeedProjectRowAsync();
+
+        await using (var scope = _root.CreateAsyncScope())
+        await using (scope.ServiceProvider.GetRequiredService<HistoryStepScope>().OpenImport(_folder, "Import book"))
+            await scope.ServiceProvider.GetRequiredService<BookMutations>()
+                .CommitAsync(new ImportBookContentMutation(_folder, OneChapterBook(), ReplaceExisting: false));
+
+        var import = Assert.Single((await _history.ListAsync(_folder)).Steps);
+        Assert.Equal("Import book", import.Label);
+        Assert.Equal(HistoryStepKind.Import, import.Kind);
+        Assert.Null(import.Action);
+    }
+
     // ── one step per state mutation ─────────────────────────────────────────
 
     [Fact]
@@ -112,6 +130,8 @@ public class ProjectHistoryTests : ProjectDbTestBase
         Assert.Equal(list.Steps[0].StepId, list.HeadStepId);
 
         var tip = list.Steps[0];
+        Assert.Equal(HistoryStepKind.Request, tip.Kind); // no scope names it: a request's edit of its own
+        Assert.Equal(StepAction.Edit, tip.Action);
         Assert.False(tip.IsOpen);
         Assert.False(string.IsNullOrWhiteSpace(tip.Author));
         Assert.NotNull(tip.EndedAt);
@@ -202,6 +222,8 @@ public class ProjectHistoryTests : ProjectDbTestBase
         var list = await _history.ListAsync(_folder);
         Assert.Equal(["New character", "History started"], list.Steps.Select(s => s.Label));
         var step = list.Steps[0];
+        Assert.Equal(HistoryStepKind.Request, step.Kind);
+        Assert.Equal(StepAction.Character, step.Action);
         Assert.False(step.IsOpen);
         Assert.NotNull(step.EndedAt);
         Assert.Equal(before.HeadStepId, step.ParentStepId);
@@ -388,7 +410,7 @@ public class ProjectHistoryTests : ProjectDbTestBase
     {
         await using var scope = _root.CreateAsyncScope();
         var steps = scope.ServiceProvider.GetRequiredService<HistoryStepScope>();
-        await using (steps.Open(_folder, label))
+        await using (steps.Open(_folder, label, StepAction.Character))
             await body(scope.ServiceProvider.GetRequiredService<BookMutations>());
     }
 

@@ -225,7 +225,7 @@ public class StateFileTests : ProjectDbTestBase
     }
 
     [Fact]
-    public async Task AHistoryRecordedByAnOlderBuild_Restarts()
+    public async Task AHistoryRecordedByAnOlderBuild_Restarts_AndLeavesTheProjectAsItIs()
     {
         await SeedAsync();
         await CommitAsync(new CreateCharacterMutation(_folder, "Alice"));
@@ -233,18 +233,56 @@ public class StateFileTests : ProjectDbTestBase
         {
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
-            command.CommandText = "PRAGMA user_version = 1";
+            command.CommandText = $"PRAGMA user_version = {HistoryDatabase.Version - 1}";
             await command.ExecuteNonQueryAsync();
         }
+        var leftover = Path.Combine(HistoryFolder, "cache", "leftover.db");
+        Directory.CreateDirectory(Path.GetDirectoryName(leftover)!);
+        await File.WriteAllTextAsync(leftover, "from the older build");
         await _root.DisposeAsync();
+        var project = await ProjectRowsAsync();
         _root = NewApp(snapshotEvery: 50);
 
         var steps = (await History.ListAsync(_folder)).Steps;
 
-        Assert.Equal("History started", Assert.Single(steps).Label);
+        var started = Assert.Single(steps);
+        Assert.Equal("History started", started.Label);
+        Assert.Equal(HistoryStepKind.Started, started.Kind);
+        Assert.False(File.Exists(leftover)); // the older history/ folder went; this one is new
+        Assert.Equal(HistoryDatabase.Version, await HistoryDatabase.ReadVersionAsync(Path.Combine(HistoryFolder, "history.db"), default));
+        Assert.Equal(project, await ProjectRowsAsync());
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Every row of every project table, as text. Not the file's bytes: opening a project runs EF's
+    /// migration lock, which writes the file without changing a row.
+    /// </summary>
+    private async Task<List<string>> ProjectRowsAsync()
+    {
+        await using var connection = new SqliteConnection($"Data Source={Path.Combine(FolderPath, "project.db")};Mode=ReadOnly;Pooling=false");
+        await connection.OpenAsync();
+        var tables = new List<string>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '__EF%' ORDER BY name";
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                tables.Add(reader.GetString(0));
+        }
+
+        var rows = new List<string>();
+        foreach (var table in tables)
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = $"SELECT * FROM \"{table}\" ORDER BY rowid";
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                rows.Add(table + ": " + string.Join(" | ", Enumerable.Range(0, reader.FieldCount).Select(i => Convert.ToString(reader.GetValue(i)))));
+        }
+        return rows;
+    }
 
     private ServiceProvider NewApp(int snapshotEvery)
     {

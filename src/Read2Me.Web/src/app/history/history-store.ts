@@ -306,6 +306,7 @@ function fromHub(step: LiveHistoryStep): HistoryStep {
     summary: step.summary ?? null,
     endedAt: step.endedAt ?? null,
     note: step.note ?? null,
+    action: step.action ?? null,
     restoredFromStepId: step.restoredFromStepId ?? null,
   };
 }

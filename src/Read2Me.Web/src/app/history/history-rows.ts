@@ -1,4 +1,4 @@
-import type { Guid, HistoryStep } from '@app/api';
+import type { Guid, HistoryStep, HistoryStepKind, StepAction } from '@app/api';
 import type { IconName } from '@app/ui/icons';
 
 /** A Background run's step, a Restore's, or any other: the sheet draws the first two apart. */
@@ -28,28 +28,31 @@ export interface HistoryGroup {
 }
 
 /**
- * The labels the host gives a Background run's step (`BackgroundRuns.LabelOf`). The wire has no
- * kind field, so a Background run is told by its label; `history-rows.spec` pins them to the host.
+ * The icon of a request's or Background run's step, by its action. Keyed by the host's
+ * `StepAction`, so a new action fails the typecheck until it has an icon.
  */
-export const BACKGROUND_RUN_ICONS: Record<string, IconName> = {
-  Attribution: 'smart_toy',
-  'Voice batch': 'record_voice_over',
-  'Attribution and voice batch': 'smart_toy',
+const ACTION_ICONS: Record<StepAction, IconName> = {
+  edit: 'edit',
+  editWithAi: 'auto_awesome',
+  insert: 'add',
+  split: 'call_split',
+  merge: 'merge',
+  delete: 'delete',
+  title: 'title',
+  pause: 'pause',
+  character: 'person',
+  voice: 'record_voice_over',
+  attribution: 'smart_toy',
 };
 
-/** The kind of action a label names, first match wins; the labels are the host's (`CommandStepLabels`, the endpoints). */
-const LABEL_ICONS: [RegExp, IconName][] = [
-  [/^History started$/, 'history'],
-  [/^Import/, 'upload_file'],
-  [/^Edit with AI/, 'auto_awesome'],
-  [/^(Split|Re-split)/, 'call_split'],
-  [/^Merge/, 'merge'],
-  [/^(Delete|Remove|Clear)/, 'delete'],
-  [/voice|transcri/i, 'record_voice_over'],
-  [/character|speaker|narrat|alias/i, 'person'],
-  [/title/i, 'title'],
-  [/pause/i, 'pause'],
-];
+/** The icon of a step with no action, by its kind. */
+const KIND_ICONS: Record<HistoryStepKind, IconName> = {
+  request: 'edit',
+  backgroundRun: 'smart_toy',
+  restore: 'restart_alt',
+  started: 'history',
+  import: 'upload_file',
+};
 
 export function historyGroups(
   steps: readonly HistoryStep[],
@@ -68,21 +71,13 @@ export function historyGroups(
 }
 
 export function historyRow(step: HistoryStep, headStepId: Guid | null): HistoryRow {
-  const backgroundRun = BACKGROUND_RUN_ICONS[step.label];
   const kind: HistoryRowKind =
-    step.restoredFromStepId !== null
-      ? 'restore'
-      : backgroundRun !== undefined
-        ? 'backgroundRun'
-        : 'step';
-  const icon =
-    kind === 'restore'
-      ? 'restart_alt'
-      : (backgroundRun ?? LABEL_ICONS.find(([pattern]) => pattern.test(step.label))?.[1] ?? 'edit');
+    step.kind === 'restore' || step.kind === 'backgroundRun' ? step.kind : 'step';
   return {
     stepId: step.stepId,
     kind,
-    icon,
+    // From the step's kind and action, never its label: renaming a label changes no icon.
+    icon: step.action === null ? KIND_ICONS[step.kind] : ACTION_ICONS[step.action],
     label: step.label,
     // Notes come without brackets; the sheet adds them, once: "Attribution (part 2 · interrupted)".
     note: step.note === null ? null : `(${step.note})`,

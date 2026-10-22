@@ -1198,6 +1198,12 @@ export interface BookEditRunDto {
   reason: string | null;
 }
 
+/** `HistoryStepKind`: what opened a History step. */
+export type HistoryStepKind = Schema['HistoryStepKind'];
+
+/** `StepAction`: the kind of action a request's or Background run's step is (the host's `StepAction`). */
+export type StepAction = NonNullable<Schema['StepAction']>;
+
 /** `HistoryStep`: one History step. `sequence` is for display; the line is the `parentStepId` chain from the Head. */
 export interface HistoryStep {
   stepId: Guid;
@@ -1213,6 +1219,10 @@ export interface HistoryStep {
   isOpen: boolean;
   /** "part 2", "212 of 340 paragraphs, cancelled", "interrupted", joined by " · ", without brackets; null when nothing is unusual. */
   note: string | null;
+  /** What opened the step: a request, a Background run, a Restore, History starting, or an import. */
+  kind: HistoryStepKind;
+  /** What kind of action a request's or Background run's step is; null on the other kinds. */
+  action: StepAction | null;
   /** The step a Restore step brought back; null for any other step. */
   restoredFromStepId: Guid | null;
   /** The step can no longer be opened: its old schema fails to migrate. */

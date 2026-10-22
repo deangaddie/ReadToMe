@@ -34,16 +34,28 @@ public sealed class HistoryStepScope(ProjectHistory history, BackgroundRuns runs
     private BackgroundRunKind? _runKind;
 
     /// <summary>
-    /// Opens a step scope for <paramref name="folder"/>. Inside a scope already open, this is a no-op:
-    /// the outer owner — the request — keeps the step, so one request is at most one step.
+    /// Opens a request's step scope for <paramref name="folder"/>, its step a <paramref name="action"/>.
+    /// Inside a scope already open, this is a no-op: the outer owner — the request — keeps the step,
+    /// so one request is at most one step.
     /// </summary>
-    public IAsyncDisposable Open(ProjectFolderId folder, string label)
+    public IAsyncDisposable Open(ProjectFolderId folder, string label, StepAction action) =>
+        Open(folder, label, HistoryStepKind.Request, action);
+
+    /// <summary>Opens the step scope of an import, or a reread, of the project's book: an import step.</summary>
+    public IAsyncDisposable OpenImport(ProjectFolderId folder, string label) =>
+        Open(folder, label, HistoryStepKind.Import, action: null);
+
+    /// <summary>Opens the step scope of a Restore: a Restore step.</summary>
+    internal IAsyncDisposable OpenRestore(ProjectFolderId folder, string label) =>
+        Open(folder, label, HistoryStepKind.Restore, action: null);
+
+    private IAsyncDisposable Open(ProjectFolderId folder, string label, HistoryStepKind kind, StepAction? action)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(label);
         if (_open is not null)
             return NothingToClose.Instance;
 
-        _open = new OpenScope(folder, label);
+        _open = new OpenScope(folder, label, kind, action);
         return new Closer(this, _open);
     }
 
@@ -75,12 +87,18 @@ public sealed class HistoryStepScope(ProjectHistory history, BackgroundRuns runs
     /// changed" describes, and the Background run work in it, which a run's label names. They are
     /// written only under the project's write lock, by the commit that moves them.
     /// </summary>
-    internal sealed class OpenScope(ProjectFolderId folder, string label)
+    internal sealed class OpenScope(ProjectFolderId folder, string label, HistoryStepKind kind, StepAction? action)
     {
         public ProjectFolderId Folder { get; } = folder;
 
         /// <summary>A request's label. A Background run's step is named for the run work in it instead.</summary>
         public string Label { get; } = label;
+
+        /// <summary>The kind of each step the scope opens.</summary>
+        public HistoryStepKind Kind { get; } = kind;
+
+        /// <summary>A request's action. A Background run's comes from the run work in it instead.</summary>
+        public StepAction? Action { get; } = action;
 
         public Guid? StepId { get; set; }
         public int Part { get; set; }

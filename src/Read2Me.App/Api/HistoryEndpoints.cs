@@ -36,13 +36,15 @@ namespace Read2Me.App.Api
         DateTimeOffset? EndedAt,
         bool IsOpen,
         string? Note,
+        HistoryStepKind Kind,
+        StepAction? Action,
         Guid? RestoredFromStepId,
         bool CantOpen,
         RestorePreviewDto? RestorePreview)
     {
         public static HistoryStepDto From(HistoryStep s, RestorePreviewDto? preview) => new(
             s.StepId, s.ParentStepId, s.Sequence, s.Label, s.Summary, s.Author, s.StartedAt, s.EndedAt, s.IsOpen, s.Note,
-            s.RestoredFromStepId, s.CantOpen, preview);
+            s.Kind, s.Action, s.RestoredFromStepId, s.CantOpen, preview);
     }
 
     /// <summary>
@@ -59,7 +61,9 @@ namespace Read2Me.App.Api
                 .ReadsLive("History itself is listed as it is now.")
                 .Produces<HistoryDto>()
                 .WithSummary("The project's History: steps newest first (stepId, parentStepId, display sequence, label, summary — what " +
-                             "changed, in user terms, or null — author, startedAt, endedAt — its close, or its last change while open — isOpen while its request or Background run runs, note — \"part 2\", \"212 of 340 paragraphs, cancelled\", \"interrupted\", without brackets — or null, restoredFromStepId — the step a Restore brought back, else null — and cantOpen), headStepId (the tip; null before the first step), busy ({ reason } while " +
+                             "changed, in user terms, or null — author, startedAt, endedAt — its close, or its last change while open — isOpen while its request or Background run runs, note — \"part 2\", \"212 of 340 paragraphs, cancelled\", \"interrupted\", without brackets — or null, kind — request | backgroundRun | restore | started | import, " +
+                             "action — what a request's or Background run's step does: edit | editWithAi | insert | split | merge | delete | " +
+                             "title | pause | character | voice | attribution, null on the other kinds — restoredFromStepId — the step a Restore brought back, else null — and cantOpen), headStepId (the tip; null before the first step), busy ({ reason } while " +
                              "anything is queued or running for the project, else null) and restoring (a Restore of the project is running). The first call on a project " +
                              "starts its History. 404 unknown project.");
             endpoints.MapGet("/api/projects/{folder}/history/{stepId:guid}", GetStepAsync)

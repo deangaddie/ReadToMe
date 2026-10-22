@@ -77,7 +77,7 @@ public class SnapshotTests : ProjectDbTestBase
         await SeedAsync();
         await CommitAsync(new CreateCharacterMutation(_folder, "A"));
         await using (var scope = _root.CreateAsyncScope())
-        await using (scope.ServiceProvider.GetRequiredService<HistoryStepScope>().Open(_folder, "Cast"))
+        await using (scope.ServiceProvider.GetRequiredService<HistoryStepScope>().Open(_folder, "Cast", StepAction.Character))
         {
             await scope.ServiceProvider.GetRequiredService<BookMutations>().CommitAsync(new CreateCharacterMutation(_folder, "B"));
             Assert.Single(Snapshots()); // the step is still open

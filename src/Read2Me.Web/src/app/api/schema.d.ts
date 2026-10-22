@@ -546,7 +546,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The project's History: steps newest first (stepId, parentStepId, display sequence, label, summary — what changed, in user terms, or null — author, startedAt, endedAt — its close, or its last change while open — isOpen while its request or Background run runs, note — "part 2", "212 of 340 paragraphs, cancelled", "interrupted", without brackets — or null, restoredFromStepId — the step a Restore brought back, else null — and cantOpen), headStepId (the tip; null before the first step), busy ({ reason } while anything is queued or running for the project, else null) and restoring (a Restore of the project is running). The first call on a project starts its History. 404 unknown project. */
+        /** The project's History: steps newest first (stepId, parentStepId, display sequence, label, summary — what changed, in user terms, or null — author, startedAt, endedAt — its close, or its last change while open — isOpen while its request or Background run runs, note — "part 2", "212 of 340 paragraphs, cancelled", "interrupted", without brackets — or null, kind — request | backgroundRun | restore | started | import, action — what a request's or Background run's step does: edit | editWithAi | insert | split | merge | delete | title | pause | character | voice | attribution, null on the other kinds — restoredFromStepId — the step a Restore brought back, else null — and cantOpen), headStepId (the tip; null before the first step), busy ({ reason } while anything is queued or running for the project, else null) and restoring (a Restore of the project is running). The first call on a project starts its History. 404 unknown project. */
         get: {
             parameters: {
                 query?: never;
@@ -5848,6 +5848,8 @@ export interface components {
             endedAt: null | string;
             isOpen: boolean;
             note: null | string;
+            kind: components["schemas"]["HistoryStepKind"];
+            action: null | components["schemas"]["StepAction"];
             /** Format: uuid */
             restoredFromStepId?: null | string;
             /** @default false */
@@ -5869,11 +5871,15 @@ export interface components {
             endedAt: null | string;
             isOpen: boolean;
             note: null | string;
+            kind: components["schemas"]["HistoryStepKind"];
+            action: null | components["schemas"]["StepAction"];
             /** Format: uuid */
             restoredFromStepId: null | string;
             cantOpen: boolean;
             restorePreview: null | components["schemas"]["RestorePreviewDto"];
         };
+        /** @enum {unknown} */
+        HistoryStepKind: "request" | "backgroundRun" | "restore" | "started" | "import";
         ImportRequest: {
             /** @default false */
             reread: boolean;
@@ -6048,6 +6054,8 @@ export interface components {
             mode: null | string;
             prefix?: null | string;
         };
+        /** @enum {unknown} */
+        StepAction: "edit" | "editWithAi" | "insert" | "split" | "merge" | "delete" | "title" | "pause" | "character" | "voice" | "attribution" | null;
         StepPreviewRequest: {
             sample: null | components["schemas"]["PreviewSampleRef"];
             settings: null | components["schemas"]["JsonElement"];

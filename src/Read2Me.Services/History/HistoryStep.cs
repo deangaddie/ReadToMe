@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Read2Me.Core.Models;
 
 namespace Read2Me.Services.History;
@@ -17,6 +18,11 @@ namespace Read2Me.Services.History;
 /// <see cref="IsOpen"/>, not <see cref="EndedAt"/>, says whether it is open.
 /// </para>
 /// <para>
+/// <see cref="Kind"/> says what opened the step, and <see cref="Action"/> what kind of action a
+/// request's or Background run's step is (null on the others): the History sheet picks a row's icon
+/// from them, never from the label, so renaming a label changes no icon.
+/// </para>
+/// <para>
 /// <see cref="RestoredFromStepId"/> is the step a Restore step brought back; null for any other.
 /// <see cref="CantOpen"/> marks a step that can no longer be opened (its old schema fails to migrate).
 /// </para>
@@ -32,8 +38,47 @@ public sealed record HistoryStep(
     DateTimeOffset? EndedAt,
     bool IsOpen,
     string? Note,
+    HistoryStepKind Kind,
+    StepAction? Action,
     Guid? RestoredFromStepId = null,
     bool CantOpen = false);
+
+/// <summary>What opened a History step: a request, a Background run, a Restore, History starting, or an import.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<HistoryStepKind>))]
+public enum HistoryStepKind
+{
+    [JsonStringEnumMemberName("request")] Request,
+    [JsonStringEnumMemberName("backgroundRun")] BackgroundRun,
+    [JsonStringEnumMemberName("restore")] Restore,
+    [JsonStringEnumMemberName("started")] Started,
+    [JsonStringEnumMemberName("import")] Import,
+}
+
+/// <summary>
+/// The kind of action a request's or Background run's step is, in user terms: the History sheet
+/// draws one icon per action.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<StepAction>))]
+public enum StepAction
+{
+    /// <summary>Any change no other action names: text, a delivery cue, project details, the cover.</summary>
+    [JsonStringEnumMemberName("edit")] Edit,
+    [JsonStringEnumMemberName("editWithAi")] EditWithAi,
+    [JsonStringEnumMemberName("insert")] Insert,
+    /// <summary>Splitting a node, or re-splitting the whole book.</summary>
+    [JsonStringEnumMemberName("split")] Split,
+    [JsonStringEnumMemberName("merge")] Merge,
+    /// <summary>Deleting, removing or clearing anything.</summary>
+    [JsonStringEnumMemberName("delete")] Delete,
+    [JsonStringEnumMemberName("title")] Title,
+    [JsonStringEnumMemberName("pause")] Pause,
+    /// <summary>Characters, aliases, speakers and the narrator.</summary>
+    [JsonStringEnumMemberName("character")] Character,
+    /// <summary>Voices, their audio and voice rules; a Background run of the voice batch alone.</summary>
+    [JsonStringEnumMemberName("voice")] Voice,
+    /// <summary>A Background run with attribution in it.</summary>
+    [JsonStringEnumMemberName("attribution")] Attribution,
+}
 
 /// <summary>A project's History: its steps newest first, and the step the Head points at (null before the first).</summary>
 public sealed record HistoryList(IReadOnlyList<HistoryStep> Steps, Guid? HeadStepId);

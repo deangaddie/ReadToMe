@@ -5,6 +5,7 @@ using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
+using Read2Me.Services.History;
 using Read2Me.Services.Mutations;
 
 namespace Read2Me.App.Api
@@ -31,7 +32,7 @@ namespace Read2Me.App.Api
                 .RecordsNoStep("Asks the LLM; nothing is written until the roster is applied.")
                 .WithSummary("Ask the active LLM for the book's notable characters and aliases. Synchronous; takes seconds to a minute. Pass ?thinking=true to let the model think first — slower, better recall. Each row carries existingCharacterId when it resolves onto a roster character; collisions lists names two characters would share.");
             endpoints.MapPost("/api/projects/{folder}/characters/discover/apply", ApplyAsync)
-                .RecordsStep("Discover characters")
+                .RecordsStep("Discover characters", StepAction.Character)
                 .WithSummary("Persist discovered characters: one create per row (idempotent on name/alias match) plus its aliases.");
         }
 

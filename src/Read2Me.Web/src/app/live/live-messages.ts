@@ -493,7 +493,13 @@ export interface HistoryRestoringMessage {
 
 export type HistoryMessage = HistoryStepMessage | HistoryBusyMessage | HistoryRestoringMessage;
 
-type NullableHistoryField = 'parentStepId' | 'summary' | 'endedAt' | 'note' | 'restoredFromStepId';
+type NullableHistoryField =
+  | 'parentStepId'
+  | 'summary'
+  | 'endedAt'
+  | 'note'
+  | 'action'
+  | 'restoredFromStepId';
 
 /** `HistoryStep` as the hub sends it: its null fields omitted. */
 export type LiveHistoryStep = Omit<HistoryStep, NullableHistoryField> &

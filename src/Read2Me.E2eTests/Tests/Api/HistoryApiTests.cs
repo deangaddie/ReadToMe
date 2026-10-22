@@ -38,6 +38,8 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         var history = await HistoryAsync(folder);
         var steps = history.GetProperty("steps").EnumerateArray().ToList();
         Assert.Equal(["New character", "History started"], steps.Select(s => s.GetProperty("label").GetString()));
+        Assert.Equal(["request", "started"], steps.Select(s => s.GetProperty("kind").GetString()));
+        Assert.Equal(["character", null], steps.Select(s => s.GetProperty("action").GetString()));
 
         var tip = steps[0];
         Assert.Equal(tip.GetProperty("stepId").GetGuid(), history.GetProperty("headStepId").GetGuid());

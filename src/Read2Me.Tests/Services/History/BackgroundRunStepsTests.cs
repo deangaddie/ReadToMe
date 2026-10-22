@@ -46,6 +46,8 @@ public class BackgroundRunStepsTests : ProjectDbTestBase
         var steps = (await History.ListAsync(_folder)).Steps;
         Assert.Equal(["Attribution", "History started"], steps.Select(s => s.Label));
         var run = steps[0];
+        Assert.Equal(HistoryStepKind.BackgroundRun, run.Kind);
+        Assert.Equal(StepAction.Attribution, run.Action);
         Assert.False(run.IsOpen);
         Assert.Null(run.Note);
         Assert.NotNull(run.EndedAt);
@@ -159,6 +161,29 @@ public class BackgroundRunStepsTests : ProjectDbTestBase
         var steps = (await History.ListAsync(_folder)).Steps;
         Assert.Equal(
             ["Voice batch", "Edit text", "Attribution and voice batch", "History started"], steps.Select(s => s.Label));
+        Assert.Equal(
+            [HistoryStepKind.BackgroundRun, HistoryStepKind.Request, HistoryStepKind.BackgroundRun, HistoryStepKind.Started],
+            steps.Select(s => s.Kind));
+        Assert.Equal([StepAction.Voice, StepAction.Edit, StepAction.Attribution, null], steps.Select(s => s.Action));
+    }
+
+    [Fact]
+    public async Task ARunsAction_FollowsTheWorkThatLandsInIt()
+    {
+        await SeedOneItemAsync();
+        await History.ListAsync(_folder);
+
+        Runs.Started(_folder, BackgroundRunKind.VoiceBatch);
+        await RunCommitAsync(new CreateCharacterMutation(_folder, "Alice"), BackgroundRunKind.VoiceBatch);
+        Assert.Equal(StepAction.Voice, (await History.ListAsync(_folder)).Steps[0].Action);
+        Runs.Started(_folder, BackgroundRunKind.Attribution);
+        await RunCommitAsync(new CreateCharacterMutation(_folder, "Bob"), BackgroundRunKind.Attribution);
+        await Runs.EndedAsync(_folder, BackgroundRunKind.VoiceBatch);
+        await Runs.EndedAsync(_folder, BackgroundRunKind.Attribution);
+
+        var run = (await History.ListAsync(_folder)).Steps[0];
+        Assert.Equal("Attribution and voice batch", run.Label);
+        Assert.Equal(StepAction.Attribution, run.Action);
     }
 
     [Fact]
@@ -333,7 +358,7 @@ public class BackgroundRunStepsTests : ProjectDbTestBase
     {
         await using var scope = _root.CreateAsyncScope();
         var steps = scope.ServiceProvider.GetRequiredService<HistoryStepScope>();
-        await using (steps.Open(_folder, label))
+        await using (steps.Open(_folder, label, StepAction.Edit))
             await body(scope.ServiceProvider.GetRequiredService<BookMutations>());
     }
 

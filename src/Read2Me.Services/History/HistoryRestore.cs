@@ -68,7 +68,7 @@ public sealed class HistoryRestore(
             BookMutationOutcome outcome;
             try
             {
-                await using (stepScope.Open(folder, LabelOf(target.Step)))
+                await using (stepScope.OpenRestore(folder, LabelOf(target.Step)))
                     outcome = await mutations.CommitAsync(new RestoreStepMutation(folder, target.Step, work), ct);
             }
             catch

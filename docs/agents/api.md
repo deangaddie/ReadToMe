@@ -684,7 +684,7 @@ request the same way.
 ```bash
 curl -s http://localhost:5000/api/projects/{folder}/history
 # → { steps: [{ stepId, parentStepId, sequence, label, summary, author, startedAt, endedAt, isOpen, note,
-#               restoredFromStepId, cantOpen }],
+#               kind, action, restoredFromStepId, cantOpen }],
 #     headStepId, busy: { reason } | null, restoring }
 ```
 
@@ -700,12 +700,21 @@ curl -s http://localhost:5000/api/projects/{folder}/history
   `stepLanded` then `stepClosed` on the live hub bracket it, with a `stepChanged` for each later
   commit in between.
 - `note` says what is unusual about the step, or is null: "part 1", "part 2" for a split step, how a Background
-  run ended early ("212 of 340 paragraphs, cancelled", "3 of 7 voices, failed") or with items that
-  failed on their own ("3 paragraphs failed", "212 of 340 paragraphs, cancelled · 3 failed"), and
+  run ended early ("212 of 340 paragraphs, cancelled", "3 of 7 voices, stopped on an error") or with items that
+  failed on their own ("3 paragraphs failed", "212 of 340 paragraphs, cancelled · 3 failed",
+  "3 of 7 voices, stopped on an error · 2 failed"), and
   "interrupted" for a step the app stopped with open, closed on the next start. Pieces join with
   " · " ("part 2 · interrupted") and carry no brackets: a client shows one as "Attribution (part 2 ·
   interrupted)". A step whose note is set
   after it closed ("part 1", once part 2 lands) is sent again as `stepClosed`.
+- `kind` says what opened the step: `request`, `backgroundRun`, `restore`, `started` (the "History
+  started" step) or `import` (an import or reread of the book). `action` says what kind of action a
+  `request` or `backgroundRun` step is: `edit`, `editWithAi`, `insert`, `split`, `merge`, `delete`,
+  `title`, `pause`, `character`, `voice` (a voice batch alone, too) or `attribution` (a Background
+  run with attribution in it); null on the other kinds. A write committed outside any request or Background run is
+  a `request` step whose action is `edit`. Tell steps apart by these, never by `label`:
+  labels are wording and may change. The hub's `stepLanded`, `stepChanged` and `stepClosed` carry
+  them too (with null fields omitted).
 - `busy` names what is queued or running for the project ("Attribution: 128 paragraphs left"), or
   is null when it is idle. `restoring` is true while a Restore of the project runs.
 - History starts the first time a project is opened (`GET /api/projects/{folder}` or this call) or
