@@ -22,7 +22,8 @@ namespace Read2Me.App.Queueing;
 /// and how many of its items failed on their own ("3 paragraphs failed").
 /// <para>
 /// On app start, before following anything, it closes every step a previous run of the app left
-/// open as "interrupted": nothing that opened one is running any more.
+/// open as "interrupted": nothing that opened one is running any more. It repairs each project's
+/// state files too, so a Restore the previous run committed but didn't finish writing is finished.
 /// </para>
 /// </summary>
 public sealed class BackgroundRunTracker(
@@ -50,6 +51,15 @@ public sealed class BackgroundRunTracker(
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogWarning(ex, "Closing the History steps {Folder} left open failed; they stay open.", folder);
+            }
+
+            try
+            {
+                await history.RepairAsync(new ProjectFolderId(folder), ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Repairing the state files of {Folder} failed; they stay as they are.", folder);
             }
         }
 

@@ -56,7 +56,7 @@ public sealed partial class ProjectHistory
     }
 
     /// <summary>The state files' list at the tip: what the next commit's file changes are taken against.</summary>
-    private static async Task<FileList> TipFilesAsync(string historyFolder, CancellationToken ct)
+    internal static async Task<FileList> TipFilesAsync(string historyFolder, CancellationToken ct)
     {
         await using var connection = HistoryDatabase.Open(HistoryDatabase.FileIn(historyFolder), SqliteOpenMode.ReadOnly);
         await connection.OpenAsync(ct);

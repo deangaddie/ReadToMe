@@ -68,22 +68,14 @@ public sealed class HistoryRestore(
 
             using var work = await history.PrepareRestoreAsync(folder, target, ct);
             BookMutationOutcome outcome;
-            try
-            {
-                await using (stepScope.OpenRestore(folder, LabelOf(target.Step)))
-                    outcome = await mutations.CommitAsync(new RestoreStepMutation(folder, target.Step, work), ct);
-            }
-            catch
-            {
-                // A throw says nothing about whether the rows committed, but a Restore that threw
-                // is a defect either way; the files go back to what the project named before.
-                work.PutFilesBack();
-                throw;
-            }
+            await using (stepScope.OpenRestore(folder, LabelOf(target.Step)))
+                outcome = await mutations.CommitAsync(new RestoreStepMutation(folder, target.Step, work), ct);
 
             switch (outcome)
             {
                 case BookMutationOutcome.Committed:
+                    // The files first: whatever throws after them, the project is whole.
+                    await WriteFilesAsync(folder);
                     landed = await history.HeadStepAsync(folder, CancellationToken.None);
                     dropped = editSessions.RemoveAll(folder);
                     return new RestoreOutcome.Restored(landed, work.AudioDiscardCount);
@@ -91,10 +83,8 @@ public sealed class HistoryRestore(
                     // The project already is the step's state: nothing to record, nothing dropped.
                     return new RestoreOutcome.Restored(null, 0);
                 case BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } cancelled:
-                    work.PutFilesBack();
                     throw new OperationCanceledException(cancelled.Message, ct);
                 case BookMutationOutcome.Rejected rejected:
-                    work.PutFilesBack();
                     return new RestoreOutcome.Refused(rejected.Message);
                 default:
                     throw new InvalidOperationException($"Unhandled mutation outcome {outcome.GetType().Name}.");
@@ -105,6 +95,24 @@ public sealed class HistoryRestore(
             restoring.End(folder);
             if (started)
                 Announce(new RestoreEvent(folder, RestoreEventKind.Finished, landed, dropped));
+        }
+    }
+
+    /// <summary>
+    /// The state files, once the rows have committed: written from the Head's list while the
+    /// restoring flag still holds every other write off. The Restore has happened whatever this
+    /// does, so a failure is logged, and the repair at the next app start finishes what is left.
+    /// </summary>
+    private async Task WriteFilesAsync(ProjectFolderId folder)
+    {
+        try
+        {
+            if (!await history.WriteStateFilesAsync(folder, CancellationToken.None))
+                logger.LogWarning("The Restore of {Folder} committed, but the write lock stayed taken, so its state files wait for the repair at the next app start.", folder.Value);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "The Restore of {Folder} committed, but writing its state files failed; the repair at the next app start finishes them.", folder.Value);
         }
     }
 

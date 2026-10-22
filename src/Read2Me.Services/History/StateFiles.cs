@@ -99,6 +99,44 @@ internal static class StateFiles
         return changes;
     }
 
+    /// <summary>
+    /// Writes <paramref name="path"/> as the blob under <paramref name="hash"/> has it, unless it
+    /// already is: copied into <c>history/cache/</c> as a <c>*.restoring</c> file and moved into place, so
+    /// the file is either whole or as it was, and a copy a crash strands is swept by the repair.
+    /// </summary>
+    public static async Task WriteFromBlobAsync(
+        string projectFolder, string historyFolder, string path, string hash, CancellationToken ct)
+    {
+        var file = Path.Combine(projectFolder, path);
+        if (await HashOfAsync(file, ct) == hash)
+            return;
+        var blob = BlobOf(historyFolder, hash);
+        if (!File.Exists(blob))
+            throw new InvalidOperationException($"History has no copy of {path} ({hash}) to restore.");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        var cache = HistoryDatabase.CacheIn(historyFolder);
+        Directory.CreateDirectory(cache);
+        var pending = Path.Combine(cache, $"{Guid.NewGuid():N}.restoring");
+        try
+        {
+            File.Copy(blob, pending);
+            File.Move(pending, file, overwrite: true);
+        }
+        finally
+        {
+            File.Delete(pending);
+        }
+    }
+
+    private static async Task<string?> HashOfAsync(string file, CancellationToken ct)
+    {
+        if (!File.Exists(file))
+            return null;
+        await using var stream = File.OpenRead(file);
+        return Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, ct));
+    }
+
     /// <summary>The list beside <paramref name="snapshot"/>; empty when there is none to read.</summary>
     public static async Task<FileList> ReadListAsync(string snapshot, CancellationToken ct)
     {
@@ -162,7 +200,7 @@ internal enum FileKind
 /// <summary>Whose a state file is: a Voice's audio or original (with the Voice), the cover, the source.</summary>
 internal readonly record struct FileOwner(FileKind Kind, Guid? VoiceId)
 {
-    public bool IsIn(StateFileOwners declared) => declared.Every || Kind switch
+    public bool IsIn(StateFileOwners declared) => Kind switch
     {
         FileKind.VoiceAudio or FileKind.VoiceOriginal => declared.Voices.Contains(VoiceId!.Value),
         FileKind.Cover => declared.Cover,

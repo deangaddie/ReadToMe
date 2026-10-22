@@ -90,9 +90,12 @@ Measured on the Dune project (8,414 paragraphs / 14,895 items):
   3. ATTACH it, and build the live → target changeset with `sqlite3session_diff` over the state tables.
   4. Apply that inside one `CommitAsync` as a **Restore** Book mutation: the discard rules of the equivalent edits apply,
      and the receipt is `WholeProject`.
-  5. Write the files back from the blobs.
+  5. Once that has committed, write the files back from the blobs, as the Head's file list has them.
 
-  The Restore is captured like any other step and carries `RestoredFromStepId`.
+  The Restore is captured like any other step and carries `RestoredFromStepId`. Its file changes are the target's file
+  list against the tip's, not read from the disk, so the rows are the truth and the files follow them. A file write that
+  fails is logged, not a failure: the Restore has happened, and a repair at app start makes every project's state files
+  as its Head lists them and clears what a crashed Restore left in `history/cache/`.
 
 ## Consequences
 

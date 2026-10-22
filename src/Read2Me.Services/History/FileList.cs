@@ -56,6 +56,17 @@ internal sealed class FileChanges : IEnumerable<KeyValuePair<string, string?>>
 
     public void Set(string path, string? hash) => _changes[path] = hash;
 
+    /// <summary>What takes the list <paramref name="from"/> to <paramref name="to"/>: each path whose hash differs, or that is gone.</summary>
+    public static FileChanges Between(FileList from, FileList to)
+    {
+        var changes = new FileChanges();
+        foreach (var path in from.Paths.Where(p => !to.Contains(p)))
+            changes.Set(path, null);
+        foreach (var path in to.Paths.Where(p => to.HashOf(p) != from.HashOf(p)))
+            changes.Set(path, to.HashOf(path));
+        return changes;
+    }
+
     public string Serialise() => JsonSerializer.Serialize(_changes);
 
     public static FileChanges Read(string json)

@@ -10,7 +10,7 @@ namespace Read2Me.Services.Mutations.Implementations;
 /// <summary>
 /// Applies a <see cref="RestoreStepMutation"/> under the write lock: the live → target difference of
 /// every state table, the audio and reviews it discards, the checkpoints it disturbs, and the state
-/// files from the blobs.
+/// file changes it records. The files themselves are written after the commit.
 /// </summary>
 internal sealed class RestoreStepMutationImplementation : IBookMutationImplementation<RestoreStepMutation>
 {
@@ -22,8 +22,8 @@ internal sealed class RestoreStepMutationImplementation : IBookMutationImplement
     {
         var connection = (SqliteConnection)db.Database.GetDbConnection();
         var projectFolder = Path.GetDirectoryName(connection.DataSource)!;
-        // Before the rows change: a file only the live state names is one the target doesn't have.
-        var liveFiles = (await StateFiles.NamedAsync(db, ct)).Keys.ToList();
+        // Under the write lock, so it is the list the capture records against.
+        var tipFiles = await ProjectHistory.TipFilesAsync(HistoryDatabase.FolderOf(projectFolder), ct);
 
         // The target copy is main and the live project is attached, read-only in effect, so the diff
         // reads live as committed: under the write lock, no one else can move it.
@@ -52,10 +52,10 @@ internal sealed class RestoreStepMutationImplementation : IBookMutationImplement
         if (disturbed.Count > 0)
             await db.StepCheckpoints.Where(c => disturbed.Contains(c.Step) && !c.Stale)
                 .ExecuteUpdateAsync(s => s.SetProperty(c => c.Stale, true), ct);
-        var filesChanged = await mutation.Work.WriteFilesAsync(projectFolder, liveFiles, ct);
+        mutation.Work.FileChanges = FileChanges.Between(tipFiles, mutation.Work.TargetFiles);
         mutation.Work.AudioDiscardCount = discarded.Count;
 
-        return patchset.Length == 0 && !filesChanged ? BookMutationEffects.Nothing : BookMutationEffects.Unknown;
+        return patchset.Length == 0 && mutation.Work.FileChanges.Count == 0 ? BookMutationEffects.Nothing : BookMutationEffects.Unknown;
     }
 
     /// <summary>
