@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.DependencyInjection;
-using Read2Me.App.Queueing;
 using Read2Me.Core.IO;
 using Read2Me.Services.History;
 
@@ -41,10 +40,8 @@ namespace Read2Me.App.Api
             if (segments is not [var folder, { Length: > 0 } path]
                 || !ProjectEndpoints.TryResolve(folder, context.RequestServices.GetRequiredService<IFileSystem>(), out var folderId))
                 return Results.NotFound();
-            if (!Guid.TryParse(at, out var stepId))
-                return Results.Problem($"'{at}' is not a History step id.", statusCode: StatusCodes.Status400BadRequest);
-            if (context.RequestServices.GetRequiredService<ProjectBusyAnswer>().For(folderId) is { } busy)
-                return StepReads.Busy(busy);
+            if (StepReads.RefuseReadAt(context, folderId, at, out var stepId) is { } refusal)
+                return refusal;
 
             var file = await context.RequestServices.GetRequiredService<ProjectHistory>()
                 .ReadFileAsync(folderId, stepId, path, context.RequestAborted);

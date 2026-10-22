@@ -132,7 +132,7 @@ internal static class HistoryDatabase
     private static void AddChunkParameters(SqliteCommand command, Chunk chunk)
     {
         command.Parameters.AddWithValue("$patchset", chunk.Patchset);
-        command.Parameters.AddWithValue("$files", chunk.FileChanges is { Count: > 0 } files ? StateFiles.Serialise(files) : DBNull.Value);
+        command.Parameters.AddWithValue("$files", chunk.FileChanges is { Count: > 0 } files ? files.Serialise() : DBNull.Value);
     }
 
     /// <summary>
@@ -286,7 +286,7 @@ internal static class HistoryDatabase
     /// The state file changes of the chunks <see cref="ReadChunksAsync"/> reads, in replay order:
     /// deepest first, each step's in sequence. Chunks that changed no file are left out.
     /// </summary>
-    public static async Task<List<Dictionary<string, string?>>> ReadFileChangesAsync(
+    public static async Task<List<FileChanges>> ReadFileChangesAsync(
         SqliteConnection connection, Guid stepId, int depth, CancellationToken ct)
     {
         await using var command = connection.CreateCommand();
@@ -298,10 +298,10 @@ internal static class HistoryDatabase
             """;
         command.Parameters.AddWithValue("$id", Stored(stepId));
         command.Parameters.AddWithValue("$depth", depth);
-        var changes = new List<Dictionary<string, string?>>();
+        var changes = new List<FileChanges>();
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
-            changes.Add(StateFiles.Deserialise(reader.GetString(0)));
+            changes.Add(FileChanges.Read(reader.GetString(0)));
         return changes;
     }
 
@@ -344,7 +344,7 @@ internal static class HistoryDatabase
     /// One commit's record: the patchset of its rows, empty when only files changed, and the state
     /// files it changed, path to new hash or null for gone.
     /// </summary>
-    public sealed record Chunk(byte[] Patchset, Dictionary<string, string?>? FileChanges);
+    public sealed record Chunk(byte[] Patchset, FileChanges? FileChanges);
 
     private static void Execute(SqliteConnection connection, string sql)
     {

@@ -22,11 +22,11 @@ internal sealed class HistoryCapture : IAsyncDisposable
     private readonly SqliteSession _session;
     private readonly string _author;
     private readonly TimeProvider _clock;
-    private readonly IReadOnlyDictionary<string, string?> _tipFiles;
+    private readonly FileList _tipFiles;
 
     private HistoryCapture(
         ProjectDbContext db, SqliteConnection connection, SqliteSession session, string author, TimeProvider clock,
-        IReadOnlyDictionary<string, string?> tipFiles)
+        FileList tipFiles)
     {
         _db = db;
         _connection = connection;
@@ -44,7 +44,7 @@ internal sealed class HistoryCapture : IAsyncDisposable
     /// </summary>
     public static async Task<HistoryCapture> BeginAsync(
         ProjectDbContext db, string historyFile, IReadOnlyCollection<string> notState, string author, TimeProvider clock,
-        IReadOnlyDictionary<string, string?> tipFiles, CancellationToken ct)
+        FileList tipFiles, CancellationToken ct)
     {
         await db.Database.OpenConnectionAsync(ct);
         var connection = (SqliteConnection)db.Database.GetDbConnection();

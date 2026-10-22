@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Read2Me.Data;
 using Read2Me.Services.Audio;
@@ -20,9 +19,6 @@ namespace Read2Me.Services.History;
 /// </summary>
 internal static class StateFiles
 {
-    /// <summary>A file list or a chunk's changes: path to hash, case-insensitive like the file system.</summary>
-    public static Dictionary<string, string?> NewList() => new(StringComparer.OrdinalIgnoreCase);
-
     public static string BlobsIn(string historyFolder) => Path.Combine(historyFolder, "blobs");
 
     public static string BlobOf(string historyFolder, string hash) => Path.Combine(BlobsIn(historyFolder), hash);
@@ -64,13 +60,13 @@ internal static class StateFiles
     /// The list of every named file that is on disk, each hashed into the blobs: what a snapshot
     /// taken when History starts records.
     /// </summary>
-    public static async Task<Dictionary<string, string?>> ListAllAsync(
+    public static async Task<FileList> ListAllAsync(
         ProjectDbContext db, string projectFolder, string historyFolder, CancellationToken ct)
     {
-        var list = NewList();
+        var list = new FileList();
         foreach (var path in (await NamedAsync(db, ct)).Keys)
             if (await StoreAsync(projectFolder, historyFolder, path, ct) is { } hash)
-                list[path] = hash;
+                list.Set(path, hash);
         return list;
     }
 
@@ -82,62 +78,40 @@ internal static class StateFiles
     /// left for that commit to record. An original is never newly named on its own: it appears
     /// with an edit, which declares it.
     /// </summary>
-    public static async Task<Dictionary<string, string?>> ChangesAsync(
-        ProjectDbContext db, string projectFolder, string historyFolder, IReadOnlyDictionary<string, string?> tip,
+    public static async Task<FileChanges> ChangesAsync(
+        ProjectDbContext db, string projectFolder, string historyFolder, FileList tip,
         StateFileOwners declared, CancellationToken ct)
     {
         var named = await NamedAsync(db, ct);
-        var changes = NewList();
-        foreach (var path in tip.Keys.Where(p => !named.ContainsKey(p)))
-            changes[path] = null;
+        var changes = new FileChanges();
+        foreach (var path in tip.Paths.Where(p => !named.ContainsKey(p)))
+            changes.Set(path, null);
 
         foreach (var (path, owner) in named)
         {
-            var newlyNamed = !tip.ContainsKey(path) && owner.Kind != FileKind.VoiceOriginal;
+            var newlyNamed = !tip.Contains(path) && owner.Kind != FileKind.VoiceOriginal;
             if (!newlyNamed && !owner.IsIn(declared))
                 continue;
             var hash = await StoreAsync(projectFolder, historyFolder, path, ct);
-            if (hash != tip.GetValueOrDefault(path))
-                changes[path] = hash;
+            if (hash != tip.HashOf(path))
+                changes.Set(path, hash);
         }
         return changes;
     }
 
-    /// <summary>Applies a chunk's changes to <paramref name="list"/>.</summary>
-    public static void Apply(Dictionary<string, string?> list, Dictionary<string, string?> changes)
-    {
-        foreach (var (path, hash) in changes)
-        {
-            if (hash is null)
-                list.Remove(path);
-            else
-                list[path] = hash;
-        }
-    }
-
-    public static string Serialise(Dictionary<string, string?> files) => JsonSerializer.Serialize(files);
-
-    public static Dictionary<string, string?> Deserialise(string json)
-    {
-        var list = NewList();
-        foreach (var (path, hash) in JsonSerializer.Deserialize<Dictionary<string, string?>>(json) ?? [])
-            list[path] = hash;
-        return list;
-    }
-
     /// <summary>The list beside <paramref name="snapshot"/>; empty when there is none to read.</summary>
-    public static async Task<Dictionary<string, string?>> ReadListAsync(string snapshot, CancellationToken ct)
+    public static async Task<FileList> ReadListAsync(string snapshot, CancellationToken ct)
     {
         var file = ListBeside(snapshot);
-        return File.Exists(file) ? Deserialise(await File.ReadAllTextAsync(file, ct)) : NewList();
+        return File.Exists(file) ? FileList.Read(await File.ReadAllTextAsync(file, ct)) : new FileList();
     }
 
     /// <summary>Writes the list beside where <paramref name="snapshot"/> will be, whole or not at all.</summary>
-    public static async Task WriteListAsync(string snapshot, Dictionary<string, string?> files, CancellationToken ct)
+    public static async Task WriteListAsync(string snapshot, FileList files, CancellationToken ct)
     {
         var target = ListBeside(snapshot);
         var pending = target + ".tmp";
-        await File.WriteAllTextAsync(pending, Serialise(files), ct);
+        await File.WriteAllTextAsync(pending, files.Serialise(), ct);
         File.Move(pending, target, overwrite: true);
     }
 

@@ -98,7 +98,7 @@ internal static class RestoreAudio
 /// each file it replaces or removes is moved aside first, so a Restore that doesn't commit puts
 /// them back. Disposing deletes the copy and whatever was moved aside.
 /// </summary>
-internal sealed class RestoreWork(string workFile, IReadOnlyDictionary<string, string?> targetFiles, string historyFolder) : IDisposable
+internal sealed class RestoreWork(string workFile, FileList targetFiles, string historyFolder) : IDisposable
 {
     private readonly List<(string Path, string? MovedAside)> _staged = [];
     private readonly string _aside = Path.ChangeExtension(workFile, ".aside");
@@ -115,12 +115,12 @@ internal sealed class RestoreWork(string workFile, IReadOnlyDictionary<string, s
     /// </summary>
     public async Task<bool> WriteFilesAsync(string projectFolder, IEnumerable<string> liveFiles, CancellationToken ct)
     {
-        var paths = new HashSet<string>(targetFiles.Keys, StringComparer.OrdinalIgnoreCase);
+        var paths = new HashSet<string>(targetFiles.Paths, StringComparer.OrdinalIgnoreCase);
         paths.UnionWith(liveFiles.Select(StateFiles.Normalise));
         foreach (var path in paths)
         {
             var file = Path.Combine(projectFolder, path);
-            var hash = targetFiles.GetValueOrDefault(path);
+            var hash = targetFiles.HashOf(path);
             if (await HashOfAsync(file, ct) == hash)
                 continue;
 
