@@ -5,7 +5,10 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.DependencyInjection;
 using Read2Me.E2eTests.Infrastructure;
+using Read2Me.Services.BookEdits;
+using Read2Me.Services.History;
 
 namespace Read2Me.E2eTests.Tests.Api;
 
@@ -293,6 +296,36 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         }
         finally
         {
+            app.FakeAi.Reset();
+        }
+    }
+
+    [Fact]
+    public async Task A_plan_still_thinking_when_a_Restore_runs_answers_409_and_keeps_no_session()
+    {
+        var folder = $"api-edit-restore-{Guid.NewGuid():N}";
+        await app.SeedMultiChapterProjectAsync(folder, "Restore Book", "Author", chapters: 2);
+        var folderId = new Read2Me.Core.Models.ProjectFolderId(folder);
+        var restoring = app.Services.GetRequiredService<RestoringProjects>();
+        app.FakeAi.LlmReply = _ => TemplatePlan;
+        app.FakeAi.HoldLlmAfter(0);
+        try
+        {
+            // Past the endpoint's restoring check and waiting on the LLM when the Restore begins.
+            var plan = Http.PostAsJsonAsync(Url(folder, "/plan"), new { instruction = "number the chapters" });
+            await WaitForAsync(() => { lock (app.FakeAi.LlmPromptsSeen) return app.FakeAi.LlmPromptsSeen.Count > 0; });
+            Assert.True(restoring.TryBegin(folderId));
+            app.FakeAi.ReleaseLlm();
+
+            var response = await plan;
+            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            Assert.Equal(RestoringProjects.Reason,
+                JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
+            Assert.Empty(app.Services.GetRequiredService<IBookEditSessionStore>().RemoveAll(folderId));
+        }
+        finally
+        {
+            restoring.End(folderId);
             app.FakeAi.Reset();
         }
     }
