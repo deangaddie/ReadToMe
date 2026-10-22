@@ -129,6 +129,11 @@ export class EditWithAiDialog extends R2mElement {
   private readonly isLlmPlan = computed(() => this.plan()?.transform === 'Llm');
 
   private program: string | null = null;
+  /**
+   * Sessions a Restore dropped while a plan was on its way, by program id with the host's reason:
+   * the drop can reach the hub before the plan's answer, when the dialog holds no program yet.
+   */
+  private droppedWhilePlanning: Map<string, string> | null = null;
   private runSubscription: Unsubscribe | null = null;
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
@@ -140,11 +145,16 @@ export class EditWithAiDialog extends R2mElement {
     // were made against text the Restore replaced): back to Instruct, with the host's reason, so
     // the instruction can be run again over the restored text.
     const dropped = this.live.on('bookEdit', (message) => {
-      if (message.kind !== 'dropped' || message.program !== this.program) return;
+      if (message.kind !== 'dropped') return;
+      const reason = message.reason ?? 'The project was restored — run it again';
+      if (message.program !== this.program) {
+        this.droppedWhilePlanning?.set(message.program, reason);
+        return;
+      }
       this.program = null;
       this.stopWatching();
       this.backToInstruct();
-      this.error.set(message.reason ?? 'The project was restored — run it again');
+      this.error.set(reason);
     });
     this.onDisconnect(() => {
       this.closed = true;
@@ -558,6 +568,7 @@ export class EditWithAiDialog extends R2mElement {
     if (!(await this.preflight.ensureReady('bookEdit'))) return;
 
     this.busy.set(true);
+    this.droppedWhilePlanning = new Map();
     try {
       const plan = await this.api.plan(
         this.data.folder,
@@ -568,13 +579,20 @@ export class EditWithAiDialog extends R2mElement {
         this.error.set(planErrorMessage(plan.status, plan.reason));
         return;
       }
+      // Checked after the old session is dropped: a drop for the new one can land during that too.
       await this.dropSession();
+      const droppedReason = this.droppedWhilePlanning.get(plan.program);
+      if (droppedReason) {
+        this.error.set(droppedReason);
+        return;
+      }
       this.plan.set(plan);
       this.program = plan.program;
       this.phase.set('plan');
     } catch (e) {
       this.error.set(toApiError(e).message);
     } finally {
+      this.droppedWhilePlanning = null;
       this.busy.set(false);
     }
   }

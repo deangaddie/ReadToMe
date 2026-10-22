@@ -49,7 +49,7 @@ namespace Read2Me.App.Api
         {
             endpoints.MapPost("/api/projects/{folder}/book-edits/plan", PlanAsync)
                 .RecordsNoStep("Plans an Edit with AI; nothing commits until it is applied.")
-                .WithSummary("Turn a plain-language instruction into an edit plan: one LLM call, then the plan's scope is resolved against the book. Answers status Ok with an opaque program id (valid 2 h after its last use), a summary, the matched item count and, for Llm transforms, the LLM request count; NoLlmConfigured / Unsupported / ServiceUnavailable / Failed / NoTargets carry a reason instead. thinking=true lets the model think first. 409 \"Project is restoring\" while a Restore runs, or when one began while the plan was thinking.");
+                .WithSummary("Turn a plain-language instruction into an edit plan: one LLM call, then the plan's scope is resolved against the book. Answers status Ok with an opaque program id (valid 2 h after its last use), a summary, the matched item count and, for Llm transforms, the LLM request count; NoLlmConfigured / Unsupported / ServiceUnavailable / Failed / NoTargets carry a reason instead. thinking=true lets the model think first. 409 \"Project is restoring\" while a Restore runs, or when one began after the plan was asked for (its targets would predate it).");
             endpoints.MapPost("/api/projects/{folder}/book-edits/{program}/propose", ProposeAsync)
                 .RecordsNoStep("Proposes an Edit with AI; nothing commits until it is applied.")
                 .WithSummary("Start computing a proposed new value per matched item (202). Progress and the finished rows arrive on /hubs/live as bookEdit { kind: progress | done | failed } on the connectionId in the body; GET the session to read them back. Deterministic transforms finish at once; Llm ones send one request per 8 items. 409 while a run is already in flight.");
@@ -76,6 +76,11 @@ namespace Read2Me.App.Api
             if (string.IsNullOrWhiteSpace(body?.Instruction))
                 return Results.Problem("An instruction is required.", statusCode: StatusCodes.Status400BadRequest);
 
+            var generation = restoring.Generation(folderId);
+            // A Restore that began since the filter is already counted: refuse it here, or the check
+            // below would pass once it ended and leave targets read while it ran.
+            if (restoring.IsRestoring(folderId))
+                return StepReads.Restoring();
             var outcome = await planner.PlanAsync(folderId, body.Instruction, !body.Thinking, ct);
             if (outcome.Status != EditPlanStatus.Ok)
                 return Results.Ok(NotPlanned(outcome.Status.ToString(), outcome.Reason));
@@ -86,9 +91,10 @@ namespace Read2Me.App.Api
                 return Results.Ok(NotPlanned("NoTargets", "No items in the book match this instruction's scope."));
 
             var session = sessions.Create(folderId, program, targets, EditProgramDescriber.Describe(program));
-            // A Restore that began while the LLM was thinking drops the project's sessions as it ends,
-            // and the dialog, holding no program yet, would miss that: refuse as the Restore would have.
-            if (restoring.IsRestoring(folderId) || sessions.TryGet(folderId, session.Id) is null)
+            // A Restore that began while the LLM was thinking or the scope resolved drops the project's
+            // sessions as it ends, or has ended and left targets read from the book before it; the
+            // dialog, holding no program yet, would miss either: refuse as the Restore would have.
+            if (restoring.IsRestoring(folderId) || restoring.Generation(folderId) != generation)
             {
                 sessions.Remove(folderId, session.Id);
                 return StepReads.Restoring();
