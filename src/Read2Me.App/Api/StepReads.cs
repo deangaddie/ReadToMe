@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi;
 using Read2Me.App.Queueing;
 using Read2Me.Core.IO;
+using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.History;
 using Read2Me.Services.Queueing;
@@ -65,14 +66,14 @@ namespace Read2Me.App.Api
                     var http = context.HttpContext;
                     if (!http.Request.Query.TryGetValue(Parameter, out var at))
                         return await next(context);
-                    if (!Guid.TryParse(at, out var stepId))
-                        return Results.Problem($"'{at}' is not a History step id.", statusCode: StatusCodes.Status400BadRequest);
-                    if (http.Request.RouteValues["folder"] is not string folder
-                        || !ProjectEndpoints.TryResolve(folder, http.RequestServices.GetRequiredService<IFileSystem>(), out var folderId))
+                    ProjectFolderId? project = null;
+                    if (http.Request.RouteValues["folder"] is string folder
+                        && ProjectEndpoints.TryResolve(folder, http.RequestServices.GetRequiredService<IFileSystem>(), out var resolved))
+                        project = resolved;
+                    if (RefuseReadAt(http, project, at.ToString(), out var stepId) is { } refusal)
+                        return refusal;
+                    if (project is not { } folderId)
                         return await next(context); // the handler answers the unknown project
-
-                    if (http.RequestServices.GetRequiredService<ProjectBusyAnswer>().For(folderId) is { } busy)
-                        return Busy(busy);
 
                     var opening = await http.RequestServices.GetRequiredService<ProjectHistory>()
                         .OpenStepAsync(folderId, stepId, http.RequestAborted);
@@ -89,6 +90,22 @@ namespace Read2Me.App.Api
                             throw new InvalidOperationException($"Unhandled {opening}.");
                     }
                 });
+
+        /// <summary>
+        /// What every read at <c>?at=</c> checks before it reads the step — a project read and a
+        /// state file under <c>/workspace</c> alike: 400 for a value that isn't a step id, 409 while
+        /// the project is busy. Null, with the step id, when the read may go ahead; the caller then
+        /// answers <see cref="UnknownStep"/> for a step the project's History doesn't have. A null
+        /// <paramref name="folder"/> is a project that doesn't exist: only the step id is checked.
+        /// </summary>
+        internal static IResult? RefuseReadAt(HttpContext http, ProjectFolderId? folder, string at, out Guid stepId)
+        {
+            if (!Guid.TryParse(at, out stepId))
+                return Results.Problem($"'{at}' is not a History step id.", statusCode: StatusCodes.Status400BadRequest);
+            return folder is { } project && http.RequestServices.GetRequiredService<ProjectBusyAnswer>().For(project) is { } busy
+                ? Busy(busy)
+                : null;
+        }
 
         /// <summary>409: a busy project can't be viewed at a step, and <c>detail</c> says what keeps it busy.</summary>
         internal static IResult Busy(ProjectBusy busy) =>

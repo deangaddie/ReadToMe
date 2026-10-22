@@ -29,7 +29,7 @@ public sealed partial class ProjectHistory
     {
         var historyFile = HistoryFileOf(folder);
         var historyFolder = Path.GetDirectoryName(historyFile)!;
-        Dictionary<string, string?> files;
+        FileList files;
         await using (var connection = HistoryDatabase.Open(historyFile, SqliteOpenMode.ReadOnly))
         {
             await connection.OpenAsync(ct);

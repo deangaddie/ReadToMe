@@ -20,7 +20,7 @@ public sealed partial class ProjectHistory
 
         var historyFolder = Path.GetDirectoryName(file)!;
         HistoryStep? step;
-        Dictionary<string, string?> files;
+        FileList files;
         await using (var connection = HistoryDatabase.Open(file, SqliteOpenMode.ReadOnly))
         {
             await connection.OpenAsync(ct);
@@ -31,7 +31,7 @@ public sealed partial class ProjectHistory
             files = await FilesAtAsync(connection, historyFolder, stepId, ct);
         }
 
-        return files.GetValueOrDefault(StateFiles.Normalise(relativePath)) is { } hash
+        return files.HashOf(StateFiles.Normalise(relativePath)) is { } hash
                && StateFiles.BlobOf(historyFolder, hash) is var blob && File.Exists(blob)
             ? new StepFile.Found(blob, step.IsOpen)
             : new StepFile.Missing();
@@ -41,7 +41,7 @@ public sealed partial class ProjectHistory
     /// The state files' list after <paramref name="stepId"/>, or before the first step for none:
     /// the nearest earlier snapshot's list with the file changes of every chunk after it applied.
     /// </summary>
-    private static async Task<Dictionary<string, string?>> FilesAtAsync(
+    private static async Task<FileList> FilesAtAsync(
         SqliteConnection connection, string historyFolder, Guid? stepId, CancellationToken ct)
     {
         if (stepId is not { } id)
@@ -51,12 +51,12 @@ public sealed partial class ProjectHistory
         var (depth, snapshot) = NearestSnapshot(historyFolder, line);
         var files = await StateFiles.ReadListAsync(snapshot, ct);
         foreach (var changes in await HistoryDatabase.ReadFileChangesAsync(connection, id, depth, ct))
-            StateFiles.Apply(files, changes);
+            files.Apply(changes);
         return files;
     }
 
     /// <summary>The state files' list at the tip: what the next commit's file changes are taken against.</summary>
-    private static async Task<Dictionary<string, string?>> TipFilesAsync(string historyFolder, CancellationToken ct)
+    private static async Task<FileList> TipFilesAsync(string historyFolder, CancellationToken ct)
     {
         await using var connection = HistoryDatabase.Open(HistoryDatabase.FileIn(historyFolder), SqliteOpenMode.ReadOnly);
         await connection.OpenAsync(ct);

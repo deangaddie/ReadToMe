@@ -29,7 +29,7 @@ public sealed partial class ProjectHistory
         try
         {
             Guid head;
-            Dictionary<string, string?> files;
+            FileList files;
             await using (var connection = HistoryDatabase.Open(HistoryDatabase.FileIn(historyFolder), SqliteOpenMode.ReadOnly))
             {
                 await connection.OpenAsync(CancellationToken.None);
@@ -115,7 +115,7 @@ public sealed partial class ProjectHistory
     /// <paramref name="files"/> list is written beside it first, so a snapshot always has its list.
     /// </summary>
     private static async Task TakeSnapshotAsync(
-        string projectDb, string historyFolder, Guid? stepId, Dictionary<string, string?> files, CancellationToken ct)
+        string projectDb, string historyFolder, Guid? stepId, FileList files, CancellationToken ct)
     {
         var target = HistoryDatabase.SnapshotOf(historyFolder, stepId);
         await StateFiles.WriteListAsync(target, files, ct);
