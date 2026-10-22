@@ -248,6 +248,7 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Assert.Equal(HttpStatusCode.OK, restore.StatusCode);
         var restored = JsonDocument.Parse(await restore.Content.ReadAsStringAsync()).RootElement;
         Assert.Equal(1, restored.GetProperty("audioDiscardCount").GetInt32());
+        Assert.True(restored.GetProperty("needsAudioCount").GetInt32() >= 1); // n1, and whatever the seed left without audio
         var restoreStep = restored.GetProperty("step");
         Assert.Equal(started, restoreStep.GetProperty("restoredFromStepId").GetGuid());
         Assert.StartsWith("Restore to 'History started' (", restoreStep.GetProperty("label").GetString());

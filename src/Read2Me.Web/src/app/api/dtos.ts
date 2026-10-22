@@ -1247,5 +1247,8 @@ export interface HistoryStepDto extends HistoryStep {
 export interface RestoreResultDto {
   /** The Restore step added; null when the project already was that state. */
   step: HistoryStep | null;
+  /** Items whose audio the Restore discarded. */
   audioDiscardCount: number;
+  /** Items without audio after the Restore, those it brought back included: what needs generating. */
+  needsAudioCount: number;
 }

@@ -1,5 +1,6 @@
 import type { BulkAssignPreviewDto } from '@app/api';
 import type { ConfirmOptions } from '@app/ui/dialogs';
+import { plural } from '@app/ui/wording';
 
 /**
  * The bulk speaker assign's wording (ticket 12): the confirmation says exactly what the command
@@ -7,11 +8,6 @@ import type { ConfirmOptions } from '@app/ui/dialogs';
  * name means a clear throughout. The figures come from the preview read, never from the loaded
  * rows: a selection can cover chapters that were never opened.
  */
-
-/** Noun-suffix pluralisation only, the idiom the wording is written in. */
-function plural(n: number): string {
-  return n === 1 ? '' : 's';
-}
 
 function scope(preview: BulkAssignPreviewDto): string {
   const items = preview.characterItems;

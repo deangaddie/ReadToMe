@@ -357,7 +357,11 @@ describe('HistoryStore', () => {
     beforeEach(async () => {
       api.on('GET', PATH, dto([step(3), step(2), step(1)]));
       api.on('GET', STEP2, { ...step(2), restorePreview: { audioDiscardCount: 60 } });
-      api.on('POST', RESTORE2, { step: restoreStep(4, 's2'), audioDiscardCount: 60 });
+      api.on('POST', RESTORE2, {
+        step: restoreStep(4, 's2'),
+        audioDiscardCount: 60,
+        needsAudioCount: 75,
+      });
       await store.load();
     });
 
@@ -413,7 +417,7 @@ describe('HistoryStore', () => {
       expect(store.restoring()).toBe(false);
       expect(store.headStepId()).toBe('s4');
       expect(toasts).toEqual([
-        'Restored to #2 Edit text. The later steps stay in History; 60 items need generating.',
+        'Restored to #2 Edit text. The later steps stay in History; 75 items need generating.',
       ]);
       expect(actions.map((a) => a.label)).toEqual(['Show in Book', 'Undo restore']);
     });
@@ -428,7 +432,11 @@ describe('HistoryStore', () => {
     });
 
     it('Undo restore restores the step that was the tip before', async () => {
-      api.on('POST', `${PATH}/s3/restore`, { step: restoreStep(5, 's3'), audioDiscardCount: 2 });
+      api.on('POST', `${PATH}/s3/restore`, {
+        step: restoreStep(5, 's3'),
+        audioDiscardCount: 2,
+        needsAudioCount: 1,
+      });
       store.view('s2');
       await store.restore();
       landed(restoreStep(4, 's2'));
@@ -438,12 +446,44 @@ describe('HistoryStore', () => {
 
       expect(api.calls('POST', `${PATH}/s3/restore`)).toHaveLength(1);
       expect(toasts.at(-1)).toBe(
-        'Restored to #3 Edit text. The later steps stay in History; 2 items need generating.',
+        'Restored to #3 Edit text. The later steps stay in History; 1 item needs generating.',
       );
     });
 
+    it('Undo restore takes the tip before from the answer, with no list read', async () => {
+      const unread = new HistoryStore();
+      unread.open('dune');
+      api.on('POST', `${PATH}/s3/restore`, {
+        step: restoreStep(5, 's3'),
+        audioDiscardCount: 0,
+        needsAudioCount: 0,
+      });
+      const reads = api.calls('GET', PATH).length;
+
+      await unread.restore('s2');
+      actions.find((a) => a.label === 'Undo restore')?.run();
+      await unread.settled();
+      unread.close();
+
+      expect(api.calls('GET', PATH)).toHaveLength(reads);
+      expect(api.calls('POST', `${PATH}/s3/restore`)).toHaveLength(1);
+    });
+
+    it('offers no Undo restore when the answer names no tip before', async () => {
+      api.on('POST', RESTORE2, {
+        step: { ...restoreStep(4, 's2'), parentStepId: null },
+        audioDiscardCount: 0,
+        needsAudioCount: 0,
+      });
+      store.view('s2');
+
+      await store.restore();
+
+      expect(actions.map((a) => a.label)).toEqual(['Show in Book']);
+    });
+
     it('says when the project already was that state', async () => {
-      api.on('POST', RESTORE2, { step: null, audioDiscardCount: 0 });
+      api.on('POST', RESTORE2, { step: null, audioDiscardCount: 0, needsAudioCount: 0 });
       store.view('s2');
 
       await store.restore();
@@ -484,11 +524,11 @@ describe('HistoryStore', () => {
       restoring('started');
       landed(restoreStep(4, 's2'));
       restoring('finished', restoreStep(4, 's2'));
-      answer({ step: restoreStep(4, 's2'), audioDiscardCount: 60 });
+      answer({ step: restoreStep(4, 's2'), audioDiscardCount: 60, needsAudioCount: 75 });
       await done;
 
       expect(toasts).toEqual([
-        'Restored to #2 Edit text. The later steps stay in History; 60 items need generating.',
+        'Restored to #2 Edit text. The later steps stay in History; 75 items need generating.',
       ]);
     });
 

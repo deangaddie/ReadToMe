@@ -2,6 +2,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Read2Me.Core.Models;
 using Read2Me.Data;
+using Read2Me.Data.Enums;
 using Read2Me.Services.Mutations;
 
 namespace Read2Me.Services.History;
@@ -83,6 +84,21 @@ internal static class RestoreAudio
         return discarded;
     }
 
+    /// <summary>
+    /// The target's spoken items without audio once <see cref="KeepUnchangedAsync"/> has run: those
+    /// whose audio is discarded, those brought back, and those that had none already. Pauses are
+    /// never generated, so they never count.
+    /// </summary>
+    public static async Task<int> CountWithoutAudioAsync(SqliteConnection target, CancellationToken ct)
+    {
+        await using var command = target.CreateCommand();
+        command.CommandText = $"""
+            SELECT COUNT(*) FROM main.ParagraphItems
+            WHERE ItemType = '{nameof(ParagraphItemType.Speech)}' AND COALESCE(AudioFileName, '') = ''
+            """;
+        return (int)(long)(await command.ExecuteScalarAsync(ct))!;
+    }
+
     /// <summary>The Restore step's "what changed": the audio it cost, or null when it cost none.</summary>
     public static string? Summary(int discarded) => discarded switch
     {
@@ -106,6 +122,9 @@ internal sealed class RestoreWork(string workFile, FileList targetFiles) : IDisp
 
     /// <summary>The items whose audio the Restore discarded, counted under the write lock.</summary>
     public int AudioDiscardCount { get; set; }
+
+    /// <summary>The items without audio once the Restore applies, counted under the write lock: what needs generating.</summary>
+    public int NeedsAudioCount { get; set; }
 
     /// <summary>The tip's file list against the target's, taken under the write lock: what the Restore step records.</summary>
     public FileChanges? FileChanges { get; set; }

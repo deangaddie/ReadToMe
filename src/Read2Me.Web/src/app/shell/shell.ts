@@ -5,7 +5,7 @@ import { Router, fill, titleOf } from '@app/core/router';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
-import { dayLabel, stepTime } from '@app/history/history-rows';
+import { dayLabel, restoreCost, stepTime } from '@app/history/history-rows';
 import { HistorySheetState } from '@app/history/history-sheet-state';
 import { LiveService } from '@app/live/live.service';
 import { shellContext } from '@app/route-meta';
@@ -25,13 +25,6 @@ adoptStyles(shellCss);
 
 const NARROW_QUERY = '(max-width: 899.98px)';
 const THEME_MENU_ID = 'r2m-theme-menu';
-
-/** What a Restore to the viewed step costs, said before the click; "" until the preview has read. */
-function restoreCost(audioDiscardCount: number | null): string {
-  if (audioDiscardCount === null) return '';
-  if (audioDiscardCount === 0) return 'Restoring discards no audio.';
-  return `Restoring discards audio on ${audioDiscardCount} item${audioDiscardCount === 1 ? '' : 's'}.`;
-}
 
 const SCHEME_ICONS: Record<SchemePreference, IconName> = {
   light: 'light_mode',
