@@ -5,6 +5,7 @@ using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Events;
 using Read2Me.Services.Audio.ParagraphTts;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.Queueing;
 using Read2Me.Tests.Fakes;
 using Xunit;
@@ -191,6 +192,24 @@ namespace Read2Me.Tests.App.Audio
         }
 
         /// <summary>
+        /// A take recorded as a Restore began: the Book refused to name it, so the item waits for
+        /// the Restore and runs again against the restored project, rather than failing.
+        /// </summary>
+        [Fact]
+        public async Task RecordingRefusedWhileRestoring_RunsAgainAfterTheRestore()
+        {
+            var itemId = Guid.NewGuid();
+            _resolver.Result = SuccessResolution(itemId);
+            _recorder.Throws = new ProjectRestoringException("Writing item audio failed: Project is restoring");
+            var queued = MakeItem(itemId);
+
+            await _sut.ProcessItemAsync(queued, TestContext.Current.CancellationToken);
+
+            DispositionFor<Disposition.RetryAfterRestore>(queued);
+            Assert.DoesNotContain(_events, e => e is Failed);
+        }
+
+        /// <summary>
         /// Resolution reads the book and voice settings, not an AI service. A throw there used to
         /// escape to the worker and leave the item stuck in Processing.
         /// </summary>
@@ -232,7 +251,7 @@ namespace Read2Me.Tests.App.Audio
             public List<(QueuedAudioItem Item, Disposition D)> Applied { get; } = [];
             public List<QueuedAudioItem> Processing { get; } = [];
 
-            public void Enqueue(IEnumerable<QueuedAudioItem> items) { }
+            public bool Enqueue(IEnumerable<QueuedAudioItem> items) => true;
 
             public void MarkProcessing(QueuedAudioItem item) => Processing.Add(item);
 

@@ -12,7 +12,12 @@ namespace Read2Me.App.Api
     public sealed record NodeEnqueueRequest(string Level, Guid NodeId, bool UnprocessedOnly = true);
     /// <summary>An explicit selection. Ids that are not Character paragraphs are ignored.</summary>
     public sealed record ParagraphsEnqueueRequest(Guid[] ParagraphIds);
-    public sealed record EnqueueResponse(int Enqueued);
+    public sealed record EnqueueResponse(int Enqueued)
+    {
+        /// <summary>202 with the count, or 409 "Project is restoring" when the queue refused the enqueue.</summary>
+        internal static IResult For(int? enqueued) =>
+            enqueued is { } count ? Results.Accepted(value: new EnqueueResponse(count)) : StepReads.Restoring();
+    }
     /// <summary>
     /// Queue state only. Attribution results are per item now — read them from the book endpoint's
     /// paragraph items, which carry the stamped character.
@@ -53,7 +58,7 @@ namespace Read2Me.App.Api
                     statusCode: StatusCodes.Status400BadRequest);
 
             var enqueued = await useCases.EnqueueAttributionAsync(folderId, level, request.NodeId, request.UnprocessedOnly);
-            return Results.Accepted(value: new EnqueueResponse(enqueued));
+            return EnqueueResponse.For(enqueued);
         }
 
         private static async Task<IResult> EnqueueParagraphsAsync(
@@ -63,7 +68,7 @@ namespace Read2Me.App.Api
                 return Results.NotFound();
 
             var enqueued = await useCases.EnqueueAttributionAsync(folderId, request.ParagraphIds ?? []);
-            return Results.Accepted(value: new EnqueueResponse(enqueued));
+            return EnqueueResponse.For(enqueued);
         }
 
         private static IResult ClearOutcome(

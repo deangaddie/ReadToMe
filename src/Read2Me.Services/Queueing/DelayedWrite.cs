@@ -35,19 +35,34 @@ namespace Read2Me.Services.Queueing
                 writer.TryWrite(item);
                 return Task.CompletedTask;
             }
-            return DelayThenWriteAsync(writer, item, delay, ct);
+            return WriteWhenAsync(writer, item, Task.Delay(delay, ct), ct);
         }
 
-        private static async Task DelayThenWriteAsync<TItem>(
-            ChannelWriter<TItem> writer, TItem item, TimeSpan delay, CancellationToken ct)
+        /// <summary>
+        /// The <see cref="Disposition.RetryAfterRestore"/> write: as <see cref="Schedule{TItem}"/>,
+        /// but waiting for <paramref name="until"/> — the project's Restore ending — rather than a delay.
+        /// </summary>
+        public static Task ScheduleWhen<TItem>(
+            ChannelWriter<TItem> writer, TItem item, Task until, CancellationToken ct)
+        {
+            if (until.IsCompleted)
+            {
+                writer.TryWrite(item);
+                return Task.CompletedTask;
+            }
+            return WriteWhenAsync(writer, item, until, ct);
+        }
+
+        private static async Task WriteWhenAsync<TItem>(
+            ChannelWriter<TItem> writer, TItem item, Task until, CancellationToken ct)
         {
             try
             {
-                await Task.Delay(delay, ct);
+                await until.WaitAsync(ct);
             }
             catch (OperationCanceledException)
             {
-                // The queue was cleared (CancelAll) while this item waited out its backoff — drop it.
+                // The queue was cleared (CancelAll) while this item waited — drop it.
                 return;
             }
             writer.TryWrite(item);

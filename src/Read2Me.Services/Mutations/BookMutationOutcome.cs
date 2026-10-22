@@ -58,7 +58,8 @@ public sealed class BookMutationRejectedException(BookMutationRejection reason, 
 /// same question at the same point: the artifact is produced, the Book refused to name it, and the
 /// caller above needs to know whether that was a failure or a cancellation. Cancellation keeps its
 /// own exception type because callers act on it differently: a cancelled queue item is dropped, a
-/// failed one is reported.
+/// failed one is reported. So does a refusal while the project restores: a queue item refused that
+/// way runs again after the Restore.
 /// </para>
 /// </summary>
 public static class UncommittedArtifact
@@ -74,8 +75,17 @@ public static class UncommittedArtifact
             _ => "the Book recorded no change.",
         };
 
-        return outcome is BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled }
-            ? new OperationCanceledException(reason, ct)
-            : new InvalidOperationException($"Writing {what} failed: {reason}");
+        return outcome switch
+        {
+            BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } => new OperationCanceledException(reason, ct),
+            BookMutationOutcome.Rejected { Reason: BookMutationRejection.Restoring } => new ProjectRestoringException($"Writing {what} failed: {reason}"),
+            _ => new InvalidOperationException($"Writing {what} failed: {reason}"),
+        };
     }
 }
+
+/// <summary>
+/// A write refused with <see cref="BookMutationRejection.Restoring"/>. Still an
+/// <see cref="InvalidOperationException"/>, so a caller that only reports failures needn't know it.
+/// </summary>
+public sealed class ProjectRestoringException(string message) : InvalidOperationException(message);

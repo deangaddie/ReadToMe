@@ -56,7 +56,7 @@ namespace Read2Me.App.Api
 
             var enqueued = await useCases.EnqueueAudioAsync(
                 folderId, level, request.NodeId, request.NeedsAudioOnly, request.NarratorOnlyMode);
-            return Results.Accepted(value: new EnqueueResponse(enqueued));
+            return EnqueueResponse.For(enqueued);
         }
 
         private static async Task<IResult> EnqueueItemsAsync(
@@ -70,7 +70,7 @@ namespace Read2Me.App.Api
                 return refused;
 
             var enqueued = await useCases.EnqueueAudioAsync(folderId, request.ItemIds ?? []);
-            return Results.Accepted(value: new EnqueueResponse(enqueued));
+            return EnqueueResponse.For(enqueued);
         }
 
         /// <summary>The 409 every enqueue answers when no paragraph TTS service is active; null when one is.</summary>

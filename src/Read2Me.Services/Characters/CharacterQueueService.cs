@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using Read2Me.Core.Models;
+using Read2Me.Services.History;
 using Read2Me.Services.NodeStatus;
 using Read2Me.Services.Queueing;
 
@@ -48,6 +49,13 @@ namespace Read2Me.Services.Characters
 
         private CancellationTokenSource _itemCts = new();
 
+        private readonly RestoringProjects _restoring;
+
+        /// <summary>A queue whose projects never restore.</summary>
+        public CharacterQueueService() : this(new RestoringProjects()) { }
+
+        public CharacterQueueService(RestoringProjects restoring) => _restoring = restoring;
+
         public event Action? Changed;
 
         /// <summary>
@@ -77,14 +85,23 @@ namespace Read2Me.Services.Characters
             Changed?.Invoke();
         }
 
-        public void Enqueue(IEnumerable<QueuedParagraph> paragraphs)
+        /// <summary>
+        /// Queues the paragraphs, or refuses them all — queuing and announcing nothing — when any of
+        /// their projects is restoring. A paragraph already queued or processing is not queued twice.
+        /// </summary>
+        public bool Enqueue(IEnumerable<QueuedParagraph> paragraphs)
         {
-            foreach (var p in paragraphs)
+            var list = paragraphs.ToList();
+            if (list.Any(p => _restoring.IsRestoring(p.Folder)))
+                return false;
+
+            foreach (var p in list)
             {
                 if (_store.TryMarkQueued(Key(p)))
                     _channel.Writer.TryWrite(p);
             }
             Changed?.Invoke();
+            return true;
         }
 
         /// <summary>
@@ -198,6 +215,12 @@ namespace Read2Me.Services.Characters
                         item with { Attempts = item.Attempts.WithBusy() },
                         retryAfter.Delay,
                         _itemCts.Token);
+                    break;
+
+                // As RetryAfter, but the wait is the project's Restore, and no budget is spent.
+                case Disposition.RetryAfterRestore:
+                    if (!_store.ReturnToQueued(key)) break;
+                    _ = DelayedWrite.ScheduleWhen(_channel.Writer, item, _restoring.WhenEnded(item.Folder), _itemCts.Token);
                     break;
             }
 

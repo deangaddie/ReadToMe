@@ -268,6 +268,36 @@ namespace Read2Me.Tests.App.Characters
             Assert.Empty(_commits.Applied);
         }
 
+        // ── A Restore began under the answer ──────────────────────────────────
+
+        /// <summary>
+        /// The project began a Restore while the paragraph was being asked about: the stamps are
+        /// refused, and the paragraph runs again after the Restore rather than failing.
+        /// </summary>
+        [Fact]
+        public async Task StampsRefusedWhileRestoring_RunsAgainAfterTheRestore()
+        {
+            _attribution.Outcome = Resolved();
+            _root.GetRequiredService<RestoringProjects>().TryBegin(_item.Folder);
+
+            await _sut.ProcessItemAsync(_item, CancellationToken.None);
+
+            DispositionFor<Disposition.RetryAfterRestore>(_item);
+            Assert.Empty(_commits.Applied);
+        }
+
+        [Fact]
+        public async Task SpeakerCreateRefusedWhileRestoring_RunsAgainAfterTheRestore()
+        {
+            _attribution.Outcome = Resolved("Gandalf");
+            _resolver.Refusal = new ProjectRestoringException("Writing character 'Gandalf' failed: Project is restoring");
+
+            await _sut.ProcessItemAsync(_item, CancellationToken.None);
+
+            DispositionFor<Disposition.RetryAfterRestore>(_item);
+            Assert.Empty(_commits.Applied);
+        }
+
         // ── The narrator token on a dialog item ───────────────────────────────
 
         /// <summary>
@@ -490,6 +520,25 @@ namespace Read2Me.Tests.App.Characters
                 Assert.Equal("boom", DispositionFor<Disposition.Failed>(item).Reason);
         }
 
+        /// <summary>
+        /// A write inside the chain itself (the Chapter style's character discovery) refused because
+        /// the project is restoring: every drained paragraph runs again after the Restore.
+        /// </summary>
+        [Fact]
+        public async Task ChainRefusedWhileRestoring_RunsTheDrainAgainAfterTheRestore()
+        {
+            var chapterId = Guid.NewGuid();
+            var items = new[] { MakeChapterItem(chapterId), MakeChapterItem(chapterId) };
+            _queue.Enqueue(items);
+
+            _attribution.ThrowException = new ProjectRestoringException("Writing character 'Gandalf' failed: Project is restoring");
+
+            await _sut.ProcessItemAsync(items[0], CancellationToken.None);
+
+            foreach (var item in items)
+                DispositionFor<Disposition.RetryAfterRestore>(item);
+        }
+
         [Fact]
         public async Task UnexpectedThrowMidStream_FailsOnlyUndecidedItems()
         {
@@ -522,7 +571,7 @@ namespace Read2Me.Tests.App.Characters
 
             public CancellationToken ItemCancellationToken => CancellationToken.None;
 
-            public void Enqueue(IEnumerable<QueuedParagraph> paragraphs) => _queued.AddRange(paragraphs);
+            public bool Enqueue(IEnumerable<QueuedParagraph> paragraphs) { _queued.AddRange(paragraphs); return true; }
 
             public IReadOnlyList<QueuedParagraph> DrainAll(QueuedParagraph first)
             {

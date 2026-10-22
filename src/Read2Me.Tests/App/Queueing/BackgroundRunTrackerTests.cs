@@ -28,7 +28,7 @@ public class BackgroundRunTrackerTests : ProjectDbTestBase
 {
     private readonly ServiceProvider _root;
     private readonly ProjectFolderId _folder;
-    private readonly CharacterQueueService _queue = new();
+    private readonly CharacterQueueService _queue;
     private readonly BackgroundRunTracker _tracker;
 
     public BackgroundRunTrackerTests()
@@ -39,6 +39,7 @@ public class BackgroundRunTrackerTests : ProjectDbTestBase
         services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
         _root = services.BuildServiceProvider();
         _folder = new ProjectFolderId(FolderName);
+        _queue = new CharacterQueueService(_root.GetRequiredService<RestoringProjects>());
 
         _tracker = new BackgroundRunTracker(
             _queue,
@@ -72,6 +73,19 @@ public class BackgroundRunTrackerTests : ProjectDbTestBase
         Assert.Equal(["Attribution", "History started"], steps.Select(s => s.Label));
         Assert.False(steps[0].IsOpen);
         Assert.Null(steps[0].Note);
+    }
+
+    [Fact]
+    public async Task AnEnqueueRefusedWhileTheProjectRestores_StartsNoRun()
+    {
+        await SeedOneItemAsync();
+        await History.ListAsync(_folder);
+        _root.GetRequiredService<RestoringProjects>().TryBegin(_folder);
+
+        Assert.False(_queue.Enqueue(Paragraphs(_folder, 2)));
+        await _tracker.ClosedAsync();
+
+        Assert.Equal(["History started"], (await History.ListAsync(_folder)).Steps.Select(s => s.Label));
     }
 
     [Fact]

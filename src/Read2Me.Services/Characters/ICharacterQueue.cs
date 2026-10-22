@@ -26,7 +26,8 @@ namespace Read2Me.Services.Characters
         /// <summary>Cancelled when the queue is cleared, so in-flight work stops with it.</summary>
         CancellationToken ItemCancellationToken { get; }
 
-        void Enqueue(IEnumerable<QueuedParagraph> paragraphs);
+        /// <summary>Queues the paragraphs; false, queuing nothing, when any of their projects is restoring.</summary>
+        bool Enqueue(IEnumerable<QueuedParagraph> paragraphs);
 
         /// <summary>
         /// Returns <paramref name="first"/> plus every remaining queued paragraph, drained from the

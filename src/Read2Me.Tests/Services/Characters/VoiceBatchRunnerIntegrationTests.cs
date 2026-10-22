@@ -125,6 +125,7 @@ namespace Read2Me.Tests.Services.Characters
 
             var sut = new VoiceBatchRunner(
                 _root.GetRequiredService<IServiceScopeFactory>(),
+                _root.GetRequiredService<RestoringProjects>(),
                 NullLogger<VoiceBatchRunner>.Instance,
                 broadcaster,
                 new EventBroadcaster<LlmStreamEvent>());
@@ -417,7 +418,7 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task StartGeneratePrompts_WhileRunning_ReturnsFalse()
+        public async Task StartGeneratePrompts_WhileRunning_IsRefusedAsAlreadyRunning()
         {
             var character = MakeCharacter("Hank");
             var h = BuildHarness(
@@ -431,8 +432,8 @@ namespace Read2Me.Tests.Services.Characters
             var r1 = h.Sut.StartGeneratePrompts(Folder);
             var r2 = h.Sut.StartGeneratePrompts(Folder);
 
-            Assert.True(r1);
-            Assert.False(r2);
+            Assert.Equal(VoiceBatchStart.Started, r1);
+            Assert.Equal(VoiceBatchStart.AlreadyRunning, r2);
 
             h.Sut.Cancel();
             await WaitForIdleAsync(h.Sut);
@@ -541,6 +542,31 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal(["Voice batch"], steps.Select(s => s.Label)); // the seed has no Book, so no "History started"
             Assert.False(steps[0].IsOpen);
             Assert.Null(steps[0].Note);
+        }
+
+        /// <summary>
+        /// A batch asked for while its project restores is refused by the runner itself — not only
+        /// by the endpoint — so it neither runs nor opens a Background run step.
+        /// </summary>
+        [Fact]
+        public async Task ABatchStartedWhileTheProjectRestores_IsRefused_AndOpensNoStep()
+        {
+            var alice = MakeCharacter("Alice");
+            var h = BuildHarness(
+                characters: new[] { alice },
+                voicesByCharacter: new Dictionary<Guid, List<VoiceEntity>> { [alice.Id] = new List<VoiceEntity>() });
+            var history = _root!.GetRequiredService<ProjectHistory>();
+            await history.ListAsync(Folder);
+            _root!.GetRequiredService<RestoringProjects>().TryBegin(Folder);
+
+            Assert.Equal(VoiceBatchStart.Restoring, h.Sut.StartGeneratePrompts(Folder));
+            Assert.Equal(VoiceBatchStart.Restoring, h.Sut.StartGenerateAudio(Folder));
+
+            Assert.False(h.Sut.IsRunning);
+            Assert.Null(h.Sut.BusyFor(Folder));
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+            Assert.Empty(h.Events);
+            Assert.Empty((await history.ListAsync(Folder)).Steps);
         }
 
         [Fact]
@@ -803,7 +829,7 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Fact]
-        public async Task StartGenerateAudio_WhileGeneratePromptsRunning_ReturnsFalse()
+        public async Task StartGenerateAudio_WhileGeneratePromptsRunning_IsRefusedAsAlreadyRunning()
         {
             var character = MakeCharacter("Jack");
             var h = BuildHarness(
@@ -814,15 +840,15 @@ namespace Read2Me.Tests.Services.Characters
             var r1 = h.Sut.StartGeneratePrompts(Folder);
             var r2 = h.Sut.StartGenerateAudio(Folder);
 
-            Assert.True(r1);
-            Assert.False(r2);
+            Assert.Equal(VoiceBatchStart.Started, r1);
+            Assert.Equal(VoiceBatchStart.AlreadyRunning, r2);
 
             h.Sut.Cancel();
             await WaitForIdleAsync(h.Sut);
         }
 
         [Fact]
-        public async Task StartGeneratePrompts_WhileGenerateAudioRunning_ReturnsFalse()
+        public async Task StartGeneratePrompts_WhileGenerateAudioRunning_IsRefusedAsAlreadyRunning()
         {
             var character = MakeCharacter("Kate");
             var voice = MakeGeneratedVoiceWithPrompt(character.Id);
@@ -834,8 +860,8 @@ namespace Read2Me.Tests.Services.Characters
             var r1 = h.Sut.StartGenerateAudio(Folder);
             var r2 = h.Sut.StartGeneratePrompts(Folder);
 
-            Assert.True(r1);
-            Assert.False(r2);
+            Assert.Equal(VoiceBatchStart.Started, r1);
+            Assert.Equal(VoiceBatchStart.AlreadyRunning, r2);
 
             h.Sut.Cancel();
             await WaitForIdleAsync(h.Sut);

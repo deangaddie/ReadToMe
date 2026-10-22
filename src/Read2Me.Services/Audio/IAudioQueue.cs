@@ -19,7 +19,8 @@ namespace Read2Me.Services.Audio
     /// </summary>
     public interface IAudioQueue
     {
-        void Enqueue(IEnumerable<QueuedAudioItem> items);
+        /// <summary>Queues the items; false, queuing nothing, when any of their projects is restoring.</summary>
+        bool Enqueue(IEnumerable<QueuedAudioItem> items);
 
         /// <summary>The item has gone in flight.</summary>
         void MarkProcessing(QueuedAudioItem item);

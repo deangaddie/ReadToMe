@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 using Read2Me.Core.Models;
+using Read2Me.Services.History;
 using Read2Me.Services.Queueing;
 
 namespace Read2Me.Services.Audio
@@ -39,19 +40,34 @@ namespace Read2Me.Services.Audio
 
         private readonly QueueStateStore<AudioItemKey, AudioItemOutcome> _store = new();
         private readonly ConcurrentDictionary<AudioItemKey, long> _versions = new();
+        private readonly RestoringProjects _restoring;
+
+        /// <summary>A queue whose projects never restore.</summary>
+        public AudioQueueService() : this(new RestoringProjects()) { }
+
+        public AudioQueueService(RestoringProjects restoring) => _restoring = restoring;
 
         public event Action? Changed;
 
         public ChannelReader<QueuedAudioItem> Reader => _channel.Reader;
 
-        public void Enqueue(IEnumerable<QueuedAudioItem> items)
+        /// <summary>
+        /// Queues the items, or refuses them all — queuing and announcing nothing — when any of their
+        /// projects is restoring. An item already queued or generating is not queued twice.
+        /// </summary>
+        public bool Enqueue(IEnumerable<QueuedAudioItem> items)
         {
-            foreach (var item in items)
+            var list = items.ToList();
+            if (list.Any(i => _restoring.IsRestoring(i.Folder)))
+                return false;
+
+            foreach (var item in list)
             {
                 if (_store.TryMarkQueued(Key(item)))
                     _channel.Writer.TryWrite(item);
             }
             Changed?.Invoke();
+            return true;
         }
 
         public void MarkProcessing(QueuedAudioItem item)
@@ -125,6 +141,12 @@ namespace Read2Me.Services.Audio
                         item with { Attempts = item.Attempts.WithBusy() },
                         retryAfter.Delay,
                         CancellationToken.None);
+                    break;
+
+                // As RetryAfter, but the wait is the project's Restore, and no budget is spent.
+                case Disposition.RetryAfterRestore:
+                    if (!_store.ReturnToQueued(key)) break;
+                    _ = DelayedWrite.ScheduleWhen(_channel.Writer, item, _restoring.WhenEnded(item.Folder), CancellationToken.None);
                     break;
             }
 
