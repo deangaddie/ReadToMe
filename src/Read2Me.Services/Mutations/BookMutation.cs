@@ -1,5 +1,6 @@
 using Read2Me.Core.Models;
 using Read2Me.Data.Enums;
+using Read2Me.Services.History;
 
 namespace Read2Me.Services.Mutations;
 
@@ -59,6 +60,13 @@ public abstract record ProjectStateMutation(ProjectFolderId FolderId) : BookMuta
     /// </summary>
     public virtual StateFileOwners WritesFiles => StateFileOwners.None;
 
+    /// <summary>
+    /// The state file changes the mutation records itself, against the list at the tip, instead of
+    /// History reading them from the rows and the disk: a <b>Restore</b>'s, which are the target step's
+    /// list against the tip's, its files written only once it has committed. Null for any other mutation.
+    /// </summary>
+    internal virtual FileChanges? RecordsFileChanges => null;
+
     /// <summary>The History step a <b>Restore</b> brings back, which its step records; null for any other mutation.</summary>
     internal virtual Guid? RestoresStepId => null;
 
@@ -70,14 +78,12 @@ public abstract record ProjectStateMutation(ProjectFolderId FolderId) : BookMuta
 }
 
 /// <summary>
-/// Whose state files a mutation writes over: some Voices' audio and originals, and the cover — or
-/// every state file, the source book file included, for a Restore.
+/// Whose state files a mutation writes over: some Voices' audio and originals, and the cover.
 /// </summary>
-public sealed record StateFileOwners(IReadOnlyCollection<Guid> Voices, bool Cover = false, bool Every = false)
+public sealed record StateFileOwners(IReadOnlyCollection<Guid> Voices, bool Cover = false)
 {
     public static readonly StateFileOwners None = new([]);
     public static readonly StateFileOwners TheCover = new([], Cover: true);
-    public static readonly StateFileOwners All = new([], Cover: true, Every: true);
 
     public static StateFileOwners Voice(Guid voiceId) => new([voiceId]);
 }

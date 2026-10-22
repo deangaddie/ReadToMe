@@ -101,7 +101,7 @@ public sealed class BookMutations(
             step = committed.Step;
             // Under the lock, so the snapshot is the state after the step just committed.
             if (step is not null)
-                await history.SnapshotIfDueAsync(mutation.FolderId);
+                await SnapshotIfDueAsync(mutation.FolderId);
         }
         catch (OperationCanceledException)
         {
@@ -175,6 +175,22 @@ public sealed class BookMutations(
     }
 
     private sealed record CommittedChange(BookMutationEffects Effects, RecordedStep? Step);
+
+    /// <summary>
+    /// Past the commit, so best-effort: a snapshot that fails is only a slower open of later steps,
+    /// and the next due commit takes one. A committed mutation is never reported as uncommitted.
+    /// </summary>
+    private async Task SnapshotIfDueAsync(ProjectFolderId folder)
+    {
+        try
+        {
+            await history.SnapshotIfDueAsync(folder);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Snapshotting History of {Folder} after a commit failed; the commit stands.", folder.Value);
+        }
+    }
 
     /// <summary>Best-effort, like <see cref="Publish"/>: the step is committed whatever a subscriber does.</summary>
     private void Announce(ProjectFolderId folder, RecordedStep step)

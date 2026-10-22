@@ -86,7 +86,7 @@ internal sealed class HistoryCapture : IAsyncDisposable
     /// The state files changed too: those the rows stop or start naming, and those the mutation
     /// writes over in place (<see cref="ProjectStateMutation.WritesFiles"/>), each hashed into the blobs before the chunk
     /// that names it. A commit that changed only a file — an edit of a Voice's audio — is still a
-    /// step.
+    /// step. A Restore records its own (<see cref="ProjectStateMutation.RecordsFileChanges"/>).
     /// </para>
     /// </summary>
     public async Task<RecordedStep?> RecordAsync(
@@ -95,7 +95,7 @@ internal sealed class HistoryCapture : IAsyncDisposable
     {
         var patchset = _session.Patchset();
         var projectFolder = Path.GetDirectoryName(_connection.DataSource)!;
-        var files = await StateFiles.ChangesAsync(
+        var files = mutation.RecordsFileChanges ?? await StateFiles.ChangesAsync(
             _db, projectFolder, HistoryDatabase.FolderOf(projectFolder), _tipFiles, mutation.WritesFiles, ct);
         if (patchset.Length == 0 && files.Count == 0)
             return null;

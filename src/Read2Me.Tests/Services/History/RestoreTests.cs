@@ -13,6 +13,7 @@ using Read2Me.Services.BookEdits;
 using Read2Me.Services.Events;
 using Read2Me.Services.History;
 using Read2Me.Services.Mutations;
+using Read2Me.Services.Mutations.Implementations;
 using Read2Me.Services.Queueing;
 using Read2Me.TestUtils;
 using Read2Me.Tests.Infrastructure;
@@ -33,6 +34,7 @@ public class RestoreTests : ProjectDbTestBase
     private readonly FakeBusy _busy = new();
     private readonly List<RestoreEvent> _events = [];
     private BookHierarchyBuilder _book = null!;
+    private bool _throwBeforeCommit;
 
     public RestoreTests()
     {
@@ -42,6 +44,8 @@ public class RestoreTests : ProjectDbTestBase
         services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
         services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
         services.AddSingleton<IProjectBusyAnswer>(_busy);
+        services.AddScoped<IBookMutationImplementation<RestoreStepMutation>>(
+            _ => new ThrowingRestore(new RestoreStepMutationImplementation(), this));
         _root = services.BuildServiceProvider();
         _folder = new ProjectFolderId(FolderName);
         _root.GetRequiredService<EventBroadcaster<RestoreEvent>>().Event += _events.Add;
@@ -237,6 +241,64 @@ public class RestoreTests : ProjectDbTestBase
         Assert.Equal(before.Steps, (await History.ListAsync(_folder)).Steps);
     }
 
+    // ── files after the commit, and the repair ──────────────────────────────
+
+    [Fact]
+    public async Task AFileWriteThatThrowsAfterTheCommit_LeavesTheRowsRestored_TheRestoreAnswered_AndTheRepairFixesIt()
+    {
+        var (path, target) = await SeedVoiceAndCoversAsync();
+        // The voice's audio can't be written back: something stands where it goes.
+        File.Delete(Path.Combine(FolderPath, path));
+        Directory.CreateDirectory(Path.Combine(FolderPath, path));
+
+        var restored = Assert.IsType<RestoreOutcome.Restored>(await RestoreAsync(target));
+
+        Assert.Equal(restored.Step!.StepId, await TipAsync());
+        Assert.Equal("cover.jpg", await CoverAsync());
+        Assert.Equal(("first cover", null), (await ReadAsync("cover.jpg"), await ReadAsync("cover.png")));
+
+        Directory.Delete(Path.Combine(FolderPath, path));
+        await History.RepairAsync(_folder);
+
+        Assert.Equal("take", await ReadAsync(path));
+    }
+
+    [Fact]
+    public async Task AThrowBeforeTheCommit_ChangesNeitherRowsNorFiles()
+    {
+        var (path, target) = await SeedVoiceAndCoversAsync();
+        var before = await History.ListAsync(_folder);
+        _throwBeforeCommit = true;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => RestoreAsync(target));
+
+        Assert.Equal(before.Steps, (await History.ListAsync(_folder)).Steps);
+        Assert.Equal("cover.png", await CoverAsync());
+        Assert.Equal(("first cover", "second cover"), (await ReadAsync("cover.jpg"), await ReadAsync("cover.png")));
+        Assert.Equal("edited", await ReadAsync(path));
+    }
+
+    [Fact]
+    public async Task TheRepair_MakesTheStateFilesAsTheHeadListsThem_SweepsRestoreDebris_AndLeavesResultsAlone()
+    {
+        var (path, _) = await SeedVoiceAndCoversAsync();
+        await WriteAsync(path, "changed");
+        File.Delete(Path.Combine(FolderPath, "cover.png"));
+        await WriteAsync("cover.jpg", "a cover the Head says is gone");
+        await WriteAsync("audio/take.wav", "a take");
+        await WriteAsync("history/cache/0123.restoring", "a crashed Restore's copy");
+        await WriteAsync("history/cache/0123.aside/0", "a file an older build moved aside");
+
+        await History.RepairAsync(_folder);
+
+        Assert.Equal("edited", await ReadAsync(path));
+        Assert.Equal(("second cover", null), (await ReadAsync("cover.png"), await ReadAsync("cover.jpg")));
+        Assert.Equal("a take", await ReadAsync("audio/take.wav"));
+        var cache = Path.Combine(FolderPath, "history", "cache");
+        Assert.Empty(Directory.GetFiles(cache, "*.restoring"));
+        Assert.Empty(Directory.GetDirectories(cache, "*.aside"));
+    }
+
     // ── refusals ────────────────────────────────────────────────────────────
 
     [Fact]
@@ -315,6 +377,47 @@ public class RestoreTests : ProjectDbTestBase
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// A Voice whose audio was edited and a cover changed after the target step: the voice's audio
+    /// is "take" at the target and "edited" now, the cover cover.jpg then and cover.png now.
+    /// </summary>
+    private async Task<(string VoicePath, Guid Target)> SeedVoiceAndCoversAsync()
+    {
+        await SeedAsync();
+        await CommitAsync(new CreateCharacterMutation(_folder, "Alice"));
+        var characterId = await CharacterIdAsync("Alice");
+        await CommitAsync(new CreateVoiceMutation(_folder, characterId, "Calm"));
+        var voice = await VoiceIdAsync("Calm");
+        const string path = "voices/alice/Calm.wav";
+        await WriteAsync(path, "take");
+        await CommitAsync(new SetVoiceAudioMutation(_folder, voice, path));
+        await WriteAsync("cover.jpg", "first cover");
+        await CommitAsync(new SetCoverImageMutation(_folder, "cover.jpg"));
+        var target = await TipAsync();
+
+        await Editor().ApplyAsync(new VoiceAudioRef(_folder, characterId, voice, path), "edited"u8.ToArray());
+        await WriteAsync("cover.png", "second cover");
+        await CommitAsync(new SetCoverImageMutation(_folder, "cover.png"));
+        return (path, target);
+    }
+
+    private async Task<string?> CoverAsync()
+    {
+        await using var db = await OpenDbAsync();
+        return (await db.Projects.SingleAsync()).CoverImage;
+    }
+
+    /// <summary>The real Restore, which throws once it has applied, before the commit, when the test says so.</summary>
+    private sealed class ThrowingRestore(RestoreStepMutationImplementation real, RestoreTests test)
+        : IBookMutationImplementation<RestoreStepMutation>
+    {
+        public async Task<BookMutationEffects> ApplyAsync(RestoreStepMutation mutation, ProjectDbContext db, CancellationToken ct)
+        {
+            var effects = await real.ApplyAsync(mutation, db, ct);
+            return test._throwBeforeCommit ? throw new InvalidOperationException("Injected before the commit.") : effects;
+        }
+    }
 
     private sealed class FakeBusy : IProjectBusyAnswer
     {

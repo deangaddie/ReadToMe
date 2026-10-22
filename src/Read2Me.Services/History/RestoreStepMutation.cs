@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Read2Me.Core.Models;
@@ -13,12 +12,13 @@ namespace Read2Me.Services.History;
 /// state table and applies it, so records keep their ids and the change reads like the equivalent
 /// hand edits: items whose text, speaker or delivery cue changes lose their audio and its review,
 /// items brought back return without audio, and the Pipeline checkpoints it disturbs go stale.
-/// The state files follow from the blobs. Only <see cref="HistoryRestore"/> commits one.
+/// It records the target's state files; they are written from the blobs once it has committed.
+/// Only <see cref="HistoryRestore"/> commits one.
 /// </summary>
 internal sealed record RestoreStepMutation(ProjectFolderId FolderId, HistoryStep Target, RestoreWork Work)
     : ProjectStateMutation(FolderId)
 {
-    public override StateFileOwners WritesFiles => StateFileOwners.All;
+    internal override FileChanges? RecordsFileChanges => Work.FileChanges;
 
     internal override Guid? RestoresStepId => Target.StepId;
 
@@ -94,80 +94,21 @@ internal static class RestoreAudio
 
 /// <summary>
 /// One Restore's working state: a private copy of the target step's database, which the Restore
-/// writes the kept audio into, and the step's state files list. Writing the files back is staged:
-/// each file it replaces or removes is moved aside first, so a Restore that doesn't commit puts
-/// them back. Disposing deletes the copy and whatever was moved aside.
+/// writes the kept audio into, and the step's state files list. The files themselves are written
+/// only after the commit, from the Head's list (<see cref="ProjectHistory.WriteStateFilesAsync"/>).
+/// Disposing deletes the copy.
 /// </summary>
-internal sealed class RestoreWork(string workFile, FileList targetFiles, string historyFolder) : IDisposable
+internal sealed class RestoreWork(string workFile, FileList targetFiles) : IDisposable
 {
-    private readonly List<(string Path, string? MovedAside)> _staged = [];
-    private readonly string _aside = Path.ChangeExtension(workFile, ".aside");
-
     public string WorkFile { get; } = workFile;
+
+    public FileList TargetFiles { get; } = targetFiles;
 
     /// <summary>The items whose audio the Restore discarded, counted under the write lock.</summary>
     public int AudioDiscardCount { get; set; }
 
-    /// <summary>
-    /// Writes each state file as the target had it, from the blobs, and removes those it didn't
-    /// have — <paramref name="liveFiles"/> names the ones the project names now. A file already as
-    /// the target had it is left alone. True when any file changed.
-    /// </summary>
-    public async Task<bool> WriteFilesAsync(string projectFolder, IEnumerable<string> liveFiles, CancellationToken ct)
-    {
-        var paths = new HashSet<string>(targetFiles.Paths, StringComparer.OrdinalIgnoreCase);
-        paths.UnionWith(liveFiles.Select(StateFiles.Normalise));
-        foreach (var path in paths)
-        {
-            var file = Path.Combine(projectFolder, path);
-            var hash = targetFiles.HashOf(path);
-            if (await HashOfAsync(file, ct) == hash)
-                continue;
+    /// <summary>The tip's file list against the target's, taken under the write lock: what the Restore step records.</summary>
+    public FileChanges? FileChanges { get; set; }
 
-            string? movedAside = null;
-            if (File.Exists(file))
-            {
-                Directory.CreateDirectory(_aside);
-                movedAside = Path.Combine(_aside, _staged.Count.ToString());
-                File.Move(file, movedAside);
-            }
-            _staged.Add((file, movedAside));
-            if (hash is null)
-                continue;
-            var blob = StateFiles.BlobOf(historyFolder, hash);
-            if (!File.Exists(blob))
-                throw new InvalidOperationException($"History has no copy of {path} ({hash}) to restore.");
-            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
-            File.Copy(blob, file);
-        }
-        return _staged.Count > 0;
-    }
-
-    /// <summary>Puts back every file the Restore wrote or removed, newest first: the Restore did not commit.</summary>
-    public void PutFilesBack()
-    {
-        for (var i = _staged.Count - 1; i >= 0; i--)
-        {
-            var (file, movedAside) = _staged[i];
-            File.Delete(file);
-            if (movedAside is not null)
-                File.Move(movedAside, file);
-        }
-        _staged.Clear();
-    }
-
-    public void Dispose()
-    {
-        File.Delete(WorkFile);
-        if (Directory.Exists(_aside))
-            Directory.Delete(_aside, recursive: true);
-    }
-
-    private static async Task<string?> HashOfAsync(string file, CancellationToken ct)
-    {
-        if (!File.Exists(file))
-            return null;
-        await using var stream = File.OpenRead(file);
-        return Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, ct));
-    }
+    public void Dispose() => File.Delete(WorkFile);
 }
