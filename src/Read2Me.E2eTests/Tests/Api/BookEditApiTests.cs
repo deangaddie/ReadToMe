@@ -331,6 +331,38 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     [Fact]
+    public async Task A_plan_overtaken_by_a_whole_Restore_while_thinking_answers_409_and_keeps_no_session()
+    {
+        var folder = $"api-edit-restored-{Guid.NewGuid():N}";
+        await app.SeedMultiChapterProjectAsync(folder, "Restored Book", "Author", chapters: 2);
+        var folderId = new Read2Me.Core.Models.ProjectFolderId(folder);
+        var restoring = app.Services.GetRequiredService<RestoringProjects>();
+        app.FakeAi.LlmReply = _ => TemplatePlan;
+        app.FakeAi.HoldLlmAfter(0);
+        try
+        {
+            // The Restore begins and ends while the LLM thinks: the flag is down again by the check,
+            // but the plan's targets would come from the book as it was before.
+            var plan = Http.PostAsJsonAsync(Url(folder, "/plan"), new { instruction = "number the chapters" });
+            await WaitForAsync(() => { lock (app.FakeAi.LlmPromptsSeen) return app.FakeAi.LlmPromptsSeen.Count > 0; });
+            Assert.True(restoring.TryBegin(folderId));
+            restoring.End(folderId);
+            app.FakeAi.ReleaseLlm();
+
+            var response = await plan;
+            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            Assert.Equal(RestoringProjects.Reason,
+                JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
+            Assert.Empty(app.Services.GetRequiredService<IBookEditSessionStore>().RemoveAll(folderId));
+        }
+        finally
+        {
+            restoring.End(folderId);
+            app.FakeAi.Reset();
+        }
+    }
+
+    [Fact]
     public async Task Unknown_folder_or_program_is_404()
     {
         var folder = $"api-edit-404-{Guid.NewGuid():N}";

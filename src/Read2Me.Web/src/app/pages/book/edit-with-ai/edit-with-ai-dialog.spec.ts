@@ -228,6 +228,50 @@ describe('r2m-edit-with-ai-dialog', () => {
     expect(button('analyze').disabled).toBe(false);
   });
 
+  it('stays on Instruct when a Restore drops the plan before its answer arrives', async () => {
+    // The host granted the session, then a Restore dropped it while the answer was on its way.
+    api.on('POST', `${BASE}/plan`, () => {
+      messages.emit({
+        kind: 'dropped',
+        program: 'prog-1',
+        reason: 'The project was restored — run it again',
+      });
+      return PLAN;
+    });
+    await instruct();
+
+    await analyze();
+
+    expect(phase()).toBe('instruct');
+    expect(text('edit-error')).toContain('The project was restored — run it again');
+    expect(button('analyze').disabled).toBe(false);
+    // The session is gone on the host: nothing to discard when the dialog closes.
+    plan = { ...PLAN, program: null };
+  });
+
+  it('stays on Instruct when the drop lands while the earlier plan is being discarded', async () => {
+    await instruct();
+    await analyze();
+    button('back').click();
+    await dialog.rendered();
+    // The second plan is granted; a Restore drops it while the first one's DELETE is in flight.
+    api
+      .on('POST', `${BASE}/plan`, () => ({ ...PLAN, program: 'prog-2' }))
+      .on('DELETE', `${BASE}/prog-1`, () => {
+        messages.emit({
+          kind: 'dropped',
+          program: 'prog-2',
+          reason: 'The project was restored — run it again',
+        });
+        return undefined;
+      });
+
+    await analyze();
+
+    expect(phase()).toBe('instruct');
+    expect(text('edit-error')).toContain('The project was restored — run it again');
+  });
+
   it('shows what the host understood, and its warnings, on Plan', async () => {
     plan = {
       ...PLAN,
