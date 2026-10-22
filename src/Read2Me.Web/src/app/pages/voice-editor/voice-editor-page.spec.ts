@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type {
-  PreviewResponse,
-  ProjectDetailDto,
-  ProjectStatusDto,
-  StepCatalogEntryDto,
-  VoiceDto,
+import {
+  type PreviewResponse,
+  type ProjectDetailDto,
+  type ProjectStatusDto,
+  type StepCatalogEntryDto,
+  StepView,
+  VIEWING_READ_ONLY,
+  type VoiceDto,
 } from '@app/api';
 import { Router, type RouteDef } from '@app/core/router';
-import { override, resetServices } from '@app/core/services';
+import { override, resetServices, use } from '@app/core/services';
 import { ConfirmService } from '@app/ui/dialogs';
 import { FakeApi, problem } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';
@@ -226,6 +228,22 @@ describe('r2m-voice-editor-page', () => {
     expect(
       page.querySelector<HTMLAnchorElement>('[data-action="back"]')?.getAttribute('href'),
     ).toBe('projects/dune/cast/alice');
+  });
+
+  it('viewing a History step, the original plays at the step; Preview, Apply and Restore are off (ticket 32)', async () => {
+    use(StepView).view('dune', 's8');
+    const page = await render({ ...VOICE, isEdited: true });
+    await tick(page, 'denoise');
+    const reason = (el: Element | null) =>
+      el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
+
+    expect(
+      page.querySelector('[data-testid="original-player"] audio')?.getAttribute('src'),
+    ).toContain('at=s8');
+    for (const action of ['preview', 'apply', 'restore']) {
+      expect(button(page, action).disabled).toBe(true);
+      expect(reason(button(page, action))).toBe(VIEWING_READ_ONLY);
+    }
   });
 
   it('renders the ticked steps in catalog order and stacks an After player per stage', async () => {

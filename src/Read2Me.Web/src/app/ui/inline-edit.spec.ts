@@ -36,6 +36,21 @@ describe('r2m-inline-edit', () => {
     expect(el.classList.contains('r2m-inline-edit--editing')).toBe(true);
   });
 
+  it('read-only, it shows the value with its button off and the reason, and never opens', async () => {
+    const { el, display, field } = await mount();
+    el.readOnly = 'Viewing a past step';
+    await el.rendered();
+
+    expect(display()?.textContent).toContain('Chapter 1');
+    expect(display()!.disabled).toBe(true);
+    expect(display()!.closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(
+      'Viewing a past step',
+    );
+    el.begin();
+    await el.rendered();
+    expect(field()).toBeNull();
+  });
+
   it('saves a changed value on Enter', async () => {
     const { el, saved, display, field, type } = await mount();
     display()!.click();

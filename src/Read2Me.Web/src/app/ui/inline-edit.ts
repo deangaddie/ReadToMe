@@ -1,12 +1,13 @@
 import { html, nothing } from 'lit-html';
 import { R2mElement, define } from '@app/core/element';
 import { computed, signal } from '@app/core/signals';
-import { icon } from './partials';
+import { blockable, icon } from './partials';
 
 /**
  * Click-to-edit text (design §7, §8): Enter saves, Escape cancels, blur saves. Emits `save` only
  * when the value actually changed and is valid (non-empty when `required`, within `maxLength`),
- * `cancelled` otherwise. The input is focused and selected on the render that opens it.
+ * `cancelled` otherwise. The input is focused and selected on the render that opens it. A
+ * `readOnly` reason (viewing a History step) keeps it closed, its button off with the reason.
  */
 export class InlineEdit extends R2mElement {
   readonly #value = signal('');
@@ -39,6 +40,14 @@ export class InlineEdit extends R2mElement {
   }
   set maxLength(value: number | undefined) {
     this.#maxLength.set(value);
+  }
+
+  readonly #readOnly = signal<string | null>(null);
+  get readOnly() {
+    return this.#readOnly();
+  }
+  set readOnly(value: string | null) {
+    this.#readOnly.set(value);
   }
 
   readonly #editing = signal(false);
@@ -83,15 +92,18 @@ export class InlineEdit extends R2mElement {
         @blur=${() => this.commit()}
       />`;
     }
-    return html`<button
+    const readOnly = this.#readOnly();
+    const display = html`<button
       type="button"
       class="r2m-inline-edit__display ${value ? '' : 'r2m-inline-edit__display--empty'}"
       aria-label=${`Edit ${placeholder || 'value'}`}
+      ?disabled=${readOnly !== null}
       @click=${() => this.begin()}
     >
       <span class="r2m-inline-edit__text">${value || placeholder}</span>
       ${icon('edit', 'r2m-inline-edit__pencil')}
     </button>`;
+    return readOnly === null ? display : blockable(readOnly, display);
   }
 
   readonly #onKeydown = (e: KeyboardEvent): void => {
@@ -105,6 +117,7 @@ export class InlineEdit extends R2mElement {
   };
 
   begin(): void {
+    if (this.#readOnly() !== null) return;
     this.#draft.set(this.#value());
     this.#focusPending = true;
     this.#editing.set(true);

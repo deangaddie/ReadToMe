@@ -547,7 +547,7 @@ describe('viewing a History step', () => {
     shell.querySelector<HTMLButtonElement>(`[data-step-id="${id}"] .history-sheet__step`);
   const main = (shell: Element) => shell.querySelector<HTMLElement>('.shell__main');
 
-  it('shows the banner above the body over an inert, greyed page, and hides the next-step pill', async () => {
+  it('shows the banner above the body over a greyed page it leaves browsable, and hides the next-step pill', async () => {
     const { shell } = await openSheet();
     expect(shell.querySelector('.shell__next')).not.toBeNull();
 
@@ -559,7 +559,8 @@ describe('viewing a History step', () => {
     expect(banner?.textContent).toContain('#1 Split chapter');
     expect(banner?.textContent).toContain('Chapter 3 at paragraph 41');
     expect(banner?.textContent).toContain('Today');
-    expect(main(shell)?.inert).toBe(true);
+    // Not inert (ticket 32): tabs, the tree, rows and play stay usable; edit controls are off.
+    expect(main(shell)?.inert).toBe(false);
     expect(main(shell)?.classList.contains('shell__main--viewing')).toBe(true);
     expect(shell.querySelector('.shell__next')).toBeNull();
     expect(stepButton(shell, 's1')?.getAttribute('aria-pressed')).toBe('true');

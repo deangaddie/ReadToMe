@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import type { BookOverviewDto, ParagraphDto, ProjectStatusDto } from '@app/api';
+import {
+  type BookOverviewDto,
+  type ParagraphDto,
+  type ProjectStatusDto,
+  StepView,
+  VIEWING_READ_ONLY,
+} from '@app/api';
 import { Router, type RouteDef } from '@app/core/router';
 import { override, resetServices, use } from '@app/core/services';
 import type { QueueMessage, Receipt } from '@app/live/live-messages';
@@ -1197,6 +1203,62 @@ describe('r2m-book-page', () => {
     });
   });
 
+  describe('viewing a History step (ticket 32)', () => {
+    const reason = (el: Element | null) =>
+      el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
+
+    it('reads at the step; the tabs and tree work, every edit control is off with the reason', async () => {
+      use(StepView).view('dune', 's8');
+      const { page, store } = await start('projects/dune/book');
+      expect(api.requests.find((r) => r.path === `${BASE}/book`)?.search).toBe('?at=s8');
+
+      const actions = page.querySelector<HTMLButtonElement>('[data-testid=book-actions]')!;
+      expect(actions.disabled).toBe(true);
+      expect(reason(actions)).toBe(VIEWING_READ_ONLY);
+      const triggers = Array.from(
+        page.querySelectorAll<HTMLButtonElement>('.r2m-node-menu__trigger'),
+      );
+      expect(triggers.length).toBeGreaterThan(0);
+      for (const trigger of triggers) {
+        expect(trigger.disabled).toBe(true);
+        expect(reason(trigger)).toBe(VIEWING_READ_ONLY);
+      }
+
+      // A tree click still opens a chapter.
+      const tree = page.querySelector('r2m-structure-tree')!;
+      tree.querySelector<HTMLElement>('[data-node-id=c2] .tree__title')!.click();
+      for (let i = 0; i < 4; i++) await settle();
+      expect(store.currentChapterId()).toBe('c2');
+
+      // The Reader mode tabs still switch.
+      const radios = page.querySelectorAll<HTMLInputElement>('[aria-label="Reader mode"] input');
+      radios[1]!.checked = true;
+      radios[1]!.dispatchEvent(new Event('change'));
+      await settle();
+      expect(store.mode()).toBe('speakers');
+    });
+
+    it('the selection bar keeps Clear but Attribute and Bulk assign are off with the reason', async () => {
+      use(StepView).view('dune', 's8');
+      const { page } = await start('projects/dune/book');
+      const box = page.querySelector<HTMLInputElement>(
+        '.r2m-paragraph[data-paragraph-id=p1] input[type=checkbox]',
+      )!;
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
+      await page.rendered();
+
+      for (const action of ['attribute-selection', 'bulk-assign']) {
+        const button = page.querySelector<HTMLButtonElement>(`[data-action=${action}]`)!;
+        expect(button.disabled).toBe(true);
+        expect(reason(button)).toBe(VIEWING_READ_ONLY);
+      }
+      expect(page.querySelector<HTMLButtonElement>('[data-action=clear-selection]')!.disabled).toBe(
+        false,
+      );
+    });
+  });
+
   describe('book actions (ticket 11)', () => {
     const open = async (page: BookPage) => {
       page.querySelector<HTMLButtonElement>('[data-testid=book-actions]')!.click();
@@ -1495,6 +1557,14 @@ describe('r2m-book-page', () => {
       await start('projects/dune/book?action=pauses');
       for (let i = 0; i < 4; i++) await settle();
       expect(document.querySelector('dialog')).toBeNull();
+      expect(new URL(lastReplace()!).searchParams.has('action')).toBe(false);
+    });
+
+    it('while a History step is viewed it only drops the param (ticket 32)', async () => {
+      use(StepView).view('dune', 's8');
+      await start('projects/dune/book?action=titles');
+      for (let i = 0; i < 4; i++) await settle();
+      expect(document.querySelector('r2m-add-titles-dialog')).toBeNull();
       expect(new URL(lastReplace()!).searchParams.has('action')).toBe(false);
     });
 

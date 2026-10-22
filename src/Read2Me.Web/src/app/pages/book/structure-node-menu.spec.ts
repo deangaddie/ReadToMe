@@ -11,6 +11,7 @@ function input(overrides: Partial<StructureNodeMenuInput> = {}): StructureNodeMe
     selection: null,
     status: null,
     locked: false,
+    readOnly: null,
     ...overrides,
   };
 }
@@ -55,6 +56,13 @@ describe('structureNodeMenu', () => {
 
   it('leaves the selection kind out when nothing is selectable', () => {
     expect('selection' in structureNodeMenu(input()).target).toBe(false);
+  });
+
+  it('disables the trigger and gives the reason while a History step is viewed', () => {
+    const menu = structureNodeMenu(input({ locked: true, readOnly: 'Viewing a past step' }));
+    expect(menu.disabled).toBe(true);
+    expect(menu.reason).toBe('Viewing a past step');
+    expect(structureNodeMenu(input()).reason).toBeNull();
   });
 
   it('disables the trigger while the node is processing attribution', () => {

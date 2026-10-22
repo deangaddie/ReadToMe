@@ -101,6 +101,8 @@ describe('BookStore', () => {
   let live: FakeBookLive;
   let store: BookStore;
   let toasts: string[];
+  /** The project's read-only reason: set while a History step is viewed. */
+  let readOnly: ReturnType<typeof signal<string | null>>;
 
   const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
   const calls = (path: string) => api.calls('GET', `${BASE}${path}`).length;
@@ -113,7 +115,8 @@ describe('BookStore', () => {
     override(LiveService, live as unknown as LiveService);
     toasts = [];
     override(ToastService, { info: (m: string) => toasts.push(m) } as unknown as ToastService);
-    const project = { detail: signal(DETAIL) } as unknown as ProjectStore;
+    readOnly = signal<string | null>(null);
+    const project = { detail: signal(DETAIL), readOnly } as unknown as ProjectStore;
     store = new BookStore(project);
 
     api
@@ -359,6 +362,19 @@ describe('BookStore', () => {
       expect(calls('/nodes/volume/v1/children')).toBe(2);
       expect(calls('/nodes/part/p1/children')).toBe(2);
       expect(store.chapters()[0]?.paragraphs.map((p) => p.id)).toEqual(['a', 'a2']);
+    });
+
+    it('while viewing a History step, a foreign split rereads (at the step) without the toast', async () => {
+      await store.open('dune');
+      await expand('p1');
+      await store.openFirstChapter();
+      readOnly.set('Viewing a past step');
+
+      live.receiptStream.emit(receipt(6, 'Structure', { paragraphIds: ['a'] }));
+      await settle(RECEIPT_BATCH_MS + 20);
+
+      expect(toasts).toEqual([]);
+      expect(calls('/nodes/chapter/c1/children')).toBe(2);
     });
 
     it('an own split does not toast', async () => {

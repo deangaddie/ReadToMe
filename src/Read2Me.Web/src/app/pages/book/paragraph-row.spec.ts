@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { render } from 'lit-html';
-import type { ParagraphDto, ParagraphItemDto } from '@app/api';
+import { type ParagraphDto, type ParagraphItemDto, VIEWING_READ_ONLY } from '@app/api';
 import { provide } from '@app/core/services';
 import { NODE_MENU_OPEN, type NodeMenuRequest } from './node-menu';
 import type { NodeMenuTarget } from './node-menu-entries';
@@ -64,6 +64,7 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
     narratorOnlyMode: false,
     ancestry: { c1: { partId: 'pt1', volumeId: 'v1' } },
     locked: false,
+    readOnly: null,
     generating: false,
     roster: ROSTER,
     ...overrides,
@@ -280,6 +281,29 @@ describe('paragraphRow', () => {
       );
       expect(el.querySelector('.r2m-paragraph__outcome')).toBeNull();
       expect(text(el.querySelector('.r2m-status-chip'))).toContain('Queued');
+    });
+  });
+
+  describe('viewing a History step (ticket 32)', () => {
+    const viewing = (overrides: Partial<RowContext> = {}) =>
+      ctx({ locked: true, readOnly: VIEWING_READ_ONLY, ...overrides });
+
+    it('the node menu is off with the viewing reason, and the chip offers no menu', async () => {
+      const el = await mount(viewing());
+      const trigger = el.querySelector<HTMLButtonElement>(
+        '.r2m-paragraph__menu .r2m-node-menu__trigger',
+      )!;
+      expect(trigger.disabled).toBe(true);
+      expect(trigger.closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(
+        VIEWING_READ_ONLY,
+      );
+      expect(el.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
+    });
+
+    it('a settled outcome shows as a plain chip, with nothing to clear', async () => {
+      const el = await mount(viewing({ paragraphStatus: { p1: { outcome: { kind: 'Failed' } } } }));
+      expect(el.querySelector('.r2m-paragraph__outcome')).toBeNull();
+      expect(text(el.querySelector('.r2m-status-chip'))).toContain('Failed');
     });
   });
 

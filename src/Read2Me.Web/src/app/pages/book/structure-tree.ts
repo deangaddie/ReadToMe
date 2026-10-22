@@ -120,6 +120,15 @@ export class StructureTree extends R2mElement {
     this.#locked.set(value);
   }
 
+  /** Why every node menu is off while a History step is viewed: their tooltip. Null otherwise. */
+  #readOnly = signal<string | null>(null);
+  get readOnly() {
+    return this.#readOnly();
+  }
+  set readOnly(value: string | null) {
+    this.#readOnly.set(value);
+  }
+
   /** The row holding the roving tab stop; null until the user moves it (the current chapter then). */
   readonly #active = signal<string | null>(null);
   readonly #rows = computed(() => flattenTree(this.#nodes(), this.#expandedIds()));
@@ -155,6 +164,7 @@ export class StructureTree extends R2mElement {
     const selection = this.#selection();
     const nodeStates = this.#nodeStates();
     const locked = this.#locked();
+    const readOnly = this.#readOnly();
     return html`<div class="tree" role="tree" aria-label="Book structure">
       ${repeat(
         rows,
@@ -164,7 +174,14 @@ export class StructureTree extends R2mElement {
           const isOpen = node.expandable && expanded.has(node.id);
           const isCurrent = node.id === current;
           const status = statuses[node.id] ?? null;
-          const menu = structureNodeMenu({ node, position: node, selection, status, locked });
+          const menu = structureNodeMenu({
+            node,
+            position: node,
+            selection,
+            status,
+            locked,
+            readOnly,
+          });
           return html`<div
             role="treeitem"
             class="tree__node ${isCurrent ? 'tree__node--current' : ''}"
@@ -221,7 +238,11 @@ export class StructureTree extends R2mElement {
             }
             ${status ? badges(status) : nothing}
             <span class="tree__menu">
-              ${nodeMenuTrigger(menu.target, { disabled: menu.disabled, tabIndex: -1 })}
+              ${nodeMenuTrigger(menu.target, {
+                disabled: menu.disabled,
+                tabIndex: -1,
+                reason: menu.reason,
+              })}
             </span>
           </div>`;
         },

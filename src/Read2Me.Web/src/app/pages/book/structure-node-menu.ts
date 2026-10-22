@@ -19,14 +19,18 @@ export interface StructureNodeMenuInput {
   selection: SelectionKind | null;
   /** The node's roll-up; null when it has none. */
   status: NodeStatusSummary | null;
-  /** The editor is locked (stale view or a write in flight). */
+  /** The editor is locked (stale view, a write in flight, or a History step viewed). */
   locked: boolean;
+  /** Why it is read-only: a History step is viewed. Null on the current project. */
+  readOnly: string | null;
 }
 
 export interface StructureNodeMenu {
   target: NodeMenuTarget;
   /** The node's attribution is processing or queued, or the editor is locked: the trigger is off. */
   disabled: boolean;
+  /** The trigger's tooltip while a History step is viewed; null otherwise. */
+  reason: string | null;
 }
 
 export function structureNodeMenu({
@@ -35,6 +39,7 @@ export function structureNodeMenu({
   selection,
   status,
   locked,
+  readOnly,
 }: StructureNodeMenuInput): StructureNodeMenu {
   const target: NodeMenuTarget = {
     kind: node.level,
@@ -47,5 +52,6 @@ export function structureNodeMenu({
   return {
     target: selection ? { ...target, selection } : target,
     disabled: busy || locked,
+    reason: readOnly,
   };
 }

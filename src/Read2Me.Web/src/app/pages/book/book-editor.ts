@@ -5,6 +5,7 @@ import {
   type CommandResponse,
   type ManualImportRequest,
   ProjectsApi,
+  StepView,
   toApiError,
 } from '@app/api';
 import { use } from '@app/core/services';
@@ -28,13 +29,21 @@ export class BookEditor {
   private readonly book = use(BookApi);
   private readonly projects = use(ProjectsApi);
   private readonly toast = use(ToastService);
+  private readonly stepView = use(StepView);
 
   private readonly _saving = signal(false);
 
   /** A write is in flight (not staleness: the stale banner covers that); the toolbar shows "Saving…". */
   readonly saving = this._saving.asReadonly();
-  /** Every mutation affordance is off: a write is in flight, or the view is stale (design §6.3). */
-  readonly locked = computed(() => this._saving() || this.store.stale() !== null);
+  /** Why the book can't be changed: a History step is viewed (ticket 32); the disabled controls' reason. */
+  readonly readOnly = computed(() => this.stepView.readOnly(this.store.folder()));
+  /**
+   * Every mutation affordance is off: a write is in flight, the view is stale (design §6.3), or a
+   * History step is viewed.
+   */
+  readonly locked = computed(
+    () => this._saving() || this.store.stale() !== null || this.readOnly() !== null,
+  );
 
   constructor(private readonly store: BookStore) {}
 
@@ -69,7 +78,7 @@ export class BookEditor {
   private declineReason(): string | null {
     if (!this.store.folder()) return 'No project is open.';
     if (this._saving()) return 'Another change is still being saved.';
-    return null;
+    return this.readOnly();
   }
 
   /** Rereads the source file from scratch (the caller has already confirmed). */
@@ -85,15 +94,15 @@ export class BookEditor {
 
   /**
    * Runs one write; resolves once the view has caught up. Null means nothing was sent (no project,
-   * or a write already in flight). `quiet` hands the refusal back on `error` instead of toasting
-   * it, for a caller that shows it itself.
+   * a write already in flight, or a History step viewed). `quiet` hands the refusal back on
+   * `error` instead of toasting it, for a caller that shows it itself.
    */
   private async settle<T>(
     write: (folder: string) => Promise<T>,
     quiet = false,
   ): Promise<{ value?: T; error: ApiError | null } | null> {
     const folder = this.store.folder();
-    if (!folder || this._saving()) return null;
+    if (!folder || this._saving() || this.readOnly() !== null) return null;
 
     // Armed before the request: the receipt can arrive before the HTTP response does.
     const receipt = this.store.expectOwnReceipt(OWN_RECEIPT_TIMEOUT_MS);

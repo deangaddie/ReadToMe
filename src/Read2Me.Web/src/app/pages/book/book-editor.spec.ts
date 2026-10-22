@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { ApiError, BookApi, ProjectsApi } from '@app/api';
-import { override, resetServices } from '@app/core/services';
+import { ApiError, BookApi, ProjectsApi, StepView, VIEWING_READ_ONLY } from '@app/api';
+import { override, resetServices, use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { ToastService } from '@app/ui/toast';
 import { BookEditor } from './book-editor';
@@ -142,6 +142,19 @@ describe('BookEditor', () => {
     expect(execute.calls.length).toBe(1);
     store.settle(true);
     await first;
+  });
+
+  it('is locked and read-only while a History step is viewed, and sends nothing', async () => {
+    use(StepView).view('dune', 's8');
+    expect(editor.locked()).toBe(true);
+    expect(editor.readOnly()).toBe(VIEWING_READ_ONLY);
+
+    expect(await editor.run({ type: 'AddPauses' })).toBe(false);
+    expect(execute.calls).toEqual([]);
+
+    use(StepView).clear('dune');
+    expect(editor.locked()).toBe(false);
+    expect(editor.readOnly()).toBeNull();
   });
 
   it('reread and manual reread go through the same wait', async () => {

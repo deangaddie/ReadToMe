@@ -14,7 +14,7 @@ import { adoptStyles } from '@app/core/styles';
 import { LiveService } from '@app/live/live.service';
 import { ConfirmService } from '@app/ui/dialogs';
 import { type KeyValueRow, keyValue } from '@app/ui/key-value';
-import { emptyState, icon, spinner, statusChip } from '@app/ui/partials';
+import { blockable, emptyState, icon, spinner, statusChip } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
 import { ProjectStore } from '../project/project-store';
 import {
@@ -78,8 +78,16 @@ export class ExportPage extends R2mElement {
 
   readonly audioRemaining = computed(() => this.store.folderAudioRemaining());
 
+  /**
+   * Assemble needs content and no run going; it is off while a History step is viewed too, since
+   * it would build today's book (ticket 32).
+   */
   readonly canAssemble = computed(
-    () => !!this.store.status()?.hasContent && !this.assembly().isRunning && !this.starting(),
+    () =>
+      !!this.store.status()?.hasContent &&
+      !this.assembly().isRunning &&
+      !this.starting() &&
+      this.store.readOnly() === null,
   );
 
   /** After a reload the hub snapshot still says how the last run ended, bar a cancel. */
@@ -206,16 +214,19 @@ export class ExportPage extends R2mElement {
           : nothing
       }
       <div class="export__actions">
-        <button
-          type="button"
-          class="r2m-button r2m-button--filled"
-          data-action="assemble"
-          ?disabled=${!this.canAssemble()}
-          @click=${() => void this.assemble()}
-        >
-          ${this.starting() ? spinner(18) : icon('library_music')}
-          ${this.audioRemaining() > 0 ? 'Assemble…' : 'Assemble'}
-        </button>
+        ${blockable(
+          this.store.readOnly(),
+          html`<button
+            type="button"
+            class="r2m-button r2m-button--filled"
+            data-action="assemble"
+            ?disabled=${!this.canAssemble()}
+            @click=${() => void this.assemble()}
+          >
+            ${this.starting() ? spinner(18) : icon('library_music')}
+            ${this.audioRemaining() > 0 ? 'Assemble…' : 'Assemble'}
+          </button>`,
+        )}
       </div>
     </section>`;
   }
@@ -359,15 +370,19 @@ export class ExportPage extends R2mElement {
       >
         ${icon('download')} Download
       </a>
-      <button
-        type="button"
-        class="r2m-icon-button"
-        data-action="delete-output"
-        aria-label=${`Delete ${output.fileName}`}
-        @click=${() => void this.deleteOutput(output)}
-      >
-        ${icon('delete')}
-      </button>
+      ${blockable(
+        this.store.readOnly(),
+        html`<button
+          type="button"
+          class="r2m-icon-button"
+          data-action="delete-output"
+          aria-label=${`Delete ${output.fileName}`}
+          ?disabled=${this.store.readOnly() !== null}
+          @click=${() => void this.deleteOutput(output)}
+        >
+          ${icon('delete')}
+        </button>`,
+      )}
     </li>`;
   }
 

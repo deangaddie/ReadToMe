@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { CharacterSummaryDto, VoiceDto } from '@app/api';
-import { override, provide, resetServices } from '@app/core/services';
+import { type CharacterSummaryDto, StepView, VIEWING_READ_ONLY, type VoiceDto } from '@app/api';
+import { override, provide, resetServices, use } from '@app/core/services';
 import { LiveService } from '@app/live/live.service';
 import { Preflight } from '@app/shared/preflight';
 import { ConfirmService } from '@app/ui/dialogs';
@@ -161,6 +161,46 @@ describe('r2m-voice-card', () => {
     expect(card.querySelector('r2m-audio-player')?.src).toBe(
       '/workspace/dune/voices/alice/v1.wav?v=0',
     );
+  });
+
+  describe('viewing a History step (ticket 32)', () => {
+    const reason = (el: Element | null) =>
+      el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
+
+    it('the reference audio plays at the step; every edit control is off with the reason', async () => {
+      use(StepView).view('dune', 's8');
+      const card = await mount(voice({ source: 'Uploaded', audioFileName: 'voices/alice/v1.wav' }));
+
+      expect(card.querySelector('r2m-audio-player')?.src).toBe(
+        '/workspace/dune/voices/alice/v1.wav?v=0&at=s8',
+      );
+      for (const action of ['set-default', 'delete-voice', 'save-description', 'save-transcript']) {
+        expect(button(card, action).disabled).toBe(true);
+        expect(reason(button(card, action))).toBe(VIEWING_READ_ONLY);
+      }
+      expect(card.querySelector('r2m-file-drop')).toBeNull();
+      expect(textarea(card, 'Voice description').readOnly).toBe(true);
+      expect(textarea(card, 'Transcript').readOnly).toBe(true);
+      expect(
+        Array.from(card.querySelectorAll<HTMLInputElement>('.voice-card__source input')).every(
+          (r) => r.disabled,
+        ),
+      ).toBe(true);
+      expect(card.querySelector('r2m-inline-edit')?.readOnly).toBe(VIEWING_READ_ONLY);
+    });
+
+    it('a prompt voice keeps its player but Save, Regenerate and Generate audio are off', async () => {
+      use(StepView).view('dune', 's8');
+      const card = await mount(
+        voice({ designPrompt: 'warm', audioFileName: 'voices/alice/v1.wav' }),
+      );
+      expect(card.querySelector('r2m-audio-player')?.src).toContain('at=s8');
+      for (const action of ['save-prompt', 'regenerate-prompt', 'generate-audio']) {
+        expect(button(card, action).disabled).toBe(true);
+        expect(reason(button(card, action))).toBe(VIEWING_READ_ONLY);
+      }
+      expect(textarea(card, 'Voice description prompt').readOnly).toBe(true);
+    });
   });
 
   it('Set as default posts SetVoiceDefault; rename posts UpdateVoice with the stored description', async () => {
