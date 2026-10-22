@@ -2,14 +2,11 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
 using Read2Me.App.Api;
-using Read2Me.Data;
 using Read2Me.E2eTests.Infrastructure;
 using Read2Me.Services.History;
+using Read2Me.TestUtils;
 
 namespace Read2Me.E2eTests.Tests.Api;
 
@@ -156,18 +153,9 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             .GetProperty("cantOpen").GetBoolean());
     }
 
-    /// <summary>
-    /// The base snapshot taken back a migration, with the table the next one creates already
-    /// there: every step opened from it fails to migrate.
-    /// </summary>
-    private async Task BreakBaseSnapshotAsync(string folder)
-    {
-        var snapshot = Path.Combine(app.WorkspaceDir, folder, "history", "snapshots", "base.db");
-        await using var db = new ProjectDbContext(new DbContextOptionsBuilder<ProjectDbContext>()
-            .UseSqlite($"Data Source={snapshot};Pooling=false").Options);
-        await db.GetService<IMigrator>().MigrateAsync("20260831131907_CollapseSpeechItemType");
-        await db.Database.ExecuteSqlRawAsync("CREATE TABLE StepCheckpoints (Step TEXT NOT NULL PRIMARY KEY)");
-    }
+    /// <summary>The base snapshot broken so that every step opened from it fails to migrate.</summary>
+    private Task BreakBaseSnapshotAsync(string folder) =>
+        PriorSchema.BreakAsync(Path.Combine(app.WorkspaceDir, folder, "history", "snapshots", "base.db"));
 
     [Fact]
     public async Task A_write_or_a_live_read_with_at_is_400_and_writes_nothing()
