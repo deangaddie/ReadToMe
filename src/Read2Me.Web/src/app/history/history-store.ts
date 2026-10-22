@@ -6,6 +6,10 @@ import type { HistoryMessage, LiveHistoryStep } from '@app/live/live-messages';
 import { LiveService, type Unsubscribe } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast';
 
+/** What the viewing banner says when the viewed step didn't open: for good, or just now. */
+const CANT_OPEN = "This step can't be opened.";
+const TRY_AGAIN = "Couldn't open this step just now. Try again.";
+
 /**
  * One project's **History** (context/history.md) for the History sheet: the step list newest first
  * and the Head, read once when the sheet first asks, then kept live from the hub's `history`
@@ -56,6 +60,7 @@ export class HistoryStore {
   private readonly _busy = signal<string | null>(null);
   private readonly _restoring = signal(false);
   private readonly _restorePreview = signal<number | null>(null);
+  private readonly _viewError = signal<string | null>(null);
 
   readonly folder = this._folder.asReadonly();
   /** Newest first. */
@@ -76,6 +81,11 @@ export class HistoryStore {
   readonly restoring = this._restoring.asReadonly();
   /** How many items would lose their audio if the viewed step were restored now; null until read. */
   readonly restorePreview = this._restorePreview.asReadonly();
+  /**
+   * Why the viewed step didn't open, for the banner: it can't be opened (marked for good), or it
+   * couldn't just now (503), when viewing it again may work. Null while it opens or opened.
+   */
+  readonly viewError = this._viewError.asReadonly();
   /** The viewed step's row, as the hub last sent it. */
   readonly viewedStep = computed(() => {
     const id = this.viewing();
@@ -140,6 +150,7 @@ export class HistoryStore {
     }
     this.stepView.view(folder, stepId);
     this._restorePreview.set(null);
+    this._viewError.set(null);
     this.track(this.readPreview(folder, stepId));
     return true;
   }
@@ -148,6 +159,7 @@ export class HistoryStore {
     const folder = this._folder();
     if (folder !== null) this.stepView.clear(folder);
     this._restorePreview.set(null);
+    this._viewError.set(null);
   }
 
   /**
@@ -198,11 +210,13 @@ export class HistoryStore {
   private async readPreview(folder: string, stepId: Guid): Promise<void> {
     try {
       const step = await this.api.step(folder, stepId);
-      if (this.viewing() === stepId)
-        this._restorePreview.set(step.restorePreview?.audioDiscardCount ?? null);
-    } catch {
-      // The banner keeps its Restore disabled: the cost can't be stated. A busy answer also
-      // arrives as busyChanged, which sends the tab back to current.
+      if (this.viewing() !== stepId) return;
+      this._restorePreview.set(step.restorePreview?.audioDiscardCount ?? null);
+      if (step.cantOpen) this._viewError.set(CANT_OPEN);
+    } catch (e) {
+      // The banner keeps its Restore disabled: the cost can't be stated; a 503 says to try again.
+      // A busy answer also arrives as busyChanged, which sends the tab back to current.
+      if (this.viewing() === stepId && toApiError(e).status === 503) this._viewError.set(TRY_AGAIN);
     }
   }
 

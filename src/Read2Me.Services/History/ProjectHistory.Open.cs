@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Read2Me.Core.Models;
 using Read2Me.Data;
+using SQLitePCL;
 
 namespace Read2Me.Services.History;
 
@@ -38,8 +39,10 @@ public sealed partial class ProjectHistory
     /// <para>
     /// A cached copy is reused while the step holds the same chunks; a step still open materialises
     /// again once it has grown. The project's results and progress (audio reviews, Pipeline
-    /// checkpoints) are not History, so the copy has none. A step whose copy fails to migrate is
-    /// marked can't-be-opened, for good, and announced so open History sheets say so.
+    /// checkpoints) are not History, so the copy has none. A step whose chunks fail to replay, or
+    /// whose copy fails to migrate, is marked can't-be-opened, for good, and announced so open
+    /// History sheets say so. A failure that passes (an IO error, a full disk, a busy database)
+    /// marks nothing: opening the step later may work.
     /// </para>
     /// </summary>
     public async Task<StepOpening> OpenStepAsync(ProjectFolderId folder, Guid stepId, CancellationToken ct = default)
@@ -70,8 +73,14 @@ public sealed partial class ProjectHistory
         // Keyed by the live schema too, so a copy an older build cached is never read as current.
         var cache = HistoryDatabase.CacheIn(historyFolder);
         var cached = Path.Combine(cache, $"{stepId:N}.{chunks.Count(c => c.Depth == 0)}.{LiveSchema.Value}.db");
-        if (!File.Exists(cached) && !await MaterialiseAsync(snapshot, chunks, cached, ct))
-            return new StepOpening.CantOpen(await MarkCantOpenAsync(folder, file, step, ct));
+        if (!File.Exists(cached))
+            switch (await MaterialiseAsync(snapshot, chunks, cached, ct))
+            {
+                case Materialised.CantOpen:
+                    return new StepOpening.CantOpen(await MarkCantOpenAsync(folder, file, step, ct));
+                case Materialised.TryAgain:
+                    return new StepOpening.TryAgain();
+            }
 
         File.SetLastWriteTimeUtc(cached, clock.GetUtcNow().UtcDateTime);
         PruneCache(cache, keep: cached, before: clock.GetUtcNow().UtcDateTime - CacheGrace);
@@ -98,29 +107,43 @@ public sealed partial class ProjectHistory
     /// Copies <paramref name="snapshot"/> to a temporary file, replays the chunks root first,
     /// migrates the copy to the live schema, empties the tables History never records, and moves
     /// the copy into place — so a cached file is always a whole step, and two requests
-    /// materialising the same step at once both end up with one. False, leaving nothing behind,
-    /// when the copy fails to migrate: its old schema can't be brought up to date.
+    /// materialising the same step at once both end up with one. Leaves nothing behind when it
+    /// fails: <see cref="Materialised.CantOpen"/> when a chunk fails to replay (damaged, or not
+    /// matching its snapshot) or the old schema fails to migrate, which no later try changes;
+    /// <see cref="Materialised.TryAgain"/> for a failure that passes (<see cref="IsTemporary"/>).
     /// </summary>
-    private async Task<bool> MaterialiseAsync(
+    private async Task<Materialised> MaterialiseAsync(
         string snapshot, List<(int Depth, int Sequence, byte[] Patchset)> chunks, string target, CancellationToken ct)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         var pending = target + $".{Guid.NewGuid():N}.tmp";
-        File.Copy(snapshot, pending);
         try
         {
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(snapshot, pending);
             await using (var db = new ProjectDbContext(new DbContextOptionsBuilder<ProjectDbContext>()
                 .UseSqlite($"Data Source={pending};Pooling=false").Options))
             {
                 await db.Database.OpenConnectionAsync(ct);
                 var connection = (SqliteConnection)db.Database.GetDbConnection();
+                if (CopyOpened is { } opened)
+                    await opened(connection, ct);
                 // The chunks recorded every cascaded delete themselves; with foreign keys on, the
                 // replayed parent delete would remove those rows first and the child deletes conflict.
                 await ExecuteAsync(connection, "PRAGMA foreign_keys = OFF", ct);
                 await ExecuteAsync(connection, "BEGIN", ct);
                 // A chunk that changed only files has an empty patchset: nothing to replay.
                 foreach (var chunk in chunks.Where(c => c.Patchset.Length > 0).OrderByDescending(c => c.Depth).ThenBy(c => c.Sequence))
-                    SqliteSession.Apply(connection, chunk.Patchset);
+                {
+                    try
+                    {
+                        SqliteSession.Apply(connection, chunk.Patchset);
+                    }
+                    catch (SqliteException ex) when (!IsTemporary(ex))
+                    {
+                        logger.LogWarning(ex, "A History chunk failed to replay onto {Snapshot}; the step can't be opened.", snapshot);
+                        return Materialised.CantOpen;
+                    }
+                }
                 await ExecuteAsync(connection, "COMMIT", ct);
 
                 // The chunks are at the snapshot's schema (none spans a migration), so the copy is
@@ -129,10 +152,10 @@ public sealed partial class ProjectHistory
                 {
                     await db.Database.MigrateAsync(ct);
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (ex is not OperationCanceledException && !IsTemporary(ex))
                 {
                     logger.LogWarning(ex, "A History step copied from {Snapshot} failed to migrate; it can't be opened.", snapshot);
-                    return false;
+                    return Materialised.CantOpen;
                 }
 
                 foreach (var table in NotStateTables(db))
@@ -148,11 +171,19 @@ public sealed partial class ProjectHistory
             {
                 // Another request materialised the same step first; its copy is the same state.
             }
-            return true;
+            return Materialised.Done;
+        }
+        catch (Exception ex) when (IsTemporary(ex))
+        {
+            logger.LogWarning(ex, "A History step copied from {Snapshot} failed to open for now; it can be tried again.", snapshot);
+            return Materialised.TryAgain;
         }
         finally
         {
-            File.Delete(pending);
+            // A leftover copy is only clutter; it must not turn the answer into an error.
+            try { File.Delete(pending); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
     }
 
@@ -175,6 +206,24 @@ public sealed partial class ProjectHistory
             catch (UnauthorizedAccessException) { }
         }
     }
+
+    /// <summary>Tests only: runs on a copy's connection once it opens, to play a full disk or a busy database.</summary>
+    internal Func<SqliteConnection, CancellationToken, Task>? CopyOpened { get; set; }
+
+    private enum Materialised { Done, CantOpen, TryAgain }
+
+    /// <summary>
+    /// A failure that says nothing about the step: an IO error, or SQLite reporting an IO error, a
+    /// full disk, or a busy or locked database. A missing file is not one: it won't come back.
+    /// </summary>
+    private static bool IsTemporary(Exception ex) => ex switch
+    {
+        FileNotFoundException or DirectoryNotFoundException => false,
+        IOException => true,
+        SqliteException { SqliteErrorCode: raw.SQLITE_BUSY or raw.SQLITE_LOCKED or raw.SQLITE_IOERR or raw.SQLITE_FULL } => true,
+        { InnerException: { } inner } => IsTemporary(inner),
+        _ => false,
+    };
 
     private static async Task ExecuteAsync(SqliteConnection connection, string sql, CancellationToken ct)
     {

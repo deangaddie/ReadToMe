@@ -731,7 +731,7 @@ Nothing else about the call changes, so an agent inspects the past with the call
 ```bash
 curl -s http://localhost:5000/api/projects/{folder}/history/{stepId}
 # → the step, as GET /history lists it, plus restorePreview: { audioDiscardCount } (null for a cantOpen step);
-#   404 unknown step, 409 while the project is busy or restoring
+#   404 unknown step, 409 while the project is busy or restoring, 503 when it failed to open for now
 
 curl -s "http://localhost:5000/api/projects/{folder}/characters?at={stepId}"
 ```
@@ -743,8 +743,11 @@ curl -s "http://localhost:5000/api/projects/{folder}/characters?at={stepId}"
 - 404 for a step the project's History doesn't have, 409 while anything is queued or running for
   the project (`detail` carries the reason, as `busy.reason` does), 422 for a step marked
   `cantOpen`, 400 when `at` is not a step id. A step recorded before a schema upgrade is migrated
-  as it opens; one whose old schema fails to migrate is marked `cantOpen` for good (the read that
-  found out answers 422, and the hub sends `stepChanged` with the row).
+  as it opens. One whose chunks fail to replay (a damaged patchset), or whose old schema fails to
+  migrate, is marked `cantOpen` for good: the read that found out answers 422, and the hub sends
+  `stepChanged` with the row. A failure that passes (an IO error, a full disk, a busy database)
+  answers 503 "try again" and marks nothing; reading the step again may work. There is no retry
+  action: nothing clears `cantOpen`.
 - State files read at a step too: `/workspace/{folder}/{path}?at={stepId}` serves a Voice's
   reference audio, the cover or the source book file as it was after that step, and
   `/voices/{voiceId}/original.wav?at=` the voice editor's original. 404 when the file didn't
@@ -768,7 +771,8 @@ Restore to the step that was the tip before.
 
 ```bash
 curl -s -X POST http://localhost:5000/api/projects/{folder}/history/{stepId}/restore
-# → { step, audioDiscardCount }; 404 unknown step, 409 busy or restoring (detail says why), 422 cantOpen
+# → { step, audioDiscardCount }; 404 unknown step, 409 busy or restoring (detail says why), 422 cantOpen,
+#   503 when opening the step failed for now (try again)
 ```
 
 - The project changes exactly as the equivalent hand edits would. Records keep their original ids,

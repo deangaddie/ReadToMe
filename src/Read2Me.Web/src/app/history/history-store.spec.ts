@@ -372,6 +372,31 @@ describe('HistoryStore', () => {
       expect(store.restorePreview()).toBeNull();
     });
 
+    it('says to try again when the step could not be opened just now, and forgets it on viewing again', async () => {
+      api.on('GET', STEP2, () =>
+        problem(503, "History step s2 couldn't be opened just now. Try again."),
+      );
+      store.view('s2');
+      await store.settled();
+
+      expect(store.viewError()).toBe("Couldn't open this step just now. Try again.");
+      expect(store.restorePreview()).toBeNull();
+
+      api.on('GET', STEP2, { ...step(2), restorePreview: { audioDiscardCount: 60 } });
+      store.view('s2');
+      expect(store.viewError()).toBeNull();
+      await store.settled();
+      expect(store.restorePreview()).toBe(60);
+    });
+
+    it("says a step can't be opened when opening it marks it", async () => {
+      api.on('GET', STEP2, { ...step(2, { cantOpen: true }), restorePreview: null });
+      store.view('s2');
+      await store.settled();
+
+      expect(store.viewError()).toBe("This step can't be opened.");
+    });
+
     it('restores the viewed step: back to current, the new step at the tip, and a toast with Show in Book and Undo restore', async () => {
       store.view('s2');
       await store.settled();

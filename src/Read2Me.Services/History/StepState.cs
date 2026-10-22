@@ -40,6 +40,9 @@ public abstract record StepOpening
     /// <summary>The project's History has no step with that id (or the project has no History yet).</summary>
     public sealed record UnknownStep : StepOpening;
 
-    /// <summary>The step is marked can't-be-opened: its old schema failed to migrate.</summary>
+    /// <summary>The step is marked can't-be-opened: its chunks failed to replay, or its old schema to migrate.</summary>
     public sealed record CantOpen(HistoryStep Step) : StepOpening;
+
+    /// <summary>Opening failed for a reason that passes (an IO error, a full disk, a busy database); nothing is marked.</summary>
+    public sealed record TryAgain : StepOpening;
 }

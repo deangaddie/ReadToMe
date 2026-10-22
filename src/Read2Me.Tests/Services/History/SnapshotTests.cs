@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.Core.Configuration;
@@ -145,6 +146,83 @@ public class SnapshotTests : ProjectDbTestBase
     }
 
     [Fact]
+    public async Task AStepWhoseChunkFailsToReplay_IsMarkedCantBeOpened_AndAnnounced()
+    {
+        await SeedAsync();
+        await CommitAsync(new CreateCharacterMutation(_folder, "Alice"));
+        var alice = await TipAsync();
+        await DamageChunksAsync();
+        var changed = new List<HistoryStepEvent>();
+        _root.GetRequiredService<EventBroadcaster<HistoryStepEvent>>().Event += changed.Add;
+
+        var cantOpen = Assert.IsType<StepOpening.CantOpen>(await History.OpenStepAsync(_folder, alice));
+
+        Assert.True(cantOpen.Step.CantOpen);
+        Assert.True((await History.ListAsync(_folder)).Steps.Single(s => s.StepId == alice).CantOpen);
+        Assert.Equal((HistoryStepEventKind.Changed, alice), (Assert.Single(changed).Kind, changed[0].Step.StepId));
+        Assert.Empty(Directory.GetFiles(Path.Combine(HistoryFolder, "cache")));
+    }
+
+    [Fact]
+    public async Task ADiskFullWhileReplaying_AnswersTryAgain_AndMarksNothing()
+    {
+        await SeedAsync();
+        await CommitAsync(new CreateCharacterMutation(_folder, new string('A', 20_000))); // overflow pages
+        var tip = await TipAsync();
+        History.CopyOpened = FillDiskAsync;
+
+        Assert.IsType<StepOpening.TryAgain>(await History.OpenStepAsync(_folder, tip));
+
+        Assert.False((await History.ListAsync(_folder)).Steps.Single(s => s.StepId == tip).CantOpen);
+        Assert.Empty(Directory.GetFiles(Path.Combine(HistoryFolder, "cache")));
+        History.CopyOpened = null;
+        Assert.IsType<StepOpening.Opened>(await History.OpenStepAsync(_folder, tip));
+    }
+
+    [Fact]
+    public async Task ADiskFullWhileMigrating_AnswersTryAgain_AndMarksNothing()
+    {
+        // The base snapshot itself, with no chunk to replay: only the migration can need a page.
+        await SeedAsync();
+        var started = await TipAsync();
+        await RestartOnPriorSchemaAsync();
+        History.CopyOpened = FillDiskAsync;
+
+        Assert.IsType<StepOpening.TryAgain>(await History.OpenStepAsync(_folder, started));
+
+        Assert.False((await History.ListAsync(_folder)).Steps.Single(s => s.StepId == started).CantOpen);
+        History.CopyOpened = null;
+        Assert.Empty(await CastAtAsync(started));
+    }
+
+    [Fact]
+    public async Task ABusyDatabase_AnswersTryAgain_AndMarksNothing()
+    {
+        await SeedAsync();
+        await CommitAsync(new CreateCharacterMutation(_folder, "Alice"));
+        var alice = await TipAsync();
+        History.CopyOpened = (_, _) => throw new SqliteException("database is locked", SQLitePCL.raw.SQLITE_BUSY);
+
+        Assert.IsType<StepOpening.TryAgain>(await History.OpenStepAsync(_folder, alice));
+
+        Assert.False((await History.ListAsync(_folder)).Steps.Single(s => s.StepId == alice).CantOpen);
+    }
+
+    [Fact]
+    public async Task ASnapshotThatCantBeRead_AnswersTryAgain_AndMarksNothing()
+    {
+        await SeedAsync();
+        await CommitAsync(new CreateCharacterMutation(_folder, "Alice"));
+        var alice = await TipAsync();
+
+        await using (File.Open(Path.Combine(HistoryFolder, "snapshots", "base.db"), FileMode.Open, FileAccess.Read, FileShare.None))
+            Assert.IsType<StepOpening.TryAgain>(await History.OpenStepAsync(_folder, alice));
+
+        Assert.False((await History.ListAsync(_folder)).Steps.Single(s => s.StepId == alice).CantOpen);
+        Assert.Equal(["Alice"], await CastAtAsync(alice));
+    }
+
+    [Fact]
     public async Task TheCache_KeepsAFewSteps_AndDropsTheLeastRecentlyOpened()
     {
         await SeedAsync();
@@ -197,6 +275,18 @@ public class SnapshotTests : ProjectDbTestBase
 
     /// <summary>The base snapshot broken so that migrating any step opened from it fails.</summary>
     private Task BreakBaseSnapshotAsync() => PriorSchema.BreakAsync(Path.Combine(HistoryFolder, "snapshots", "base.db"));
+
+    /// <summary>Every recorded chunk cut in half, as a damaged history.db would hold it.</summary>
+    private Task DamageChunksAsync() => DamagedHistory.DamageChunksAsync(Path.Combine(HistoryFolder, "history.db"));
+
+    /// <summary>The copy's disk full: it can't grow by a page.</summary>
+    private static async Task FillDiskAsync(SqliteConnection copy, CancellationToken ct)
+    {
+        await using var command = copy.CreateCommand();
+        // Without free pages to reuse; SQLite keeps the pages it has.
+        command.CommandText = "VACUUM; PRAGMA max_page_count = 1";
+        await command.ExecuteNonQueryAsync(ct);
+    }
 
     private async Task SeedAsync()
     {

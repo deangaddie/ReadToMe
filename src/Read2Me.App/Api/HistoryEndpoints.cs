@@ -71,17 +71,19 @@ namespace Read2Me.App.Api
                 .Produces<HistoryStepDto>()
                 .ProducesProblem(StatusCodes.Status404NotFound)
                 .ProducesProblem(StatusCodes.Status409Conflict)
+                .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
                 .WithSummary("One History step, in the shape GET /history lists it, plus restorePreview: { audioDiscardCount } — how many " +
                              "items would lose their audio if the project were restored to it now (their text, speaker or delivery cue " +
                              "differs there, or the step doesn't have them) — or null for a step that can't be opened. 404 unknown project " +
                              "or step; 409 while anything is queued or running for the project, or it is restoring (detail says what), " +
-                             "since a busy project can't be viewed at a step.");
+                             "since a busy project can't be viewed at a step; 503 when opening the step failed for a reason that passes (try again).");
             endpoints.MapPost("/api/projects/{folder}/history/{stepId:guid}/restore", RestoreAsync)
                 .RecordsOwnStep()
                 .Produces<RestoreResultDto>()
                 .ProducesProblem(StatusCodes.Status404NotFound)
                 .ProducesProblem(StatusCodes.Status409Conflict)
                 .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
+                .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
                 .WithSummary("Restore: make the project as it stood after the step current, as a new step " +
                              "(\"Restore to 'Split chapter' (14:02)\", restoredFromStepId set) — every later step stays in History. Records keep " +
                              "their ids; items whose text, speaker or delivery cue changes lose their audio and its review, items brought back " +
@@ -90,7 +92,7 @@ namespace Read2Me.App.Api
                              "project are dropped. Answers { step, audioDiscardCount }; step is null when the project already was that state. " +
                              "While it runs every other write and enqueue for the project is 409 \"Project is restoring\". 404 unknown project " +
                              "or step; 409 while anything is queued or running for the project, or it is already restoring (detail says why); " +
-                             "422 a step that can't be opened.");
+                             "422 a step that can't be opened; 503 when opening it failed for a reason that passes (try again).");
         }
 
         private static async Task<IResult> ListAsync(
@@ -122,6 +124,7 @@ namespace Read2Me.App.Api
                 StepOpening.Opened opened => Results.Ok(HistoryStepDto.From(
                     opened.State.Step, new RestorePreviewDto(await history.CountRestoreAudioDiscardsAsync(folderId, opened.State, ct)))),
                 StepOpening.CantOpen cantOpen => Results.Ok(HistoryStepDto.From(cantOpen.Step, preview: null)),
+                StepOpening.TryAgain => StepReads.TryAgain(stepId),
                 _ => StepReads.UnknownStep(stepId),
             };
         }
@@ -138,6 +141,7 @@ namespace Read2Me.App.Api
                 RestoreOutcome.UnknownStep => StepReads.UnknownStep(stepId),
                 RestoreOutcome.CantOpen => Results.Problem(
                     $"History step {stepId} can't be opened, so it can't be restored.", statusCode: StatusCodes.Status422UnprocessableEntity),
+                RestoreOutcome.TryAgain => StepReads.TryAgain(stepId),
                 RestoreOutcome.Refused refused => Results.Problem(refused.Reason, statusCode: StatusCodes.Status409Conflict),
                 var other => throw new InvalidOperationException($"Unhandled {other}."),
             };

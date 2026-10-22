@@ -54,6 +54,8 @@ public sealed class HistoryRestore(
                     return new RestoreOutcome.UnknownStep();
                 case StepOpening.CantOpen:
                     return new RestoreOutcome.CantOpen();
+                case StepOpening.TryAgain:
+                    return new RestoreOutcome.TryAgain();
                 case StepOpening.Opened opened:
                     target = opened.State;
                     break;
@@ -144,6 +146,9 @@ public abstract record RestoreOutcome
 
     /// <summary>The step can't be opened, so it can't be restored.</summary>
     public sealed record CantOpen : RestoreOutcome;
+
+    /// <summary>Opening the step failed for a reason that passes (an IO error, a full disk, a busy database).</summary>
+    public sealed record TryAgain : RestoreOutcome;
 
     /// <summary>Not now: the project is busy (the reason says with what), already restoring, or its write lock stayed taken.</summary>
     public sealed record Refused(string Reason) : RestoreOutcome;

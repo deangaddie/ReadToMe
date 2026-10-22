@@ -1,7 +1,10 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Read2Me.App.Api;
 using Read2Me.E2eTests.Infrastructure;
@@ -154,6 +157,37 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Assert.True(Assert.Single((await HistoryAsync(folder)).GetProperty("steps").EnumerateArray())
             .GetProperty("cantOpen").GetBoolean());
     }
+
+    [Fact]
+    public async Task A_read_at_a_step_whose_chunk_is_damaged_is_422_and_the_hub_says_it_cant_be_opened()
+    {
+        var folder = $"api-history-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "History Book", "Author");
+        await HistoryAsync(folder);
+        await CreateCharacterAsync(folder, "Ganondorf");
+        var ganondorf = (await HistoryAsync(folder)).GetProperty("headStepId").GetGuid();
+        await DamageChunksAsync(folder);
+        await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
+        var messages = new ConcurrentQueue<JsonElement>();
+        hub.On<JsonElement>("history", messages.Enqueue);
+        await hub.StartAsync();
+        await hub.InvokeAsync<JsonElement>("JoinProject", folder);
+
+        var read = await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/characters?at={ganondorf}");
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, read.StatusCode);
+        var deadline = Stopwatch.StartNew();
+        while (messages.IsEmpty && deadline.Elapsed < TimeSpan.FromSeconds(10))
+            await Task.Delay(50);
+        var changed = Assert.Single(messages);
+        Assert.Equal("stepChanged", changed.GetProperty("kind").GetString());
+        Assert.Equal(ganondorf, changed.GetProperty("step").GetProperty("stepId").GetGuid());
+        Assert.True(changed.GetProperty("step").GetProperty("cantOpen").GetBoolean());
+    }
+
+    /// <summary>Every chunk the project's History recorded cut in half, as a damaged history.db would hold it.</summary>
+    private Task DamageChunksAsync(string folder) =>
+        DamagedHistory.DamageChunksAsync(Path.Combine(app.WorkspaceDir, folder, "history", "history.db"));
 
     /// <summary>The base snapshot broken so that every step opened from it fails to migrate.</summary>
     private Task BreakBaseSnapshotAsync(string folder) =>
