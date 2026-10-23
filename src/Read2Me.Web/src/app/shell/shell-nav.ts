@@ -20,6 +20,7 @@ export function contextNavItems(ctx: ShellContext): NavItem[] {
         { label: 'Overview', icon: 'dashboard', link: base, exact: true },
         { label: 'Book', icon: 'menu_book', link: `${base}/book` },
         { label: 'Cast', icon: 'groups', link: `${base}/cast` },
+        { label: 'Pronunciations', icon: 'text_to_speech', link: `${base}/pronunciations` },
         { label: 'Export', icon: 'download', link: `${base}/export` },
       ];
     }

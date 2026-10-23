@@ -67,6 +67,13 @@ export const routes: RouteDef[] = [
             load: () => import('@app/pages/cast/cast-page'),
           },
           {
+            path: 'pronunciations',
+            title: 'Pronunciations',
+            tag: 'r2m-pronunciations-page',
+            load: () => import('@app/pages/pronunciations/pronunciations-page'),
+            guardUnsaved: true,
+          },
+          {
             path: 'voices/:voiceId/editor',
             title: 'Voice editor',
             tag: 'r2m-voice-editor-page',
