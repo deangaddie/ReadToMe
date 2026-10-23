@@ -78,9 +78,7 @@ export function nodeMenuTrigger(
     ${icon('more_vert')}
   </button>`;
   if (reason === null) return trigger;
-  return options.tabIndex === undefined
-    ? blockable(reason, trigger)
-    : html`<span class="r2m-blockable" data-tooltip=${reason}>${trigger}</span>`;
+  return blockable(reason, trigger, { tabbable: options.tabIndex === undefined });
 }
 
 /** What the menu reads of the open book: its Structure rules and volume count, from the overview. */

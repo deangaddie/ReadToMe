@@ -122,6 +122,16 @@ describe('blockable', () => {
     expect(wrap.hasAttribute('data-tooltip')).toBe(false);
     expect(wrap.hasAttribute('tabindex')).toBe(false);
   });
+
+  it('keeps the reason but stays out of the tab order when not tabbable, as a tree node’s trigger', () => {
+    const wrap = mount(
+      blockable('Viewing a past step', html`<button disabled tabindex="-1">⋮</button>`, {
+        tabbable: false,
+      }),
+    ).firstElementChild as HTMLElement;
+    expect(wrap.getAttribute('data-tooltip')).toBe('Viewing a past step');
+    expect(wrap.hasAttribute('tabindex')).toBe(false);
+  });
 });
 
 describe('callout', () => {

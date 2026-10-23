@@ -1,7 +1,7 @@
 import { html, nothing } from 'lit-html';
 import { R2mElement, define } from '@app/core/element';
 import { computed, signal } from '@app/core/signals';
-import { icon } from './partials';
+import { blockable, icon } from './partials';
 
 export type FileRejectReason = 'type' | 'size';
 
@@ -58,6 +58,15 @@ export class FileDrop extends R2mElement {
     this.#hint.set(value);
   }
 
+  /** Why no file may be taken (viewing a History step), or null: the picker is off with the reason and a drop is ignored. */
+  readonly #readOnly = signal<string | null>(null);
+  get readOnly() {
+    return this.#readOnly();
+  }
+  set readOnly(value: string | null) {
+    this.#readOnly.set(value);
+  }
+
   readonly #over = signal(false);
 
   readonly #rules = computed(() =>
@@ -70,7 +79,10 @@ export class FileDrop extends R2mElement {
   protected override connected(): void {
     this.classList.add('r2m-file-drop');
     this.effect(() => this.classList.toggle('r2m-file-drop--over', this.#over()));
+    this.effect(() => this.classList.toggle('r2m-file-drop--read-only', this.#readOnly() !== null));
+    // Read-only: no preventDefault, so the browser shows a no-drop cursor and never fires `drop`.
     const onDragOver = (e: DragEvent) => {
+      if (this.#readOnly() !== null) return;
       e.preventDefault();
       this.#over.set(true);
     };
@@ -78,7 +90,7 @@ export class FileDrop extends R2mElement {
     const onDrop = (e: DragEvent) => {
       e.preventDefault();
       this.#over.set(false);
-      this.#take(Array.from(e.dataTransfer?.files ?? []));
+      if (this.#readOnly() === null) this.#take(Array.from(e.dataTransfer?.files ?? []));
     };
     this.addEventListener('dragover', onDragOver);
     this.addEventListener('dragleave', onDragLeave);
@@ -92,22 +104,28 @@ export class FileDrop extends R2mElement {
 
   protected template() {
     const hint = this.#hint();
+    const readOnly = this.#readOnly();
     return html`
       ${icon('upload_file', 'r2m-file-drop__icon')}
       <p class="r2m-file-drop__label">${this.#label()}</p>
       ${hint ? html`<p class="r2m-file-drop__hint">${hint}</p>` : nothing}
-      <button
-        type="button"
-        class="r2m-button r2m-button--stroked"
-        @click=${() => this.querySelector<HTMLInputElement>('.r2m-file-drop__input')?.click()}
-      >
-        ${this.#multiple() ? 'Choose files' : 'Choose file'}
-      </button>
+      ${blockable(
+        readOnly,
+        html`<button
+          type="button"
+          class="r2m-button r2m-button--stroked"
+          ?disabled=${readOnly !== null}
+          @click=${() => this.querySelector<HTMLInputElement>('.r2m-file-drop__input')?.click()}
+        >
+          ${this.#multiple() ? 'Choose files' : 'Choose file'}
+        </button>`,
+      )}
       <input
         class="r2m-file-drop__input"
         type="file"
         accept=${this.#accept()}
         ?multiple=${this.#multiple()}
+        ?disabled=${readOnly !== null}
         tabindex="-1"
         aria-hidden="true"
         @change=${(e: Event) => this.#onPicked(e.currentTarget as HTMLInputElement)}

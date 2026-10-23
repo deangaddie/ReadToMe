@@ -246,6 +246,21 @@ describe('r2m-voice-editor-page', () => {
     }
   });
 
+  it('viewing a History step, a step still opens but its tick and dials are off with the reason (ticket 35)', async () => {
+    use(StepView).view('dune', 's8');
+    const page = await render();
+    page.querySelector<HTMLElement>('[data-step="denoise"]')!.click();
+    await page.rendered();
+
+    const ticks = Array.from(page.querySelectorAll<HTMLInputElement>('[data-tick]'));
+    expect(ticks.length).toBeGreaterThan(0);
+    for (const t of ticks) {
+      expect(t.disabled).toBe(true);
+      expect(t.closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(VIEWING_READ_ONLY);
+    }
+    expect(page.querySelector('r2m-settings-form')?.readOnly).toBe(VIEWING_READ_ONLY);
+  });
+
   it('renders the ticked steps in catalog order and stacks an After player per stage', async () => {
     api.on('POST', PREVIEW_URL, PREVIEW);
     const page = await render();

@@ -1629,6 +1629,13 @@ progress {
   border-color: var(--r2m-accent);
   background: color-mix(in srgb, var(--r2m-accent) 8%, var(--r2m-surface-low));
 }
+/* Viewing a History step: the zone stays readable but no longer invites a drop. */
+.r2m-file-drop--read-only {
+  border-style: solid;
+}
+.r2m-file-drop--read-only .r2m-file-drop__label {
+  color: var(--r2m-text-muted);
+}
 .r2m-file-drop__icon {
   font-size: 36px;
 }

@@ -165,6 +165,26 @@ describe('r2m-settings-form', () => {
     expect(valid.at(-1)).toBe(true);
   });
 
+  it('a read-only reason turns every field off and shows the reason on each', async () => {
+    const { form } = await mount('override', { cfg: 3 });
+    form.readOnly = 'Viewing a past step';
+    await form.rendered();
+
+    const controls = form.querySelectorAll<HTMLInputElement>('input, select, textarea, button');
+    expect(controls.length).toBeGreaterThan(0);
+    for (const control of controls) expect(control.disabled).toBe(true);
+    for (const key of SCHEMA.fields.map((f) => f.key)) {
+      expect(field(form, key).getAttribute('data-tooltip')).toBe('Viewing a past step');
+    }
+
+    form.readOnly = null;
+    await form.rendered();
+    expect(form.querySelector<HTMLInputElement>('.r2m-settings-form__number')!.disabled).toBe(
+      false,
+    );
+    expect(field(form, 'cfg').hasAttribute('data-tooltip')).toBe(false);
+  });
+
   it('new values from the host re-seed the working copy', async () => {
     const { form } = await mount('override', { cfg: 3 });
     form.values = {};
