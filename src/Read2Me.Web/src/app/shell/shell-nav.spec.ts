@@ -6,7 +6,13 @@ import { GLOBAL_NAV_ITEMS, type NavItem, contextNavItems, isActive } from './she
 describe('shell-nav', () => {
   it('lists the project sections for a project route', () => {
     const items = contextNavItems({ section: 'project', title: 'Book', folder: 'foundation' });
-    expect(items.map((i) => i.label)).toEqual(['Overview', 'Book', 'Cast', 'Export']);
+    expect(items.map((i) => i.label)).toEqual([
+      'Overview',
+      'Book',
+      'Cast',
+      'Pronunciations',
+      'Export',
+    ]);
     expect(items[1]?.link).toBe('projects/foundation/book');
     expect(items[0]?.exact).toBe(true);
   });

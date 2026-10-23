@@ -1252,3 +1252,86 @@ export interface RestoreResultDto {
   /** Items without audio after the Restore, those it brought back included: what needs generating. */
   needsAudioCount: number;
 }
+
+// ---- Pronunciations (`PronunciationEndpoints.cs`) ---------------------------------------------------
+
+/** `GET /api/projects/{folder}/pronunciations`: one entry and its reach in the book. */
+export interface PronunciationDto {
+  id: Guid;
+  writtenForm: string;
+  spokenForm: string;
+  /** Matched spans in the book. */
+  matchCount: number;
+  /** Items holding a match. */
+  itemCount: number;
+  /** Those items that have audio. */
+  withAudioCount: number;
+}
+
+/** `POST …/pronunciations` and `PUT …/pronunciations/{id}`. */
+export interface SetPronunciationRequest {
+  writtenForm: string;
+  spokenForm: string;
+}
+
+/** A saved entry with its reach, and what saving it cost. */
+export interface PronunciationSavedDto extends PronunciationDto {
+  /** Items that lost their audio. */
+  audioDiscardCount: number;
+  /** Spoken items without audio after the save: what needs generating. */
+  needsAudioCount: number;
+}
+
+/** `DELETE …/pronunciations/{id}`. */
+export interface PronunciationDeletedDto {
+  audioDiscardCount: number;
+  needsAudioCount: number;
+}
+
+/** `POST …/pronunciations/impact`: no id adds, an id edits that entry, `delete` deletes it. */
+export interface PronunciationDraftRequest {
+  id: Guid | null;
+  writtenForm: string | null;
+  spokenForm: string | null;
+  delete: boolean;
+}
+
+export interface PronunciationRef {
+  id: Guid;
+  writtenForm: string;
+  spokenForm: string;
+}
+
+/** An entry whose written form holds the draft's as whole words, or is held by it. */
+export interface PronunciationOverlap extends PronunciationRef {
+  /** The draft's written form is the longer, so it wins where both match. */
+  draftWins: boolean;
+}
+
+/** One match of the draft, in book order. */
+export interface PronunciationMatchInBook {
+  itemId: Guid;
+  chapterId: Guid;
+  chapterTitle: string | null;
+  speaker: string | null;
+  hasAudio: boolean;
+  /** The sentence around the match; `matchStart`/`matchLength` are offsets in it. */
+  sentence: string;
+  matchStart: number;
+  matchLength: number;
+  /** The sentence with the drafted list applied. */
+  spokenSentence: string;
+}
+
+/** What saving a draft would do. */
+export interface PronunciationImpactDto {
+  matchCount: number;
+  itemCount: number;
+  withAudioCount: number;
+  /** Exactly the audio a save would discard. */
+  audioDiscardCount: number;
+  overlaps: PronunciationOverlap[];
+  /** Another entry with the written form, ignoring case: a save would be 409. */
+  duplicateOf: PronunciationRef | null;
+  matches: PronunciationMatchInBook[];
+}

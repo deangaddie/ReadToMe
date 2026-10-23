@@ -1,0 +1,99 @@
+@scope (r2m-pronunciations-page) to (r2m-pronunciation-editor > *, .r2m-status-chip > *, .r2m-empty-state > *) {
+  :scope {
+    display: block;
+    padding-bottom: var(--r2m-space-6);
+  }
+  .pron {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+    gap: var(--r2m-space-4);
+    align-items: start;
+  }
+  .pron__toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+    flex-wrap: wrap;
+    margin-bottom: var(--r2m-space-3);
+  }
+  .pron__search {
+    flex: 1;
+    min-width: 160px;
+  }
+  .pron__none,
+  .pron__hint {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+  .pron__table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .pron__table th {
+    text-align: start;
+    font-size: var(--r2m-text-sm);
+    font-weight: 500;
+    color: var(--r2m-text-muted);
+    border-bottom: 1px solid var(--r2m-outline);
+    padding: var(--r2m-space-1) var(--r2m-space-2);
+  }
+  .pron__table td {
+    padding: var(--r2m-space-1) var(--r2m-space-2);
+    border-bottom: 1px solid var(--r2m-surface-high);
+    overflow-wrap: anywhere;
+  }
+  .pron__row {
+    cursor: pointer;
+  }
+  .pron__row:hover {
+    background: var(--r2m-surface-container);
+  }
+  .pron__row--selected,
+  .pron__row--selected:hover {
+    background: var(--r2m-nav-active-bg);
+    color: var(--r2m-nav-active-fg);
+  }
+  .pron__open {
+    all: unset;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .pron__open:focus-visible {
+    outline: 2px solid var(--r2m-accent);
+    outline-offset: 2px;
+    border-radius: var(--r2m-radius-sm);
+  }
+  .pron__spoken {
+    font-family: var(--r2m-font-mono);
+    color: var(--r2m-accent);
+  }
+  .pron__row--selected .pron__spoken {
+    color: inherit;
+  }
+  .pron__table .pron__num {
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+  }
+  .pron__delete {
+    width: 1%;
+  }
+  .pron__editor {
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-md);
+    padding: var(--r2m-space-3);
+    background: var(--r2m-surface-low);
+  }
+  /* Narrow: the list is the page, and an open editor replaces it. */
+  @media (max-width: 899.98px) {
+    .pron {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .pron--editing .pron__list,
+    .pron:not(.pron--editing) .pron__editor {
+      display: none;
+    }
+  }
+}

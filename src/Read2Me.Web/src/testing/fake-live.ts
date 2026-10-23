@@ -7,6 +7,7 @@ import type {
   LiveSnapshot,
   ProjectSnapshot,
   QueueMessage,
+  Receipt,
   ServiceStatusState,
   StreamKind,
   ThroughputSnapshot,
@@ -52,8 +53,11 @@ export class FakeLive {
     if (!stream) this.#streams.set(family, (stream = new Emitter<unknown>()));
     return stream;
   }
-  receipts() {
-    return () => undefined;
+  /** A project's receipts: what a spec pushes with `emit('receipt', receipt)` for that folder. */
+  receipts(folder: string, listener: (receipt: Receipt) => void) {
+    return this.stream('receipt').subscribe((r) => {
+      if ((r as Receipt).folder === folder) listener(r as Receipt);
+    });
   }
   resynced(listener: (snapshot: LiveSnapshot) => void) {
     return this.#resynced.subscribe(listener);
