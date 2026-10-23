@@ -440,6 +440,24 @@ Enqueueing is idempotent (already-queued items dedupe) and `needsAudioOnly: true
 skips items that already have audio — safe to re-run after failures.
 `POST /api/audio/cancel` clears the queue.
 
+### Pronunciation list
+
+A book's **Pronunciations** respell made-up words for TTS: wherever an item's text has the written
+form, TTS is asked to say the spoken form (the item's **Spoken text**); the book text never changes.
+Whole words, any case (the match's case carries over to the spoken form), the longer written form
+wins where two overlap. Verify scores the transcript against the text and the spoken text and keeps
+the lower WER.
+
+```bash
+curl -s http://localhost:5000/api/projects/{folder}/pronunciations          # honours ?at=<stepId>
+# → [{ id, writtenForm, spokenForm, matchCount, itemCount, withAudioCount }]  sorted by written form
+curl -s -X POST http://localhost:5000/api/projects/{folder}/pronunciations \
+  -H 'content-type: application/json' -d '{ "writtenForm": "Kulgan", "spokenForm": "KULL-gun" }'
+# → 201 with the entry. Both forms trimmed, inner whitespace collapsed. 400: written form not 1–100
+# characters or not starting and ending with a letter or digit, spoken form not 1–200 characters;
+# 409: another entry has that written form, ignoring case. One History step: Pronunciation: add "Kulgan".
+```
+
 ## 5. Book commands (edit anything)
 
 One endpoint drives every book mutation:

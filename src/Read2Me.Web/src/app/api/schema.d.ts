@@ -2281,6 +2281,127 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{folder}/pronunciations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Pronunciation list, sorted by written form: id, writtenForm, spokenForm, and its reach in the book — matchCount (matched spans), itemCount (items holding one) and withAudioCount (those items that have audio). */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Add a Pronunciation { writtenForm, spokenForm }. Both are trimmed and inner whitespace collapsed to one space. Written form: 1–100 characters, starting and ending with a letter or digit; spoken form: 1–200 characters. 201 with the entry and its reach; 400 invalid; 409 when another entry has the written form, ignoring case. One History step, labelled Pronunciation: add "<written>". An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["AddPronunciationRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PronunciationEntry"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{folder}/characters/{characterId}/voices": {
         parameters: {
             query?: never;
@@ -5898,6 +6019,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AddPronunciationRequest: {
+            writtenForm: null | string;
+            spokenForm: null | string;
+        };
         ApplyDiscoveryRow: {
             name: string;
             aliases: null | string[];
@@ -6180,6 +6305,18 @@ export interface components {
         };
         PromptTemplateRequest: {
             template: string;
+        };
+        PronunciationEntry: {
+            /** Format: uuid */
+            id: string;
+            writtenForm: string;
+            spokenForm: string;
+            /** Format: int32 */
+            matchCount: number | string;
+            /** Format: int32 */
+            itemCount: number | string;
+            /** Format: int32 */
+            withAudioCount: number | string;
         };
         ProposeBookEditRequest: {
             /** @default false */

@@ -278,6 +278,27 @@ namespace Read2Me.Data.Migrations
                     b.ToTable("Projects");
                 });
 
+            modelBuilder.Entity("Read2Me.Data.Entities.Pronunciation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SpokenForm")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WrittenForm")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Pronunciations");
+                });
+
             modelBuilder.Entity("Read2Me.Data.Entities.StepCheckpoint", b =>
                 {
                     b.Property<string>("Step")

@@ -278,6 +278,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.SetCoverImageMutation>,
             Mutations.Implementations.SetCoverImageMutationImplementation>();
+        // The Pronunciation list — what TTS is asked to say, never the book text
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.AddPronunciationMutation>,
+            Mutations.Implementations.AddPronunciationMutationImplementation>();
         // Voice and Voice Rule lifecycles — Voice rows and rule rows only, previews everywhere
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.CreateVoiceMutation>,

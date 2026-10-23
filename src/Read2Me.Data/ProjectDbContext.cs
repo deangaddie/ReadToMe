@@ -24,6 +24,7 @@ namespace Read2Me.Data
         public DbSet<CharacterAlias> CharacterAliases => Set<CharacterAlias>();
         public DbSet<AudioReview> AudioReviews => Set<AudioReview>();
         public DbSet<StepCheckpoint> StepCheckpoints => Set<StepCheckpoint>();
+        public DbSet<Pronunciation> Pronunciations => Set<Pronunciation>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -143,6 +144,13 @@ namespace Read2Me.Data
                 e.HasKey(c => c.Step);
                 e.Property(c => c.Step).HasConversion<string>();
                 e.Property(c => c.State).HasConversion<string>().IsRequired();
+            });
+
+            modelBuilder.Entity<Pronunciation>(e =>
+            {
+                e.HasKey(p => p.Id);
+                e.Property(p => p.WrittenForm).HasMaxLength(100).IsRequired();
+                e.Property(p => p.SpokenForm).HasMaxLength(200).IsRequired();
             });
         }
     }

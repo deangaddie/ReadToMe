@@ -92,6 +92,7 @@ export const READS_AT_STEP = [
   '/api/projects/{folder}/nodes/{level}/{id}/paragraph-ids',
   '/api/projects/{folder}/nodes/{level}/{id}/status',
   '/api/projects/{folder}/paragraphs/{paragraphId}/context',
+  '/api/projects/{folder}/pronunciations',
   '/api/projects/{folder}/status',
   '/api/projects/{folder}/voices/{voiceId}',
   '/api/projects/{folder}/voices/{voiceId}/original.wav',
