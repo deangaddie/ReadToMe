@@ -52,8 +52,13 @@ public enum BookFacets
     /// moves only the project status the Overview reads.
     /// </summary>
     Checkpoints = 1 << 11,
+    /// <summary>
+    /// The book's Pronunciation list. It changes no item text, only what TTS is asked to say, so a
+    /// reader refetches the list and its marks.
+    /// </summary>
+    Pronunciations = 1 << 12,
     All = Structure | ItemText | Attribution | Audio | Reviews
-        | Characters | Narrator | Voices | VoiceRules | ProjectPolicy | NodeTitle | Checkpoints,
+        | Characters | Narrator | Voices | VoiceRules | ProjectPolicy | NodeTitle | Checkpoints | Pronunciations,
 }
 
 public enum BookStructuralRelationKind

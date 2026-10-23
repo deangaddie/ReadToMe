@@ -94,6 +94,16 @@ Alternate names for a Character. Matched case-insensitively by the attribution q
 | `CharacterId` | Guid   | no       | FK → Character |
 | `Alias`       | string | no       | max 250        |
 
+### Pronunciation
+
+One entry in the book's Pronunciation list: TTS is asked to say `SpokenForm` wherever an item's text has `WrittenForm` (whole words, any case). No ordering column: the list sorts by written form, and where two overlap the longer wins. Written forms are unique ignoring case, enforced on write.
+
+| Column        | Type   | Nullable | Notes   |
+| ------------- | ------ | -------- | ------- |
+| `Id`          | Guid   | no       | PK      |
+| `WrittenForm` | string | no       | max 100 |
+| `SpokenForm`  | string | no       | max 200 |
+
 ### Voice
 
 | Column                            | Type     | Nullable | Notes                                        |

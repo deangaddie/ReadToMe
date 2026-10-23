@@ -339,6 +339,43 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal("the voice's own transcript", result.Request!.ReferenceTranscript);
         }
 
+        // ── Pronunciation list ─────────────────────────────────────────────────
+
+        private async Task AddPronunciationAsync(string written, string spoken)
+        {
+            await using var db = await OpenDbAsync();
+            db.Pronunciations.Add(new Pronunciation { Id = Guid.NewGuid(), WrittenForm = written, SpokenForm = spoken });
+            await db.SaveChangesAsync();
+        }
+
+        [Fact]
+        public async Task PipelineRequest_CarriesTheSpokenText_BesideTheSourceText()
+        {
+            var (queued, _, _) = await SeedCharacterItemAsync(
+                text: "Kulgan saw Pug.", voiceTranscript: "Kulgan's reference words");
+            await AddPronunciationAsync("Kulgan", "KULL-gun");
+
+            var result = await _sut.ResolveAsync(queued, CancellationToken.None);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal("Kulgan saw Pug.", result.Request!.SourceText);
+            Assert.Equal("KULL-gun saw Pug.", result.Request.SpokenText);
+            Assert.Equal("Kulgan saw Pug.", result.SourceText);
+            // The reference transcript describes the reference audio: never respelled.
+            Assert.Equal("Kulgan's reference words", result.Request.ReferenceTranscript);
+        }
+
+        [Fact]
+        public async Task PipelineRequest_SpokenTextIsTheText_WhenTheListHasNoMatch()
+        {
+            var (queued, _, _) = await SeedCharacterItemAsync(text: "In a hole in the ground");
+            await AddPronunciationAsync("Kulgan", "KULL-gun");
+
+            var result = await _sut.ResolveAsync(queued, CancellationToken.None);
+
+            Assert.Equal("In a hole in the ground", result.Request!.SpokenText);
+        }
+
         // ── narrator link (slice 13) ───────────────────────────────────────────
 
         /// <summary>Narration item in a book whose narrator is linked to "Dr. Watson".</summary>

@@ -23,6 +23,7 @@ namespace Read2Me.App.Api
             endpoints.MapAttributionEndpoints();
             endpoints.MapDiscoveryEndpoints();
             endpoints.MapBookEditEndpoints();
+            endpoints.MapPronunciationEndpoints();
             endpoints.MapVoiceEndpoints();
             endpoints.MapVoiceEditorEndpoints();
             endpoints.MapAssemblyEndpoints();

@@ -43,6 +43,22 @@ public class PriorSchemaTests
     }
 
     [Fact]
+    public void ALatestMigrationThatCreatesAStateTable_HasAPrior_SinceNoChunkOnThePriorSchemaHoldsItsRows()
+    {
+        var prior = PriorSchema.PriorOf(
+        [
+            new("20260101000000_First", [new CreateTableOperation { Name = "Characters" }]),
+            new("20260201000000_Second",
+            [
+                new CreateTableOperation { Name = "Pronunciations" },
+                new CreateIndexOperation { Table = "Pronunciations", Name = "IX_Pronunciations_WrittenForm" },
+            ]),
+        ], NotState);
+
+        Assert.Equal("20260101000000_First", prior);
+    }
+
+    [Fact]
     public void ALatestMigrationWithRawSql_FailsToo_SinceWhatItTouchesIsUnknown()
     {
         var failure = Assert.Throws<InvalidOperationException>(() => PriorSchema.PriorOf(

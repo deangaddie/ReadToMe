@@ -6,6 +6,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Audio.ParagraphTts;
+using Read2Me.Services.Pronunciations;
 using Read2Me.Services.Voice;
 
 namespace Read2Me.Services.Audio
@@ -104,6 +105,11 @@ namespace Read2Me.Services.Audio
                 Math.Max(1, processingSettings.AudioMaxAttempts), processingSettings.WerThreshold,
                 !string.IsNullOrWhiteSpace(voice.TtsSettingsOverrideJson));
 
+            // The book's Pronunciation list applies to what TTS says, not to the book text or the
+            // reference transcript (that one describes the reference audio).
+            var pronunciations = await db.Pronunciations.AsNoTracking().ToListAsync(ct);
+            var spokenText = new PronunciationMatcher(pronunciations).SpokenTextOf(sourceText);
+
             var request = new PipelineRequest(
                 Folder: folder,
                 ParagraphItemId: itemRef.ParagraphItemId,
@@ -116,7 +122,8 @@ namespace Read2Me.Services.Audio
                 MaxAttempts: Math.Max(1, processingSettings.AudioMaxAttempts),
                 WerThreshold: processingSettings.WerThreshold,
                 FfmpegPath: processingSettings.FfmpegPath,
-                ReferenceTranscript: referenceTranscript);
+                ReferenceTranscript: referenceTranscript,
+                SpokenText: spokenText);
 
             return new ResolutionResult(speaker, sourceText, request, null);
         }

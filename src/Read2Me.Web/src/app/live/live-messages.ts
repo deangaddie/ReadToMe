@@ -197,6 +197,7 @@ export const BOOK_FACETS = [
   'ProjectPolicy',
   'NodeTitle',
   'Checkpoints',
+  'Pronunciations',
 ] as const;
 
 export type BookFacet = (typeof BOOK_FACETS)[number];

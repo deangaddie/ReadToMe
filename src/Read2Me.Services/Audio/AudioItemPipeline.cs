@@ -75,7 +75,8 @@ namespace Read2Me.Services.Audio
         private async Task<PipelineResult> RunToCompletionAsync(PipelineRequest req, CancellationToken ct)
         {
             var id = req.ParagraphItemId;
-            var ttsText = ReplaceTrailingComma(req.SourceText);
+            var spokenText = req.SpokenText ?? req.SourceText;
+            var ttsText = ReplaceTrailingComma(spokenText);
             var client = ttsResolver.Resolve(req.TtsConfig.Type);
 
             var pipelineSw = Stopwatch.StartNew();
@@ -85,8 +86,10 @@ namespace Read2Me.Services.Audio
                 id, req.Speaker, req.TtsConfig.Type, req.SourceText.Length, req.MaxAttempts,
                 req.WerThreshold, req.RefAudioPath);
             logger.LogTrace("Item {Id} source text: {Text}", id, req.SourceText);
+            if (!string.Equals(spokenText, req.SourceText, StringComparison.Ordinal))
+                logger.LogDebug("Item {Id} spoken text: {Text}", id, spokenText);
 
-            if (!string.Equals(ttsText, req.SourceText, StringComparison.Ordinal))
+            if (!string.Equals(ttsText, spokenText, StringComparison.Ordinal))
                 logger.LogDebug("Item {Id} trailing comma replaced with semicolon for TTS", id);
 
             byte[] audioBytes = [];
@@ -152,7 +155,7 @@ namespace Read2Me.Services.Audio
 
                 audioBytes = await PostProcessAsync(id, attempt, audioBytes, req.FfmpegPath, ct);
 
-                verifyOutcome = await VerifyAsync(id, attempt, audioBytes, req.SourceText, req.WerThreshold, ct);
+                verifyOutcome = await VerifyAsync(id, attempt, audioBytes, req.SourceText, spokenText, req.WerThreshold, ct);
 
                 attemptSw.Stop();
                 logger.LogDebug("Item {Id} attempt {A} complete in {Ms} ms — verifyOk {Ok}",
@@ -235,7 +238,8 @@ namespace Read2Me.Services.Audio
         }
 
         private async Task<VerifyOutcome> VerifyAsync(
-            Guid id, int attempt, byte[] audioBytes, string sourceText, double werThreshold, CancellationToken ct)
+            Guid id, int attempt, byte[] audioBytes, string sourceText, string spokenText, double werThreshold,
+            CancellationToken ct)
         {
             var config = await transcriptionSettings.GetActiveConfigAsync();
             if (config is null)
@@ -283,7 +287,7 @@ namespace Read2Me.Services.Audio
 
             broadcaster.Publish(new Transcribed(id, attempt, transcript));
 
-            var wer = werComparer.Compute(sourceText, transcript);
+            var wer = LowerWer(id, attempt, sourceText, spokenText, transcript);
             logger.LogDebug("Item {Id} attempt {A}: WER {Wer:0.000} (threshold {Threshold:0.000}) — {Verdict}",
                 id, attempt, wer, werThreshold, wer > werThreshold ? "over" : "pass");
 
@@ -314,6 +318,21 @@ namespace Read2Me.Services.Audio
 
             broadcaster.Publish(new Verified(id, attempt, true, wer, null, false));
             return new VerifyOutcome(true, wer, null, transcript, false);
+        }
+
+        /// The transcript may follow the book's words or the respelling TTS was given, so it scores
+        /// against both and keeps the lower: a respelling never fails WER on its own account. With
+        /// no Pronunciation in the item the two are one text, scored once.
+        private double LowerWer(Guid id, int attempt, string sourceText, string spokenText, string transcript)
+        {
+            var wer = werComparer.Compute(sourceText, transcript);
+            if (string.Equals(spokenText, sourceText, StringComparison.Ordinal))
+                return wer;
+
+            var spokenWer = werComparer.Compute(spokenText, transcript);
+            logger.LogDebug("Item {Id} attempt {A}: WER {Source:0.000} against source text, {Spoken:0.000} against spoken text",
+                id, attempt, wer, spokenWer);
+            return Math.Min(wer, spokenWer);
         }
 
         internal static string ReplaceTrailingComma(string text)

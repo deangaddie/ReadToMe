@@ -30,14 +30,22 @@ namespace Read2Me.TestUtils
 
         /// <summary>
         /// The id of the migration before the last of <paramref name="migrations"/>; throws when the
-        /// last touches a table outside <paramref name="notStateTables"/>, or runs SQL nobody can read.
+        /// last touches a table outside <paramref name="notStateTables"/> that it does not create, or runs SQL
+        /// nobody can read.
         /// </summary>
         public static string PriorOf(IReadOnlyList<MigrationStep> migrations, IReadOnlyCollection<string> notStateTables)
         {
             if (migrations.Count < 2)
                 throw new InvalidOperationException("The project has no migration before its latest to go back to.");
             var latest = migrations[^1];
-            var state = latest.Up.SelectMany(TablesOf).Where(t => t is null || !notStateTables.Contains(t)).ToList();
+            // A table the latest creates holds no row a chunk recorded on the prior schema could carry,
+            // so it is as safe as a not-state table, as long as the tests playing an older build never
+            // write to it.
+            var created = latest.Up.OfType<CreateTableOperation>().Select(c => c.Name).ToHashSet();
+            var state = latest.Up.SelectMany(TablesOf)
+                .Where(t => t is null || (!notStateTables.Contains(t) && !created.Contains(t)))
+                .Distinct()
+                .ToList();
             if (state.Count > 0)
                 throw new InvalidOperationException(
                     $"The latest migration {latest.Id} touches "

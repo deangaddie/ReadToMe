@@ -21,6 +21,11 @@ namespace Read2Me.Services.Audio
         VerifyOutcome Verify,
         WorkOutcome Outcome);
 
+    /// <param name="SourceText">The item's text, as the book has it.</param>
+    /// <param name="SpokenText">
+    /// The item's <b>Spoken text</b> (its text with the book's Pronunciation list applied): what TTS is
+    /// asked to say. Null means the same as <paramref name="SourceText"/>.
+    /// </param>
     public record PipelineRequest(
         ProjectFolderId Folder,
         Guid ParagraphItemId,
@@ -33,7 +38,8 @@ namespace Read2Me.Services.Audio
         double WerThreshold,
         string? FfmpegPath,
         string? Speaker,
-        string? ReferenceTranscript = null);
+        string? ReferenceTranscript = null,
+        string? SpokenText = null);
 
     public interface IAudioItemPipeline
     {
