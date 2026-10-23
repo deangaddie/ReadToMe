@@ -2351,7 +2351,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** Add a Pronunciation { writtenForm, spokenForm }. Both are trimmed and inner whitespace collapsed to one space. Written form: 1–100 characters, starting and ending with a letter or digit; spoken form: 1–200 characters. 201 with the entry and its reach; 400 invalid; 409 when another entry has the written form, ignoring case. One History step, labelled Pronunciation: add "<written>". An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
+        /** Add a Pronunciation { writtenForm, spokenForm }. Both are trimmed and inner whitespace collapsed to one space. Written form: 1–100 characters, starting and ending with a letter or digit; spoken form: 1–200 characters. 201 with the entry, its reach and what it cost; 400 invalid; 409 when another entry has the written form, ignoring case. One History step, labelled Pronunciation: add "<written>". Items with audio whose Spoken text the change alters lose it (WAV reference and audio review), as a text edit does; audioDiscardCount counts them, needsAudioCount the spoken items without audio after it. 409 while audio generation is queued or running for the project, or a Restore runs. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
         post: {
             parameters: {
                 query?: never;
@@ -2363,7 +2363,7 @@ export interface paths {
             };
             requestBody?: {
                 content: {
-                    "application/json": null | components["schemas"]["AddPronunciationRequest"];
+                    "application/json": null | components["schemas"]["SetPronunciationRequest"];
                 };
             };
             responses: {
@@ -2373,11 +2373,191 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["PronunciationEntry"];
+                        "application/json": components["schemas"]["PronunciationSaved"];
                     };
                 };
                 /** @description Bad Request */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/pronunciations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Edit a Pronunciation's { writtenForm, spokenForm }, checked as an add. 200 with the entry, its reach and what it cost; 400 invalid; 404 unknown id; 409 when another entry has the written form. Saving it unchanged writes nothing and lands no step; otherwise one History step, labelled Pronunciation: edit "<written>". Items with audio whose Spoken text the change alters lose it (WAV reference and audio review), as a text edit does; audioDiscardCount counts them, needsAudioCount the spoken items without audio after it. 409 while audio generation is queued or running for the project, or a Restore runs. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["SetPronunciationRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PronunciationSaved"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /** Delete a Pronunciation: its word goes back to how the provider reads it. 404 unknown id. One History step, labelled Pronunciation: delete "<written>". Items with audio whose Spoken text the change alters lose it (WAV reference and audio review), as a text edit does; audioDiscardCount counts them, needsAudioCount the spoken items without audio after it. 409 while audio generation is queued or running for the project, or a Restore runs. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PronunciationDeleted"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/pronunciations/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What saving a draft { id?, writtenForm, spokenForm, delete? } would do, writing nothing: no id adds, an id edits that entry, delete: true deletes it (forms ignored). Answers matchCount, itemCount, withAudioCount (a delete's: the entry's reach now), audioDiscardCount (exactly what the save would discard), overlaps (entries whose written form holds the draft's as whole words or is held by it, draftWins when the draft's is the longer and so wins), duplicateOf (another entry with the written form, ignoring case: a save would be 409; the counts treat the draft as taking its place), and matches in book order: itemId, chapterId, chapterTitle, speaker, hasAudio, the sentence around it with matchStart and matchLength in that sentence, and spokenSentence, the sentence with the drafted list applied. 400 invalid; 404 unknown id. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["PronunciationDraftRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PronunciationImpactReport"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -6019,10 +6199,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        AddPronunciationRequest: {
-            writtenForm: null | string;
-            spokenForm: null | string;
-        };
         ApplyDiscoveryRow: {
             name: string;
             aliases: null | string[];
@@ -6306,7 +6482,62 @@ export interface components {
         PromptTemplateRequest: {
             template: string;
         };
-        PronunciationEntry: {
+        PronunciationDeleted: {
+            /** Format: int32 */
+            audioDiscardCount: number | string;
+            /** Format: int32 */
+            needsAudioCount: number | string;
+        };
+        PronunciationDraftRequest: {
+            /** Format: uuid */
+            id: null | string;
+            writtenForm: null | string;
+            spokenForm: null | string;
+            /** @default false */
+            delete: boolean;
+        };
+        PronunciationImpactReport: {
+            /** Format: int32 */
+            matchCount: number | string;
+            /** Format: int32 */
+            itemCount: number | string;
+            /** Format: int32 */
+            withAudioCount: number | string;
+            /** Format: int32 */
+            audioDiscardCount: number | string;
+            overlaps: components["schemas"]["PronunciationOverlap"][];
+            duplicateOf: null | components["schemas"]["PronunciationRef"];
+            matches: components["schemas"]["PronunciationMatchInBook"][];
+        };
+        PronunciationMatchInBook: {
+            /** Format: uuid */
+            itemId: string;
+            /** Format: uuid */
+            chapterId: string;
+            chapterTitle: null | string;
+            speaker: null | string;
+            hasAudio: boolean;
+            sentence: string;
+            /** Format: int32 */
+            matchStart: number | string;
+            /** Format: int32 */
+            matchLength: number | string;
+            spokenSentence: string;
+        };
+        PronunciationOverlap: {
+            /** Format: uuid */
+            id: string;
+            writtenForm: string;
+            spokenForm: string;
+            draftWins: boolean;
+        };
+        PronunciationRef: {
+            /** Format: uuid */
+            id: string;
+            writtenForm: string;
+            spokenForm: string;
+        };
+        PronunciationSaved: {
             /** Format: uuid */
             id: string;
             writtenForm: string;
@@ -6317,6 +6548,10 @@ export interface components {
             itemCount: number | string;
             /** Format: int32 */
             withAudioCount: number | string;
+            /** Format: int32 */
+            audioDiscardCount: number | string;
+            /** Format: int32 */
+            needsAudioCount: number | string;
         };
         ProposeBookEditRequest: {
             /** @default false */
@@ -6356,6 +6591,10 @@ export interface components {
         SetCheckpointRequest: {
             state: null | components["schemas"]["CheckpointRequestState"];
         };
+        SetPronunciationRequest: {
+            writtenForm: null | string;
+            spokenForm: null | string;
+        };
         SimilarityTestRequest: {
             text1?: null | string;
             text2?: null | string;
@@ -6365,7 +6604,7 @@ export interface components {
             prefix?: null | string;
         };
         /** @enum {unknown} */
-        StepAction: "edit" | "editWithAi" | "insert" | "split" | "merge" | "delete" | "title" | "pause" | "character" | "voice" | "attribution" | null;
+        StepAction: "edit" | "editWithAi" | "insert" | "split" | "merge" | "delete" | "title" | "pause" | "character" | "voice" | "attribution" | "pronunciation" | null;
         StepPreviewRequest: {
             sample: null | components["schemas"]["PreviewSampleRef"];
             settings: null | components["schemas"]["JsonElement"];

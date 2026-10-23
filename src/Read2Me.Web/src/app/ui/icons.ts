@@ -96,6 +96,7 @@ export const ICON_NAMES = [
   'stop',
   'stop_circle',
   'subtitles',
+  'text_to_speech',
   'timer',
   'title',
   'tune',

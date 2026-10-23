@@ -110,6 +110,7 @@ describe('historyRow', () => {
     ['a pause', { kind: 'request', action: 'pause' }, 'step', 'pause'],
     ['a character action', { kind: 'request', action: 'character' }, 'step', 'person'],
     ['a voice action', { kind: 'request', action: 'voice' }, 'step', 'record_voice_over'],
+    ['a pronunciation', { kind: 'request', action: 'pronunciation' }, 'step', 'text_to_speech'],
   ])('gives %s its kind and icon', (_, overrides, kind, icon) => {
     expect(historyRow(step(overrides), null)).toMatchObject({ kind, icon });
   });
