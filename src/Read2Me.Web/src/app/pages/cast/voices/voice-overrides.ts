@@ -3,7 +3,7 @@ import { type VoiceDto, toApiError } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { computed, signal, untracked } from '@app/core/signals';
-import { icon } from '@app/ui/partials';
+import { blockable, icon } from '@app/ui/partials';
 import type { SettingsSchema, SettingsValues } from '@app/ui/settings-form';
 import { tabPanel, tabs } from '@app/ui/tabs';
 import { PROVIDER_AREA_LABEL, type ProviderArea, ProviderSchemas } from './provider-schemas';
@@ -51,6 +51,15 @@ export class VoiceOverrideEditor extends R2mElement {
     this.#disabled.set(value);
   }
 
+  /** Why nothing may change (viewing a History step), or null: the form and Save are off with it. */
+  readonly #readOnly = signal<string | null>(null);
+  get readOnly() {
+    return this.#readOnly();
+  }
+  set readOnly(value: string | null) {
+    this.#readOnly.set(value);
+  }
+
   readonly schema = signal<SettingsSchema | null>(null);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
@@ -88,6 +97,7 @@ export class VoiceOverrideEditor extends R2mElement {
         No active ${label} provider — nothing to override.
       </p>`;
     }
+    const readOnly = this.#readOnly();
     return html`
       <p class="voice-override__note">
         Overriding the active ${label} provider (${schema.type}). Fields left alone use the
@@ -98,18 +108,22 @@ export class VoiceOverrideEditor extends R2mElement {
         .schema=${schema}
         .values=${this.stored()}
         .disabled=${this.#disabled()}
+        .readOnly=${readOnly}
         @values-change=${(e: Event) => this.patch.set((e as CustomEvent<SettingsValues>).detail)}
         @valid-change=${(e: Event) => this.valid.set((e as CustomEvent<boolean>).detail)}
       ></r2m-settings-form>
-      <button
-        type="button"
-        class="r2m-button r2m-button--stroked"
-        data-action="save-override"
-        ?disabled=${this.#disabled() || !this.dirty() || !this.valid()}
-        @click=${() => this.emit<OverrideSave>('save', { area: this.#area(), json: this.json() })}
-      >
-        ${icon('save')} Save
-      </button>
+      ${blockable(
+        readOnly,
+        html`<button
+          type="button"
+          class="r2m-button r2m-button--stroked"
+          data-action="save-override"
+          ?disabled=${this.#disabled() || readOnly !== null || !this.dirty() || !this.valid()}
+          @click=${() => this.emit<OverrideSave>('save', { area: this.#area(), json: this.json() })}
+        >
+          ${icon('save')} Save
+        </button>`,
+      )}
     `;
   }
 
@@ -136,7 +150,10 @@ const OVERRIDE_TABS: readonly { id: OverrideTab; label: string }[] = [
 
 export interface VoiceOverridesOptions {
   voice: VoiceDto;
+  /** A write is in flight. */
   disabled: boolean;
+  /** Why nothing may change (viewing a History step), or null. */
+  readOnly: string | null;
   /** Which override tab is open; the card owns it. */
   selected: OverrideTab;
   onSelect: (tab: OverrideTab) => void;
@@ -166,6 +183,7 @@ export function voiceOverrides(options: VoiceOverridesOptions) {
         .area=${selected}
         .storedJson=${storedJson ?? null}
         .disabled=${options.disabled}
+        .readOnly=${options.readOnly}
         @save=${(e: Event) => options.onSave((e as CustomEvent<OverrideSave>).detail)}
       ></r2m-voice-override-editor>`,
     )}

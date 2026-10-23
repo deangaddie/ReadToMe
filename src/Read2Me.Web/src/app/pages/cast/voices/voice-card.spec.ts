@@ -178,7 +178,8 @@ describe('r2m-voice-card', () => {
         expect(button(card, action).disabled).toBe(true);
         expect(reason(button(card, action))).toBe(VIEWING_READ_ONLY);
       }
-      expect(card.querySelector('r2m-file-drop')).toBeNull();
+      expect(card.querySelector('r2m-file-drop')?.readOnly).toBe(VIEWING_READ_ONLY);
+      expect(card.querySelector('r2m-voice-override-editor')?.readOnly).toBe(VIEWING_READ_ONLY);
       expect(textarea(card, 'Voice description').readOnly).toBe(true);
       expect(textarea(card, 'Transcript').readOnly).toBe(true);
       expect(

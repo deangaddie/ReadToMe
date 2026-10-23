@@ -153,6 +153,7 @@ export class VoiceEditorPage extends R2mElement {
   private editorTemplate(voice: VoiceDto) {
     const busy = this.busy();
     // Viewing a History step: Preview would render today's audio, and Apply and Restore change it.
+    // The ticks and dials are off too: a past voice plays but is not shaped.
     const readOnly = this.project.readOnly();
     const applyBlocked = this.applyBlocked();
     const actionError = this.actionError();
@@ -233,12 +234,12 @@ export class VoiceEditorPage extends R2mElement {
           ${repeat(
             this.catalog(),
             (entry) => entry.stepId,
-            (entry) => this.stepTemplate(entry, busy),
+            (entry) => this.stepTemplate(entry, busy, readOnly),
           )}
         </section>
 
         <section class="voice-editor__dials" aria-label="Dials">
-          ${this.dialsTemplate(busy)}
+          ${this.dialsTemplate(busy, readOnly)}
         </section>
       </div>
 
@@ -271,7 +272,7 @@ export class VoiceEditorPage extends R2mElement {
     `;
   }
 
-  private stepTemplate(entry: StepCatalogEntryDto, busy: boolean) {
+  private stepTemplate(entry: StepCatalogEntryDto, busy: boolean, readOnly: string | null) {
     const stage = stageFor(this.stages(), entry.stepId);
     const select = () => this.selectedStepId.set(entry.stepId);
     return html`<div
@@ -284,17 +285,20 @@ export class VoiceEditorPage extends R2mElement {
         if (e.key === 'Enter') select();
       }}
     >
-      <label class="voice-editor__tick" @click=${(e: Event) => e.stopPropagation()}>
-        <input
-          type="checkbox"
-          class="r2m-checkbox"
-          data-tick=${entry.stepId}
-          .checked=${!!this.ticks()[entry.stepId]}
-          ?disabled=${busy}
-          @change=${(e: Event) => this.tick(entry.stepId, (e.target as HTMLInputElement).checked)}
-        />
-        ${entry.label}
-      </label>
+      ${blockable(
+        readOnly,
+        html`<label class="voice-editor__tick" @click=${(e: Event) => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            class="r2m-checkbox"
+            data-tick=${entry.stepId}
+            .checked=${!!this.ticks()[entry.stepId]}
+            ?disabled=${busy || readOnly !== null}
+            @change=${(e: Event) => this.tick(entry.stepId, (e.target as HTMLInputElement).checked)}
+          />
+          ${entry.label}
+        </label>`,
+      )}
       <p class="voice-editor__blurb">${entry.blurb}</p>
       ${
         stage && !stage.applied
@@ -318,7 +322,7 @@ export class VoiceEditorPage extends R2mElement {
     </div>`;
   }
 
-  private dialsTemplate(busy: boolean) {
+  private dialsTemplate(busy: boolean, readOnly: string | null) {
     const entry = this.selected();
     if (!entry) return html`<p class="voice-editor__blurb">Select a step to adjust its dials.</p>`;
     return html`<h3>${entry.label}</h3>
@@ -330,6 +334,7 @@ export class VoiceEditorPage extends R2mElement {
               .schema=${toStepSchema(entry)}
               .values=${this.values()[entry.stepId] ?? {}}
               .disabled=${busy}
+              .readOnly=${readOnly}
               @values-change=${(e: CustomEvent<SettingsValues>) =>
                 this.setValues(entry.stepId, e.detail)}
             ></r2m-settings-form>`

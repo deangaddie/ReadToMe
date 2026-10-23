@@ -109,6 +109,18 @@ export class SettingsForm extends R2mElement {
     this.#disabled.set(value);
   }
 
+  /**
+   * Why nothing may change (viewing a History step), or null: every field is off and shows the
+   * reason as its tooltip, focusable so a tap or Tab reaches it, as `blockable` does for a button.
+   */
+  readonly #readOnly = signal<string | null>(null);
+  get readOnly() {
+    return this.#readOnly();
+  }
+  set readOnly(value: string | null) {
+    this.#readOnly.set(value);
+  }
+
   /** Local working copy; re-seeded whenever the host hands in new values. */
   readonly #working = signal<SettingsValues>({});
 
@@ -135,7 +147,8 @@ export class SettingsForm extends R2mElement {
   protected template() {
     const override = this.#mode() === 'override';
     this.classList.toggle('r2m-settings-form--override', override);
-    const disabled = this.#disabled();
+    const readOnly = this.#readOnly();
+    const disabled = this.#disabled() || readOnly !== null;
     // Read eagerly, not inside a lazy directive, so the element's effect tracks every signal.
     return this.#schema().fields.map((field) => {
       const overridden = this.isOverridden(field);
@@ -145,6 +158,8 @@ export class SettingsForm extends R2mElement {
           valid ? '' : 'r2m-settings-form__field--invalid'
         }"
         data-key=${field.key}
+        data-tooltip=${readOnly ?? nothing}
+        tabindex=${readOnly === null ? nothing : '0'}
       >
         <div class="r2m-settings-form__label-row">
           ${

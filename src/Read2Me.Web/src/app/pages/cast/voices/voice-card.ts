@@ -321,7 +321,8 @@ export class VoiceCard extends R2mElement {
             <div class="r2m-expansion__body">
               ${voiceOverrides({
                 voice,
-                disabled: off,
+                disabled: busy,
+                readOnly,
                 selected: this.overrideTab(),
                 onSelect: (tab) => this.overrideTab.set(tab),
                 onSave: (save) => void this.saveOverride(save),
@@ -393,23 +394,17 @@ export class VoiceCard extends R2mElement {
           : html`<p class="voice-card__hint">No audio uploaded yet.</p>`
       }
       ${
-        readOnly !== null
-          ? blockable(
-              readOnly,
-              html`<button type="button" class="r2m-button r2m-button--stroked" disabled>
-                ${voice.audioFileName ? 'Replace audio' : 'Upload audio'}
-              </button>`,
-            )
-          : this.uploading()
-            ? html`<p class="voice-card__hint" role="status">Uploading and normalising…</p>`
-            : html`<r2m-file-drop
-                .accept=${'audio/*,.wav,.mp3,.flac,.ogg,.m4a,.aac,.opus,.webm'}
-                .maxBytes=${MAX_VOICE_AUDIO_BYTES}
-                .label=${voice.audioFileName ? 'Replace audio' : 'Upload audio'}
-                .hint=${'Audio file (WAV, MP3, FLAC, OGG, M4A…), 200 MB max. The reference must be 30 s or shorter; 15 s or shorter clones best. The recording is normalised on upload.'}
-                @files=${(e: Event) => void this.upload((e as CustomEvent<File[]>).detail)}
-                @rejected=${(e: Event) => this.rejected((e as CustomEvent<RejectedFile[]>).detail)}
-              ></r2m-file-drop>`
+        this.uploading()
+          ? html`<p class="voice-card__hint" role="status">Uploading and normalising…</p>`
+          : html`<r2m-file-drop
+              .accept=${'audio/*,.wav,.mp3,.flac,.ogg,.m4a,.aac,.opus,.webm'}
+              .maxBytes=${MAX_VOICE_AUDIO_BYTES}
+              .label=${voice.audioFileName ? 'Replace audio' : 'Upload audio'}
+              .hint=${'Audio file (WAV, MP3, FLAC, OGG, M4A…), 200 MB max. The reference must be 30 s or shorter; 15 s or shorter clones best. The recording is normalised on upload.'}
+              .readOnly=${readOnly}
+              @files=${(e: Event) => void this.upload((e as CustomEvent<File[]>).detail)}
+              @rejected=${(e: Event) => this.rejected((e as CustomEvent<RejectedFile[]>).detail)}
+            ></r2m-file-drop>`
       }
     </section>`;
   }

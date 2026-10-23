@@ -84,13 +84,19 @@ export function emptyState(
  * Makes a disabled control's blocked reason reachable: a `data-tooltip` wrapper that takes focus
  * only while blocked, since a disabled button cannot (`ui/tooltip.ts` shows on `focusin`, so a tap
  * shows it too). The control still sets `?disabled=${reason !== null}` itself; the reason comes
- * from a pure `xBlockedReason` in the feature folder. A momentary busy carries no reason.
+ * from a pure `xBlockedReason` in the feature folder. A momentary busy carries no reason. A control
+ * kept out of the tab order (a tree node's trigger, reached by the tree's own keys) passes
+ * `tabbable: false` so its wrapper stays out too.
  */
-export function blockable(reason: string | null, control: unknown) {
+export function blockable(
+  reason: string | null,
+  control: unknown,
+  { tabbable = true }: { tabbable?: boolean } = {},
+) {
   return html`<span
     class="r2m-blockable"
     data-tooltip=${reason ?? nothing}
-    tabindex=${reason === null ? nothing : '0'}
+    tabindex=${reason === null || !tabbable ? nothing : '0'}
     >${control}</span
   >`;
 }

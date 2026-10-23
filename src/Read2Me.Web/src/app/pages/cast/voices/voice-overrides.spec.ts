@@ -86,6 +86,18 @@ describe('r2m-voice-override-editor', () => {
     expect(save(editor).disabled).toBe(true);
   });
 
+  it('a read-only reason turns the form and Save off, each showing the reason', async () => {
+    const { editor } = await mount('voice-design', '{"cfg_value":3.5}');
+    editor.readOnly = 'Viewing a past step';
+    await editor.rendered();
+
+    expect(editor.querySelector('r2m-settings-form')?.readOnly).toBe('Viewing a past step');
+    expect(save(editor).disabled).toBe(true);
+    expect(save(editor).closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(
+      'Viewing a past step',
+    );
+  });
+
   it('an invalid field blocks Save', async () => {
     const { editor } = await mount('voice-design');
     const number = field(editor, 'cfg_value').querySelector<HTMLInputElement>(

@@ -75,25 +75,16 @@ export class ProjectDetailsPanel extends R2mElement {
         }
       </div>
       <div class="details__cover-actions">
-        ${
-          readOnly === null
-            ? html`<r2m-file-drop
-                class="details__drop"
-                .accept=${COVER_ACCEPT}
-                .maxBytes=${COVER_MAX_BYTES}
-                .label=${d.coverImage ? 'Replace cover' : 'Add a cover'}
-                .hint=${'JPG, PNG or WebP, up to 10 MB'}
-                @files=${(e: Event) => void this.uploadCover((e as CustomEvent<File[]>).detail)}
-                @rejected=${(e: Event) =>
-                  this.rejectCover((e as CustomEvent<RejectedFile[]>).detail)}
-              ></r2m-file-drop>`
-            : blockable(
-                readOnly,
-                html`<button type="button" class="r2m-button details__add-cover" disabled>
-                  ${icon('upload_file')} ${d.coverImage ? 'Replace cover' : 'Add a cover'}
-                </button>`,
-              )
-        }
+        <r2m-file-drop
+          class="details__drop"
+          .accept=${COVER_ACCEPT}
+          .maxBytes=${COVER_MAX_BYTES}
+          .label=${d.coverImage ? 'Replace cover' : 'Add a cover'}
+          .hint=${'JPG, PNG or WebP, up to 10 MB'}
+          .readOnly=${readOnly}
+          @files=${(e: Event) => void this.uploadCover((e as CustomEvent<File[]>).detail)}
+          @rejected=${(e: Event) => this.rejectCover((e as CustomEvent<RejectedFile[]>).detail)}
+        ></r2m-file-drop>
         ${
           d.coverImage
             ? blockable(

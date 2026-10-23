@@ -57,4 +57,25 @@ describe('r2m-file-drop', () => {
 
     expect(files.map((f) => f.name)).toEqual(['a.epub']);
   });
+
+  it('a read-only reason turns the picker off with the reason and ignores a drop', async () => {
+    const { zone, files, rejected } = await mount();
+    zone.readOnly = 'Viewing a past step';
+    await zone.rendered();
+
+    const button = zone.querySelector('button')!;
+    expect(button.disabled).toBe(true);
+    expect(button.closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(
+      'Viewing a past step',
+    );
+    expect(zone.querySelector<HTMLInputElement>('input[type=file]')!.disabled).toBe(true);
+    drop(zone, [new File(['x'], 'book.epub')]);
+    expect(files).toEqual([]);
+    expect(rejected).toEqual([]);
+
+    zone.readOnly = null;
+    await zone.rendered();
+    drop(zone, [new File(['x'], 'book.epub')]);
+    expect(files.map((f) => f.name)).toEqual(['book.epub']);
+  });
 });
