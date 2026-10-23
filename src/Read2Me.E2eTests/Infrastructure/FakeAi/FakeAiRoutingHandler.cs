@@ -83,6 +83,12 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
     /// </summary>
     public int AudioCppTakeMs { get; set; } = 100;
 
+    /// <summary>
+    /// Per-test hook: while set, every fake-audiocpp speech request is recorded and then waits for it
+    /// (or for its own cancellation), so a test knows audio generation is still running.
+    /// </summary>
+    public TaskCompletionSource? HoldSpeech { get; set; }
+
     /// <summary>Text the last TTS request spoke; echoed back by fake-whisper.</summary>
     private volatile string _lastTtsText = "";
 
@@ -107,6 +113,8 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
         LlmReply = p => FakeAiResponses.AttributionReply(p, "Narrator");
         ReleaseLlm();
         AudioCppTakeMs = 100;
+        HoldSpeech?.TrySetResult();
+        HoldSpeech = null;
         LlmModels = FakeLlmModelStore.AllLoaded(DefaultModel);
         _lastTtsText = "";
         lock (LlmPromptsSeen) LlmPromptsSeen.Clear();
@@ -180,6 +188,7 @@ public sealed class FakeAiRoutingHandler : HttpMessageHandler
             lock (AudioCppSpeechBodies) AudioCppSpeechBodies.Add(body);
             _lastTtsText = SpokenText(body);
             _audioCppLoaded = body["model"]?.GetValue<string>();
+            if (HoldSpeech is { } hold) await hold.Task.WaitAsync(ct);
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new ByteArrayContent(FakeAiResponses.SilentWav(durationMs: AudioCppTakeMs)),

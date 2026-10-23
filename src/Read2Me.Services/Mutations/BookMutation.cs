@@ -408,15 +408,18 @@ public sealed record SetCoverImageMutation(
 
 // ── Pronunciation list ───────────────────────────────────────────────────────
 // The book's written form → spoken form entries. They change what TTS is asked to say, never the
-// book text, so nothing here names a node or rewrites an item.
+// book text, so nothing here rewrites an item; what they cost is the audio of items whose Spoken
+// text they change.
 
 /// <summary>
-/// Adds a Pronunciation. Its forms are normalised and checked by <c>PronunciationForms</c>, an invalid
-/// one being a <see cref="BookMutationRejection.Validation"/>; a written form another entry already
-/// has, ignoring case, is a <see cref="BookMutationRejection.Conflict"/>: a word never has two respellings.
+/// Adds, edits or deletes a Pronunciation, as <see cref="Draft"/> says (<c>PronunciationDraft.ApplyTo</c>):
+/// an invalid form is a <see cref="BookMutationRejection.Validation"/>, an unknown entry a
+/// <see cref="BookMutationRejection.NotFound"/>, and a written form another entry already has,
+/// ignoring case, a <see cref="BookMutationRejection.Conflict"/>: a word never has two respellings.
+/// Items with audio whose Spoken text the change alters lose it, as a text edit's do.
 /// </summary>
-public sealed record AddPronunciationMutation(
-    ProjectFolderId FolderId, string WrittenForm, string SpokenForm) : ProjectStateMutation(FolderId);
+public sealed record SetPronunciationMutation(
+    ProjectFolderId FolderId, Pronunciations.PronunciationDraft Draft) : ProjectStateMutation(FolderId);
 
 // ── manual and AI book edits ─────────────────────────────────────────────────
 // What a person rewrites by hand, and what an approved AI edit program rewrites for them. The two

@@ -453,10 +453,30 @@ curl -s http://localhost:5000/api/projects/{folder}/pronunciations          # ho
 # → [{ id, writtenForm, spokenForm, matchCount, itemCount, withAudioCount }]  sorted by written form
 curl -s -X POST http://localhost:5000/api/projects/{folder}/pronunciations \
   -H 'content-type: application/json' -d '{ "writtenForm": "Kulgan", "spokenForm": "KULL-gun" }'
-# → 201 with the entry. Both forms trimmed, inner whitespace collapsed. 400: written form not 1–100
-# characters or not starting and ending with a letter or digit, spoken form not 1–200 characters;
-# 409: another entry has that written form, ignoring case. One History step: Pronunciation: add "Kulgan".
+# → 201 with the entry plus audioDiscardCount and needsAudioCount. Both forms trimmed, inner whitespace
+# collapsed. 400: written form not 1–100 characters or not starting and ending with a letter or digit,
+# spoken form not 1–200 characters; 409: another entry has that written form, ignoring case.
+# One History step: Pronunciation: add "Kulgan" (action pronunciation).
+curl -s -X PUT http://localhost:5000/api/projects/{folder}/pronunciations/{id} \
+  -H 'content-type: application/json' -d '{ "writtenForm": "Kulgan", "spokenForm": "KUHL-gun" }'
+# → 200, same answer and refusals as the add; 404 unknown id. Unchanged forms write nothing, no step.
+# Step: Pronunciation: edit "Kulgan" (action pronunciation).
+curl -s -X DELETE http://localhost:5000/api/projects/{folder}/pronunciations/{id}
+# → { audioDiscardCount, needsAudioCount }; 404 unknown id. Step: Pronunciation: delete "Kulgan" (action delete).
+curl -s -X POST http://localhost:5000/api/projects/{folder}/pronunciations/impact \
+  -H 'content-type: application/json' -d '{ "id": null, "writtenForm": "Kulgan", "spokenForm": "KULL-gun", "delete": false }'
+# → { matchCount, itemCount, withAudioCount, audioDiscardCount, overlaps: [{ id, writtenForm, spokenForm, draftWins }],
+#     duplicateOf, matches: [{ itemId, chapterId, chapterTitle, speaker, hasAudio, sentence, matchStart,
+#     matchLength, spokenSentence }] }  A dry run: no step; audioDiscardCount is what saving the draft discards.
 ```
+
+Any change to the list discards the audio (WAV reference and audio review) of every item that has
+audio and whose Spoken text it alters, as a text edit does: new matches on an add, the entry's
+matches on a spoken-form edit, old and new matches on a written-form edit, items where an overlap's
+winner changes what is said, the old matches on a delete. Items without audio change silently. Add,
+edit and delete answer 409 while audio generation is queued or running for the project (a take in
+flight would land with the old Spoken text). The receipt carries the `Pronunciations` facet, so
+open pages refetch the list.
 
 ## 5. Book commands (edit anything)
 

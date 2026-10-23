@@ -78,6 +78,8 @@ public enum StepAction
     [JsonStringEnumMemberName("voice")] Voice,
     /// <summary>A Background run with attribution in it.</summary>
     [JsonStringEnumMemberName("attribution")] Attribution,
+    /// <summary>Adding or editing a Pronunciation; deleting one is a <see cref="Delete"/>.</summary>
+    [JsonStringEnumMemberName("pronunciation")] Pronunciation,
 }
 
 /// <summary>A project's History: its steps newest first, and the step the Head points at (null before the first).</summary>

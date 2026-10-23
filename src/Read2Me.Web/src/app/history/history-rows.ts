@@ -44,6 +44,7 @@ const ACTION_ICONS: Record<StepAction, IconName> = {
   character: 'person',
   voice: 'record_voice_over',
   attribution: 'smart_toy',
+  pronunciation: 'text_to_speech',
 };
 
 /** The icon of a step with no action, by its kind. */
