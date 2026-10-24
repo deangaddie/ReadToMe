@@ -1,11 +1,11 @@
 // Verifies the native projects shelf and project overview (native-web 29) against a running host:
 // the shelf's cards (cover or initials, author, progress), the New project dialog opening and
 // closing, then one project's overview with its six pipeline steps and the details panel.
-// Read-only: nothing is created or changed.
-//   R2M_WEB=http://localhost:5000 bun native-projects-verify.mjs <folder> > native-projects-verify.log 2>&1
-import { launch, openWeb } from './browse.mjs';
+// It imports its own throwaway copy of a books/ epub (Pride and Prejudice unless named) and changes nothing else.
+//   R2M_WEB=http://localhost:5000 bun native-projects-verify.mjs [book] > native-projects-verify.log 2>&1
+import { launch, openWeb, bookProject } from './browse.mjs';
 
-const folder = process.argv[2] ?? 'foundation';
+const { folder, remove } = await bookProject(process.argv[2] ?? 'pride-and-prejudice');
 const { page, close } = await launch();
 try {
   await openWeb(page, '/projects');
@@ -70,5 +70,6 @@ try {
   await page.screenshot({ path: 'native-projects-overview.png', fullPage: true });
   console.log('toasts:', page.toasts, 'errors:', page.errors);
 } finally {
+  await remove();
   await close();
 }

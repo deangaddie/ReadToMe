@@ -1,11 +1,11 @@
-// Verifies native-web 22 against the host's /app bundle on a real workspace book: the reader
+// Verifies native-web 22 against the host's /app bundle on a books/ epub (Dracula unless named): the reader
 // renders in the measured list, modes switch and mirror the URL, the chapter window loads on
 // scroll and caps at 5, the current chapter follows the top row, and anchoring holds over a
-// prepend and a resize. Read-only: it mutates nothing.
+// prepend and a resize. It imports a throwaway copy of the book and mutates nothing else.
 //   R2M_WEB=http://localhost:5000 bun native-reader-verify.mjs
-import { launch, openWeb, waitFor } from './browse.mjs';
+import { launch, openWeb, waitFor, bookProject } from './browse.mjs';
 
-const folder = process.argv[2] ?? 'dune';
+const { folder, remove } = await bookProject(process.argv[2] ?? 'dracula');
 const { page, close } = await launch();
 
 const state = () =>
@@ -98,5 +98,6 @@ try {
   await page.screenshot({ path: 'reader-deep.png' });
   console.log('errors', page.errors, 'toasts', page.toasts);
 } finally {
+  await remove();
   await close();
 }

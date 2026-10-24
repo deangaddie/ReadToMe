@@ -1,9 +1,10 @@
-// Cutover smoke against the host's /app bundle: shell on a real project, the reader, an unknown path, favicon.
-import { launch, openWeb, WEB } from './browse.mjs';
+// Cutover smoke against the host's /app bundle: shell on a throwaway book project, the reader, an unknown path, favicon.
+import { launch, openWeb, WEB, bookProject } from './browse.mjs';
 
+const { folder, remove } = await bookProject('alices-adventures-in-wonderland');
 const { page, close } = await launch();
 try {
-  await openWeb(page, '/projects/foundation/book');
+  await openWeb(page, `/projects/${folder}/book`);
   await page.waitForSelector('.tree__title');
   console.log('url:', page.url(), 'title:', await page.title());
   console.log('crumbs:', await page.$$eval('.shell__crumb', (e) => e.map((x) => x.textContent.trim())));
@@ -24,5 +25,6 @@ try {
   await page.screenshot({ path: 'cutover-verify.png' });
   console.log('toasts:', page.toasts, 'errors:', page.errors);
 } finally {
+  await remove();
   await close();
 }

@@ -2,9 +2,9 @@
 // with AI…" with the auto_fix_high icon, and the entry opens r2m-edit-with-ai-dialog full screen on
 // the Instruct phase with the AI-activity toggle at the bottom. Read-only: no AI call is made.
 //   R2M_WEB=http://localhost:5000 bun native-edit-ai-verify.mjs
-import { launch, openWeb } from './browse.mjs';
+import { launch, openWeb, bookProject } from './browse.mjs';
 
-const folder = process.argv[2] ?? 'alices-adventures-in-wonderland';
+const { folder, remove } = await bookProject(process.argv[2] ?? 'alices-adventures-in-wonderland');
 const { page, close } = await launch();
 
 try {
@@ -42,5 +42,6 @@ try {
   await dialog.waitFor({ state: 'detached' });
   console.log('closed; errors:', JSON.stringify(page.errors), 'toasts:', JSON.stringify(page.toasts));
 } finally {
+  await remove();
   await close();
 }
