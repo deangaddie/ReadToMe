@@ -18,10 +18,10 @@ cd src/Read2Me.Web && bun run dev                                        # optio
 The host serves whatever bundle was last built (`pwsh scripts/build-web.ps1`); the dev server
 serves the source. Restart `bun run dev` after adding a file reached through `@app/*`.
 
-Development config points the workspace at `D:\Dev\Read\WS`, which holds real projects with
-generated audio (`foundation` ~314 wavs, `pride-and-prejudice` ~41,
-`alices-adventures-in-wonderland` ~16) and app settings in `app.db`. Mutate a throwaway project
-(`throwawayProject` below), never those.
+Development config points the workspace at `D:\Dev\Read\WS`, which holds the app settings in
+`app.db` and any real projects the owner keeps there (list the folder first; the one-off
+`tools/browse/*-check.mjs` scripts assume a `foundation` project). Mutate only a throwaway project
+(`throwawayProject` below), never a real one.
 
 Start each detached with its output redirected to a file. A `dotnet run` piped through
 `Select-Object -First N` gets killed when the pipe closes; a `| Select-Object -Last N` shows

@@ -62,6 +62,7 @@ bundler does not see it until then.
 - `src/app/ai-services/` — the store behind the AI services page and its docker controls.
 - `src/app/shared/` — non-element helpers shared across pages: config forms, preflight, the
   settings schema, speaker colours, the unsaved-changes guard.
+- `src/app/history/` — the project History sheet: its store, rows and viewing a past step.
 - `src/app/theme/` — the theme service and theme CSS.
 - `src/styles/global.css` — design tokens, fonts and the global primitive CSS.
 - `src/testing/` — test helpers: fake Navigation API, API client, live hub and timers.
@@ -79,7 +80,8 @@ it becomes the title and is left out of the body, whose headings start at `##` (
 down, under the partial's `<h2>` title). The shape is `# Name`, one "what this step is for"
 paragraph, `## How`, `## Done when`, about 150–300 words. No front matter, no images, no raw HTML
 (it is escaped), no links into the app: name the control in prose. Links are absolute `http(s)://`
-URLs and open in a new tab.
+URLs and open in a new tab. Quote with “ ” rather than `"`: a straight quote renders as `&quot;`,
+which `help-panel.spec.ts` sees serialised back as `"` and fails on.
 
 `bun run help` renders the nine files into `src/app/help/help.generated.ts`, which is committed;
 `bun run help:check` (part of `bun run check`) fails when the module is stale or a page breaks the

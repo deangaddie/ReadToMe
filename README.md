@@ -18,7 +18,7 @@ dotnet run --project src/Read2Me.App
 # https://localhost:5001 / http://localhost:5000
 ```
 
-`Workspace.FolderPath` in `appsettings.json` (or `appsettings.Development.json`) sets the root data directory. All project folders, databases, audio files, and logs are written here. Leave empty to use the current directory.
+`Workspace.FolderPath` in `appsettings.json` (or `appsettings.Development.json`) sets the root data directory. All project folders, databases, audio files, and logs are written here. It must be set: `appsettings.json` ships it empty, and the host fails at startup on an empty path.
 
 ### Web app
 
