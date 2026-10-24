@@ -189,6 +189,28 @@ public class OpenStepTests : ProjectDbTestBase
             (await LiveReader().GetCharactersAsync(_folder)).Where(c => !c.IsNarrator).Select(c => c.Name).Order());
     }
 
+    [Fact]
+    public async Task ASnapshotTakenWhileAnotherOpenMigratedTheProject_StillOpens()
+    {
+        await SeedOneItemAsync();
+        var started = await TipAsync();
+        // VACUUM INTO copies the lock row EF holds in project.db while another request's open migrates it.
+        var snapshot = HistoryDatabase.SnapshotOf(HistoryDatabase.FolderOf(FolderPath), null);
+        await using (var connection = HistoryDatabase.Open(snapshot, Microsoft.Data.Sqlite.SqliteOpenMode.ReadWrite))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                CREATE TABLE IF NOT EXISTS "__EFMigrationsLock" ("Id" INTEGER NOT NULL PRIMARY KEY, "Timestamp" TEXT NOT NULL);
+                INSERT INTO "__EFMigrationsLock" ("Id", "Timestamp") VALUES (1, '2026-10-24 04:05:45+00:00');
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        Assert.IsType<StepOpening.Opened>(await _history.OpenStepAsync(_folder, started, timeout.Token));
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     private async Task<List<string?>> BookTextAsync(ProjectReader reader)

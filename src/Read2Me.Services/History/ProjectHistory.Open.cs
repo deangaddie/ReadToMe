@@ -146,6 +146,11 @@ public sealed partial class ProjectHistory
                 }
                 await ExecuteAsync(connection, "COMMIT", ct);
 
+                // A snapshot taken while another request's open was migrating project.db holds EF's
+                // migration lock row (VACUUM INTO copies it), and MigrateAsync would wait on it for
+                // good. Nothing else migrates this private copy, so any lock in it is stale.
+                await ExecuteAsync(connection, "DROP TABLE IF EXISTS \"__EFMigrationsLock\"", ct);
+
                 // The chunks are at the snapshot's schema (none spans a migration), so the copy is
                 // a whole step at that schema before it is brought up to the live one.
                 try
