@@ -11,17 +11,20 @@ The web app (`src/Read2Me.Web`, custom elements on Bun, `docs/agents/web.md`) is
 ## Launch
 
 ```bash
-dotnet run --project src/Read2Me.App --urls http://localhost:5000        # Development: no HTTPS redirect; serves the /app bundle
+dotnet run --project src/Read2Me.App --urls http://localhost:5000 -- --Workspace:FolderPath="$PWD/tools/browse/workspace"   # from the repo root; Development: no HTTPS redirect; serves the /app bundle
 cd src/Read2Me.Web && bun run dev                                        # optional HMR; :4300/app/ (Bun at ~/.bun/bin if not on PATH)
 ```
 
 The host serves whatever bundle was last built (`pwsh scripts/build-web.ps1`); the dev server
 serves the source. Restart `bun run dev` after adding a file reached through `@app/*`.
 
-Development config points the workspace at `D:\Dev\Read\WS`, which holds the app settings in
-`app.db` and any real projects the owner keeps there (list the folder first; the one-off
-`tools/browse/*-check.mjs` scripts assume a `foundation` project). Mutate only a throwaway project
-(`throwawayProject` below), never a real one.
+Always pass the tool workspace. Development config points the workspace at `D:\Dev\Read\WS`,
+which belongs to the owner for trying things out: leave it alone. `tools/browse/workspace/` is
+git-ignored and starts with a fresh `app.db`; delete it to start clean. Its books come with the
+tools: Project Gutenberg epubs in `tools/browse/books/`, imported with `bookProject('dracula')`
+(or a text project from `throwawayProject`). Never use a book that is not from Project Gutenberg.
+A fresh `app.db` has no ffmpeg path, so set it (Settings → Audio processing) before anything
+that needs ffmpeg.
 
 Start each detached with its output redirected to a file. A `dotnet run` piped through
 `Select-Object -First N` gets killed when the pipe closes; a `| Select-Object -Last N` shows
@@ -31,8 +34,8 @@ nothing until exit. Stop the host with `taskkill //F //IM Read2Me.App.exe`.
 
 Use the checked-in harness `tools/browse/` (`bun install` there once; it reuses the Chromium the
 E2E tests installed; run scripts with `bun x.mjs`). Read its `README.md` for the helper list and
-the example script; the helpers cover launch with a watchdog, throwaway projects, the node menu
-and dialogs, and tree waits.
+the example script; the helpers cover launch with a watchdog, book and throwaway projects, the
+node menu and dialogs, and tree waits.
 
 `R2M_WEB` defaults to the dev server (`:4300`); `R2M_WEB=http://localhost:5000` drives the host's
 own bundle instead:
@@ -42,8 +45,8 @@ bun my-check.mjs                                                       # on the 
 R2M_WEB=http://localhost:5000 bun my-check.mjs                         # from the host's /app bundle
 ```
 
-`tools/browse/shell-check.mjs` is the smallest smoke run: it prints the brand, title and whether
-the route rendered the not-found page.
+`tools/browse/shell-check.mjs` is the smallest smoke run: it imports Alice as a throwaway project,
+prints the brand, title and whether the route rendered the not-found page, then removes it.
 
 The web app re-renders after the click resolves, from the hub's receipt — so **wait on the DOM
 state you expect**, never on a timeout, and never on a count the stale DOM already satisfies (a tree that shows two parts also has "two titles" before it reloads
@@ -71,7 +74,7 @@ await page.evaluate(async url => {
 - **A frozen tab is a defect, not a slow page.** A screenshot that times out means the renderer is
   spinning (a microtask loop in a store); capture the API calls the page made and look for a loop.
 - **ffmpeg is not on PATH.** It lives at `D:\Dev\ffmpeg\bin\ffmpeg.exe`; the path is stored in
-  settings (Audio Processing → ffmpeg). Any ffmpeg-dependent step silently *falls back* rather than
+  settings (Audio Processing → ffmpeg), so a fresh tool workspace needs it set. Any ffmpeg-dependent step silently *falls back* rather than
   failing, so an unset path looks like "the filter did nothing".
 - **Docker AI containers are usually stopped.** TTS/LLM/Whisper flows need `docker compose up -d
   <service>` from `Infra/` first. Audio *post-processing* and assembly only need ffmpeg.

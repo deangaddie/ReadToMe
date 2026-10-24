@@ -1,8 +1,9 @@
 // Verifies native-web 20 against the host's /app bundle: theme on boot, shell nav + crumbs,
 // live dot, theme quick menu, not-found page. Restores the theme selection it found.
 //   R2M_WEB=http://localhost:5000 bun native-shell-verify.mjs
-import { launch, openWeb, api, HOST } from './browse.mjs';
+import { launch, openWeb, api, HOST, bookProject } from './browse.mjs';
 
+const { folder, remove } = await bookProject('alices-adventures-in-wonderland');
 const texts = (page, sel) => page.locator(sel).allTextContents().then((t) => t.map((s) => s.trim()));
 const put = (body) =>
   fetch(`${HOST}/api/settings/themes/selection`, {
@@ -19,7 +20,7 @@ console.log('initial selection:', initial, 'themes:', themes.map((t) => `${t.id}
 const { page, close } = await launch();
 try {
   await put({ selectedThemeId: byName('Light').id, followSystemPreference: false });
-  await openWeb(page, '/projects/foundation/book');
+  await openWeb(page, `/projects/${folder}/book`);
   await page.waitForSelector('app-root .shell__brand');
   console.log('url:', page.url());
   console.log('data-theme on boot:', await page.locator('html').getAttribute('data-theme'));
@@ -49,7 +50,7 @@ try {
 
   // Rail navigation to Cast, then settings via the app bar.
   await page.locator('.shell__nav-group--context a', { hasText: 'Cast' }).click();
-  await page.waitForFunction(() => location.pathname.endsWith('/foundation/cast'));
+  await page.waitForFunction((f) => location.pathname.endsWith(`/${f}/cast`), folder);
   console.log('after Cast click:', await texts(page, '.shell__crumb'), await texts(page, 'r2m-cast-page'));
   await page.locator('.shell__settings').click();
   await page.waitForFunction(() => location.pathname.endsWith('/settings/llm'));
@@ -59,5 +60,6 @@ try {
 } finally {
   await put(initial);
   console.log('restored selection:', await api('/api/settings/themes/selection'));
+  await remove();
   await close();
 }

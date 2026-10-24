@@ -1,11 +1,12 @@
 // Smoke check: the app serves its shell for a project route. Prints the brand, the page title and
 // what the route rendered (an unknown project path still renders the shell).
 //   R2M_WEB=http://localhost:5000 bun shell-check.mjs > shell-check.log 2>&1
-import { launch, openWeb, APP, WEB, visibleText } from './browse.mjs';
+import { launch, openWeb, APP, WEB, visibleText, bookProject } from './browse.mjs';
 
+const { folder, remove } = await bookProject('alices-adventures-in-wonderland');
 const { page, close } = await launch();
 try {
-  await openWeb(page, '/projects/foundation/book');
+  await openWeb(page, `/projects/${folder}/book`);
   await page.waitForSelector('app-root .shell__brand');
   console.log('app:', APP, 'at', WEB, '→', page.url());
   console.log('brand:', (await page.locator('app-root .shell__brand').first().textContent()).trim());
@@ -14,5 +15,6 @@ try {
   console.log('text:', (await visibleText(page)).slice(0, 300));
   console.log('toasts:', page.toasts, 'errors:', page.errors);
 } finally {
+  await remove();
   await close();
 }

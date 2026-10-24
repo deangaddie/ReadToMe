@@ -119,6 +119,38 @@ export async function throwawayProject(text, { title = `browse-${Date.now().toSt
   };
 }
 
+/** The Project Gutenberg epubs in `books/`, by project folder name. */
+export const BOOKS = {
+  'alices-adventures-in-wonderland': { title: "Alice's Adventures in Wonderland", author: 'Lewis Carroll' },
+  'the-adventures-of-sherlock-holmes': { title: 'The Adventures of Sherlock Holmes', author: 'Arthur Conan Doyle' },
+  'pride-and-prejudice': { title: 'Pride and Prejudice', author: 'Jane Austen' },
+  dracula: { title: 'Dracula', author: 'Bram Stoker' },
+  'the-call-of-the-wild': { title: 'The Call of the Wild', author: 'Jack London' },
+};
+
+/**
+ * A throwaway project imported from one of the `books/` epubs (a `BOOKS` key). Like
+ * `throwawayProject`, it returns the folder and a `remove()`.
+ */
+export async function bookProject(book, { title = `browse-${book}-${Date.now().toString(36)}` } = {}) {
+  const meta = BOOKS[book];
+  if (!meta) throw new Error(`no book '${book}' in books/: ${Object.keys(BOOKS).join(', ')}`);
+  const file = Bun.file(new URL(`./books/${book}.epub`, import.meta.url));
+  const form = new FormData();
+  form.set('title', title);
+  form.set('bookTitle', meta.title);
+  form.set('author', meta.author);
+  form.set('file', new Blob([await file.arrayBuffer()], { type: 'application/epub+zip' }), `${book}.epub`);
+  const r = await fetch(`${HOST}/api/projects`, { method: 'POST', body: form });
+  if (!r.ok) throw new Error(`create project: ${r.status} ${await r.text()}`);
+  const { folderName } = await r.json();
+  await post(`/api/projects/${folderName}/import`, { reread: false });
+  return {
+    folder: folderName,
+    remove: () => fetch(`${HOST}/api/projects/${folderName}`, { method: 'DELETE' }),
+  };
+}
+
 // ---- The web app (APP) ---------------------------------------------------------------------
 
 /** Opens an app route (`/projects/x/book`) under APP and waits for the shell to render. */

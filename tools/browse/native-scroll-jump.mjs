@@ -1,11 +1,11 @@
 // Scroll-jump probe for the checkpoint (native-web 28). Scrolls the measured list down and then up
 // in fixed steps. Each step waits until the list settles (row set and row tops unchanged over two
 // frames, chapter loads included), then reports how far the row at the viewport top moved beyond
-// the requested delta (0 = no jump). Steps that would hit either end are skipped. Read-only.
-//   R2M_WEB=http://localhost:5000 bun native-scroll-jump.mjs dune 150 > jump.log 2>&1
-import { launch, openWeb } from './browse.mjs';
+// the requested delta (0 = no jump). Steps that would hit either end are skipped. Runs on a throwaway copy of a books/ epub.
+//   R2M_WEB=http://localhost:5000 bun native-scroll-jump.mjs dracula 150 > jump.log 2>&1
+import { launch, openWeb, bookProject } from './browse.mjs';
 
-const folder = process.argv[2] ?? 'dune';
+const { folder, remove } = await bookProject(process.argv[2] ?? 'dracula');
 const stepsPerDirection = Number(process.argv[3] ?? 150);
 const stepPx = 400;
 const { page, close } = await launch();
@@ -75,5 +75,6 @@ try {
   if (big.length) console.log('jumps > 1px:', big.map((j) => j.toFixed(1)).join(' '));
   console.log('errors', page.errors, 'toasts', page.toasts);
 } finally {
+  await remove();
   await close();
 }

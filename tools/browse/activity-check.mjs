@@ -1,10 +1,11 @@
 // Verify the native activity centre and the preflight gate (native-web 21) against a real host.
 //   R2M_WEB=http://localhost:5000 bun activity-check.mjs > activity-check.log 2>&1
-import { launch, openWeb } from './browse.mjs';
+import { launch, openWeb, bookProject } from './browse.mjs';
 
+const { folder, remove } = await bookProject('alices-adventures-in-wonderland');
 const { page, close } = await launch();
 try {
-  await openWeb(page, '/projects/foundation/book');
+  await openWeb(page, `/projects/${folder}/book`);
   await page.waitForSelector('app-root .shell__brand');
 
   const bar = page.locator('r2m-activity-bar');
@@ -52,5 +53,6 @@ try {
   }
   console.log('toasts:', page.toasts, 'errors:', page.errors);
 } finally {
+  await remove();
   await close();
 }
