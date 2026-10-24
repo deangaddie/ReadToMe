@@ -265,7 +265,7 @@ namespace Read2Me.App.Api
         /// generation or a voice batch would queue behind it, so any of them queued or running in any
         /// project refuses. The web words its disabled play buttons the same way.
         /// </summary>
-        private static string? GpuBusyReason(
+        internal static string? GpuBusyReason(
             CharacterQueueService characterQueue, AudioQueueService audioQueue, VoiceBatchRunner voiceBatch)
         {
             var audio = audioQueue.Snapshot();

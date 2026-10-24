@@ -61,4 +61,21 @@ describe('HeightIndex', () => {
     index.setHeight('b', 50);
     expect(index.total()).toBe(100 + 50 + 75 + 75);
   });
+
+  it('keeps the estimate of an unmeasured row above a measured one when more rows are measured', () => {
+    // The row above the reader's view is never rendered: a row measured further down must not
+    // move it, or every row on screen shifts by the change in the average.
+    const index = new HeightIndex(10);
+    index.setKeys(['heading', 'a', 'b', 'c', 'd']);
+    index.setHeight('a', 60);
+    index.setHeight('b', 40);
+    expect(index.offsetOf(1)).toBe(50);
+
+    index.setHeight('c', 110);
+
+    expect(index.offsetOf(1)).toBe(50);
+    expect(index.offsetOf(4)).toBe(50 + 60 + 40 + 110);
+    // The row past the last measured one still follows the average.
+    expect(index.total()).toBe(50 + 60 + 40 + 110 + 70);
+  });
 });

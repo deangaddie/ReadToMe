@@ -7,6 +7,8 @@ export class HeightIndex {
   private keys: readonly string[] = [];
   private positions = new Map<string, number>();
   private readonly heights = new Map<string, number>();
+  /** Estimates held by unmeasured rows that sit above a measured row. */
+  private readonly pinned = new Map<string, number>();
   private measuredSum = 0;
   /** `offsets[i]` = top of row i; `offsets[length]` = total. Rebuilt lazily. */
   private offsets: Float64Array | null = null;
@@ -20,6 +22,8 @@ export class HeightIndex {
   setKeys(keys: readonly string[]): void {
     this.keys = keys;
     this.positions = new Map(keys.map((k, i) => [k, i]));
+    // A row that left the list is estimated afresh if it comes back.
+    for (const key of this.pinned.keys()) if (!this.positions.has(key)) this.pinned.delete(key);
     this.offsets = null;
   }
 
@@ -37,6 +41,7 @@ export class HeightIndex {
     if (previous !== undefined && Math.abs(previous - height) < 0.5) return false;
     this.measuredSum += height - (previous ?? 0);
     this.heights.set(key, height);
+    this.pinned.delete(key);
     this.offsets = null;
     return true;
   }
@@ -69,12 +74,24 @@ export class HeightIndex {
     return this.heights.size ? this.measuredSum / this.heights.size : this.initialEstimate;
   }
 
+  private pin(key: string, estimate: number): number {
+    const held = this.pinned.get(key);
+    if (held !== undefined) return held;
+    this.pinned.set(key, estimate);
+    return estimate;
+  }
+
   private build(): Float64Array {
     if (this.offsets) return this.offsets;
     const estimate = this.estimate();
+    let lastMeasured = this.keys.length - 1;
+    while (lastMeasured >= 0 && !this.heights.has(this.keys[lastMeasured]!)) lastMeasured--;
     const offsets = new Float64Array(this.keys.length + 1);
     for (let i = 0; i < this.keys.length; i++) {
-      offsets[i + 1] = offsets[i]! + (this.heights.get(this.keys[i]!) ?? estimate);
+      const key = this.keys[i]!;
+      offsets[i + 1] =
+        offsets[i]! +
+        (this.heights.get(key) ?? (i < lastMeasured ? this.pin(key, estimate) : estimate));
     }
     this.offsets = offsets;
     return offsets;

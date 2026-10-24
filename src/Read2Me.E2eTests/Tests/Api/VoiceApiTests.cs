@@ -28,19 +28,6 @@ public class VoiceApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             .GetProperty("id").GetGuid();
     }
 
-    private async Task WaitForBatchAsync()
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        while (DateTime.UtcNow < deadline)
-        {
-            var status = JsonDocument.Parse(
-                await Http.GetStringAsync($"{app.BaseUrl}/api/voice-batch/status"));
-            if (!status.RootElement.GetProperty("isRunning").GetBoolean())
-                return;
-            await Task.Delay(200);
-        }
-    }
-
     [Fact]
     public async Task Batch_prompts_then_single_audio_generation()
     {
@@ -52,7 +39,7 @@ public class VoiceApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             $"{app.BaseUrl}/api/projects/{folder}/voice-batch/prompts", new { regenerateAll = false });
         Assert.Equal(HttpStatusCode.Accepted, start.StatusCode);
 
-        await WaitForBatchAsync();
+        await app.WaitForVoiceBatchIdleAsync();
 
         var aliceId = await CharacterIdAsync(folder, "Alice");
         var voicesDoc = JsonDocument.Parse(await Http.GetStringAsync(
@@ -181,7 +168,7 @@ public class VoiceApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         app.FakeAi.LlmReply = _ => VoicePlanReply;
         await Http.PostAsJsonAsync(
             $"{app.BaseUrl}/api/projects/{folder}/voice-batch/prompts", new { regenerateAll = false });
-        await WaitForBatchAsync();
+        await app.WaitForVoiceBatchIdleAsync();
 
         var aliceId = await CharacterIdAsync(folder, "Alice");
         var voiceId = JsonDocument.Parse(await Http.GetStringAsync(

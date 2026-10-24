@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Read2Me.E2eTests.Infrastructure;
+using Read2Me.E2eTests.Infrastructure.FakeAi;
 
 namespace Read2Me.E2eTests.Tests.Api;
 
@@ -295,6 +296,7 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         var pug = await AddedIdAsync(folder, "Pug", "Pugg");
         await app.SeedItemAudioAsync(folder, book.ItemId("n2"), Read2Me.Data.ProjectDbContext.NarratorId);
         await app.SeedItemAudioAsync(folder, book.ItemId("n3"), Read2Me.Data.ProjectDbContext.NarratorId);
+        var steps = (await StepsAsync(folder)).Count;
 
         var deleted = await DeleteAsync(folder, pug);
 
@@ -304,7 +306,9 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         Assert.Equal(2, answer.GetProperty("needsAudioCount").GetInt32());
         Assert.Equal(["n3"], await WithAudioAsync(folder, book, 3));
         Assert.Empty(await ListAsync(folder));
-        var step = (await StepsAsync(folder))[0];
+        var after = await StepsAsync(folder);
+        Assert.Equal(steps + 1, after.Count);
+        var step = after[0];
         Assert.Equal("Pronunciation: delete \"Pug\"", step.GetProperty("label").GetString());
         Assert.Equal("delete", step.GetProperty("action").GetString());
     }
@@ -661,10 +665,13 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         var alice = await app.SeedEditableVoiceAsync(folder, book.CharacterId("Alice"));
         var folderPath = Path.Combine(app.WorkspaceDir, folder);
         var narratorRef = Convert.ToBase64String(await File.ReadAllBytesAsync(Path.Combine(folderPath, "voices", "narrator.wav")));
+        var aliceRef = Convert.ToBase64String(await File.ReadAllBytesAsync(
+            Directory.GetFiles(Path.Combine(folderPath, "voices", book.CharacterId("Alice").ToString()), "*.wav").Single()));
+        Assert.NotEqual(narratorRef, aliceRef);
 
         Assert.Equal(HttpStatusCode.OK, (await TryAsync(folder,
             new { itemId = book.ItemId("n1"), sentenceStart = 0, asWritten = false, voice = new { voiceId = alice } })).StatusCode);
-        Assert.NotEqual(narratorRef, LastVoiceRef());
+        Assert.Equal(aliceRef, LastVoiceRef());
         Assert.Equal(HttpStatusCode.OK, (await TryAsync(folder,
             new { itemId = book.ItemId("n1"), sentenceStart = 0, asWritten = false, voice = "item" })).StatusCode);
         Assert.Equal(narratorRef, LastVoiceRef());
@@ -694,37 +701,85 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         })).StatusCode);
     }
 
-    [Fact]
-    public async Task A_try_out_is_409_while_audio_generation_holds_the_GPU_in_any_project()
+    /// <summary>
+    /// A try-out in one project while <paramref name="start"/> keeps a GPU holder busy in another: it
+    /// is refused 409, naming the holder. <paramref name="drain"/> releases and drains the holder
+    /// whatever happens, so the class's next test meets an idle host.
+    /// </summary>
+    private async Task AssertTryOutRefusedWhileAsync(
+        string holder, Func<string, TestUtils.BookHierarchyBuilder, Task<HttpResponseMessage>> start, Func<Task> drain)
     {
         app.FakeAi.Reset();
         var busy = $"api-pronunciations-{Guid.NewGuid():N}";
-        var busyBook = await app.SeedProjectAsync(busy, "Busy Book", "Author");
+        var busyBook = await app.SeedProjectAsync(busy, "Busy Book", "Author", characterName: "Alice");
         await app.SeedNarratorVoiceAsync(busy);
         var folder = $"api-pronunciations-{Guid.NewGuid():N}";
         var book = await app.SeedProjectAsync(folder, "Pronunciation Book", "Author");
         await app.SeedNarratorVoiceAsync(folder);
 
-        app.FakeAi.HoldSpeech = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         try
         {
-            var enqueue = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{busy}/audio/enqueue",
-                new { level = "chapter", nodeId = busyBook.ChapterId("ch1"), needsAudioOnly = true });
-            Assert.Equal(HttpStatusCode.Accepted, enqueue.StatusCode);
+            Assert.Equal(HttpStatusCode.Accepted, (await start(busy, busyBook)).StatusCode);
 
             var refused = await TryAsync(folder, new { itemId = book.ItemId("n1"), sentenceStart = 0, asWritten = false, voice = "item" });
 
             Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
-            Assert.Equal("Can't play while Audio generation is running: it has the GPU.",
+            Assert.Equal($"Can't play while {holder} is running: it has the GPU.",
                 (await JsonOf(refused)).GetProperty("detail").GetString());
         }
         finally
         {
-            app.FakeAi.HoldSpeech.TrySetResult();
-            await app.WaitForQueueDrainAsync("/api/audio/queue", timeoutSeconds: 60);
+            await drain();
             app.FakeAi.Reset();
         }
     }
+
+    [Fact]
+    public Task A_try_out_is_409_while_audio_generation_holds_the_GPU_in_any_project() =>
+        AssertTryOutRefusedWhileAsync("Audio generation",
+            (busy, busyBook) =>
+            {
+                app.FakeAi.HoldSpeech = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                return Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{busy}/audio/enqueue",
+                    new { level = "chapter", nodeId = busyBook.ChapterId("ch1"), needsAudioOnly = true });
+            },
+            async () =>
+            {
+                app.FakeAi.HoldSpeech?.TrySetResult();
+                await app.WaitForQueueDrainAsync("/api/audio/queue", timeoutSeconds: 60);
+            });
+
+    [Fact]
+    public Task A_try_out_is_409_while_attribution_holds_the_GPU_in_any_project() =>
+        AssertTryOutRefusedWhileAsync("Attribution",
+            (busy, busyBook) =>
+            {
+                app.FakeAi.LlmReply = p => FakeAiResponses.AttributionReply(p, "Alice");
+                app.FakeAi.HoldLlmAfter(0);
+                return Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{busy}/attribution/enqueue",
+                    new { level = "chapter", nodeId = busyBook.ChapterId("ch1"), unprocessedOnly = true });
+            },
+            async () =>
+            {
+                app.FakeAi.ReleaseLlm();
+                await app.WaitForQueueDrainAsync("/api/attribution/queue");
+            });
+
+    [Fact]
+    public Task A_try_out_is_409_while_a_voice_batch_holds_the_GPU_in_any_project() =>
+        AssertTryOutRefusedWhileAsync("a voice batch",
+            (busy, _) =>
+            {
+                app.FakeAi.LlmReply = _ => """[ { "name": "Main Voice", "description": "the only voice", "design_prompt": "A clear adult voice." } ]""";
+                app.FakeAi.HoldLlmAfter(0);
+                // The runner is running once it answers 202: Start sets IsRunning before it returns.
+                return Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{busy}/voice-batch/prompts", new { regenerateAll = false });
+            },
+            async () =>
+            {
+                app.FakeAi.ReleaseLlm();
+                await app.WaitForVoiceBatchIdleAsync();
+            });
 
     // ── the Book view's marks ───────────────────────────────────────────────
 

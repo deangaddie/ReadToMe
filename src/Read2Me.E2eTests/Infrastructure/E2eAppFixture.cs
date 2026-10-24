@@ -152,6 +152,25 @@ public sealed class E2eAppFixture : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    /// Polls <c>/api/voice-batch/status</c> until no voice batch runs; like
+    /// <see cref="WaitForQueueDrainAsync"/>, a test that starts one must leave with it finished.
+    /// Throws when it is still running at the timeout.
+    /// </summary>
+    public async Task WaitForVoiceBatchIdleAsync(int timeoutSeconds = 30)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+        while (true)
+        {
+            using var status = JsonDocument.Parse(await _http.GetStringAsync($"{BaseUrl}/api/voice-batch/status"));
+            if (!status.RootElement.GetProperty("isRunning").GetBoolean())
+                return;
+            if (DateTime.UtcNow >= deadline)
+                throw new TimeoutException($"The voice batch was still running after {timeoutSeconds} s.");
+            await Task.Delay(200);
+        }
+    }
+
     private static readonly HttpClient _http = new();
 
     public async ValueTask DisposeAsync()
