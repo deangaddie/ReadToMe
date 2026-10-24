@@ -2,8 +2,10 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Read2Me.Core.Models;
 using Read2Me.Data;
+using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services.Mutations;
+using Read2Me.Services.Pronunciations;
 
 namespace Read2Me.Services.History;
 
@@ -11,7 +13,7 @@ namespace Read2Me.Services.History;
 /// The <b>Restore</b> Book mutation (spec, "History module"): makes the Project state after
 /// <c>Target</c> current. Under the write lock it takes the live → target difference of every
 /// state table and applies it, so records keep their ids and the change reads like the equivalent
-/// hand edits: items whose text, speaker or delivery cue changes lose their audio and its review,
+/// hand edits: items whose text, speaker, delivery cue or Spoken text changes lose their audio and its review,
 /// items brought back return without audio, and the Pipeline checkpoints it disturbs go stale.
 /// It records the target's state files; they are written from the blobs once it has committed.
 /// Only <see cref="HistoryRestore"/> commits one.
@@ -30,7 +32,8 @@ internal sealed record RestoreStepMutation(ProjectFolderId FolderId, HistoryStep
 /// What a Restore makes of the items' audio, on a connection to a copy of the target state with the
 /// live project attached as <c>live</c>. Audio is a result, not state, so the target's own
 /// <c>AudioFileName</c>s are whatever they were then: an item in both states that kept its text,
-/// speaker and delivery cue keeps the audio it has now, and every other one has none.
+/// speaker and delivery cue keeps the audio it has now, unless the two Pronunciation lists make its
+/// Spoken text differ, and every other one has none.
 /// </summary>
 internal static class RestoreAudio
 {
@@ -57,7 +60,9 @@ internal static class RestoreAudio
     {
         await using var command = connection.CreateCommand();
         command.CommandText = $"SELECT COUNT(*) {Discarded}";
-        return (int)(long)(await command.ExecuteScalarAsync(ct))!;
+        var changed = (int)(long)(await command.ExecuteScalarAsync(ct))!;
+        var respelt = await RespeltAsync(connection, ct);
+        return changed + respelt.Count;
     }
 
     /// <summary>
@@ -66,22 +71,78 @@ internal static class RestoreAudio
     /// </summary>
     public static async Task<IReadOnlyList<Guid>> KeepUnchangedAsync(SqliteConnection target, CancellationToken ct)
     {
-        var discarded = new List<Guid>();
+        var discarded = new List<string>();
         await using (var read = target.CreateCommand())
         {
             read.CommandText = $"SELECT l.Id {Discarded}";
             await using var reader = await read.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct))
-                discarded.Add(Guid.Parse(reader.GetString(0)));
+                discarded.Add(reader.GetString(0));
         }
+        var respelt = await RespeltAsync(target, ct);
 
-        await using var keep = target.CreateCommand();
-        keep.CommandText = $"""
-            UPDATE main.ParagraphItems AS t
-                SET AudioFileName = (SELECT l.AudioFileName FROM live.ParagraphItems l WHERE {Unchanged})
+        await using (var keep = target.CreateCommand())
+        {
+            keep.CommandText = $"""
+                UPDATE main.ParagraphItems AS t
+                    SET AudioFileName = (SELECT l.AudioFileName FROM live.ParagraphItems l WHERE {Unchanged})
+                """;
+            await keep.ExecuteNonQueryAsync(ct);
+        }
+        await using (var drop = target.CreateCommand())
+        {
+            drop.CommandText = "UPDATE main.ParagraphItems SET AudioFileName = NULL WHERE Id = $id";
+            var id = drop.Parameters.Add("$id", SqliteType.Text);
+            foreach (var item in respelt)
+            {
+                id.Value = item;
+                await drop.ExecuteNonQueryAsync(ct);
+            }
+        }
+        return [.. discarded.Concat(respelt).Select(Guid.Parse)];
+    }
+
+    /// <summary>
+    /// The live items with audio that the target has unchanged but whose Spoken text the live and the
+    /// target Pronunciation lists make different: the audio the list change discards, as the
+    /// equivalent list edits would. None when the lists are the same. Ids as stored.
+    /// </summary>
+    private static async Task<IReadOnlyList<string>> RespeltAsync(SqliteConnection connection, CancellationToken ct)
+    {
+        var live = await PronunciationsAsync(connection, "live", ct);
+        var target = await PronunciationsAsync(connection, "main", ct);
+        if (live.Select(p => (p.Id, p.WrittenForm, p.SpokenForm)).ToHashSet()
+            .SetEquals(target.Select(p => (p.Id, p.WrittenForm, p.SpokenForm))))
+            return [];
+
+        var liveMatcher = new PronunciationMatcher(live);
+        var targetMatcher = new PronunciationMatcher(target);
+        var respelt = new List<string>();
+        await using var read = connection.CreateCommand();
+        read.CommandText = $"""
+            SELECT l.Id, l.Text FROM live.ParagraphItems l
+            JOIN main.ParagraphItems t ON {Unchanged}
+            WHERE COALESCE(l.AudioFileName, '') <> '' AND COALESCE(l.Text, '') <> ''
             """;
-        await keep.ExecuteNonQueryAsync(ct);
-        return discarded;
+        await using var reader = await read.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var text = reader.GetString(1);
+            if (liveMatcher.SpokenTextOf(text) != targetMatcher.SpokenTextOf(text))
+                respelt.Add(reader.GetString(0));
+        }
+        return respelt;
+    }
+
+    private static async Task<List<Pronunciation>> PronunciationsAsync(SqliteConnection connection, string schema, CancellationToken ct)
+    {
+        var list = new List<Pronunciation>();
+        await using var read = connection.CreateCommand();
+        read.CommandText = $"SELECT Id, WrittenForm, SpokenForm FROM {schema}.Pronunciations";
+        await using var reader = await read.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            list.Add(new Pronunciation { Id = Guid.Parse(reader.GetString(0)), WrittenForm = reader.GetString(1), SpokenForm = reader.GetString(2) });
+        return list;
     }
 
     /// <summary>

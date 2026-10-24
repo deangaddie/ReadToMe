@@ -10,7 +10,7 @@ public sealed partial class ProjectHistory
     /// <summary>
     /// The <b>Restore preview</b>: how many items would lose their audio if the project were
     /// restored to <paramref name="target"/> now — those with audio that the step doesn't have, or
-    /// has with other text, speaker or delivery cue. Read without the write lock, so a commit
+    /// has with other text, speaker, delivery cue or Spoken text. Read without the write lock, so a commit
     /// landing meanwhile can move it; the Restore counts again under the lock.
     /// </summary>
     public async Task<int> CountRestoreAudioDiscardsAsync(ProjectFolderId folder, StepState target, CancellationToken ct = default)
