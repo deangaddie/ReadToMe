@@ -1,5 +1,5 @@
 /* The reader (design §6.3): toolbar, stale banner, the tree, the measured list and its rows. */
-@scope (r2m-book-page) to (r2m-speaker-chip > *, r2m-node-menu > *) {
+@scope (r2m-book-page) to (r2m-speaker-chip > *, r2m-node-menu > *, r2m-pronunciation-card > *) {
   :scope {
     display: flex;
     flex-direction: column;
@@ -355,6 +355,19 @@
     flex: 1 1 auto;
     min-width: 0;
     line-height: 1.5;
+  }
+  /* A word a Pronunciation respells (pronunciation ticket 15): the text is unchanged, only underlined.
+   * Inside the row, so the row still lights on hover. */
+  .r2m-pron-mark {
+    text-decoration: underline dotted var(--r2m-accent);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+    cursor: help;
+    border-radius: var(--r2m-radius-sm);
+  }
+  .r2m-pron-mark:focus-visible {
+    outline: 2px solid var(--r2m-accent);
+    outline-offset: 1px;
   }
   .r2m-item__audio {
     display: flex;

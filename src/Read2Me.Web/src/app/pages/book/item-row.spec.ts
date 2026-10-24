@@ -64,6 +64,7 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
     locked: false,
     readOnly: null,
     generating: false,
+    marks: {},
     roster: [],
     ...overrides,
   };
@@ -130,6 +131,18 @@ async function openChipMenu(el: Element) {
 }
 
 describe('itemRow (speakers)', () => {
+  it('marks the words a Pronunciation respells, in Speakers and Audio modes alike, the text unchanged', async () => {
+    const marks = {
+      [NARRATION.id]: [{ start: 0, length: 4, pronunciationId: 'h', sentenceStart: 0 }],
+    };
+    for (const mode of ['speakers', 'audio'] as const) {
+      const el = await mount(ctx({ mode, marks }), NARRATION);
+      const textEl = el.querySelector('.r2m-item__text')!;
+      expect(textEl.textContent).toBe(NARRATION.text!);
+      expect(textEl.querySelector('.r2m-pron-mark')!.textContent).toBe('text');
+    }
+  });
+
   describe('checkbox enablement (ticket 13)', () => {
     it('narration and attributed lines can be selected; an unattributed line cannot', async () => {
       expect(box(await mount(ctx(), NARRATION))!.disabled).toBe(false);

@@ -61,6 +61,13 @@ namespace Read2Me.App.Api
                 .ReadsAt()
                 .WithSummary("The Pronunciation list, sorted by written form: id, writtenForm, spokenForm, and its reach in the book — " +
                              "matchCount (matched spans), itemCount (items holding one) and withAudioCount (those items that have audio).");
+            endpoints.MapGet("/api/projects/{folder}/pronunciations/matches", MatchesAsync)
+                .ReadsAt()
+                .Produces<PronunciationSpanReport>()
+                .WithSummary("Where the list matches in the chapters named by repeated chapterIds (the Book view's marks): spans in book " +
+                             "order — itemId, start and length in the item's text, pronunciationId, and sentenceStart (where the sentence " +
+                             "around it starts, what a try-out names it by) — and pronunciations, the entries they name { id, writtenForm, " +
+                             "spokenForm }, sorted by written form. Unknown chapters match nothing.");
             endpoints.MapPost("/api/projects/{folder}/pronunciations", AddAsync)
                 .RecordsOwnStep()
                 .Produces<PronunciationSaved>(StatusCodes.Status201Created)
@@ -123,6 +130,14 @@ namespace Read2Me.App.Api
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
             return Results.Ok(await PronunciationList.ReadAsync(await session.OpenAsync(folderId), ct));
+        }
+
+        private static async Task<IResult> MatchesAsync(
+            string folder, Guid[]? chapterIds, IFileSystem fs, ProjectDbSession session, CancellationToken ct)
+        {
+            if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
+                return Results.NotFound();
+            return Results.Ok(await PronunciationSpans.ReadAsync(await session.OpenAsync(folderId), chapterIds ?? [], ct));
         }
 
         private static async Task<IResult> AddAsync(

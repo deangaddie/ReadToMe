@@ -134,10 +134,10 @@ beforeEach(() => {
 });
 afterEach(() => document.body.replaceChildren());
 
-async function render(): Promise<PronunciationsPage> {
+async function render(path = 'projects/magician/pronunciations'): Promise<PronunciationsPage> {
   api.on('GET', PROJECT, DETAIL).on('GET', `${PROJECT}/status`, STATUS);
   api.on('GET', LIST, () => list);
-  installNavigation('projects/magician/pronunciations');
+  installNavigation(path);
   const router = new Router();
   override(Router, router);
   router.start(ROUTES, async () => true);
@@ -200,6 +200,13 @@ describe('r2m-pronunciations-page', () => {
     expect(page.querySelector('.pron__none')?.textContent?.trim()).toBe(
       'No pronunciation matches "zzz".',
     );
+  });
+
+  it('?entry= opens that entry in the editor (the Book view’s Edit pencil), then drops the param', async () => {
+    const page = await render('projects/magician/pronunciations?entry=kulgan');
+    await rerender(page);
+    expect(editorOf(page)?.entry?.writtenForm).toBe('Kulgan');
+    expect(use(Router).query().get('entry')).toBeNull();
   });
 
   it('a row opens its entry in the editor and marks it; the editor closing empties the pane', async () => {

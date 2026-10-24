@@ -31,6 +31,12 @@ describe('ApiClient', () => {
     expect(headersOf(requests[0]?.init)['X-Origin-Id']).toBe(ORIGIN_ID);
   });
 
+  it('repeats a query key once per value of an array', async () => {
+    const { api, requests } = clientReturning(() => json({}));
+    await api.get('/api/x', { chapterIds: ['a', 'b'], none: [] });
+    expect(requests[0]?.url).toBe('/api/x?chapterIds=a&chapterIds=b');
+  });
+
   it('posts a JSON body with its content type', async () => {
     const { api, requests } = clientReturning(() => json({}));
     await api.post('/api/settings/themes', { name: 'Dusk' });

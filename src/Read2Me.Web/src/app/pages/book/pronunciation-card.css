@@ -1,0 +1,35 @@
+/* The Book view's Pronunciation hover card (pronunciation ticket 15): one popover anchored to the mark. */
+@scope (r2m-pronunciation-card) {
+  :scope {
+    display: contents;
+  }
+  .pron-card__panel[popover] {
+    position-anchor: --r2m-pron-card;
+    position-area: block-end span-inline-end;
+    position-try-fallbacks: flip-block, flip-inline;
+    min-width: 220px;
+    padding: var(--r2m-space-2) var(--r2m-space-3);
+  }
+  .pron-card__forms {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+    margin: 0 0 var(--r2m-space-1);
+  }
+  .pron-card__written {
+    color: var(--r2m-text-muted);
+  }
+  .pron-card__arrow {
+    font-size: 18px;
+    color: var(--r2m-text-muted);
+  }
+  .pron-card__spoken {
+    font-weight: 600;
+  }
+  .pron-card__actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--r2m-space-2);
+  }
+}

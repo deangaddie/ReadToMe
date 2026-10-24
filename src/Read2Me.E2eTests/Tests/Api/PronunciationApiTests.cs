@@ -725,4 +725,75 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
             app.FakeAi.Reset();
         }
     }
+
+    // ── the Book view's marks ───────────────────────────────────────────────
+
+    private async Task<JsonElement> MatchesAsync(string folder, IEnumerable<Guid> chapterIds, Guid? at = null)
+    {
+        var query = string.Join("&", chapterIds.Select(id => $"chapterIds={id}").Append(at is { } step ? $"at={step}" : "")
+            .Where(p => p != ""));
+        return JsonDocument.Parse(await Http.GetStringAsync($"{Url(folder)}/matches?{query}")).RootElement;
+    }
+
+    [Fact]
+    public async Task Matches_answer_the_spans_in_the_named_chapters_with_the_entries_they_name()
+    {
+        var folder = $"api-pronunciations-{Guid.NewGuid():N}";
+        var book = await app.SeedMultiChapterProjectAsync(folder, "Marks Book", "Author", chapters: 3);
+        var line = await AddedIdAsync(folder, "Line", "LYNE");
+        var opens = await AddedIdAsync(folder, "opens", "OH-penz");
+        await AddedIdAsync(folder, "Nowhere", "NO-wair");
+
+        var matches = await MatchesAsync(folder, [book.ChapterId("Chapter 2"), book.ChapterId("Chapter 3")]);
+
+        var spans = matches.GetProperty("spans").EnumerateArray()
+            .Select(s => (s.GetProperty("itemId").GetGuid(), s.GetProperty("start").GetInt32(), s.GetProperty("length").GetInt32(),
+                s.GetProperty("pronunciationId").GetGuid(), s.GetProperty("sentenceStart").GetInt32()))
+            .ToList();
+        Assert.Equal(
+        [
+            (book.ItemId("n2"), 10, 5, opens, 0), // "Chapter 2 opens."
+            (book.ItemId("line2"), 1, 4, line, 0), // "“Line 2,” she said."
+            (book.ItemId("n3"), 10, 5, opens, 0),
+            (book.ItemId("line3"), 1, 4, line, 0),
+        ], spans);
+        var entries = matches.GetProperty("pronunciations").EnumerateArray()
+            .Select(e => (e.GetProperty("id").GetGuid(), e.GetProperty("writtenForm").GetString(), e.GetProperty("spokenForm").GetString()))
+            .ToList();
+        Assert.Equal([(line, "Line", "LYNE"), (opens, "opens", "OH-penz")], entries);
+    }
+
+    [Fact]
+    public async Task A_span_names_the_sentence_it_is_in_and_the_longest_written_form_wins()
+    {
+        var (folder, book) = await SeedWithAudioAsync(["Pug ran. Minas Tirith fell."]);
+        await AddedIdAsync(folder, "Pug", "PUHG");
+        var minas = await AddedIdAsync(folder, "Minas Tirith", "MEE-nas TEER-ith");
+        await AddedIdAsync(folder, "Tirith", "TEER-ith");
+
+        var spans = (await MatchesAsync(folder, [book.ChapterId("ch1")])).GetProperty("spans").EnumerateArray().ToList();
+
+        Assert.Equal(2, spans.Count);
+        Assert.Equal(9, spans[1].GetProperty("start").GetInt32());
+        Assert.Equal(12, spans[1].GetProperty("length").GetInt32());
+        Assert.Equal(minas, spans[1].GetProperty("pronunciationId").GetGuid());
+        Assert.Equal(9, spans[1].GetProperty("sentenceStart").GetInt32());
+    }
+
+    [Fact]
+    public async Task Matches_read_at_a_step_and_none_or_unknown_chapters_answer_nothing()
+    {
+        var (folder, book) = await SeedWithAudioAsync(["Pug ran."]);
+        var started = (await StepsAsync(folder))[0].GetProperty("stepId").GetGuid();
+        await AddedIdAsync(folder, "Pug", "PUHG");
+
+        Assert.Single((await MatchesAsync(folder, [book.ChapterId("ch1")])).GetProperty("spans").EnumerateArray());
+        var then = await MatchesAsync(folder, [book.ChapterId("ch1")], at: started);
+        Assert.Empty(then.GetProperty("spans").EnumerateArray());
+        Assert.Empty(then.GetProperty("pronunciations").EnumerateArray());
+        Assert.Empty((await MatchesAsync(folder, [])).GetProperty("spans").EnumerateArray());
+        Assert.Empty((await MatchesAsync(folder, [Guid.NewGuid()])).GetProperty("spans").EnumerateArray());
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await Http.GetAsync($"{Url($"no-such-{Guid.NewGuid():N}")}/matches?chapterIds={Guid.NewGuid()}")).StatusCode);
+    }
 }

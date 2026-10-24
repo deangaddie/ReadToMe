@@ -66,6 +66,7 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
     locked: false,
     readOnly: null,
     generating: false,
+    marks: {},
     roster: ROSTER,
     ...overrides,
   };
@@ -138,6 +139,23 @@ describe('paragraphRow', () => {
       expect(chips.length).toBe(1);
       expect(text(chips[0]!)).toBe('Hardin +?');
       expect(el.querySelectorAll('.r2m-item').length).toBe(0);
+    });
+
+    it('marks the words a Pronunciation respells in the prose, the text unchanged', async () => {
+      const el = await mount(
+        ctx({
+          marks: {
+            d: [{ start: 5, length: 12, pronunciationId: 'e', sentenceStart: 0 }],
+          },
+        }),
+      );
+      const prose = el.querySelector('.r2m-paragraph__prose')!;
+      expect(text(prose)).toBe(
+        'Hardin leaned back. "The Encyclopedia comes first." "Then face Anacreon."',
+      );
+      expect([...prose.querySelectorAll('.r2m-pron-mark')].map((m) => m.textContent)).toEqual([
+        'Encyclopedia',
+      ]);
     });
 
     it('shows no delivery cue, which Speakers mode puts under the cued item only', async () => {
