@@ -51,6 +51,7 @@ import type {
   ThemeSelectionUpdate,
   ToSentenceCaseConfig,
   TranscriptionServiceConfig,
+  TryPronunciationRequest,
   UpdateProjectRequest,
   VoiceDesignSampleTextRequest,
   VoiceDesignServiceConfig,
@@ -106,6 +107,7 @@ export type SchemaPins = [
   Pin<PronunciationDeletedDto, Schema['PronunciationDeleted']>,
   Pin<PronunciationDraftRequest, Schema['PronunciationDraftRequest']>,
   Pin<PronunciationImpactDto, Schema['PronunciationImpactReport']>,
+  Pin<TryPronunciationRequest, Schema['TryPronunciationRequest']>,
   // Inline in the document (the handler reads it by hand), so pinned to its operation.
   Pin<
     GenerateVoiceAudioRequest,

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Read2Me.E2eTests.Infrastructure;
@@ -461,6 +462,8 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         Assert.Equal(0, match.GetProperty("matchStart").GetInt32());
         Assert.Equal(6, match.GetProperty("matchLength").GetInt32());
         Assert.Equal("TEER-ith slept.", match.GetProperty("spokenSentence").GetString());
+        Assert.Equal(0, match.GetProperty("spokenMatchStart").GetInt32());
+        Assert.Equal(8, match.GetProperty("spokenMatchLength").GetInt32());
 
         var duplicate = await JsonOf(await ImpactAsync(folder, new { writtenForm = "KULGAN", spokenForm = "x" }));
         Assert.Equal("Kulgan", duplicate.GetProperty("duplicateOf").GetProperty("writtenForm").GetString());
@@ -469,6 +472,13 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         Assert.Equal("Kulgan read.", readMatch.GetProperty("sentence").GetString());
         Assert.Equal(7, readMatch.GetProperty("matchStart").GetInt32());
         Assert.Equal("KULL-gun red.", readMatch.GetProperty("spokenSentence").GetString());
+        Assert.Equal(9, readMatch.GetProperty("spokenMatchStart").GetInt32());
+        Assert.Equal(3, readMatch.GetProperty("spokenMatchLength").GetInt32());
+        // The match's case carries over: a sentence-initial "Kulgan" respelt "kool-gan" reads "Kool-gan".
+        var initial = Assert.Single((await JsonOf(await ImpactAsync(folder, new { id = (Guid?)null, writtenForm = "Kulgan", spokenForm = "kool-gan" })))
+            .GetProperty("matches").EnumerateArray());
+        var spokenSentence = initial.GetProperty("spokenSentence").GetString()!;
+        Assert.Equal("Kool-gan", spokenSentence.Substring(initial.GetProperty("spokenMatchStart").GetInt32(), initial.GetProperty("spokenMatchLength").GetInt32()));
     }
 
     [Fact]
@@ -478,5 +488,133 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
 
         Assert.Equal(HttpStatusCode.BadRequest, (await ImpactAsync(folder, new { writtenForm = "'Rain", spokenForm = "x" })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await ImpactAsync(folder, new { id = Guid.NewGuid(), delete = true })).StatusCode);
+    }
+
+    // ── try-out samples ─────────────────────────────────────────────────────
+
+    private Task<HttpResponseMessage> TryAsync(string folder, object request) =>
+        Http.PostAsJsonAsync($"{Url(folder)}/try", request);
+
+    /// <summary>The <c>input</c> of each audio.cpp speech request since the fake was last reset.</summary>
+    private List<string> SpeechInputs()
+    {
+        lock (app.FakeAi.AudioCppSpeechBodies)
+            return [.. app.FakeAi.AudioCppSpeechBodies.Select(b => b["input"]!.GetValue<string>())];
+    }
+
+    private string? LastVoiceRef()
+    {
+        lock (app.FakeAi.AudioCppSpeechBodies)
+            return app.FakeAi.AudioCppSpeechBodies[^1]["voice_ref"]?["data"]?.GetValue<string>();
+    }
+
+    [Fact]
+    public async Task A_try_out_answers_the_sentence_as_WAV_with_the_draft_in_its_entrys_place_or_as_written()
+    {
+        app.FakeAi.Reset();
+        var folder = $"api-pronunciations-{Guid.NewGuid():N}";
+        var book = await app.SeedNarrationBookAsync(folder, "Part One", ["Pug ran. Kulgan read the stormy book."]);
+        await app.SeedNarratorVoiceAsync(folder);
+        var kulgan = await AddedIdAsync(folder, "Kulgan", "KULL-gun");
+        await AddedIdAsync(folder, "stormy", "storm-ee");
+        var steps = (await StepsAsync(folder)).Count;
+
+        var match = Assert.Single((await JsonOf(await ImpactAsync(folder,
+            new { id = kulgan, writtenForm = "Kulgan", spokenForm = "KOOL-gan" }))).GetProperty("matches").EnumerateArray());
+        Assert.Equal(9, match.GetProperty("sentenceStart").GetInt32());
+
+        var draft = new { id = kulgan, writtenForm = "Kulgan", spokenForm = "KOOL-gan" };
+        var drafted = await TryAsync(folder, new { itemId = book.ItemId("n1"), sentenceStart = 9, draft, asWritten = false, voice = "item" });
+        var asWritten = await TryAsync(folder, new { itemId = book.ItemId("n1"), sentenceStart = 9, draft, asWritten = true, voice = "item" });
+        var saved = await TryAsync(folder, new { itemId = book.ItemId("n1"), sentenceStart = 9, asWritten = false, voice = "item" });
+
+        Assert.Equal(HttpStatusCode.OK, drafted.StatusCode);
+        Assert.Equal("audio/wav", drafted.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("RIFF", Encoding.ASCII.GetString((await drafted.Content.ReadAsByteArrayAsync())[..4]));
+        Assert.Equal(["KOOL-gan read the storm-ee book.", "Kulgan read the stormy book.", "KULL-gun read the storm-ee book."],
+            SpeechInputs());
+        Assert.Equal(HttpStatusCode.OK, asWritten.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+
+        // Nothing is stored: no step, the list as it was, the item still without audio.
+        Assert.Equal(steps, (await StepsAsync(folder)).Count);
+        Assert.Equal("KULL-gun", (await ListAsync(folder)).Single(e => e.GetProperty("id").GetGuid() == kulgan)
+            .GetProperty("spokenForm").GetString());
+        Assert.Empty(await WithAudioAsync(folder, book, 1));
+    }
+
+    [Fact]
+    public async Task A_try_out_speaks_in_the_chosen_voice_or_the_items_own()
+    {
+        app.FakeAi.Reset();
+        var folder = $"api-pronunciations-{Guid.NewGuid():N}";
+        var book = await app.SeedProjectAsync(folder, "Pronunciation Book", "Author");
+        await app.SeedNarratorVoiceAsync(folder);
+        var alice = await app.SeedEditableVoiceAsync(folder, book.CharacterId("Alice"));
+        var folderPath = Path.Combine(app.WorkspaceDir, folder);
+        var narratorRef = Convert.ToBase64String(await File.ReadAllBytesAsync(Path.Combine(folderPath, "voices", "narrator.wav")));
+
+        Assert.Equal(HttpStatusCode.OK, (await TryAsync(folder,
+            new { itemId = book.ItemId("n1"), sentenceStart = 0, asWritten = false, voice = new { voiceId = alice } })).StatusCode);
+        Assert.NotEqual(narratorRef, LastVoiceRef());
+        Assert.Equal(HttpStatusCode.OK, (await TryAsync(folder,
+            new { itemId = book.ItemId("n1"), sentenceStart = 0, asWritten = false, voice = "item" })).StatusCode);
+        Assert.Equal(narratorRef, LastVoiceRef());
+
+        Assert.Equal(HttpStatusCode.NotFound, (await TryAsync(folder,
+            new { itemId = book.ItemId("n1"), sentenceStart = 0, asWritten = false, voice = new { voiceId = Guid.NewGuid() } })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await TryAsync(folder,
+            new { itemId = book.ItemId("n1"), sentenceStart = 0, asWritten = false, voice = "narrator" })).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_try_out_of_an_unknown_item_is_404_of_no_sentence_400_and_without_a_voice_422()
+    {
+        var folder = await SeedAsync();
+        var book = await app.SeedNarrationBookAsync($"{folder}-b", "Part One", ["Pug ran."]);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await TryAsync(folder,
+            new { itemId = Guid.NewGuid(), sentenceStart = 0, asWritten = false, voice = "item" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await TryAsync($"{folder}-b",
+            new { itemId = book.ItemId("n1"), sentenceStart = 3, asWritten = false, voice = "item" })).StatusCode);
+        var voiceless = await TryAsync($"{folder}-b", new { itemId = book.ItemId("n1"), sentenceStart = 0, asWritten = false, voice = "item" });
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, voiceless.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await TryAsync($"{folder}-b", new
+        {
+            itemId = book.ItemId("n1"), sentenceStart = 0, asWritten = false, voice = "item",
+            draft = new { writtenForm = "'Pug", spokenForm = "x" },
+        })).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_try_out_is_409_while_audio_generation_holds_the_GPU_in_any_project()
+    {
+        app.FakeAi.Reset();
+        var busy = $"api-pronunciations-{Guid.NewGuid():N}";
+        var busyBook = await app.SeedProjectAsync(busy, "Busy Book", "Author");
+        await app.SeedNarratorVoiceAsync(busy);
+        var folder = $"api-pronunciations-{Guid.NewGuid():N}";
+        var book = await app.SeedProjectAsync(folder, "Pronunciation Book", "Author");
+        await app.SeedNarratorVoiceAsync(folder);
+
+        app.FakeAi.HoldSpeech = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            var enqueue = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{busy}/audio/enqueue",
+                new { level = "chapter", nodeId = busyBook.ChapterId("ch1"), needsAudioOnly = true });
+            Assert.Equal(HttpStatusCode.Accepted, enqueue.StatusCode);
+
+            var refused = await TryAsync(folder, new { itemId = book.ItemId("n1"), sentenceStart = 0, asWritten = false, voice = "item" });
+
+            Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+            Assert.Equal("Can't play while Audio generation is running: it has the GPU.",
+                (await JsonOf(refused)).GetProperty("detail").GetString());
+        }
+        finally
+        {
+            app.FakeAi.HoldSpeech.TrySetResult();
+            await app.WaitForQueueDrainAsync("/api/audio/queue", timeoutSeconds: 60);
+            app.FakeAi.Reset();
+        }
     }
 }

@@ -8,6 +8,7 @@ import type {
   PronunciationImpactDto,
   PronunciationSavedDto,
   SetPronunciationRequest,
+  TryPronunciationRequest,
 } from './dtos';
 import { projectUrl } from './projects-api';
 
@@ -43,5 +44,13 @@ export class PronunciationsApi {
       `${projectUrl(folder)}/pronunciations/impact`,
       draft,
     );
+  }
+
+  /**
+   * Renders a try-out sentence and answers its WAV; nothing is stored. Aborting `signal` drops the
+   * request. 409 while attribution, audio generation or a voice batch has the GPU.
+   */
+  tryOut(folder: string, request: TryPronunciationRequest, signal?: AbortSignal): Promise<Blob> {
+    return this.api.postForBlob(`${projectUrl(folder)}/pronunciations/try`, request, signal);
   }
 }

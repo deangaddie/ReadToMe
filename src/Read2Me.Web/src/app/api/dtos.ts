@@ -1317,10 +1317,15 @@ export interface PronunciationMatchInBook {
   hasAudio: boolean;
   /** The sentence around the match; `matchStart`/`matchLength` are offsets in it. */
   sentence: string;
+  /** Where the sentence starts in the item's text: what a try-out names it by. */
+  sentenceStart: number;
   matchStart: number;
   matchLength: number;
   /** The sentence with the drafted list applied. */
   spokenSentence: string;
+  /** Where the match's spoken form (its case carried over) sits in `spokenSentence`. */
+  spokenMatchStart: number;
+  spokenMatchLength: number;
 }
 
 /** What saving a draft would do. */
@@ -1334,4 +1339,19 @@ export interface PronunciationImpactDto {
   /** Another entry with the written form, ignoring case: a save would be 409. */
   duplicateOf: PronunciationRef | null;
   matches: PronunciationMatchInBook[];
+}
+
+/** A try-out's voice: one of the project's voices, or the item's own resolved voice. */
+export type TryVoice = { voiceId: Guid } | 'item';
+
+/**
+ * `POST …/pronunciations/try`: the item's sentence starting at `sentenceStart` (an impact match's),
+ * with `draft` in its entry's place unless `asWritten`. Answers the WAV body.
+ */
+export interface TryPronunciationRequest {
+  itemId: Guid;
+  sentenceStart: number;
+  draft: PronunciationDraftRequest | null;
+  asWritten: boolean;
+  voice: TryVoice;
 }

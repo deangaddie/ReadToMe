@@ -50,6 +50,31 @@ describe('ApiClient', () => {
     expect(headersOf(init)['Content-Type']).toBeUndefined();
   });
 
+  it('posts JSON for bytes, answering the body as a blob and a refusal as ApiError', async () => {
+    const wav = clientReturning(() => new Response(new Uint8Array([82, 73, 70, 70])));
+    const blob = await wav.api.postForBlob('/api/try', { itemId: 'i' });
+    expect(await blob.text()).toBe('RIFF');
+    expect(wav.requests[0]?.init.body).toBe('{"itemId":"i"}');
+    expect(headersOf(wav.requests[0]?.init)['X-Origin-Id']).toBe(ORIGIN_ID);
+
+    const busy = clientReturning(() =>
+      json({ status: 409, detail: 'Busy.' }, { status: 409, statusText: 'Conflict' }),
+    );
+    const error = await busy.api.postForBlob('/api/try', {}).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).detail).toBe('Busy.');
+  });
+
+  it('rejects an aborted blob request with the abort, not an ApiError', async () => {
+    const abort = new AbortController();
+    const api = new ApiClient((_url, init) => {
+      abort.abort();
+      return Promise.reject(init.signal?.reason as Error);
+    });
+    const error = await api.postForBlob('/api/try', {}, abort.signal).catch((e: unknown) => e);
+    expect(error).not.toBeInstanceOf(ApiError);
+  });
+
   it('maps a ProblemDetails response to ApiError with the verbatim detail', async () => {
     const { api } = clientReturning(() =>
       json(
