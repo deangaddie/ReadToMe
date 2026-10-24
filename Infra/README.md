@@ -255,7 +255,7 @@ huggingface-cli download <repo> --local-dir ./models
 ```
 
 - `IPC_LOCK` capability + unlimited `memlock` to keep model in RAM (size the WSL VM for it: see [Host / WSL memory](#host--wsl-memory))
-- GPU layers offloaded via `ngl = 999` in preset config
+- GPU layers offloaded via `ngl = 999` in the GPU presets (`qwen-4b` sets `ngl = 0` and runs on CPU; `qwen-28b` and `gemma-12b_QAT` keep some MoE layers on CPU with `n-cpu-moe`)
 - Logs bind-mounted to `./logs`
 
 Port `8080`.

@@ -2,9 +2,9 @@
 
 ## Ordering
 
-All tables use fractional indexing for ordering via the `FractionalIndexing` NuGet package. `Order` columns are Base-62 (`a-zA-Z0-9`), BINARY-collated (case-sensitive). All rows have a stable `Guid Id` PK.
+The book tables (Volume, Part, Chapter, Paragraph, ParagraphItem) order by fractional indexing via the `FractionalIndexing` NuGet package, and VoiceRule orders by its `Rank` the same way. These keys are Base-62 (`a-zA-Z0-9`), BINARY-collated (case-sensitive). Every row has a stable `Guid Id` PK except StepCheckpoint, which is keyed by its step.
 
-Every book has at least one Volume, Part, and Chapter. Singular nodes are hidden in the UI but always present in the data.
+Every book keeps at least one Volume. Parts and Chapters may be absent: a new Volume or Part is born empty (Structure rules, `StructureRules`). An import always writes at least one Part and Chapter, and singular nodes are hidden in the UI.
 
 ## Tables
 
@@ -18,7 +18,7 @@ Every book has at least one Volume, Part, and Chapter. Singular nodes are hidden
 | `Author`              | string | no       | max 250                                                            |
 | `Filename`            | string | no       | max 526                                                            |
 | `Type`                | enum   | no       | `BookFileType` (Epub / Text)                                       |
-| `CoverImage`          | string | yes      | relative jpg path                                                  |
+| `CoverImage`          | string | yes      | file name of the uploaded cover (jpg, jpeg, png or webp) in the project folder                                                  |
 | `NarratorOnlyMode`    | bool   | no       | suppress character voices                                          |
 | `NarratorCharacterId` | Guid   | yes      | narrator link — no FK; read only via `NarratorIdentity` (ADR-0004) |
 
@@ -92,7 +92,7 @@ Alternate names for a Character. Matched case-insensitively by the attribution q
 | ------------- | ------ | -------- | -------------- |
 | `Id`          | Guid   | no       | PK             |
 | `CharacterId` | Guid   | no       | FK → Character |
-| `Alias`       | string | no       | max 250        |
+| `Name`        | string | no       | max 250; unique per (CharacterId, Name) |
 
 ### Pronunciation
 
@@ -112,7 +112,7 @@ One entry in the book's Pronunciation list: TTS is asked to say `SpokenForm` whe
 | `CharacterId`                     | Guid     | no       | FK → Character                               |
 | `Name`                            | string   | no       | max 250                                      |
 | `Description`                     | string   | yes      |                                              |
-| `Source`                          | enum     | no       | `VoiceSource` (Uploaded / Designed / Cloned) |
+| `Source`                          | enum     | no       | `VoiceSource` (Uploaded / Generated) |
 | `DesignPrompt`                    | string   | yes      | text description used for voice design       |
 | `Transcript`                      | string   | yes      | transcript of reference audio (cloning)      |
 | `AudioFileName`                   | string   | yes      | relative path to reference WAV               |
@@ -122,14 +122,14 @@ One entry in the book's Pronunciation list: TTS is asked to say `SpokenForm` whe
 
 ### VoiceRule
 
-Ordered per-Character rules that select which Voice to use over a position range. See CONTEXT.md for full evaluation semantics.
+Ordered per-Character rules that select which Voice to use over a position range. See `context/voice-rules.md` for full evaluation semantics.
 
 | Column        | Type             | Nullable | Notes                                             |
 | ------------- | ---------------- | -------- | ------------------------------------------------- |
 | `Id`          | Guid             | no       | PK                                                |
 | `CharacterId` | Guid             | no       | FK → Character                                    |
 | `VoiceId`     | Guid             | no       | FK → Voice                                        |
-| `Rank`        | string           | no       | BINARY fractional key — lower = higher priority   |
+| `Rank`        | string           | no       | BINARY fractional key; rules run in ascending order and the last passing one wins |
 | `IsDefault`   | bool             | no       | exactly one default rule per Character            |
 | `FromLevel`   | VoiceAnchorLevel | yes      | anchor level for start bound                      |
 | `FromNodeId`  | Guid             | yes      | node id for start bound                           |
@@ -154,3 +154,14 @@ One row per ParagraphItem that has a completed audio generation attempt with a n
 | `OriginalTextSnapshot`  | string           | yes      | source text at generation time, max 8000       |
 | `CreatedUtc`            | DateTime         | no       |                                                |
 | `UpdatedUtc`            | DateTime         | no       |                                                |
+
+### StepCheckpoint
+
+A Pipeline step the user confirmed or skipped (one project per database, so the step alone is the key). A Book mutation can mark it stale; a reread deletes every row.
+
+| Column  | Type            | Nullable | Notes                                                  |
+| ------- | --------------- | -------- | ------------------------------------------------------ |
+| `Step`  | PipelineStep    | no       | PK, stored as the enum name (`Import` … `Export`)       |
+| `State` | CheckpointState | no       | Confirmed / Skipped, stored as text                    |
+| `Stale` | bool            | no       | a later mutation disturbed what was confirmed          |
+| `At`    | DateTimeOffset  | no       | when it was confirmed or skipped; kept when it goes stale |

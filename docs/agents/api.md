@@ -138,7 +138,9 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/import/manual \
 read only when `hasMultipleVolumes`, `part` only when `hasMultipleParts`; `chapter` is always
 required. A switched-on level without a valid rule is 400; a reader failure is 422.
 
-Every write (`/commands` and both imports) accepts an optional `X-Origin-Id` header (a GUID).
+The book writes (`/commands`, both imports, pronunciation add/edit/delete, voice audio upload and
+transcribe) accept an optional `X-Origin-Id` header (a GUID); the project PATCH, cover and
+narrator-only writes ignore it.
 It is echoed as `originId` on the mutation receipt the live hub publishes, so a client can
 recognise its own commits among everyone else's. Absent or malformed, the receipt is unattributed.
 
@@ -200,8 +202,9 @@ current even with no UI open, and hub clients receive the corrected `nodeStatus`
 
 A Pipeline step the user has checked holds a **checkpoint**. `checkpoints` lists only the steps
 that have one, keyed by the camelCase step id (`import | structure | speakers | text | voices |
-titles | pauses | audio | export`). Unlike the PascalCase enums elsewhere in this API, a
-checkpoint's `state` is lower case too (`confirmed` | `skipped`), because these ids double as the
+titles | pauses | audio | export`). Unlike the PascalCase enum strings elsewhere in this API (an
+enum without a converter, such as a settings config's `type` or a queue `outcome.kind`, goes out
+as its integer), a checkpoint's `state` is lower case too (`confirmed` | `skipped`), because these ids double as the
 route segment and the web's step ids. Set, replace or clear one:
 
 ```bash
@@ -348,7 +351,7 @@ curl -s -X POST http://localhost:5000/api/voice-batch/cancel
 # inspect / regenerate one voice:
 curl -s http://localhost:5000/api/projects/{folder}/characters/{characterId}/voices
 curl -s http://localhost:5000/api/projects/{folder}/voices/{voiceId}
-# → { id, characterId, name, source: "Uploaded"|"Generated", designPrompt, transcript, audioFileName,
+# → { id, characterId, name, description, source: "Uploaded"|"Generated", designPrompt, transcript, audioFileName,
 #     isEdited, voiceDesignSettingsOverrideJson, ttsSettingsOverrideJson,
 #     referenceSeconds (from the stored WAV header), referenceWarning (set over the 15 s soft Reference Limit) }
 curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/{characterId}/voices/{voiceId}/generate-audio # 503 "TTS busy, try again" = retry later
@@ -481,7 +484,7 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/pronunciations/try -
 # resolved voice). Active TTS config and the item's delivery cue, as for its take. Nothing stored, no step.
 # 400 no sentence starts there / bad draft or voice; 404 unknown item or voice; 409 "Can't play while
 # Attribution is running: it has the GPU." while attribution, audio generation or a voice batch is queued or
-# running in any project; 422 no voice resolves or it has no audio; 503 TTS busy or down.
+# running in any project; 422 no voice resolves, it has no audio or no TTS config is active; 503 TTS busy or down.
 ```
 
 Any change to the list discards the audio (WAV reference and audio review) of every item that has
@@ -659,7 +662,7 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/assembly \
 # 409 with audioRemainingCount → items still need audio (or pass allowPartial:true)
 # poll /api/assembly/status (phases: Gather, Silence, ProbeConcat, Encode, Finalize);
 # it names the job's folder, and outputFileName once the job completed
-curl -s -X POST http://localhost:5000/api/assembly/cancel      # stop the running assembly (status → Cancelled)
+curl -s -X POST http://localhost:5000/api/assembly/cancel      # stop the running assembly (isRunning → false; the hub sends AssemblyCancelled)
 
 curl -s http://localhost:5000/api/projects/{folder}/assembly/outputs
 # → [{ fileName, sizeBytes, createdAt, isPartial }], newest first
@@ -683,7 +686,7 @@ multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.A
 
 | Direction | Name | Notes |
 |---|---|---|
-| client → server | `JoinProject(folder)` / `LeaveProject(folder)` | joins `project:{folder}`; `JoinProject` returns a `ProjectSnapshot` (`revision`, `nodes`, `paragraphs`, `items`, `folderAudioRemaining`) |
+| client → server | `JoinProject(folder)` / `LeaveProject(folder)` | joins `project:{folder}`; `JoinProject` returns a `ProjectSnapshot` (`folder`, `revision`, `nodes`, `paragraphs`, `items`, `folderAudioRemaining`) |
 | client → server | `JoinStream("llm" \| "audio")` / `LeaveStream(kind)` | joins `stream:llm` / `stream:audio`; the current in-progress turn is replayed to the caller first |
 | client → server | `GetSnapshot()` | `{ queue, assembly, voiceBatch, watchdog, serviceStatus, throughput, projects }` for the projects this connection joined |
 | server → client | `queue` | `{ attribution, audio, escalation? }`, debounced 250 ms, everyone |
@@ -765,7 +768,7 @@ curl -s http://localhost:5000/api/projects/{folder}/history
 - `kind` says what opened the step: `request`, `backgroundRun`, `restore`, `started` (the "History
   started" step) or `import` (an import or reread of the book). `action` says what kind of action a
   `request` or `backgroundRun` step is: `edit`, `editWithAi`, `insert`, `split`, `merge`, `delete`,
-  `title`, `pause`, `character`, `voice` (a voice batch alone, too) or `attribution` (a Background
+  `title`, `pause`, `character`, `voice` (a voice batch alone, too), `pronunciation` or `attribution` (a Background
   run with attribution in it); null on the other kinds. A write committed outside any request or Background run is
   a `request` step whose action is `edit`. Tell steps apart by these, never by `label`:
   labels are wording and may change. The hub's `stepLanded`, `stepChanged` and `stepClosed` carry
@@ -780,7 +783,8 @@ curl -s http://localhost:5000/api/projects/{folder}/history
 ### Viewing a step: `?at=`
 
 Every project read of Project state accepts `?at=<stepId>` and answers exactly as it would have
-right after that step for the Book, characters and aliases, Voices, Voice Rules and project metadata.
+right after that step for the Book, characters and aliases, Voices, Voice Rules, the Pronunciation
+list and project metadata.
 Nothing else about the call changes, so an agent inspects the past with the calls it already uses.
 
 ```bash
@@ -794,7 +798,7 @@ curl -s "http://localhost:5000/api/projects/{folder}/characters?at={stepId}"
 - `?at=` reads: `GET /api/projects/{folder}`, `/status`, `/book`, `/characters`,
   `/characters/summary`, `/characters/{id}/lines`, `/characters/{id}/voices`,
   `/characters/{id}/voice-rules` (and `/preview`), `/voices/{voiceId}`,
-  `/paragraphs/{id}/context` and the `/nodes/...` reads. The OpenAPI document lists `at` on each.
+  `/paragraphs/{id}/context`, `/pronunciations` (and `/matches`) and the `/nodes/...` reads. The OpenAPI document lists `at` on each.
 - 404 for a step the project's History doesn't have, 409 while anything is queued or running for
   the project (`detail` carries the reason, as `busy.reason` does), 422 for a step marked
   `cantOpen`, 400 when `at` is not a step id. A step recorded before a schema upgrade is migrated
