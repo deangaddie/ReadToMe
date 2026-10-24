@@ -397,7 +397,7 @@ export function derivePipeline(input: PipelineInput): PipelineStep[] {
       detail:
         content && hasPauses
           ? `${plural(s.pauseParagraphs, 'pause paragraph')}`
-          : 'Insert a pause after every chapter title.',
+          : 'Insert a pause between paragraphs and at the end of every chapter.',
       actions: [
         {
           id: 'addPauses',

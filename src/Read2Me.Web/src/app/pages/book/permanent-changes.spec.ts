@@ -47,9 +47,9 @@ function target(overrides: Partial<NodeMenuTarget> = {}): NodeMenuTarget {
 
 describe('addPausesChange', () => {
   it.each([
-    [3, 'Inserts a pause after every chapter title (3 chapters).'],
-    [1, 'Inserts a pause after every chapter title (1 chapter).'],
-    [0, 'Inserts a pause after every chapter title (0 chapters).'],
+    [3, 'Inserts a pause between paragraphs and at the end of every chapter (3 chapters).'],
+    [1, 'Inserts a pause between paragraphs and at the end of every chapter (1 chapter).'],
+    [0, 'Inserts a pause between paragraphs and at the end of every chapter (0 chapters).'],
   ])('always asks, neutral, counting %i chapters', (chapters, scope) => {
     expect(addPausesChange(chapters)).toEqual({
       action: 'Add pauses',

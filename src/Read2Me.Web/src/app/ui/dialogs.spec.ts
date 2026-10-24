@@ -93,7 +93,7 @@ describe('ConfirmService', () => {
 describe('confirmPermanent (guidance-primitives 13)', () => {
   const change: PermanentChange = {
     action: 'Add pauses',
-    scope: 'Inserts a pause after every chapter title (3 chapters).',
+    scope: 'Inserts a pause between paragraphs and at the end of every chapter (3 chapters).',
     cost: 'Removing them later means deleting each one.',
     destructive: false,
   };
@@ -104,7 +104,7 @@ describe('confirmPermanent (guidance-primitives 13)', () => {
     expect(permanentConfirmOptions(change)).toEqual({
       title: 'Add pauses?',
       message:
-        'Inserts a pause after every chapter title (3 chapters). Removing them later means deleting each one.',
+        'Inserts a pause between paragraphs and at the end of every chapter (3 chapters). Removing them later means deleting each one.',
       confirmLabel: 'Add pauses',
       destructive: false,
     });
