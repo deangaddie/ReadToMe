@@ -46,7 +46,7 @@ dotnet test src/Read2Me.E2eTests --filter-namespace 'Read2Me.E2eTests.Tests.Web*
 # Ad-hoc browser driving of a running host: tools/browse/README.md (or the `verify` skill)
 
 # PR gate: every CI stage in order, stopping at the first failure (web check and build, dotnet build, unit, E2E Chromium, E2E Firefox browser tests only)
-pwsh scripts/check.ps1                  # -SkipInstall once node_modules are current; installs Playwright Firefox on first use
+pwsh scripts/check.ps1                  # -SkipInstall once node_modules are current; installs Playwright Firefox on first use; an E2E stage hung past -E2eTimeoutMinutes (10) is killed and dumped
 ```
 
 ## Architecture
