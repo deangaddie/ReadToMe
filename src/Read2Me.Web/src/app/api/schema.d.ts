@@ -2522,7 +2522,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** What saving a draft { id?, writtenForm, spokenForm, delete? } would do, writing nothing: no id adds, an id edits that entry, delete: true deletes it (forms ignored). Answers matchCount, itemCount, withAudioCount (a delete's: the entry's reach now), audioDiscardCount (exactly what the save would discard), overlaps (entries whose written form holds the draft's as whole words or is held by it, draftWins when the draft's is the longer and so wins), duplicateOf (another entry with the written form, ignoring case: a save would be 409; the counts treat the draft as taking its place), and matches in book order: itemId, chapterId, chapterTitle, speaker, hasAudio, the sentence around it with matchStart and matchLength in that sentence, and spokenSentence, the sentence with the drafted list applied. 400 invalid; 404 unknown id. */
+        /** What saving a draft { id?, writtenForm, spokenForm, delete? } would do, writing nothing: no id adds, an id edits that entry, delete: true deletes it (forms ignored). Answers matchCount, itemCount, withAudioCount (a delete's: the entry's reach now), audioDiscardCount (exactly what the save would discard), overlaps (entries whose written form holds the draft's as whole words or is held by it, draftWins when the draft's is the longer and so wins), duplicateOf (another entry with the written form, ignoring case: a save would be 409; the counts treat the draft as taking its place), and matches in book order: itemId, chapterId, chapterTitle, speaker, hasAudio, the sentence around it, sentenceStart (where it starts in the item's text, what a try-out names it by), matchStart and matchLength in that sentence, spokenSentence, the sentence with the drafted list applied, and spokenMatchStart and spokenMatchLength, where the match's spoken form (its case carried over) sits in spokenSentence. 400 invalid; 404 unknown id. */
         post: {
             parameters: {
                 query?: never;
@@ -2567,6 +2567,91 @@ export interface paths {
                 };
                 /** @description Conflict */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/pronunciations/try": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Render one try-out sentence { itemId, sentenceStart, draft?, asWritten, voice }: the sentence of the item starting at sentenceStart (an impact match's), carried on over a match that runs past its end. The list, with draft { id?, writtenForm, spokenForm, delete? } in place of its entry, is applied unless asWritten. voice is { voiceId } or "item" (the item's own resolved voice, also when left out); the active TTS config and the item's delivery cue are used as for its take. Answers the WAV body (audio/wav); nothing is stored and no item's audio changes. 400 invalid draft, no sentence starts there or a bad voice; 404 unknown item, voice or entry; 409 while attribution, audio generation or a voice batch is queued or running anywhere (it holds the GPU); 422 no voice resolves, the voice has no audio or no TTS config is active; 503 TTS busy or down. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["TryPronunciationRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -6519,10 +6604,16 @@ export interface components {
             hasAudio: boolean;
             sentence: string;
             /** Format: int32 */
+            sentenceStart: number | string;
+            /** Format: int32 */
             matchStart: number | string;
             /** Format: int32 */
             matchLength: number | string;
             spokenSentence: string;
+            /** Format: int32 */
+            spokenMatchStart: number | string;
+            /** Format: int32 */
+            spokenMatchLength: number | string;
         };
         PronunciationOverlap: {
             /** Format: uuid */
@@ -6655,6 +6746,15 @@ export interface components {
             settingsJson?: string;
         };
         TranscriptionServiceType: number;
+        TryPronunciationRequest: {
+            /** Format: uuid */
+            itemId: string;
+            /** Format: int32 */
+            sentenceStart: number | string;
+            draft: null | components["schemas"]["PronunciationDraftRequest"];
+            asWritten: boolean;
+            voice: null | components["schemas"]["JsonElement"];
+        };
         UpdateProjectRequest: {
             title?: null | string;
             bookTitle?: null | string;

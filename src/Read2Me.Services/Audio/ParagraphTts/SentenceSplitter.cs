@@ -22,8 +22,8 @@ namespace Read2Me.Services.Audio.ParagraphTts
         // A period between two digits is a decimal point, not a sentence end (e.g. "3.14").
         private static readonly Regex Decimal = new(@"(?<=\d)\.(?=\d)", RegexOptions.Compiled);
 
-        // Two or more consecutive dots are an ellipsis, not a sentence end.
-        private static readonly Regex Ellipsis = new(@"\.{2,}", RegexOptions.Compiled);
+        // Two or more dots, back to back or spaced (". . ."), are an ellipsis, not a sentence end.
+        private static readonly Regex Ellipsis = new(@"\.(?:[  ]?\.)+", RegexOptions.Compiled);
 
         // Stand-in for a period that must not trigger a split; a control char unlikely in prose.
         private const char DotPlaceholder = '';
@@ -48,7 +48,7 @@ namespace Read2Me.Services.Audio.ParagraphTts
         /// <summary>Masks periods that must not trigger a split (abbreviations, decimals, ellipsis).</summary>
         private static string Guard(string text)
         {
-            var guarded = Ellipsis.Replace(text, m => new string(DotPlaceholder, m.Length));
+            var guarded = Ellipsis.Replace(text, m => m.Value.Replace('.', DotPlaceholder));
             guarded = Decimal.Replace(guarded, DotPlaceholder.ToString());
 
             foreach (var abbr in Abbreviations)

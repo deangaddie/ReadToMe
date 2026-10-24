@@ -466,8 +466,18 @@ curl -s -X DELETE http://localhost:5000/api/projects/{folder}/pronunciations/{id
 curl -s -X POST http://localhost:5000/api/projects/{folder}/pronunciations/impact \
   -H 'content-type: application/json' -d '{ "id": null, "writtenForm": "Kulgan", "spokenForm": "KULL-gun", "delete": false }'
 # → { matchCount, itemCount, withAudioCount, audioDiscardCount, overlaps: [{ id, writtenForm, spokenForm, draftWins }],
-#     duplicateOf, matches: [{ itemId, chapterId, chapterTitle, speaker, hasAudio, sentence, matchStart,
-#     matchLength, spokenSentence }] }  A dry run: no step; audioDiscardCount is what saving the draft discards.
+#     duplicateOf, matches: [{ itemId, chapterId, chapterTitle, speaker, hasAudio, sentence, sentenceStart,
+#     matchStart, matchLength, spokenSentence, spokenMatchStart, spokenMatchLength }] }  A dry run: no step; audioDiscardCount is what saving the draft discards.
+curl -s -X POST http://localhost:5000/api/projects/{folder}/pronunciations/try -o try.wav \
+  -H 'content-type: application/json' \
+  -d '{ "itemId": "…", "sentenceStart": 9, "draft": { "id": null, "writtenForm": "Kulgan", "spokenForm": "KOOL-gan" },
+        "asWritten": false, "voice": { "voiceId": "…" } }'
+# → the WAV body (audio/wav): the item's sentence starting at sentenceStart (an impact match's), with the list
+# (the draft in its entry's place) applied unless asWritten, in the voice named or "item" (the item's own
+# resolved voice). Active TTS config and the item's delivery cue, as for its take. Nothing stored, no step.
+# 400 no sentence starts there / bad draft or voice; 404 unknown item or voice; 409 "Can't play while
+# Attribution is running: it has the GPU." while attribution, audio generation or a voice batch is queued or
+# running in any project; 422 no voice resolves or it has no audio; 503 TTS busy or down.
 ```
 
 Any change to the list discards the audio (WAV reference and audio review) of every item that has

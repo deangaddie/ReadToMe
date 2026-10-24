@@ -16,11 +16,14 @@ public sealed record PronunciationOverlap(Guid Id, string WrittenForm, string Sp
 
 /// <summary>
 /// One place the draft's written form matches: the item, where it is, and the sentence around it with
-/// the match's offsets in that sentence, and the sentence's Spoken text with the drafted list applied.
+/// where that sentence starts in the item's text (what a try-out names it by), the match's offsets in
+/// that sentence, and the sentence's Spoken text with the drafted list applied, with where the match's
+/// spoken form sits in it (case carried over, as TTS will be asked to say it).
 /// </summary>
 public sealed record PronunciationMatchInBook(
     Guid ItemId, Guid ChapterId, string? ChapterTitle, string? Speaker, bool HasAudio,
-    string Sentence, int MatchStart, int MatchLength, string SpokenSentence);
+    string Sentence, int SentenceStart, int MatchStart, int MatchLength,
+    string SpokenSentence, int SpokenMatchStart, int SpokenMatchLength);
 
 /// <summary>
 /// What saving a draft would do: its reach (matches, items, items with audio — for a delete, the
@@ -77,7 +80,10 @@ public static class PronunciationImpact
                 var sentence = item.Text.Substring(start, length);
                 matches.Add(new PronunciationMatchInBook(
                     item.Id, item.ChapterId, item.ChapterTitle, item.Speaker, item.HasAudio,
-                    sentence, hit.Start - start, hit.Length, spoken.SpokenTextOf(sentence)));
+                    sentence, start, hit.Start - start, hit.Length, spoken.SpokenTextOf(sentence),
+                    // Matches never cross a match's edges, so the text before it and the match itself respell alone.
+                    spoken.SpokenTextOf(sentence[..(hit.Start - start)]).Length,
+                    spoken.SpokenTextOf(item.Text.Substring(hit.Start, hit.Length)).Length));
             }
         }
 
@@ -101,7 +107,7 @@ public static class PronunciationImpact
     }
 
     /// <summary>Where each of the text's sentences starts and how long it is, as TTS chunking splits them.</summary>
-    private static List<(int Start, int Length)> SentencesOf(string text)
+    internal static List<(int Start, int Length)> SentencesOf(string text)
     {
         var sentences = new List<(int, int)>();
         var at = 0;
@@ -117,7 +123,7 @@ public static class PronunciationImpact
     }
 
     /// <summary>The sentence the match is in, or the run of sentences it spans.</summary>
-    private static (int Start, int Length) SentenceAround(
+    internal static (int Start, int Length) SentenceAround(
         List<(int Start, int Length)> sentences, PronunciationMatch match, int textLength)
     {
         var first = sentences.LastOrDefault(s => s.Start <= match.Start, (Start: 0, Length: textLength));

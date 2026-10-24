@@ -50,6 +50,17 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         [Theory]
+        [InlineData("“Master Kulgan. . . ,” said Pug.")]
+        [InlineData("He waited . . . and nothing came.")]
+        [InlineData("He waited. . . . Nothing came.")]
+        public void SpacedEllipsis_DoesNotCauseSplit(string text)
+        {
+            var chunks = SentenceSplitter.Split(text);
+
+            Assert.Equal(new[] { text }, chunks);
+        }
+
+        [Theory]
         [InlineData("The sun rose. ")]
         [InlineData("The sun rose.  ")]
         [InlineData("The sun rose!\t")]

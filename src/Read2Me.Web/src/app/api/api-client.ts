@@ -49,6 +49,36 @@ export class ApiClient {
     return this.send<T>('PUT', url, form);
   }
 
+  /**
+   * A JSON POST answered with bytes (a rendered WAV, say). Aborting `signal` drops the request; the
+   * promise then rejects with the `AbortError`, not an {@link ApiError}, so callers can tell a stop
+   * from a failure. A non-2xx answer is an {@link ApiError} from its ProblemDetails body.
+   */
+  async postForBlob(url: string, body: unknown, signal?: AbortSignal): Promise<Blob> {
+    const response = await this.fetchFn(url, {
+      method: 'POST',
+      headers: { 'X-Origin-Id': ORIGIN_ID, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: signal ?? null,
+    }).catch((error: unknown) => {
+      if (signal?.aborted) throw error;
+      throw new ApiError(
+        0,
+        'Host unreachable',
+        error instanceof Error ? error.message : String(error),
+      );
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw ApiError.fromProblem(
+        response.status,
+        text ? safeJson(text) : undefined,
+        response.statusText || 'Request failed',
+      );
+    }
+    return response.blob();
+  }
+
   private async send<T>(
     method: string,
     url: string,

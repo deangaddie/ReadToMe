@@ -22,6 +22,7 @@ import {
 } from './pronunciation-logic';
 import { PronunciationWriter } from './pronunciation-writer';
 import css from './pronunciation-editor.css' with { type: 'text' };
+import './pronunciation-try';
 
 adoptStyles(css);
 
@@ -31,9 +32,10 @@ export const IMPACT_DEBOUNCE_MS = 300;
 /**
  * One Pronunciation's editor, shared by the Pronunciations page and (later) the Book view's panel:
  * written → spoken inputs, the draft's reach, overlap and duplicate notes from a debounced impact
- * call, Save (Add for a new entry) off until something changed or while a duplicate stands, the
- * advice line saying what Save discards, Cancel, and Delete behind its confirm. Writes go through
- * {@link PronunciationWriter}; emits `editor-close` after a save, a delete or Cancel.
+ * call, Try it (`r2m-pronunciation-try`) over its matches, Save (Add for a new entry) off until
+ * something changed or while a duplicate stands, the advice line saying what Save discards, Cancel,
+ * and Delete behind its confirm. Writes go through {@link PronunciationWriter}; emits `editor-close`
+ * after a save, a delete or Cancel.
  */
 export class PronunciationEditor extends R2mElement {
   private readonly api = use(PronunciationsApi);
@@ -298,6 +300,21 @@ export class PronunciationEditor extends R2mElement {
           ? html`<p class="pron-editor__note" data-role="overlap">
               ${icon('info')} ${overlaps.join(' ')}
             </p>`
+          : nothing
+      }
+      ${
+        impact && impact.matches.length > 0
+          ? html`<r2m-pronunciation-try
+              .folder=${this.#folder()}
+              .matchesInBook=${impact.matches}
+              .draft=${{
+                id: entry?.id ?? null,
+                writtenForm: this.written(),
+                spokenForm: this.spoken(),
+                delete: false,
+              }}
+              .readOnly=${readOnly}
+            ></r2m-pronunciation-try>`
           : nothing
       }
       <div class="pron-editor__actions">

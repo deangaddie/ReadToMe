@@ -282,6 +282,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.SetPronunciationMutation>,
             Mutations.Implementations.SetPronunciationMutationImplementation>();
+        services.AddScoped<Pronunciations.PronunciationTryOut>();
         // Voice and Voice Rule lifecycles — Voice rows and rule rows only, previews everywhere
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.CreateVoiceMutation>,
