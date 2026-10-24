@@ -1,0 +1,31 @@
+@scope (r2m-pronunciation-sentence) {
+  :scope {
+    display: block;
+    margin-top: var(--r2m-space-3);
+    padding: var(--r2m-space-2) var(--r2m-space-3);
+    border-radius: var(--r2m-radius-md);
+    background: var(--r2m-surface-low);
+  }
+  .pron-sentence__text {
+    margin: 0 0 var(--r2m-space-1);
+    font-style: italic;
+    overflow-wrap: anywhere;
+  }
+  mark {
+    font-family: var(--r2m-font-mono);
+    font-style: normal;
+    background: var(--r2m-accent-container);
+    color: inherit;
+    border-radius: var(--r2m-radius-sm);
+    padding: 0 2px;
+  }
+  /* Both plays on one line in the panel's narrow column. */
+  .pron-sentence__actions .r2m-button {
+    padding-inline: var(--r2m-space-2);
+  }
+  .pron-sentence__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--r2m-space-2);
+  }
+}

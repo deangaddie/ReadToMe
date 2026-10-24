@@ -122,8 +122,8 @@ export function itemRow(
         @clear=${chip.clear}
         @create=${chip.create}
       ></r2m-speaker-chip>
-      <span class="r2m-item__text"
-        >${markedText(item.id, item.text ?? '', ctx.marks[item.id])}</span
+      <span class="r2m-item__text" data-item-text=${item.id}
+        >${markedText(item.id, item.text ?? '', ctx.marks[item.id], { lit: ctx.litMarks })}</span
       >
       ${busy ? icon('lock', 'r2m-item__lock') : nothing}
       <span class="r2m-item__menu"

@@ -65,22 +65,30 @@ export function segmentsOf(
   return segments;
 }
 
-/** An item's text with its marks, as row content; `from`/`to` as for {@link segmentsOf}. */
+export interface MarkedTextOptions {
+  /** Where the shown text starts and ends in the item's text, as for {@link segmentsOf}. */
+  from?: number;
+  to?: number;
+  /** Entries whose marks light (the panel's hovered row and the entry it edits). */
+  lit?: ReadonlySet<Guid> | undefined;
+}
+
+/** An item's text with its marks, as row content. */
 export function markedText(
   itemId: Guid,
   text: string,
   spans: readonly MarkSpan[] | undefined,
-  from = 0,
-  to = text.length,
+  { from = 0, to = text.length, lit }: MarkedTextOptions = {},
 ) {
   if (!spans?.length) return text.slice(from, to);
   return segmentsOf(text, spans, from, to).map((s) =>
     s.mark
       ? html`<span
-          class="r2m-pron-mark"
+          class="r2m-pron-mark ${lit?.has(s.mark.pronunciationId) ? 'r2m-pron-mark--lit' : ''}"
           tabindex="0"
           data-item-id=${itemId}
           data-pronunciation-id=${s.mark.pronunciationId}
+          data-start=${s.mark.start}
           data-sentence-start=${s.mark.sentenceStart}
           >${s.text}</span
         >`
@@ -88,13 +96,49 @@ export function markedText(
   );
 }
 
-/** Read mode's prose ({@link paragraphText}'s joined, trimmed items), each item's marks in place. */
-export function proseOf(paragraph: ParagraphDto, marks: MarkIndex) {
+/**
+ * Read mode's prose ({@link paragraphText}'s joined, trimmed items), each item's marks in place and
+ * each item's text in its own `[data-item-text]` run, which says where in the item's text it starts
+ * (`data-text-from`), so a selection in the prose knows its item and offset ({@link selectedPlace}).
+ */
+export function proseOf(paragraph: ParagraphDto, marks: MarkIndex, lit?: ReadonlySet<Guid>) {
   const parts = paragraph.items.filter((i) => !i.isPause && i.text);
   return parts.map((item, n) => {
     const text = item.text!;
     const from = text.length - text.trimStart().length;
     const to = text.trimEnd().length;
-    return html`${n > 0 ? ' ' : ''}${markedText(item.id, text, marks[item.id], from, to)}`;
+    return html`${n > 0 ? ' ' : ''}<span data-item-text=${item.id} data-text-from=${from}
+        >${markedText(item.id, text, marks[item.id], { from, to, lit })}</span
+      >`;
   });
+}
+
+/** Where a selection lies in one item's text: the item, the offset it starts at, and its text. */
+export interface SelectedPlace {
+  itemId: Guid;
+  offset: number;
+  text: string;
+}
+
+/**
+ * The item and offset a selection starts at when it lies inside one item's text run
+ * (`[data-item-text]`, the Speakers and Audio rows' text and Read mode's per-item runs), or null
+ * for an empty selection, one across items, or one outside the text.
+ */
+export function selectedPlace(range: Range): SelectedPlace | null {
+  if (range.collapsed) return null;
+  const runOf = (node: Node) =>
+    (node instanceof Element ? node : node.parentElement)?.closest<HTMLElement>(
+      '[data-item-text]',
+    ) ?? null;
+  const run = runOf(range.startContainer);
+  if (!run || run !== runOf(range.endContainer)) return null;
+  const before = document.createRange();
+  before.setStart(run, 0);
+  before.setEnd(range.startContainer, range.startOffset);
+  return {
+    itemId: run.dataset['itemText']!,
+    offset: Number(run.dataset['textFrom'] ?? 0) + before.toString().length,
+    text: range.toString(),
+  };
 }

@@ -56,6 +56,9 @@ export interface Forms {
   spokenForm: string;
 }
 
+/** A written form's longest: the host's limit. */
+export const WRITTEN_FORM_MAX = 100;
+
 /** Why Save and Delete are off while audio generation is queued or running (the host's 409 wording). */
 export const AUDIO_RUNNING = 'Audio generation is running: wait for it or cancel it';
 

@@ -472,3 +472,57 @@ describe('disabled with a reason', () => {
     );
   });
 });
+
+describe('the editor in the Book view panel', () => {
+  const match = (itemId: string, sentenceStart: number, matchStart: number) => ({
+    itemId,
+    chapterId: 'c1',
+    chapterTitle: 'ONE',
+    speaker: 'Narrator',
+    hasAudio: false,
+    sentence: 'So Kulgan said.',
+    sentenceStart,
+    matchStart,
+    matchLength: 6,
+    spokenSentence: 'So KULL-gun said.',
+    spokenMatchStart: 3,
+    spokenMatchLength: 8,
+  });
+
+  it('opens a new entry pre-filled from a selection, ready to Add', async () => {
+    api.on('POST', IMPACT, impact());
+    await mount(null, (e) => (e.prefill = { writtenForm: 'Kulgan', spokenForm: 'Kulgan' }));
+    expect(q<HTMLInputElement>('[data-field=written]')!.value).toBe('Kulgan');
+    expect(q<HTMLInputElement>('[data-field=spoken]')!.value).toBe('Kulgan');
+    expect(save().disabled).toBe(false);
+    await settleImpact();
+    expect(api.calls('POST', IMPACT)[0]!.body).toMatchObject({
+      writtenForm: 'Kulgan',
+    });
+  });
+
+  it('tries out the sentence it was opened from in place of the sample cards', async () => {
+    api.on('POST', IMPACT, impact({ matches: [match('i1', 0, 3), match('i2', 20, 3)] }));
+    await mount(KULGAN, (e) => (e.origin = { itemId: 'i2', offset: 23 }));
+    await settleImpact();
+    expect(q('r2m-pronunciation-try')).toBeNull();
+    const sentence = q<HTMLElement & { match: { itemId: string } }>('r2m-pronunciation-sentence')!;
+    expect(sentence.match.itemId).toBe('i2');
+  });
+
+  it('says so when the draft no longer matches in the sentence it was opened from', async () => {
+    api.on('POST', IMPACT, impact({ matches: [match('i1', 0, 3)] }));
+    await mount(KULGAN, (e) => (e.origin = { itemId: 'i2', offset: 23 }));
+    await settleImpact();
+    expect(q('r2m-pronunciation-sentence')).toBeNull();
+    expect(q('[data-role=no-sentence]')).not.toBeNull();
+  });
+
+  it('shows Try it on the Pronunciations page, where it was opened from no place', async () => {
+    api.on('POST', IMPACT, impact({ matches: [match('i1', 0, 3)] }));
+    await mount(KULGAN);
+    await settleImpact();
+    expect(q('r2m-pronunciation-try')).not.toBeNull();
+    expect(q('r2m-pronunciation-sentence')).toBeNull();
+  });
+});

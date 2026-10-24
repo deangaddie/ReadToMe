@@ -1,0 +1,82 @@
+/* The Book view's Pronunciations panel (pronunciation ticket 16): the reader's third column. */
+@scope (r2m-pronunciation-panel) to (r2m-pronunciation-editor > *) {
+  :scope {
+    display: block;
+    min-height: 0;
+    overflow: auto;
+    padding: 0 var(--r2m-space-3) var(--r2m-space-3);
+    border-left: 1px solid var(--r2m-outline);
+    background: var(--r2m-surface);
+    box-sizing: border-box;
+  }
+  :scope[hidden] {
+    display: none;
+  }
+  .pron-panel__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--r2m-space-2);
+  }
+  .pron-panel__title {
+    margin: 0;
+    font-size: var(--r2m-text-lg);
+  }
+  .pron-panel__subtitle {
+    margin: var(--r2m-space-4) 0 var(--r2m-space-1);
+    font-size: var(--r2m-text-md);
+  }
+  .pron-panel__hint {
+    margin: var(--r2m-space-2) 0;
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-sm);
+  }
+  .pron-panel__editor {
+    padding-bottom: var(--r2m-space-3);
+    border-bottom: 1px solid var(--r2m-outline);
+  }
+  .pron-panel__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .pron-panel__row {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-1);
+    width: 100%;
+    padding: var(--r2m-space-1) var(--r2m-space-2);
+    border: 0;
+    border-radius: var(--r2m-radius-sm);
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+  .pron-panel__row:hover,
+  .pron-panel__item--open .pron-panel__row {
+    background: var(--r2m-accent-container);
+  }
+  .pron-panel__arrow {
+    color: var(--r2m-text-muted);
+    font-size: 16px;
+  }
+  .pron-panel__spoken {
+    font-weight: 600;
+  }
+  .pron-panel__count {
+    margin-inline-start: auto;
+    padding-inline-start: var(--r2m-space-2);
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-xs);
+    white-space: nowrap;
+  }
+  .pron-panel__all {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--r2m-space-1);
+    margin-top: var(--r2m-space-3);
+    font-size: var(--r2m-text-sm);
+  }
+}

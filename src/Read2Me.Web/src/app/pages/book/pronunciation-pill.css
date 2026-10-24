@@ -1,0 +1,21 @@
+/* The selection's Add / Edit pronunciation pill (pronunciation ticket 16), just above the selection. */
+@scope (r2m-pronunciation-pill) {
+  .pron-pill__popover {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    overflow: visible;
+    transform: translate(-50%, calc(-100% - 6px));
+  }
+  .pron-pill__button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--r2m-space-1);
+    border-radius: var(--r2m-radius-pill);
+    box-shadow: var(--r2m-shadow-2);
+    white-space: nowrap;
+  }
+}

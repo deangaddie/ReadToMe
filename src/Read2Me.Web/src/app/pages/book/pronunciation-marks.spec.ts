@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'bun:test';
-import { render } from 'lit-html';
+import { html, render } from 'lit-html';
 import type { ParagraphDto, ParagraphItemDto, PronunciationSpanReport } from '@app/api';
-import { type MarkSpan, indexSpans, markedText, proseOf, segmentsOf } from './pronunciation-marks';
+import {
+  type MarkSpan,
+  indexSpans,
+  markedText,
+  proseOf,
+  segmentsOf,
+  selectedPlace,
+} from './pronunciation-marks';
 import { paragraphText } from './reader-rows';
 
 const span = (start: number, length: number, pronunciationId = 'pug', sentenceStart = 0) =>
@@ -97,6 +104,17 @@ describe('markedText', () => {
     expect(marks[1]!.dataset['sentenceStart']).toBe('9');
   });
 
+  it('says where each mark starts in the item text, and lights the marks of the entries named', () => {
+    const el = host(
+      markedText('i1', 'Pug met Kulgan.', [span(0, 3), span(8, 6, 'kul')], {
+        lit: new Set(['kul']),
+      }),
+    );
+    const marks = [...el.querySelectorAll<HTMLElement>('.r2m-pron-mark')];
+    expect(marks.map((m) => m.dataset['start'])).toEqual(['0', '8']);
+    expect(marks.map((m) => m.classList.contains('r2m-pron-mark--lit'))).toEqual([false, true]);
+  });
+
   it('is plain text for an item without spans', () => {
     const el = host(markedText('i1', 'Pug ran.', undefined));
     expect(el.textContent).toBe('Pug ran.');
@@ -120,5 +138,89 @@ describe('proseOf', () => {
       'Pug',
       'Kulgan',
     ]);
+  });
+
+  it("holds each item's text in its own run, saying where in the item it starts", () => {
+    const paragraph = {
+      id: 'p1',
+      items: [item('i1', '  Pug ran. '), item('i2', 'Then Kulgan came.')],
+    } as unknown as ParagraphDto;
+    const el = host(proseOf(paragraph, {}));
+    const runs = [...el.querySelectorAll<HTMLElement>('[data-item-text]')];
+    expect(runs.map((r) => [r.dataset['itemText'], r.dataset['textFrom'], r.textContent])).toEqual([
+      ['i1', '2', 'Pug ran.'],
+      ['i2', '0', 'Then Kulgan came.'],
+    ]);
+  });
+});
+
+/** The text node under `root` holding `text`. */
+function textNode(root: Node, text: string): Text {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (n.textContent?.includes(text)) return n as Text;
+  }
+  throw new Error(`no text node holds “${text}”`);
+}
+
+/** A range over `text` (in one text node under `root`), `root` attached to the document. */
+function rangeOver(root: HTMLElement, text: string, upTo?: string): Range {
+  document.body.append(root);
+  const start = textNode(root, text);
+  const end = upTo === undefined ? start : textNode(root, upTo);
+  const range = document.createRange();
+  range.setStart(start, start.data.indexOf(text));
+  range.setEnd(
+    end,
+    upTo === undefined
+      ? start.data.indexOf(text) + text.length
+      : end.data.indexOf(upTo) + upTo.length,
+  );
+  return range;
+}
+
+describe('selectedPlace', () => {
+  const paragraph = {
+    id: 'p1',
+    items: [item('i1', '  Pug ran. '), item('i2', 'Then Kulgan came.')],
+  } as unknown as ParagraphDto;
+
+  it('is the item, the offset in its text where the selection starts, and the selected text', () => {
+    const el = host(proseOf(paragraph, {}));
+    expect(selectedPlace(rangeOver(el, 'Kulgan'))).toEqual({
+      itemId: 'i2',
+      offset: 5,
+      text: 'Kulgan',
+    });
+    expect(selectedPlace(rangeOver(el, 'ran'))).toEqual({
+      itemId: 'i1',
+      offset: 6,
+      text: 'ran',
+    });
+    el.remove();
+  });
+
+  it('counts the text of the marks before it', () => {
+    const el = host(
+      html`<span data-item-text="i1">${markedText('i1', 'Pug met Kulgan.', [span(0, 3)])}</span>`,
+    );
+    expect(selectedPlace(rangeOver(el, 'Kulgan'))).toEqual({
+      itemId: 'i1',
+      offset: 8,
+      text: 'Kulgan',
+    });
+    el.remove();
+  });
+
+  it('is none for a selection across two items, outside any item, or empty', () => {
+    const el = host(proseOf(paragraph, {}));
+    expect(selectedPlace(rangeOver(el, 'ran', 'Then'))).toBeNull();
+    const collapsed = rangeOver(el, 'Kulgan');
+    collapsed.collapse(true);
+    expect(selectedPlace(collapsed)).toBeNull();
+    el.remove();
+    const outside = host(html`<p>Nothing here</p>`);
+    expect(selectedPlace(rangeOver(outside, 'Nothing'))).toBeNull();
+    outside.remove();
   });
 });

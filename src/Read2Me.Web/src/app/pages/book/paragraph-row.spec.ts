@@ -67,6 +67,7 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
     readOnly: null,
     generating: false,
     marks: {},
+    litMarks: new Set(),
     roster: ROSTER,
     ...overrides,
   };

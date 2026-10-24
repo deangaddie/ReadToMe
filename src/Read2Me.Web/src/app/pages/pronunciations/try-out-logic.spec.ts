@@ -8,6 +8,7 @@ import type {
 import { IDLE_VOICE_BATCH } from '@app/live/live-state';
 import type { QueueMessage } from '@app/live/live-messages';
 import {
+  originMatch,
   playView,
   cardsFor,
   gpuBusyReason,
@@ -249,5 +250,43 @@ describe('playView', () => {
       reason: null,
     });
     expect(playView('k', null, { key: 'other', phase: 'playing' }).phase).toBe('idle');
+  });
+});
+
+/** A match of the draft in `itemId`: its sentence starts at `sentenceStart`, the match `matchStart` into it. */
+const at = (
+  itemId: string,
+  sentenceStart: number,
+  matchStart: number,
+  sentence = 'Pug ran far.',
+) => ({
+  itemId,
+  chapterId: 'c1',
+  chapterTitle: null,
+  speaker: null,
+  hasAudio: false,
+  sentence,
+  sentenceStart,
+  matchStart,
+  matchLength: 3,
+  spokenSentence: sentence,
+  spokenMatchStart: matchStart,
+  spokenMatchLength: 3,
+});
+
+describe('the sentence the editor was opened from', () => {
+  const matches = [at('i1', 0, 0), at('i2', 0, 4), at('i2', 20, 2), at('i2', 20, 8)];
+
+  it('is the draft match at that place', () => {
+    expect(originMatch(matches, { itemId: 'i2', offset: 28 })).toBe(matches[3]!);
+  });
+
+  it('is the match in the same sentence when the draft no longer matches at that very place', () => {
+    expect(originMatch(matches, { itemId: 'i2', offset: 25 })).toBe(matches[2]!);
+  });
+
+  it('is none when the draft matches nowhere in that sentence', () => {
+    expect(originMatch(matches, { itemId: 'i3', offset: 0 })).toBeNull();
+    expect(originMatch([at('i2', 0, 4)], { itemId: 'i2', offset: 20 })).toBeNull();
   });
 });

@@ -124,15 +124,25 @@ describe('the Pronunciation hover card', () => {
     expect(reasonOf(play())).toBe(VIEWING_READ_ONLY);
   });
 
-  it('Edit opens the entry on the Pronunciations page', async () => {
+  it('Edit asks for the entry in the panel, from the mark it was opened on', async () => {
+    const asked: unknown[] = [];
+    card.addEventListener('pronunciation-edit', (e) => asked.push((e as CustomEvent).detail));
     await focusMark();
 
     card.querySelector<HTMLButtonElement>('[data-action=edit-pronunciation]')!.click();
 
-    expect(navigations).toEqual([
-      { path: 'projects/magician/pronunciations', query: { entry: 'pug' } },
-    ]);
+    expect(asked).toEqual([{ pronunciationId: 'pug', place: { itemId: 'i1', offset: 9 } }]);
+    expect(navigations).toEqual([]);
     expect(card.open()).toBeNull();
+  });
+
+  it('Edit is off with the viewing reason while a step is viewed', async () => {
+    card.readOnly = VIEWING_READ_ONLY;
+    await focusMark();
+
+    const edit = card.querySelector<HTMLButtonElement>('[data-action=edit-pronunciation]')!;
+    expect(edit.disabled).toBe(true);
+    expect(reasonOf(edit)).toBe(VIEWING_READ_ONLY);
   });
 
   it('Escape closes it and gives focus back to the mark', async () => {
