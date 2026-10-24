@@ -17,7 +17,7 @@ function plural(n: number, word: string): string {
 export function addPausesChange(chapterCount: number): PermanentChange {
   return {
     action: 'Add pauses',
-    scope: `Inserts a pause after every chapter title (${plural(chapterCount, 'chapter')}).`,
+    scope: `Inserts a pause between paragraphs and at the end of every chapter (${plural(chapterCount, 'chapter')}).`,
     cost: 'Removing them later means deleting each one.',
     destructive: false,
   };

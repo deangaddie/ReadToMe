@@ -429,7 +429,9 @@ describe('r2m-overview-page', () => {
     expect(confirms).toEqual([
       expect.objectContaining({
         title: 'Add pauses?',
-        message: expect.stringContaining('Inserts a pause after every chapter title (3 chapters).'),
+        message: expect.stringContaining(
+          'Inserts a pause between paragraphs and at the end of every chapter (3 chapters).',
+        ),
         confirmLabel: 'Add pauses',
         destructive: false,
       }),

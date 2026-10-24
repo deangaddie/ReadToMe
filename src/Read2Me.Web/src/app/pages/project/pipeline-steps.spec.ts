@@ -324,7 +324,9 @@ describe('derivePipeline', () => {
       expect(step(i, 'export').detail).toBe(
         'Assemble the .m4b audiobook with chapters and cover art.',
       );
-      expect(step(i, 'pauses').detail).toBe('Insert a pause after every chapter title.');
+      expect(step(i, 'pauses').detail).toBe(
+        'Insert a pause between paragraphs and at the end of every chapter.',
+      );
     });
   });
 

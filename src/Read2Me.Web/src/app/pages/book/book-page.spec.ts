@@ -1411,7 +1411,7 @@ describe('r2m-book-page', () => {
         {
           title: 'Add pauses?',
           message:
-            'Inserts a pause after every chapter title (2 chapters). ' +
+            'Inserts a pause between paragraphs and at the end of every chapter (2 chapters). ' +
             'Removing them later means deleting each one.',
           confirmLabel: 'Add pauses',
           destructive: false,
