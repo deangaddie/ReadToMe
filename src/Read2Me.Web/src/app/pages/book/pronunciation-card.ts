@@ -1,14 +1,18 @@
 import { html, nothing } from 'lit-html';
 import { type Guid, type PronunciationRef, PronunciationsApi } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
-import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import { LiveService } from '@app/live/live.service';
 import { blockable, icon, spinner } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
-import { gpuBusyReason, playBlockedReason, playView } from '../pronunciations/try-out-logic';
+import {
+  type TextPlace,
+  gpuBusyReason,
+  playBlockedReason,
+  playView,
+} from '../pronunciations/try-out-logic';
 import { TryOutPlayer } from '../pronunciations/try-out-player';
 import { type IndexedMarks, NO_MARKS } from './pronunciation-marks';
 import css from './pronunciation-card.css' with { type: 'text' };
@@ -25,15 +29,25 @@ const HIDE_DELAY_MS = 200;
 export interface OpenMark {
   anchor: HTMLElement;
   itemId: Guid;
+  /** Where the mark starts in the item's text. */
+  start: number;
   sentenceStart: number;
   pronunciationId: Guid;
+}
+
+/** `pronunciation-edit`: the Edit pencil asks for the entry in the Book view's panel. */
+export interface PronunciationEditRequest {
+  pronunciationId: Guid;
+  /** The mark it was asked from: the sentence the panel's try-out plays. */
+  place: TextPlace;
 }
 
 /**
  * The Book view's Pronunciation hover card (pronunciation ticket 15, variant D): hovering or
  * focusing a mark (`.r2m-pron-mark`, anywhere in the element's parent) shows `written → spoken`,
  * **▶ This sentence** (a try-out of the mark's sentence in the item's own voice, the list applied)
- * and an Edit pencil. One shared top-layer popover anchored to the mark, as the node menu is.
+ * and an Edit pencil that asks (`pronunciation-edit`, off while a step is viewed) for the entry in
+ * the Book view's panel. One shared top-layer popover anchored to the mark, as the node menu is.
  * Playing is off with its reason while a step is viewed or a GPU job is queued or running; one
  * sentence plays at a time and keeps playing when the card closes, as a Try it sample does.
  * Enter on a mark moves focus into the card; Escape closes it and gives focus back to the mark.
@@ -41,7 +55,6 @@ export interface OpenMark {
 export class PronunciationCard extends R2mElement {
   private readonly api = use(PronunciationsApi);
   private readonly live = use(LiveService);
-  private readonly router = use(Router);
   private readonly toast = use(ToastService);
 
   readonly #folder = signal<string | null>(null);
@@ -114,7 +127,7 @@ export class PronunciationCard extends R2mElement {
     this.#cancelTimers();
     const current = this.#open();
     if (current?.anchor === anchor) return;
-    const { itemId, pronunciationId, sentenceStart } = anchor.dataset;
+    const { itemId, pronunciationId, start, sentenceStart } = anchor.dataset;
     if (!itemId || !pronunciationId) return;
     current?.anchor.style.removeProperty('anchor-name');
     anchor.style.setProperty('anchor-name', ANCHOR);
@@ -122,6 +135,7 @@ export class PronunciationCard extends R2mElement {
       anchor,
       itemId,
       pronunciationId,
+      start: Number(start),
       sentenceStart: Number(sentenceStart),
     });
     void this.rendered().then(() => {
@@ -218,14 +232,16 @@ export class PronunciationCard extends R2mElement {
     anchor.focus();
   };
 
-  #edit(pronunciationId: Guid): void {
-    const folder = this.folder;
+  #edit(open: OpenMark): void {
     this.hide();
-    if (!folder) return;
-    // Until the Book view has its own panel (ticket 16), the entry opens on the Pronunciations page.
-    this.router.navigate(`projects/${encodeURIComponent(folder)}/pronunciations`, {
-      query: { entry: pronunciationId },
-    });
+    this.emit<PronunciationEditRequest>(
+      'pronunciation-edit',
+      {
+        pronunciationId: open.pronunciationId,
+        place: { itemId: open.itemId, offset: open.start },
+      },
+      { bubbles: true },
+    );
   }
 
   protected template() {
@@ -244,6 +260,7 @@ export class PronunciationCard extends R2mElement {
 
   #body(open: OpenMark, entry: PronunciationRef) {
     const key = `${open.itemId}:${open.sentenceStart}`;
+    const readOnly = this.#readOnly();
     const view = playView(key, this.blocked(), this.player.playing());
     const request = {
       itemId: open.itemId,
@@ -275,16 +292,20 @@ export class PronunciationCard extends R2mElement {
             }
           </button>`,
         )}
-        <button
-          type="button"
-          class="r2m-icon-button"
-          data-action="edit-pronunciation"
-          aria-label=${`Edit pronunciation of ${entry.writtenForm}`}
-          data-tooltip="Edit pronunciation"
-          @click=${() => this.#edit(entry.id)}
-        >
-          ${icon('edit')}
-        </button>
+        ${blockable(
+          readOnly,
+          html`<button
+            type="button"
+            class="r2m-icon-button"
+            data-action="edit-pronunciation"
+            aria-label=${`Edit pronunciation of ${entry.writtenForm}`}
+            data-tooltip=${readOnly === null ? 'Edit pronunciation' : nothing}
+            ?disabled=${readOnly !== null}
+            @click=${() => this.#edit(open)}
+          >
+            ${icon('edit')}
+          </button>`,
+        )}
       </div>`;
   }
 }

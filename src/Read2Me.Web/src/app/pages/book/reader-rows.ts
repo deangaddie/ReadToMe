@@ -188,6 +188,8 @@ export interface RowContext {
   generating: boolean;
   /** Pronunciation spans per item (pronunciation ticket 15): marked in every mode. */
   marks: MarkIndex;
+  /** Entries whose marks light (pronunciation ticket 16): the panel row hovered, the entry it edits. */
+  litMarks: ReadonlySet<string>;
 }
 
 /** Queued or processing: the server rejects edits, so the row shows a lock (design §8). */

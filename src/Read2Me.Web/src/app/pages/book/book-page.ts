@@ -35,7 +35,10 @@ import { openManualRereadDialog } from './manual-reread-dialog';
 import { type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
 import type { ActionEntryId, NodeMenuTarget, SelectionKind } from './node-menu-entries';
 import { paragraphRow } from './paragraph-row';
+import type { PronunciationEditRequest } from './pronunciation-card';
 import { PronunciationMarks } from './pronunciation-marks-store';
+import type { PronunciationPanel } from './pronunciation-panel';
+import { PronunciationPanelState } from './pronunciation-panel-store';
 import {
   addPausesChange,
   attributeSelectionChange,
@@ -58,6 +61,8 @@ import '@app/ui/measured-list';
 import '@app/ui/speaker-menu';
 import './node-menu';
 import './pronunciation-card';
+import './pronunciation-panel';
+import './pronunciation-pill';
 import './structure-tree';
 import bookCss from './book.css' with { type: 'text' };
 
@@ -75,6 +80,7 @@ const MODE_LABELS: Record<ReaderMode, string> = {
 };
 
 const SKELETON = [1, 2, 3, 4, 5, 6];
+const NO_LIT: ReadonlySet<string> = new Set();
 const BULK_MENU_ID = 'r2m-book-bulk-menu';
 const ACTIONS_MENU_ID = 'r2m-book-actions-menu';
 
@@ -113,6 +119,10 @@ export class BookPage extends R2mElement {
   private generator!: AudioGenerator;
   /** The Pronunciation marks of the chapters in the reader (pronunciation ticket 15). */
   private readonly marks = new PronunciationMarks();
+  /** The Pronunciations panel (pronunciation ticket 16): open or not, and what its editor holds. */
+  private pronunciations!: PronunciationPanelState;
+  /** The loaded items that have audio: the panel rows' with-audio counts. */
+  private itemsWithAudio = computed<ReadonlySet<string>>(() => new Set());
   private readonly treeOpen = signal(true);
   /** A selection read or enqueue in flight: the action bar waits for it. */
   private readonly working = signal(false);
@@ -152,6 +162,27 @@ export class BookPage extends R2mElement {
     this.assigner = use(SpeakerAssigner, this);
     this.generator = use(AudioGenerator, this);
     const { project, store, editor, selection, audioSelection, generator } = this;
+    const pronunciations = (this.pronunciations = new PronunciationPanelState(
+      () => this.querySelector<PronunciationPanel>('r2m-pronunciation-panel')?.dirty() === true,
+    ));
+    this.onDisconnect(() => pronunciations.dispose());
+    this.itemsWithAudio = computed(() => {
+      const ids = new Set<string>();
+      for (const chapter of store.chapters()) {
+        for (const paragraph of chapter.paragraphs) {
+          for (const item of paragraph.items) if (item.audioFileName) ids.add(item.id);
+        }
+      }
+      return ids;
+    });
+    this.effect(() => {
+      const folder = store.folder();
+      if (folder) untracked(() => pronunciations.follow(folder));
+    });
+    // The panel is off while a step is viewed.
+    this.effect(() => {
+      if (editor.readOnly() !== null) untracked(() => pronunciations.hide());
+    });
 
     this.noContent = computed(() => store.overview()?.hasContent === false);
     this.rows = computed(() => buildRows(store.chapters(), store.mode()));
@@ -197,6 +228,7 @@ export class BookPage extends R2mElement {
       readOnly: editor.readOnly(),
       generating: generator.working(),
       marks: this.marks.marks().byItem,
+      litMarks: pronunciations.open() ? pronunciations.lit() : NO_LIT,
     }));
 
     // The reader's chapters, read (again): their Pronunciation marks follow, at the viewed step if any.
@@ -305,6 +337,7 @@ export class BookPage extends R2mElement {
               </label>`,
           )}
         </fieldset>
+        ${noContent ? nothing : this.pronunciationsToggle()}
         ${
           this.audioSelectable() && this.audioSelection.count() > 0
             ? this.audioSelectionBar()
@@ -342,7 +375,11 @@ export class BookPage extends R2mElement {
               },
               [{ label: 'Go to overview', href: './' }],
             )
-          : html`<div class="book__body ${treeOpen ? '' : 'book__body--tree-hidden'}">
+          : html`<div
+              class="book__body ${treeOpen ? '' : 'book__body--tree-hidden'} ${
+                this.pronunciations.open() ? 'book__body--pron' : ''
+              }"
+            >
               ${
                 treeOpen
                   ? html`<nav class="book__tree" aria-label="Structure">
@@ -388,6 +425,15 @@ export class BookPage extends R2mElement {
                   @r2m-reader-scroll=${this.onReaderScroll}
                 ></r2m-measured-list>
               </section>
+              <r2m-pronunciation-panel
+                class="book__pron"
+                .state=${this.pronunciations}
+                .folder=${store.folder()}
+                .marks=${this.marks.marks()}
+                .itemsWithAudio=${this.itemsWithAudio()}
+                .readOnly=${this.editor.readOnly()}
+                .audioInFlight=${this.project.audioInFlight()}
+              ></r2m-pronunciation-panel>
             </div>`
       }
       <r2m-node-menu></r2m-node-menu>
@@ -395,9 +441,39 @@ export class BookPage extends R2mElement {
         .folder=${store.folder()}
         .marks=${this.marks.marks()}
         .readOnly=${this.editor.readOnly()}
+        @pronunciation-edit=${this.onPronunciationEdit}
       ></r2m-pronunciation-card>
+      <r2m-pronunciation-pill
+        .state=${this.pronunciations}
+        .readOnly=${this.editor.readOnly()}
+      ></r2m-pronunciation-pill>
     `;
   }
+
+  /** The toolbar's Pronunciations toggle (pronunciation ticket 16): off while a step is viewed. */
+  private pronunciationsToggle() {
+    const open = this.pronunciations.open();
+    const readOnly = this.editor.readOnly();
+    return blockable(
+      readOnly,
+      html`<button
+        type="button"
+        class="r2m-button book__pron-toggle ${open ? 'book__pron-toggle--on' : ''}"
+        data-action="toggle-pronunciations"
+        aria-pressed=${open ? 'true' : 'false'}
+        ?disabled=${readOnly !== null}
+        @click=${() => this.pronunciations.toggle()}
+      >
+        ${icon('text_to_speech')} Pronunciations
+      </button>`,
+    );
+  }
+
+  /** A mark's Edit pencil: the entry opens in the panel, its try-out the mark's sentence. */
+  private readonly onPronunciationEdit = (e: Event): void => {
+    const { pronunciationId, place } = (e as CustomEvent<PronunciationEditRequest>).detail;
+    void this.pronunciations.edit(pronunciationId, place);
+  };
 
   /** The paragraph selection's action bar (ticket 12): count, Attribute, Bulk assign speaker, Clear. */
   private selectionBar() {
@@ -1100,6 +1176,7 @@ const EMPTY_CONTEXT: RowContext = {
   readOnly: null,
   generating: false,
   marks: {},
+  litMarks: NO_LIT,
 };
 
 define('r2m-book-page', BookPage);

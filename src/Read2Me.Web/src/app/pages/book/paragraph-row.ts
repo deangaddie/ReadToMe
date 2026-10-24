@@ -123,7 +123,7 @@ export function paragraphRow(
                   @create=${chip.create}
                 ></r2m-speaker-chip>
               </div>
-              <p class="r2m-paragraph__prose">${proseOf(paragraph, ctx.marks)}</p>`
+              <p class="r2m-paragraph__prose">${proseOf(paragraph, ctx.marks, ctx.litMarks)}</p>`
           : repeat(
               items,
               (item) => item.id,

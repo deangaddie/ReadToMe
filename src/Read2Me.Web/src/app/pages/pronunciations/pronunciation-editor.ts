@@ -1,6 +1,7 @@
 import { html, nothing } from 'lit-html';
 import { live } from 'lit-html/directives/live.js';
 import {
+  type PronunciationDraftRequest,
   type PronunciationDto,
   type PronunciationImpactDto,
   PronunciationsApi,
@@ -12,6 +13,7 @@ import { computed, signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import { adviceLine, blockable, icon } from '@app/ui/partials';
 import {
+  type Forms,
   countLine,
   deleteBlockedReason,
   discardAdvice,
@@ -19,9 +21,12 @@ import {
   isDirty,
   overlapNotes,
   saveBlockedReason,
+  WRITTEN_FORM_MAX,
 } from './pronunciation-logic';
 import { PronunciationWriter } from './pronunciation-writer';
+import { type TextPlace, originMatch } from './try-out-logic';
 import css from './pronunciation-editor.css' with { type: 'text' };
+import './pronunciation-sentence';
 import './pronunciation-try';
 
 adoptStyles(css);
@@ -30,7 +35,7 @@ adoptStyles(css);
 export const IMPACT_DEBOUNCE_MS = 300;
 
 /**
- * One Pronunciation's editor, shared by the Pronunciations page and (later) the Book view's panel:
+ * One Pronunciation's editor, shared by the Pronunciations page and the Book view's panel:
  * written → spoken inputs, the draft's reach, overlap and duplicate notes from a debounced impact
  * call, Try it (`r2m-pronunciation-try`) over its matches, Save (Add for a new entry) off until
  * something changed or while a duplicate stands, the advice line saying what Save discards, Cancel,
@@ -71,6 +76,30 @@ export class PronunciationEditor extends R2mElement {
     this.impact.set(null);
     this.invalid.set(null);
     this.scheduleImpact();
+  }
+
+  /**
+   * A new entry's first draft (the Book view's Add from a selection); set after {@link entry}. The
+   * draft is then what Add saves, so Add is on at once.
+   */
+  set prefill(forms: Forms | null) {
+    if (forms === null) return;
+    this.written.set(forms.writtenForm);
+    this.spoken.set(forms.spokenForm);
+    this.scheduleImpact();
+  }
+
+  /**
+   * Where in the book the editor was opened from (the Book view's panel): Try it is then the one
+   * sentence there, `r2m-pronunciation-sentence`, in place of the sample cards. Null on the
+   * Pronunciations page.
+   */
+  readonly #origin = signal<TextPlace | null>(null);
+  get origin() {
+    return this.#origin();
+  }
+  set origin(value: TextPlace | null) {
+    this.#origin.set(value);
   }
 
   /** `StepView.readOnly`: why nothing can change while a step is viewed, or null. */
@@ -212,6 +241,26 @@ export class PronunciationEditor extends R2mElement {
     this.emit('editor-close');
   }
 
+  /** The panel's try-out: the sentence at `origin`, or why there is none once the impact answers. */
+  private originTry(
+    origin: TextPlace,
+    impact: PronunciationImpactDto | null,
+    draft: PronunciationDraftRequest,
+    readOnly: string | null,
+  ) {
+    if (!impact) return nothing;
+    const match = originMatch(impact.matches, origin);
+    return match
+      ? html`<r2m-pronunciation-sentence
+          .folder=${this.#folder()}
+          .match=${match}
+          .draft=${draft}
+          .readOnly=${readOnly}
+        ></r2m-pronunciation-sentence>`
+      : html`<p class="pron-editor__note" data-role="no-sentence">
+          ${icon('info')} The written form no longer matches in the sentence it was opened from.
+        </p>`;
+  }
   protected template() {
     const entry = this.#entry();
     const readOnly = this.#readOnly();
@@ -226,6 +275,13 @@ export class PronunciationEditor extends R2mElement {
     const duplicate = duplicateWarning(impact?.duplicateOf ?? null);
     const overlaps = overlapNotes(impact?.overlaps ?? []);
     const invalid = this.invalid();
+    const origin = this.#origin();
+    const draft = {
+      id: entry?.id ?? null,
+      writtenForm: this.written(),
+      spokenForm: this.spoken(),
+      delete: false,
+    };
     return html`
       <header class="pron-editor__head">
         <h2 class="pron-editor__title">${entry ? entry.writtenForm : 'New pronunciation'}</h2>
@@ -247,7 +303,7 @@ export class PronunciationEditor extends R2mElement {
             readOnly,
             html`<input
               data-field="written"
-              maxlength="100"
+              maxlength=${WRITTEN_FORM_MAX}
               placeholder="Kulgan"
               .value=${live(this.written())}
               ?disabled=${readOnly !== null}
@@ -303,19 +359,16 @@ export class PronunciationEditor extends R2mElement {
           : nothing
       }
       ${
-        impact && impact.matches.length > 0
-          ? html`<r2m-pronunciation-try
-              .folder=${this.#folder()}
-              .matchesInBook=${impact.matches}
-              .draft=${{
-                id: entry?.id ?? null,
-                writtenForm: this.written(),
-                spokenForm: this.spoken(),
-                delete: false,
-              }}
-              .readOnly=${readOnly}
-            ></r2m-pronunciation-try>`
-          : nothing
+        origin !== null
+          ? this.originTry(origin, impact, draft, readOnly)
+          : impact && impact.matches.length > 0
+            ? html`<r2m-pronunciation-try
+                .folder=${this.#folder()}
+                .matchesInBook=${impact.matches}
+                .draft=${draft}
+                .readOnly=${readOnly}
+              ></r2m-pronunciation-try>`
+            : nothing
       }
       <div class="pron-editor__actions">
         ${

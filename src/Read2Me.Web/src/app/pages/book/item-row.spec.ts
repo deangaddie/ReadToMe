@@ -65,6 +65,7 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
     readOnly: null,
     generating: false,
     marks: {},
+    litMarks: new Set(),
     roster: [],
     ...overrides,
   };
@@ -141,6 +142,17 @@ describe('itemRow (speakers)', () => {
       expect(textEl.textContent).toBe(NARRATION.text!);
       expect(textEl.querySelector('.r2m-pron-mark')!.textContent).toBe('text');
     }
+  });
+
+  it("lights the marks of the entries the panel names, and tags its text as the item's", async () => {
+    const marks = {
+      [NARRATION.id]: [{ start: 0, length: 4, pronunciationId: 'h', sentenceStart: 0 }],
+    };
+    const el = await mount(ctx({ marks, litMarks: new Set(['h']) }), NARRATION);
+    expect(el.querySelector('.r2m-pron-mark')!.classList.contains('r2m-pron-mark--lit')).toBe(true);
+    expect(el.querySelector<HTMLElement>('.r2m-item__text')!.dataset['itemText']).toBe(
+      NARRATION.id,
+    );
   });
 
   describe('checkbox enablement (ticket 13)', () => {

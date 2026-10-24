@@ -261,3 +261,32 @@ export function spokenPlayBlockedReason(spokenForm: string | null): string | nul
 export function otherSampleBlockedReason(matchCount: number, cardCount: number): string | null {
   return matchCount > cardCount ? null : 'Every match is already a sample';
 }
+
+/** A place in an item's text: where an editor was opened from. */
+export interface TextPlace {
+  itemId: Guid;
+  /** Offset into the item's text. */
+  offset: number;
+}
+
+/**
+ * Which of a draft's matches the editor's try-out plays: the one at `place`, else the first in the
+ * sentence holding `place` (the draft's written form changed since), else none.
+ */
+export function originMatch(
+  matches: readonly PronunciationMatchInBook[],
+  place: TextPlace,
+): PronunciationMatchInBook | null {
+  const inItem = matches.filter((m) => m.itemId === place.itemId);
+  const at = inItem.find((m) => {
+    const start = m.sentenceStart + m.matchStart;
+    return start <= place.offset && place.offset < start + m.matchLength;
+  });
+  return (
+    at ??
+    inItem.find(
+      (m) => m.sentenceStart <= place.offset && place.offset < m.sentenceStart + m.sentence.length,
+    ) ??
+    null
+  );
+}

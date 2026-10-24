@@ -1,5 +1,5 @@
 /* The reader (design §6.3): toolbar, stale banner, the tree, the measured list and its rows. */
-@scope (r2m-book-page) to (r2m-speaker-chip > *, r2m-node-menu > *, r2m-pronunciation-card > *) {
+@scope (r2m-book-page) to (r2m-speaker-chip > *, r2m-node-menu > *, r2m-pronunciation-card > *, r2m-pronunciation-panel > *, r2m-pronunciation-pill > *) {
   :scope {
     display: flex;
     flex-direction: column;
@@ -7,6 +7,8 @@
     min-height: 480px;
     padding-top: var(--r2m-space-3);
     box-sizing: border-box;
+    /* The Pronunciations panel floats on a narrow page (see `.book__pron`). */
+    container-type: inline-size;
   }
   .book__toolbar {
     display: flex;
@@ -64,9 +66,55 @@
     display: grid;
     grid-template-columns: 280px minmax(0, 1fr);
     gap: var(--r2m-space-4);
+    /* The narrow page's floating Pronunciations panel sits against it. */
+    position: relative;
   }
   .book__body--tree-hidden {
     grid-template-columns: minmax(0, 1fr);
+  }
+  /* The Pronunciations panel (pronunciation ticket 16): a third column, tree | reader | panel. */
+  .book__body--pron {
+    grid-template-columns: 280px minmax(0, 1fr) 320px;
+  }
+  .book__body--pron.book__body--tree-hidden {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+  /*
+   * Too narrow for three columns: the panel floats over the reader's right edge instead. A page
+   * under about 860 px floats it; with the tree open, under 1100 px, which leaves the reader the
+   * ~450 px of the settled look between the tree and the panel.
+   */
+  @container (max-width: 1100px) {
+    .book__body--pron:not(.book__body--tree-hidden) {
+      grid-template-columns: 280px minmax(0, 1fr);
+    }
+    .book__body--pron:not(.book__body--tree-hidden) .book__pron {
+      position: absolute;
+      inset: 0 0 0 auto;
+      z-index: 2;
+      width: min(320px, 100%);
+      box-shadow: var(--r2m-shadow-3);
+    }
+  }
+  @container (max-width: 860px) {
+    .book__body--pron.book__body--tree-hidden {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .book__body--pron.book__body--tree-hidden .book__pron {
+      position: absolute;
+      inset: 0 0 0 auto;
+      z-index: 2;
+      width: min(320px, 100%);
+      box-shadow: var(--r2m-shadow-3);
+    }
+  }
+  .book__pron-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--r2m-space-1);
+  }
+  .book__pron-toggle--on {
+    background: var(--r2m-accent-container);
   }
   .book__tree {
     overflow: auto;
@@ -364,6 +412,10 @@
     text-underline-offset: 3px;
     cursor: help;
     border-radius: var(--r2m-radius-sm);
+  }
+  /* The marks of the panel row hovered and of the entry its editor holds (pronunciation ticket 16). */
+  .r2m-pron-mark--lit {
+    background: var(--r2m-accent-container);
   }
   .r2m-pron-mark:focus-visible {
     outline: 2px solid var(--r2m-accent);
