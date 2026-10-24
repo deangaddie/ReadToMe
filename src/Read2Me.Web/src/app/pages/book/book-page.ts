@@ -35,6 +35,7 @@ import { openManualRereadDialog } from './manual-reread-dialog';
 import { type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
 import type { ActionEntryId, NodeMenuTarget, SelectionKind } from './node-menu-entries';
 import { paragraphRow } from './paragraph-row';
+import { PronunciationMarks } from './pronunciation-marks-store';
 import {
   addPausesChange,
   attributeSelectionChange,
@@ -56,6 +57,7 @@ import { structureNodeMenu } from './structure-node-menu';
 import '@app/ui/measured-list';
 import '@app/ui/speaker-menu';
 import './node-menu';
+import './pronunciation-card';
 import './structure-tree';
 import bookCss from './book.css' with { type: 'text' };
 
@@ -109,6 +111,8 @@ export class BookPage extends R2mElement {
   private audioSelection!: AudioSelectionStore;
   private assigner!: SpeakerAssigner;
   private generator!: AudioGenerator;
+  /** The Pronunciation marks of the chapters in the reader (pronunciation ticket 15). */
+  private readonly marks = new PronunciationMarks();
   private readonly treeOpen = signal(true);
   /** A selection read or enqueue in flight: the action bar waits for it. */
   private readonly working = signal(false);
@@ -192,7 +196,18 @@ export class BookPage extends R2mElement {
       locked: editor.locked(),
       readOnly: editor.readOnly(),
       generating: generator.working(),
+      marks: this.marks.marks().byItem,
     }));
+
+    // The reader's chapters, read (again): their Pronunciation marks follow, at the viewed step if any.
+    this.effect(() => {
+      const folder = store.folder();
+      const chapterIds = store.chapters().map((c) => c.id);
+      // Viewing a step (or going back to current) rereads the marks at that step.
+      editor.readOnly();
+      if (folder) untracked(() => this.marks.follow(folder, chapterIds));
+    });
+    this.onDisconnect(() => this.marks.close());
 
     this.effect(() => {
       const mode = parseMode(this.router.query().get('mode'));
@@ -376,6 +391,11 @@ export class BookPage extends R2mElement {
             </div>`
       }
       <r2m-node-menu></r2m-node-menu>
+      <r2m-pronunciation-card
+        .folder=${store.folder()}
+        .marks=${this.marks.marks()}
+        .readOnly=${this.editor.readOnly()}
+      ></r2m-pronunciation-card>
     `;
   }
 
@@ -1079,6 +1099,7 @@ const EMPTY_CONTEXT: RowContext = {
   locked: false,
   readOnly: null,
   generating: false,
+  marks: {},
 };
 
 define('r2m-book-page', BookPage);

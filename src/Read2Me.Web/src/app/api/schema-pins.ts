@@ -36,6 +36,7 @@ import type {
   PronunciationDraftRequest,
   PronunciationImpactDto,
   PronunciationSavedDto,
+  PronunciationSpanReport,
   ProposeBookEditRequest,
   ProposeOneBookEditRequest,
   Schema,
@@ -108,6 +109,7 @@ export type SchemaPins = [
   Pin<PronunciationDraftRequest, Schema['PronunciationDraftRequest']>,
   Pin<PronunciationImpactDto, Schema['PronunciationImpactReport']>,
   Pin<TryPronunciationRequest, Schema['TryPronunciationRequest']>,
+  Pin<PronunciationSpanReport, Schema['PronunciationSpanReport']>,
   // Inline in the document (the handler reads it by hand), so pinned to its operation.
   Pin<
     GenerateVoiceAudioRequest,

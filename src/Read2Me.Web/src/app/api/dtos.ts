@@ -1355,3 +1355,19 @@ export interface TryPronunciationRequest {
   asWritten: boolean;
   voice: TryVoice;
 }
+
+/** One span of an item's text the list matches (`GET …/pronunciations/matches`): offsets into the item's text. */
+export interface PronunciationSpan {
+  itemId: Guid;
+  start: number;
+  length: number;
+  pronunciationId: Guid;
+  /** Where the sentence around it starts in the item's text: what a try-out names it by. */
+  sentenceStart: number;
+}
+
+/** `GET …/pronunciations/matches?chapterIds=…`: the spans in book order and the entries they name. */
+export interface PronunciationSpanReport {
+  pronunciations: PronunciationRef[];
+  spans: PronunciationSpan[];
+}

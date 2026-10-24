@@ -8,6 +8,7 @@ import type {
 import { IDLE_VOICE_BATCH } from '@app/live/live-state';
 import type { QueueMessage } from '@app/live/live-messages';
 import {
+  playView,
   cardsFor,
   gpuBusyReason,
   matchKey,
@@ -229,5 +230,24 @@ describe('why the other controls are off', () => {
   it('Swap and Other samples need a match no card shows', () => {
     expect(otherSampleBlockedReason(3, 3)).toBe('Every match is already a sample');
     expect(otherSampleBlockedReason(4, 3)).toBeNull();
+  });
+});
+
+describe('playView', () => {
+  const reason = "Can't play while Attribution is running: it has the GPU";
+
+  it('plays when nothing blocks it, and is off with the reason while blocked', () => {
+    expect(playView('k', null, null)).toEqual({ phase: 'idle', disabled: false, reason: null });
+    expect(playView('k', reason, null)).toEqual({ phase: 'idle', disabled: true, reason });
+  });
+
+  it('follows its own sentence through generating and playing, stoppable though blocked since', () => {
+    expect(playView('k', null, { key: 'k', phase: 'generating' }).phase).toBe('generating');
+    expect(playView('k', reason, { key: 'k', phase: 'playing' })).toEqual({
+      phase: 'playing',
+      disabled: false,
+      reason: null,
+    });
+    expect(playView('k', null, { key: 'other', phase: 'playing' }).phase).toBe('idle');
   });
 });

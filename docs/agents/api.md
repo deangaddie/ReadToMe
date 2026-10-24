@@ -451,6 +451,10 @@ the lower WER.
 ```bash
 curl -s http://localhost:5000/api/projects/{folder}/pronunciations          # honours ?at=<stepId>
 # → [{ id, writtenForm, spokenForm, matchCount, itemCount, withAudioCount }]  sorted by written form
+curl -s 'http://localhost:5000/api/projects/{folder}/pronunciations/matches?chapterIds=…&chapterIds=…'  # honours ?at=
+# → { pronunciations: [{ id, writtenForm, spokenForm }], spans: [{ itemId, start, length, pronunciationId, sentenceStart }] }
+# The Book view's marks: spans in book order in the named chapters, offsets into the item's text; the
+# entries they name, sorted by written form. Unknown chapters match nothing.
 curl -s -X POST http://localhost:5000/api/projects/{folder}/pronunciations \
   -H 'content-type: application/json' -d '{ "writtenForm": "Kulgan", "spokenForm": "KULL-gun" }'
 # → 201 with the entry plus audioDiscardCount and needsAudioCount. Both forms trimmed, inner whitespace

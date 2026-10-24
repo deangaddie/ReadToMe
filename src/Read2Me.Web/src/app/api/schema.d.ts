@@ -2402,6 +2402,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{folder}/pronunciations/matches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Where the list matches in the chapters named by repeated chapterIds (the Book view's marks): spans in book order — itemId, start and length in the item's text, pronunciationId, and sentenceStart (where the sentence around it starts, what a try-out names it by) — and pronunciations, the entries they name { id, writtenForm, spokenForm }, sorted by written form. Unknown chapters match nothing. */
+        get: {
+            parameters: {
+                query?: {
+                    chapterIds?: string[];
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PronunciationSpanReport"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{folder}/pronunciations/{id}": {
         parameters: {
             query?: never;
@@ -6643,6 +6730,22 @@ export interface components {
             audioDiscardCount: number | string;
             /** Format: int32 */
             needsAudioCount: number | string;
+        };
+        PronunciationSpan: {
+            /** Format: uuid */
+            itemId: string;
+            /** Format: int32 */
+            start: number | string;
+            /** Format: int32 */
+            length: number | string;
+            /** Format: uuid */
+            pronunciationId: string;
+            /** Format: int32 */
+            sentenceStart: number | string;
+        };
+        PronunciationSpanReport: {
+            pronunciations: components["schemas"]["PronunciationRef"][];
+            spans: components["schemas"]["PronunciationSpan"][];
         };
         ProposeBookEditRequest: {
             /** @default false */

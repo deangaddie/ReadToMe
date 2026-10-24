@@ -7,6 +7,7 @@ import type {
 } from '@app/api';
 import type { QueueMessage, VoiceBatchState } from '@app/live/live-messages';
 import { isAttributionActive, isAudioActive } from '@app/activity/activity-jobs';
+import type { TryOutPlaying } from './try-out-player';
 
 /**
  * Try it's rules as pure functions (ticket 13, variant F): which matches the sample cards show,
@@ -220,6 +221,22 @@ export function gpuBusyReason(
 /** Why a play button is off: viewing a step first, then the GPU. */
 export function playBlockedReason(readOnly: string | null, gpu: string | null): string | null {
   return readOnly ?? gpu;
+}
+
+/** The card's ▶ This sentence: idle, generating or playing; off with its reason unless it is the one playing. */
+export interface PlayView {
+  phase: 'idle' | 'generating' | 'playing';
+  disabled: boolean;
+  reason: string | null;
+}
+
+export function playView(
+  key: string,
+  blocked: string | null,
+  playing: TryOutPlaying | null,
+): PlayView {
+  if (playing?.key === key) return { phase: playing.phase, disabled: false, reason: null };
+  return { phase: 'idle', disabled: blocked !== null, reason: blocked };
 }
 
 function range(from: number, to: number): number[] {

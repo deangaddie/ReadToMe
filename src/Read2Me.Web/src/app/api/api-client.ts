@@ -9,7 +9,11 @@ export const ORIGIN_ID: string = crypto.randomUUID();
 
 export type FetchFn = (input: string, init: RequestInit) => Promise<Response>;
 
-export type QueryParams = Record<string, string | number | boolean | null | undefined>;
+/** An array value repeats its key once per value (`?ids=a&ids=b`), as ASP.NET binds a `Guid[]`. */
+export type QueryParams = Record<
+  string,
+  string | number | boolean | readonly string[] | null | undefined
+>;
 
 /**
  * The one HTTP wrapper feature code goes through: JSON in and out, same-origin relative URLs,
@@ -126,7 +130,8 @@ function withParams(url: string, params?: QueryParams): string {
   if (!params) return url;
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (value !== null && value !== undefined) search.set(key, String(value));
+    if (Array.isArray(value)) for (const v of value) search.append(key, v);
+    else if (value !== null && value !== undefined) search.set(key, String(value));
   }
   const query = search.toString();
   return query ? `${url}?${query}` : url;

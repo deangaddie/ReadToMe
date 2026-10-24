@@ -6,6 +6,7 @@ import { speakerHue } from '@app/shared/speaker-color';
 import { icon } from '@app/ui/partials';
 import { chipOf, itemRow, speakerChipEvents } from './item-row';
 import { nodeMenuTrigger } from './node-menu';
+import { proseOf } from './pronunciation-marks';
 import type { NodeMenuTarget } from './node-menu-entries';
 import {
   type RowContext,
@@ -122,7 +123,7 @@ export function paragraphRow(
                   @create=${chip.create}
                 ></r2m-speaker-chip>
               </div>
-              <p class="r2m-paragraph__prose">${paragraphText(paragraph)}</p>`
+              <p class="r2m-paragraph__prose">${proseOf(paragraph, ctx.marks)}</p>`
           : repeat(
               items,
               (item) => item.id,

@@ -7,6 +7,7 @@ import type {
   PronunciationDto,
   PronunciationImpactDto,
   PronunciationSavedDto,
+  PronunciationSpanReport,
   SetPronunciationRequest,
   TryPronunciationRequest,
 } from './dtos';
@@ -23,6 +24,13 @@ export class PronunciationsApi {
   /** The list sorted by written form, each entry with its reach. Read at the viewed step. */
   list(folder: string): Promise<PronunciationDto[]> {
     return this.api.get<PronunciationDto[]>(`${projectUrl(folder)}/pronunciations`);
+  }
+
+  /** Where the list matches in these chapters (the Book view's marks). Read at the viewed step. */
+  matches(folder: string, chapterIds: readonly Guid[]): Promise<PronunciationSpanReport> {
+    return this.api.get<PronunciationSpanReport>(`${projectUrl(folder)}/pronunciations/matches`, {
+      chapterIds,
+    });
   }
 
   add(folder: string, body: SetPronunciationRequest): Promise<PronunciationSavedDto> {

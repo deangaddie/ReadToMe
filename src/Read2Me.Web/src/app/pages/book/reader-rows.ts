@@ -17,6 +17,7 @@ import type { StatusKind } from '@app/ui/partials';
 import type { SpeakerChipState } from '@app/ui/speaker-chip';
 import type { SpeakerRosterEntry } from '@app/ui/speaker-menu';
 import type { ChapterParents, ChapterRef, HeadingRef } from './book-tree';
+import type { MarkIndex } from './pronunciation-marks';
 
 /**
  * What the reader rows show (design §6.3), as pure functions of the loaded data. Components bind
@@ -185,6 +186,8 @@ export interface RowContext {
   readOnly: string | null;
   /** An audio preflight or enqueue is in flight (ticket 13): the row's Retry waits for it. */
   generating: boolean;
+  /** Pronunciation spans per item (pronunciation ticket 15): marked in every mode. */
+  marks: MarkIndex;
 }
 
 /** Queued or processing: the server rejects edits, so the row shows a lock (design §8). */
