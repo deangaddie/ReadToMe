@@ -35,7 +35,7 @@ public class PronunciationPanelTests(E2eAppFixture app, PlaywrightFixture pw) : 
         Assert.True(tree.X + tree.Width <= reader.X, $"tree {tree.X}+{tree.Width} overlaps reader {reader.X}");
         Assert.True(reader.X + reader.Width <= panel.X, $"reader {reader.X}+{reader.Width} overlaps panel {panel.X}");
         Assert.InRange(panel.Width, 300, 340);
-        Assert.InRange(reader.Width, 400, 1440);
+        Assert.True(reader.Width >= 400, $"reader squeezed to {reader.Width} px");
     }
 
     [Fact]

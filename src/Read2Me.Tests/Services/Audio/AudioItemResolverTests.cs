@@ -366,6 +366,19 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         [Fact]
+        public async Task PipelineRequest_VoiceDesignSampleText_IsNeverRespelled()
+        {
+            var (queued, _, _) = await SeedCharacterItemAsync(text: "The sample was taken.");
+            await AddPronunciationAsync("sample", "sahm-pul");
+
+            var result = await _sut.ResolveAsync(queued, CancellationToken.None);
+
+            Assert.Equal("The sahm-pul was taken.", result.Request!.SpokenText);
+            // The sample text is what the voice-design reference audio says.
+            Assert.Equal("the sample text", result.Request.ReferenceTranscript);
+        }
+
+        [Fact]
         public async Task PipelineRequest_SpokenTextIsTheText_WhenTheListHasNoMatch()
         {
             var (queued, _, _) = await SeedCharacterItemAsync(text: "In a hole in the ground");

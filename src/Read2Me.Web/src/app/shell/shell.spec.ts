@@ -90,6 +90,11 @@ let live: FakeLive;
 /** Lazy route chunks resolve on the macrotask queue, beyond what `settle()` covers. */
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
+/**
+ * Waits until every routed level is rendered, not for a fixed number of ticks: nested outlets
+ * load their chunks one after another, and a cold chunk under a full parallel run can take more
+ * than one macrotask.
+ */
 async function mount(path: string) {
   installNavigation(path);
   const router = new Router();
@@ -98,8 +103,11 @@ async function mount(path: string) {
   const shell = document.createElement('app-root');
   document.body.append(shell);
   await settle();
-  await tick();
-  await settle();
+  const tags = router.match()?.chain.flatMap((r) => (r.tag ? [r.tag] : [])) ?? [];
+  for (let i = 0; i < 50 && !tags.every((tag) => shell.querySelector(tag)); i++) {
+    await tick();
+    await settle();
+  }
   return { shell, router };
 }
 
