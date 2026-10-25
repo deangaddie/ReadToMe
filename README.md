@@ -18,7 +18,9 @@ dotnet run --project src/Read2Me.App
 # https://localhost:5001 / http://localhost:5000
 ```
 
-`Workspace.FolderPath` in `appsettings.json` (or `appsettings.Development.json`) sets the root data directory. All project folders, databases, audio files, and logs are written here. It must be set: `appsettings.json` ships it empty, and the host fails at startup on an empty path.
+`Workspace.FolderPath` sets the root data directory. All project folders, databases, audio files, and logs are written here. It must be set: the committed settings files ship it empty, and the host fails at startup on an empty path.
+
+Copy `src/Read2Me.App/appsettings.Local.example.json` to `appsettings.Local.json` in the same folder (git-ignored) and edit its Workspace folder and ffmpeg path.
 
 ### Web app
 

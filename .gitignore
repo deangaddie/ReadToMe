@@ -486,3 +486,6 @@ readtome.db-wal
 
 # Scratch
 *.scratch/
+
+# Per-machine App settings (copy appsettings.Local.example.json)
+src/Read2Me.App/appsettings.Local.json

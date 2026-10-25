@@ -14,6 +14,7 @@ dotnet build src/Read2Me.App
 
 # Run (Kestrel)
 dotnet run --project src/Read2Me.App
+# Per-machine settings (Workspace folder, ffmpeg path): copy src/Read2Me.App/appsettings.Local.example.json to appsettings.Local.json (git-ignored); command line and env vars override it
 # https://localhost:5001 / http://localhost:5000 — `/` redirects to the web app at /app (the only UI, ADR 0014)
 
 # Infrastructure services (run from Infra/)

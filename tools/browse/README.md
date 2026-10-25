@@ -27,10 +27,10 @@ cd src/Read2Me.Web && bun run dev                                     # dev serv
 
 ## The tool workspace
 
-The scripts bring their own files and never touch the owner's workspace (`D:\Dev\Read\WS` in
-Development config). The host above runs on `tools/browse/workspace/`, which is git-ignored: the
-first start creates it with a fresh `app.db` seeded with the default AI service configs. Delete the
-folder to start clean. Settings that live in `app.db`, such as the ffmpeg path, start unset there.
+The scripts bring their own files and never touch the owner's workspace (the folder set in
+`src/Read2Me.App/appsettings.Local.json`). The host above runs on `tools/browse/workspace/`, which
+is git-ignored: the first start creates it with a fresh `app.db` seeded with the default AI service
+configs. Delete the folder to start clean. Settings that live in `app.db`, such as the ffmpeg path, start unset there.
 
 The books are Project Gutenberg epubs in `books/`, committed with the tools; `BOOKS` in
 `browse.mjs` lists them, by the folder name each would get:

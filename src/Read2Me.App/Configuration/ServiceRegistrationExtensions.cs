@@ -41,7 +41,10 @@ public static class ServiceRegistrationExtensions
 {
     public static IServiceCollection AddProjectServices(this IServiceCollection services, IConfiguration configuration)
     {
-        services.Configure<WorkspaceOptions>(configuration.GetSection(WorkspaceOptions.SectionName));
+        services.AddOptions<WorkspaceOptions>()
+            .Bind(configuration.GetSection(WorkspaceOptions.SectionName))
+            .Validate(o => !string.IsNullOrWhiteSpace(o.FolderPath),
+                $"Workspace:FolderPath is not set. Copy appsettings.Local.example.json to {LocalSettings.FileName} beside the App's other settings files and set the Workspace folder there.");
         services.AddSingleton<IFileSystem, FileSystemService>();
         services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
         services.AddScoped<ProjectDbSession>();
