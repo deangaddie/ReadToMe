@@ -61,14 +61,14 @@ namespace Read2Me.Tests.Services.Audio
             bool hasCharacter = true,
             bool resolverReturnsVoice = true,
             string voiceAudioFile = "voices/char1/voice.wav",
-            string text = "In a hole in the ground",
+            string text = "Pieces of eight!",
             string? voiceTranscript = null)
         {
             var charId = Guid.NewGuid();
-            var character = new Data.Entities.Character { Id = charId, Name = "Bilbo" };
+            var character = new Data.Entities.Character { Id = charId, Name = "Jim" };
 
             var b = new BookHierarchyBuilder(OpenDbAsync);
-            b.WithCharacter("bilbo", character);
+            b.WithCharacter("jim", character);
             await b.AddVolume("vol", v => v.AddChapter("ch", c => c
                 .AddParagraph("para", p => p.AddRawItem("item", ParagraphItemType.Speech,
                     text, hasCharacter ? charId : null))))
@@ -86,7 +86,7 @@ namespace Read2Me.Tests.Services.Audio
                 {
                     Id = Guid.NewGuid(),
                     CharacterId = charId,
-                    Name = "Bilbo Voice",
+                    Name = "Jim Voice",
                     Source = VoiceSource.Uploaded,
                     AudioFileName = hasRefAudio ? voiceAudioFile : null,
                     Transcript = voiceTranscript
@@ -163,8 +163,8 @@ namespace Read2Me.Tests.Services.Audio
             var result = await _sut.ResolveAsync(queued, CancellationToken.None);
 
             Assert.True(result.Succeeded);
-            Assert.Equal("Bilbo", result.Speaker);
-            Assert.Equal("In a hole in the ground", result.SourceText);
+            Assert.Equal("Jim", result.Speaker);
+            Assert.Equal("Pieces of eight!", result.SourceText);
             Assert.NotNull(result.Request);
             Assert.Equal("whispered", result.Request!.VoiceInstructions);
             Assert.Null(result.FailureReason);
@@ -217,7 +217,7 @@ namespace Read2Me.Tests.Services.Audio
             var result = await _sut.ResolveAsync(queued, CancellationToken.None);
 
             Assert.False(result.Succeeded);
-            Assert.Contains("Bilbo", result.FailureReason);
+            Assert.Contains("Jim", result.FailureReason);
         }
 
         [Fact]
@@ -229,7 +229,7 @@ namespace Read2Me.Tests.Services.Audio
 
             Assert.False(result.Succeeded);
             Assert.Contains("No default voice", result.FailureReason);
-            Assert.Contains("Bilbo", result.FailureReason);
+            Assert.Contains("Jim", result.FailureReason);
         }
 
         [Fact]
@@ -352,17 +352,17 @@ namespace Read2Me.Tests.Services.Audio
         public async Task PipelineRequest_CarriesTheSpokenText_BesideTheSourceText()
         {
             var (queued, _, _) = await SeedCharacterItemAsync(
-                text: "Kulgan saw Pug.", voiceTranscript: "Kulgan's reference words");
-            await AddPronunciationAsync("Kulgan", "KULL-gun");
+                text: "Watson saw Holmes.", voiceTranscript: "Watson's reference words");
+            await AddPronunciationAsync("Watson", "WAT-sun");
 
             var result = await _sut.ResolveAsync(queued, CancellationToken.None);
 
             Assert.True(result.Succeeded);
-            Assert.Equal("Kulgan saw Pug.", result.Request!.SourceText);
-            Assert.Equal("KULL-gun saw Pug.", result.Request.SpokenText);
-            Assert.Equal("Kulgan saw Pug.", result.SourceText);
+            Assert.Equal("Watson saw Holmes.", result.Request!.SourceText);
+            Assert.Equal("WAT-sun saw Holmes.", result.Request.SpokenText);
+            Assert.Equal("Watson saw Holmes.", result.SourceText);
             // The reference transcript describes the reference audio: never respelled.
-            Assert.Equal("Kulgan's reference words", result.Request.ReferenceTranscript);
+            Assert.Equal("Watson's reference words", result.Request.ReferenceTranscript);
         }
 
         [Fact]
@@ -381,12 +381,12 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task PipelineRequest_SpokenTextIsTheText_WhenTheListHasNoMatch()
         {
-            var (queued, _, _) = await SeedCharacterItemAsync(text: "In a hole in the ground");
-            await AddPronunciationAsync("Kulgan", "KULL-gun");
+            var (queued, _, _) = await SeedCharacterItemAsync(text: "Pieces of eight!");
+            await AddPronunciationAsync("Watson", "WAT-sun");
 
             var result = await _sut.ResolveAsync(queued, CancellationToken.None);
 
-            Assert.Equal("In a hole in the ground", result.Request!.SpokenText);
+            Assert.Equal("Pieces of eight!", result.Request!.SpokenText);
         }
 
         // ── narrator link (slice 13) ───────────────────────────────────────────

@@ -213,7 +213,7 @@ namespace Read2Me.Tests.Services.Audio
             string sourceText = "Hello world",
             int maxAttempts = 1,
             double werThreshold = 0.15,
-            string? speaker = "Bilbo",
+            string? speaker = "Jim",
             string? referenceTranscript = null,
             string? spokenText = null) => new(
             Folder: Folder,
@@ -441,29 +441,29 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task SpokenText_IsWhatTtsIsAskedToSay_WithTheTrailingCommaFixApplied()
         {
-            var req = MakeRequest(sourceText: "Kulgan said,", spokenText: "KULL-gun said,");
+            var req = MakeRequest(sourceText: "Watson said,", spokenText: "WAT-sun said,");
 
             await _sut.RunAsync(req, CancellationToken.None);
 
-            Assert.Equal("KULL-gun said;", _tts.LastText);
+            Assert.Equal("WAT-sun said;", _tts.LastText);
         }
 
         [Fact]
         public async Task NoSpokenText_TtsIsAskedToSayTheSourceText()
         {
-            await _sut.RunAsync(MakeRequest(sourceText: "Kulgan said."), CancellationToken.None);
+            await _sut.RunAsync(MakeRequest(sourceText: "Watson said."), CancellationToken.None);
 
-            Assert.Equal("Kulgan said.", _tts.LastText);
-            Assert.Equal(["Kulgan said."], _wer.References);
+            Assert.Equal("Watson said.", _tts.LastText);
+            Assert.Equal(["Watson said."], _wer.References);
         }
 
         [Fact]
         public async Task Verify_KeepsTheLowerWer_OfTheSourceTextAndTheSpokenText()
         {
             // The transcript followed the respelling: against the book's words it scores badly.
-            _wer.ByReference["Kulgan said."] = 0.5;
-            _wer.ByReference["KULL-gun said."] = 0.05;
-            var req = MakeRequest(sourceText: "Kulgan said.", spokenText: "KULL-gun said.");
+            _wer.ByReference["Watson said."] = 0.5;
+            _wer.ByReference["WAT-sun said."] = 0.05;
+            var req = MakeRequest(sourceText: "Watson said.", spokenText: "WAT-sun said.");
 
             var result = await _sut.RunAsync(req, CancellationToken.None);
 
@@ -476,9 +476,9 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task Verify_KeepsTheSourceTextsWer_WhenItIsTheLower()
         {
-            _wer.ByReference["Kulgan said."] = 0.1;
-            _wer.ByReference["KULL-gun said."] = 0.6;
-            var req = MakeRequest(sourceText: "Kulgan said.", spokenText: "KULL-gun said.");
+            _wer.ByReference["Watson said."] = 0.1;
+            _wer.ByReference["WAT-sun said."] = 0.6;
+            var req = MakeRequest(sourceText: "Watson said.", spokenText: "WAT-sun said.");
 
             var result = await _sut.RunAsync(req, CancellationToken.None);
 
@@ -488,11 +488,11 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task Verify_ScoresOnce_WhenTheSpokenTextIsTheSourceText()
         {
-            var req = MakeRequest(sourceText: "Pug said.", spokenText: "Pug said.");
+            var req = MakeRequest(sourceText: "Holmes said.", spokenText: "Holmes said.");
 
             await _sut.RunAsync(req, CancellationToken.None);
 
-            Assert.Equal(["Pug said."], _wer.References);
+            Assert.Equal(["Holmes said."], _wer.References);
         }
 
         [Fact]
@@ -502,11 +502,11 @@ namespace Read2Me.Tests.Services.Audio
             _semantic.Passes = true;
             _semantic.Score = 0.9;
             _semantic.Threshold = 0.85;
-            var req = MakeRequest(sourceText: "Kulgan said.", spokenText: "KULL-gun said.");
+            var req = MakeRequest(sourceText: "Watson said.", spokenText: "WAT-sun said.");
 
             await _sut.RunAsync(req, CancellationToken.None);
 
-            Assert.Equal("Kulgan said.", _semantic.LastSource);
+            Assert.Equal("Watson said.", _semantic.LastSource);
         }
 
         [Fact]

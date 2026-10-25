@@ -21,21 +21,19 @@ namespace Read2Me.Tests.Services.BookEdits
         private const string UrlVariable = "READ2ME_LIVE_LLM_URL";
         private const string ModelVariable = "READ2ME_LIVE_LLM_MODEL";
         private const string DefaultModel = "qwen-28b";
-        private const int FoundationChapters = 53;
+        private const int TaleChapters = 45;
 
-        // Foundation's all-caps spans in context (research 01): headings, headwords, numerals, UV.
+        // All-caps spans in context from Project Gutenberg books (research 01): headings, a quoted
+        // sign, numerals, a front-matter line and PG.
         private const string AllCapsSample = """
-            HARI SELDON— . . . born in the 11,988th year of the Galactic Era;
-            ENCYCLOPEDIA GALACTICA
-            “TAXIS TO ALL POINTS.”
-            COMMISSION OF PUBLIC SAFETY— . . . the last strong Emperor, Cleon II. The first Chief Commissioner.
-            THE MAYORS
-            THE FOUR KINGDOMS— The name given to those portions of the Province of Anacreon
-            I’m just a sucker who happened to land on Glyptal IV the day after the mail.
-            it works on Korell, where UV light is not to be found on street corners.
-            ISAAC ASIMOV began his Foundation Series at the age of twenty-one,
-            THE FOUNDATION NOVELS
-            PART IV
+            “MY DEAR MR. SHERLOCK HOLMES,—You really did it very well.
+            JONATHAN HARKER’S JOURNAL
+            it was labelled “ORANGE MARMALADE”, but to her great disappointment it was empty
+            THE FIVE ORANGE PIPS
+            daughter of Louis XI, and married in 1499 Anne of Brittany, widow of Charles VIII
+            Most people start at our website which has the main PG search facility: www.gutenberg.org.
+            PRINTED IN THE UNITED STATES AT THE COUNTRY LIFE PRESS, GARDEN CITY, N.Y.
+            CHAPTER IV
             """;
 
         /// <summary>The pattern a case expects and the text its spans are compared over.</summary>
@@ -52,7 +50,7 @@ namespace Read2Me.Tests.Services.BookEdits
 
         private static readonly EvalCase[] Cases =
         [
-            new("make the all-caps words in Foundation sentence case", TransformKind.ChangeCase,
+            new("make the all-caps words in A Tale of Two Cities sentence case", TransformKind.ChangeCase,
                 EditTargetSelector.ParagraphText, CaseMode.Sentence, AllCaps),
             new("the headings are in ALL CAPS, change them to normal case", TransformKind.ChangeCase,
                 EditTargetSelector.ParagraphText, CaseMode.Sentence, AllCaps),
@@ -67,7 +65,7 @@ namespace Read2Me.Tests.Services.BookEdits
             new("replace HELlo with heLO", TransformKind.RegexReplace,
                 EditTargetSelector.ParagraphText, null, new("HELlo", "HELlo, hello, Hello and HELLO.")),
             new("replace Mr. with Mister", TransformKind.RegexReplace,
-                EditTargetSelector.ParagraphText, null, new(@"Mr\.", "Mr. Mallow met Mrs Jael, Mr, and Mr. Sutt; Mrx.")),
+                EditTargetSelector.ParagraphText, null, new(@"Mr\.", "Mr. Darcy met Mrs Bennet, Mr, and Mr. Collins; Mrx.")),
         ];
 
         public static TheoryData<EvalCase, bool> CasesWithThinking()
@@ -123,7 +121,7 @@ namespace Read2Me.Tests.Services.BookEdits
                 Name = "live-eval", BaseUrl = baseUrl,
                 Model = Environment.GetEnvironmentVariable(ModelVariable) ?? DefaultModel,
             };
-            var prompt = BookEditPlanner.RenderPrompt("Foundation", "Isaac Asimov", instruction, FoundationOutline());
+            var prompt = BookEditPlanner.RenderPrompt("A Tale of Two Cities", "Charles Dickens", instruction, TaleOutline());
             var body = OpenAiRequestBuilder.BuildChatBody(config, prompt, stream: false,
                 EditProgramSchema.JsonSchema, disableThinking: !thinking);
 
@@ -135,13 +133,13 @@ namespace Read2Me.Tests.Services.BookEdits
             return reply.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
         }
 
-        // Shaped like ChapterOutlineBuilder's output for Foundation: 5 parts, numbered chapters.
-        private static string FoundationOutline()
+        // Shaped like ChapterOutlineBuilder's output for A Tale of Two Cities: 3 books (parts), numbered chapters.
+        private static string TaleOutline()
         {
-            var sb = new StringBuilder($"1 volume(s), 5 part(s), {FoundationChapters} chapter(s).\n");
+            var sb = new StringBuilder($"1 volume(s), 3 part(s), {TaleChapters} chapter(s).\n");
             for (var n = 1; n <= ChapterOutlineBuilder.ChapterLimit; n++)
                 sb.AppendLine($"Chapter {n}: {(n == 1 ? "(untitled)" : (n - 1).ToString())}");
-            sb.AppendLine($"... and {FoundationChapters - ChapterOutlineBuilder.ChapterLimit} more chapters.");
+            sb.AppendLine($"... and {TaleChapters - ChapterOutlineBuilder.ChapterLimit} more chapters.");
             return sb.ToString();
         }
     }

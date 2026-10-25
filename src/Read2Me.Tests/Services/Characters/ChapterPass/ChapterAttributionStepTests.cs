@@ -49,12 +49,12 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             public List<Character> Characters { get; } =
             [
                 new() { Id = ProjectDbContext.NarratorId, Name = ProjectDbContext.NarratorName, IsNarrator = true },
-                new() { Id = Guid.NewGuid(), Name = "Kulgan" },
-                new() { Id = Guid.NewGuid(), Name = "Pug" },
+                new() { Id = Guid.NewGuid(), Name = "Watson" },
+                new() { Id = Guid.NewGuid(), Name = "Holmes" },
             ];
 
             public override Task<Project?> GetProjectAsync(ProjectFolderId folderId) =>
-                Task.FromResult<Project?>(new Project { BookTitle = "Magician", Author = "Feist" });
+                Task.FromResult<Project?>(new Project { BookTitle = "The Adventures of Sherlock Holmes", Author = "Doyle" });
 
             public override Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId) =>
                 Task.FromResult(Characters.ToList());
@@ -122,7 +122,7 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             var p0 = Para(Narr("Night."), Dialog("“A”"), Narr("said he."), Dialog("“B”"));
             var p1 = Para(Narr("Silence."));
             var p2 = Para(Dialog("“C”"));
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | calm", "Kulgan |", "Pug | angry");
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Holmes | calm", "Watson |", "Holmes | angry");
 
             var outcomes = await RunAsync(NewStep(runner, new FakeReader([p0, p1, p2])), [Queued(p0), Queued(p2)]);
 
@@ -133,10 +133,10 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             Assert.Equal(AttributionStatus.Resolved, first.Outcome.Status);
             Assert.Equal(EscalationTrigger.None, first.Trigger);
             Assert.Equal(
-                [new AttributedItem(1, "Pug", "calm"), new AttributedItem(3, "Kulgan", null)],
+                [new AttributedItem(1, "Holmes", "calm"), new AttributedItem(3, "Watson", null)],
                 first.Outcome.Answer!.Items);
             Assert.Equal([null, p0.Items[1].ItemId, null, p0.Items[3].ItemId], first.Outcome.Answer.ItemIds);
-            Assert.Equal([new AttributedItem(0, "Pug", "angry")], outcomes[1].Step.Outcome.Answer!.Items);
+            Assert.Equal([new AttributedItem(0, "Holmes", "angry")], outcomes[1].Step.Outcome.Answer!.Items);
         }
 
         [Fact]
@@ -144,12 +144,12 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         {
             var p0 = Para(Dialog("“A”"));
             var p1 = Para(Dialog("“B”"));
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | calm", "Kulgan | dry");
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Holmes | calm", "Watson | dry");
 
             await RunAsync(NewStep(runner, new FakeReader([p0, p1])), [Queued(p0), Queued(p1)]);
 
-            Assert.DoesNotContain("{Pug}", runner.Requests[0].Prompt);
-            Assert.Contains("[0] {Pug} ⟦0.0⟧“A”\n", runner.Requests[1].Prompt);
+            Assert.DoesNotContain("{Holmes}", runner.Requests[0].Prompt);
+            Assert.Contains("[0] {Holmes} ⟦0.0⟧“A”\n", runner.Requests[1].Prompt);
         }
 
         [Fact]
@@ -157,11 +157,11 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         {
             var p0 = Para(Dialog("“A”"), Dialog("“B”"));
             var p1 = Para(Dialog("“C”"));
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Unknown | sly", "Pug | calm", "Pug |");
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Unknown | sly", "Holmes | calm", "Holmes |");
 
             var outcomes = await RunAsync(NewStep(runner, new FakeReader([p0, p1])), [Queued(p0), Queued(p1)]);
 
-            Assert.Contains("[0] ⟦0.0⟧“A” {Pug} ⟦0.1⟧“B”\n", runner.Requests[2].Prompt);
+            Assert.Contains("[0] ⟦0.0⟧“A” {Holmes} ⟦0.1⟧“B”\n", runner.Requests[2].Prompt);
             var step = outcomes[0].Step;
             Assert.Equal(EscalationTrigger.Unknown, step.Trigger);
             Assert.Equal(AttributionStatus.Unknown, step.Outcome.Status);
@@ -178,7 +178,7 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             var p0 = Para(Dialog("“A”"));
             var p1 = Para(Dialog("“B”"), Dialog("“C”"));
             var p2 = Para(Dialog("“D”"));
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | calm");
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Holmes | calm");
             runner.FailFor(ConfigName, run, "boom");
 
             var outcomes = await RunAsync(
@@ -201,7 +201,7 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         {
             var p0 = Para(Dialog("“A”"));
             var p1 = Para(Dialog("“B”"));
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Tomas | calm", "Pug | calm");
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Lestrade | calm", "Holmes | calm");
 
             var outcomes = await RunAsync(NewStep(runner, new FakeReader([p0, p1])), [Queued(p0), Queued(p1)]);
 
@@ -215,7 +215,7 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         {
             var p0 = Para(Dialog("“A”"));
             var p1 = Para(Dialog("“B”"));
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | calm");
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Holmes | calm");
             var opts = new ChainStepOptions(
                 Config, IsFinal: true, SelfConsistency: true, Thinking: true,
                 Style: AttributionPromptStyle.Chapter, TemperatureOverride: 0.7);
@@ -229,7 +229,7 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
                 Assert.Equal(new LlmRunOverrides(MaxTokens: 48, Temperature: 0), r.Overrides);
                 Assert.Equal(CompletionShape.None, r.Shape);
                 Assert.Null(r.JsonSchema);
-                Assert.Equal(RosterGrammar.ForRoster(["Kulgan", "Pug"]), r.Grammar);
+                Assert.Equal(RosterGrammar.ForRoster(["Watson", "Holmes"]), r.Grammar);
                 Assert.StartsWith("You identify who speaks", r.SystemPrompt);
                 Assert.StartsWith("Passage (tail):\n", r.DisplayPrompt);
                 Assert.Same(Config, r.Config);
@@ -243,7 +243,7 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             var p0 = Para(Dialog("“A”"));
             var p1 = Para(Dialog("“B”"));
             var reader = new FakeReader([p0, p1]);
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | calm");
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Holmes | calm");
             var started = new List<IReadOnlyList<QueuedParagraph>>();
 
             await RunAsync(NewStep(runner, reader), [Queued(p0), Queued(p1)],
@@ -268,7 +268,7 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             var paras = Enumerable.Range(0, 120)
                 .Select(i => Para(Narr($"N{i}."), Dialog($"“{new string('x', 600)}”")))
                 .ToList();
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | calm");
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Holmes | calm");
 
             var outcomes = await RunAsync(NewStep(runner, new FakeReader(paras)), [.. paras.Select(Queued)]);
 
@@ -289,9 +289,9 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             var p0 = Para(Dialog("“A”"));
             var p1 = Para(Dialog("“B”"));
             var p2 = Para(Dialog("“C”"));
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | calm", "Kulgan |");
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Holmes | calm", "Watson |");
             runner.FailFor(ConfigName, LlmRunOutcome.Failed, ContextOverflow);
-            runner.ForConfig(ConfigName, "Pug | dry");
+            runner.ForConfig(ConfigName, "Holmes | dry");
 
             var outcomes = await RunAsync(
                 NewStep(runner, new FakeReader([p0, p1, p2])), [Queued(p0), Queued(p1), Queued(p2)]);
@@ -299,7 +299,7 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             Assert.Equal(["⟦0.0⟧", "⟦1.0⟧", "⟦2.0⟧", "⟦2.0⟧"], runner.Requests.Select(Asked));
             Assert.Equal([0, 0, 0, 1], runner.Requests.Select(FirstLine));
             Assert.All(outcomes, o => Assert.Equal(AttributionStatus.Resolved, o.Step.Outcome.Status));
-            Assert.Equal([new AttributedItem(0, "Pug", "dry")], outcomes[2].Step.Outcome.Answer!.Items);
+            Assert.Equal([new AttributedItem(0, "Holmes", "dry")], outcomes[2].Step.Outcome.Answer!.Items);
         }
 
         [Fact]
@@ -311,9 +311,9 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             var p0 = Para(Dialog("“A”"));
             var p1 = Para(Dialog("“B”"));
             var client = new PerCallLlmClient(
-                "Pug | calm",
+                "Holmes | calm",
                 new LlmProviderException(ContextOverflow, System.Net.HttpStatusCode.BadRequest),
-                "Kulgan | dry");
+                "Watson | dry");
             var reporter = new FakeAiServiceReporter { Managed = true };
             var runner = new LlmCompletionRunner(client, reporter, new EventBroadcaster<LlmStreamEvent>(),
                 new EventBroadcaster<LlmTimingsSample>(), NullLogger<LlmCompletionRunner>.Instance);
@@ -324,7 +324,7 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
 
             Assert.Equal(3, client.Calls);
             Assert.All(outcomes, o => Assert.Equal(AttributionStatus.Resolved, o.Step.Outcome.Status));
-            Assert.Equal([new AttributedItem(0, "Kulgan", "dry")], outcomes[1].Step.Outcome.Answer!.Items);
+            Assert.Equal([new AttributedItem(0, "Watson", "dry")], outcomes[1].Step.Outcome.Answer!.Items);
             Assert.Empty(reporter.Failures);
         }
 
@@ -357,7 +357,7 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             var p0 = Para(Dialog("“A”"));
             var p1 = Para(Dialog("“B”"));
             var p2 = Para(Dialog("“C”"));
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | calm");
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Holmes | calm");
             runner.FailFor(ConfigName, LlmRunOutcome.Failed, ContextOverflow);
             runner.FailFor(ConfigName, LlmRunOutcome.Failed, ContextOverflow);
 
@@ -374,7 +374,7 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         {
             var p0 = Para(Dialog("“A”"));
             var p1 = Para(Dialog("“B”"));
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | calm");
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Holmes | calm");
             runner.FailFor(ConfigName, LlmRunOutcome.Failed, "LLM provider returned error (InternalServerError): boom");
 
             var outcomes = await RunAsync(NewStep(runner, new FakeReader([p0, p1])), [Queued(p0), Queued(p1)]);
@@ -390,9 +390,9 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             var p1 = Para(Dialog("“C”"));
             var p2 = Para(Dialog("“D”"));
             var runner = new SequenceCompletionRunner()
-                .ForConfig(ConfigName, "Pug | calm", "Unknown |", "Kulgan |");
+                .ForConfig(ConfigName, "Holmes | calm", "Unknown |", "Watson |");
             runner.FailFor(ConfigName, LlmRunOutcome.Failed, ContextOverflow);
-            runner.ForConfig(ConfigName, "Pug |");
+            runner.ForConfig(ConfigName, "Holmes |");
             int[] promptN = [1000, 100, 300, 900, 900, 200];
             runner.Timings = (_, n) => new LlmTimings(CacheN: 50, PromptN: promptN[n], null, PredictedN: 4, null);
             var logger = new CollectingLogger<ChapterAttributionStep>();
@@ -414,7 +414,7 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         {
             var p0 = Para(Dialog("“A”"));
             var p1 = Para(Dialog("“B”"));
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | calm");
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Holmes | calm");
             runner.FailFor(ConfigName, LlmRunOutcome.ServiceUnavailable, "down");
             var logger = new CollectingLogger<ChapterAttributionStep>();
 
@@ -428,7 +428,7 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         {
             var p0 = Para(Dialog("“A”"));
             var gone = Para(Dialog("“gone”"));
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | calm");
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Holmes | calm");
 
             var outcomes = await RunAsync(NewStep(runner, new FakeReader([p0])), [Queued(gone), Queued(p0)]);
 
@@ -442,33 +442,33 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         [Fact]
         public async Task A_rule_tagged_item_gets_a_voice_only_call_and_keeps_the_tagged_name()
         {
-            var p0 = Para(Dialog("“We must go,”"), Narr("said Pug."));
+            var p0 = Para(Dialog("“We must go,”"), Narr("said Holmes."));
             // The voice-only grammar cannot produce another name; the parse must not trust one anyway.
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Kulgan | urgent");
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Watson | urgent");
 
             var outcomes = await RunAsync(NewStep(runner, new FakeReader([p0])), [Queued(p0)]);
 
             var request = Assert.Single(runner.Requests);
-            Assert.Equal(RosterGrammar.ForName("Pug"), request.Grammar);
+            Assert.Equal(RosterGrammar.ForName("Holmes"), request.Grammar);
             Assert.EndsWith("Who speaks ⟦0.0⟧, and how is it delivered? Answer as Name | delivery.", request.Prompt);
             Assert.Equal(AttributionStatus.Resolved, outcomes[0].Step.Outcome.Status);
-            Assert.Equal([new AttributedItem(0, "Pug", "urgent")], outcomes[0].Step.Outcome.Answer!.Items);
+            Assert.Equal([new AttributedItem(0, "Holmes", "urgent")], outcomes[0].Step.Outcome.Answer!.Items);
         }
 
         [Fact]
         public async Task An_untagged_item_still_gets_the_roster_grammar()
         {
             // Item 0 has a named tag; item 2 follows another character's beat, so the rules leave it.
-            var p0 = Para(Dialog("“We must go,”"), Narr("said Pug. Kulgan frowned."), Dialog("“Now.”"));
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | urgent", "Kulgan | curt");
+            var p0 = Para(Dialog("“We must go,”"), Narr("said Holmes. Watson frowned."), Dialog("“Now.”"));
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Holmes | urgent", "Watson | curt");
 
             var outcomes = await RunAsync(NewStep(runner, new FakeReader([p0])), [Queued(p0)]);
 
             Assert.Equal(["⟦0.0⟧", "⟦0.2⟧"], runner.Requests.Select(Asked));
-            Assert.Equal(RosterGrammar.ForName("Pug"), runner.Requests[0].Grammar);
-            Assert.Equal(RosterGrammar.ForRoster(["Kulgan", "Pug"]), runner.Requests[1].Grammar);
+            Assert.Equal(RosterGrammar.ForName("Holmes"), runner.Requests[0].Grammar);
+            Assert.Equal(RosterGrammar.ForRoster(["Watson", "Holmes"]), runner.Requests[1].Grammar);
             Assert.Equal(
-                [new AttributedItem(0, "Pug", "urgent"), new AttributedItem(2, "Kulgan", "curt")],
+                [new AttributedItem(0, "Holmes", "urgent"), new AttributedItem(2, "Watson", "curt")],
                 outcomes[0].Step.Outcome.Answer!.Items);
         }
 
@@ -476,10 +476,10 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         public async Task Rule_tags_are_labels_from_the_very_first_call_but_never_over_a_stamp()
         {
             var p0 = Para(Dialog("“A”"));
-            var queuedTagged = Para(Dialog("“We must go,”"), Narr("said Pug."));
-            var unstampedTagged = Para(Dialog("“Sit down,”"), Narr("said Kulgan."));
-            var stamped = Para(Dialog("“Hm,”", "Kulgan"), Narr("said Pug."));
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Kulgan | calm", "Pug | urgent");
+            var queuedTagged = Para(Dialog("“We must go,”"), Narr("said Holmes."));
+            var unstampedTagged = Para(Dialog("“Sit down,”"), Narr("said Watson."));
+            var stamped = Para(Dialog("“Hm,”", "Watson"), Narr("said Holmes."));
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Watson | calm", "Holmes | urgent");
 
             await RunAsync(
                 NewStep(runner, new FakeReader([p0, queuedTagged, unstampedTagged, stamped])),
@@ -487,16 +487,16 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
 
             var first = runner.Requests[0].Prompt;
             Assert.Equal("⟦0.0⟧", Asked(runner.Requests[0]));
-            Assert.Contains("[1] {Pug} ⟦1.0⟧“We must go,” said Pug.\n", first);
-            Assert.Contains("[2] {Kulgan} ⟦2.0⟧“Sit down,” said Kulgan.\n", first);
-            Assert.Contains("[3] {Kulgan} ⟦3.0⟧“Hm,” said Pug.\n", first);
+            Assert.Contains("[1] {Holmes} ⟦1.0⟧“We must go,” said Holmes.\n", first);
+            Assert.Contains("[2] {Watson} ⟦2.0⟧“Sit down,” said Watson.\n", first);
+            Assert.Contains("[3] {Watson} ⟦3.0⟧“Hm,” said Holmes.\n", first);
         }
 
         [Fact]
         public async Task Voice_only_calls_and_rule_tags_are_counted_and_logged_with_the_rule_id()
         {
-            var p0 = Para(Dialog("“We must go,”"), Narr("said Pug. Kulgan frowned."), Dialog("“Now.”"));
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | urgent", "Kulgan | curt");
+            var p0 = Para(Dialog("“We must go,”"), Narr("said Holmes. Watson frowned."), Dialog("“Now.”"));
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Holmes | urgent", "Watson | curt");
             var logger = new CollectingLogger<ChapterAttributionStep>();
 
             await RunAsync(NewStep(runner, new FakeReader([p0]), logger), [Queued(p0)]);
@@ -512,29 +512,29 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         public async Task An_unlisted_tag_name_is_created_before_the_first_call_and_offered_from_it()
         {
             var p0 = Para(Dialog("“A”"));
-            var p1 = Para(Dialog("“We must go,”"), Narr("said Laurie."));
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Pug | calm", "Laurie | urgent");
+            var p1 = Para(Dialog("“We must go,”"), Narr("said Mycroft."));
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Holmes | calm", "Mycroft | urgent");
             var reader = new FakeReader([p0, p1]);
             var resolver = new FakeResolver(reader, runner);
 
             var outcomes = await RunAsync(NewStep(runner, reader, resolver: resolver), [Queued(p0), Queued(p1)]);
 
-            Assert.Equal([("Laurie", 0)], resolver.Calls);
+            Assert.Equal([("Mycroft", 0)], resolver.Calls);
             var first = runner.Requests[0];
-            Assert.Contains("- Laurie", first.SystemPrompt);
-            Assert.Equal(RosterGrammar.ForRoster(["Kulgan", "Pug", "Laurie"]), first.Grammar);
-            // with Laurie on the roster, the said-tag is now a rule tag
-            Assert.Equal(RosterGrammar.ForName("Laurie"), runner.Requests[1].Grammar);
-            Assert.Equal([new AttributedItem(0, "Laurie", "urgent")], outcomes[1].Step.Outcome.Answer!.Items);
+            Assert.Contains("- Mycroft", first.SystemPrompt);
+            Assert.Equal(RosterGrammar.ForRoster(["Watson", "Holmes", "Mycroft"]), first.Grammar);
+            // with Mycroft on the roster, the said-tag is now a rule tag
+            Assert.Equal(RosterGrammar.ForName("Mycroft"), runner.Requests[1].Grammar);
+            Assert.Equal([new AttributedItem(0, "Mycroft", "urgent")], outcomes[1].Step.Outcome.Answer!.Items);
         }
 
         [Fact]
         public async Task A_name_created_in_one_chapter_is_not_created_again_in_the_next()
         {
             var otherChapter = Guid.NewGuid();
-            var p0 = Para(Dialog("“We must go,”"), Narr("said Laurie."));
-            var p1 = Para(Dialog("“Wait,”"), Narr("said Laurie."));
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Laurie | urgent", "Laurie | soft");
+            var p0 = Para(Dialog("“We must go,”"), Narr("said Mycroft."));
+            var p1 = Para(Dialog("“Wait,”"), Narr("said Mycroft."));
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Mycroft | urgent", "Mycroft | soft");
             var reader = new FakeReader([p0]);
             reader.OtherChapters[otherChapter] = [p1];
             var resolver = new FakeResolver(reader, runner);
@@ -543,21 +543,21 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
                 NewStep(runner, reader, resolver: resolver),
                 [Queued(p0), Queued(p1) with { ChapterId = otherChapter }]);
 
-            Assert.Equal(["Laurie"], resolver.Calls.Select(c => c.Name));
+            Assert.Equal(["Mycroft"], resolver.Calls.Select(c => c.Name));
             Assert.Equal(2, runner.Requests.Count);
         }
 
         [Fact]
         public async Task A_created_character_is_logged_with_its_example_and_counted_in_the_summary()
         {
-            var p0 = Para(Dialog("“We must go,”"), Narr("said Laurie."));
-            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Laurie | urgent");
+            var p0 = Para(Dialog("“We must go,”"), Narr("said Mycroft."));
+            var runner = new SequenceCompletionRunner().ForConfig(ConfigName, "Mycroft | urgent");
             var logger = new CollectingLogger<ChapterAttributionStep>();
 
             await RunAsync(NewStep(runner, new FakeReader([p0]), logger), [Queued(p0)]);
 
             var info = logger.At(LogLevel.Information).ToList();
-            Assert.Contains($"Rules-discover created 'Laurie' in '{Chapter}' (1×, e.g. \"said Laurie.\")", info);
+            Assert.Contains($"Rules-discover created 'Mycroft' in '{Chapter}' (1×, e.g. \"said Mycroft.\")", info);
             var summary = Assert.Single(info, m => m.StartsWith("Chapter pass '", StringComparison.Ordinal));
             Assert.Contains("1 characters created", summary);
         }

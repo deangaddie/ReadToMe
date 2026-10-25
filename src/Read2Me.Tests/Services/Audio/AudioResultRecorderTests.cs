@@ -66,7 +66,7 @@ namespace Read2Me.Tests.Services.Audio
         {
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter(configure: c => c
-                    .AddParagraph(configure: p => p.AddNarration("item", "In a hole in the ground"))))
+                    .AddParagraph(configure: p => p.AddNarration("item", "Pieces of eight!"))))
                 .BuildAsync();
             return b.ItemId("item");
         }
@@ -74,7 +74,7 @@ namespace Read2Me.Tests.Services.Audio
         private static PipelineResult Clean(byte[]? audio = null) => new(
             AudioBytes: audio ?? [0x52, 0x49, 0x46, 0x46],
             Normalize: new NormalizeOutcome(Ok: true, Reason: null),
-            Verify: new VerifyOutcome(Ok: true, Wer: 0.0, Reason: null, Transcript: "In a hole in the ground", Rescued: false),
+            Verify: new VerifyOutcome(Ok: true, Wer: 0.0, Reason: null, Transcript: "Pieces of eight!", Rescued: false),
             Outcome: new WorkOutcome.Ok());
 
         private static PipelineResult FailedVerify() => new(
@@ -103,7 +103,7 @@ namespace Read2Me.Tests.Services.Audio
         {
             var itemId = await SeedItemAsync();
 
-            var relativePath = await Sut().RecordAsync(_folder, itemId, Clean(), "In a hole in the ground", TestContext.Current.CancellationToken);
+            var relativePath = await Sut().RecordAsync(_folder, itemId, Clean(), "Pieces of eight!", TestContext.Current.CancellationToken);
 
             Assert.Equal($"audio/{itemId}.wav", relativePath);
             Assert.Equal(relativePath, (await ItemAsync(itemId)).AudioFileName);
@@ -127,7 +127,7 @@ namespace Read2Me.Tests.Services.Audio
                     ? Encoding.Latin1.GetString(_fs.GetFileContent(PathOf(itemId)))
                     : null;
 
-            await Sut().RecordAsync(_folder, itemId, Clean(audio), "In a hole in the ground", TestContext.Current.CancellationToken);
+            await Sut().RecordAsync(_folder, itemId, Clean(audio), "Pieces of eight!", TestContext.Current.CancellationToken);
 
             Assert.Equal(Encoding.Latin1.GetString(audio), whenTheBookWasWritten);
         }
@@ -137,7 +137,7 @@ namespace Read2Me.Tests.Services.Audio
         {
             var itemId = await SeedItemAsync();
 
-            await Sut().RecordAsync(_folder, itemId, FailedVerify(), "In a hole in the ground", TestContext.Current.CancellationToken);
+            await Sut().RecordAsync(_folder, itemId, FailedVerify(), "Pieces of eight!", TestContext.Current.CancellationToken);
 
             var review = await ReviewAsync(itemId);
             Assert.NotNull(review);
@@ -150,9 +150,9 @@ namespace Read2Me.Tests.Services.Audio
         public async Task ACleanTake_RemovesThePreviousTakesReview()
         {
             var itemId = await SeedItemAsync();
-            await Sut().RecordAsync(_folder, itemId, FailedVerify(), "In a hole in the ground", TestContext.Current.CancellationToken);
+            await Sut().RecordAsync(_folder, itemId, FailedVerify(), "Pieces of eight!", TestContext.Current.CancellationToken);
 
-            await Sut().RecordAsync(_folder, itemId, Clean(), "In a hole in the ground", TestContext.Current.CancellationToken);
+            await Sut().RecordAsync(_folder, itemId, Clean(), "Pieces of eight!", TestContext.Current.CancellationToken);
 
             Assert.Null(await ReviewAsync(itemId));
         }
@@ -165,10 +165,10 @@ namespace Read2Me.Tests.Services.Audio
         public async Task ARetakeThatMovesNoColumn_StillReplacesTheAudioOnDisk()
         {
             var itemId = await SeedItemAsync();
-            await Sut().RecordAsync(_folder, itemId, Clean(), "In a hole in the ground", TestContext.Current.CancellationToken);
+            await Sut().RecordAsync(_folder, itemId, Clean(), "Pieces of eight!", TestContext.Current.CancellationToken);
 
             byte[] retake = [0x52, 0x49, 0x46, 0x46, 0x99];
-            await Sut().RecordAsync(_folder, itemId, Clean(retake), "In a hole in the ground", TestContext.Current.CancellationToken);
+            await Sut().RecordAsync(_folder, itemId, Clean(retake), "Pieces of eight!", TestContext.Current.CancellationToken);
 
             Assert.Equal(retake, _fs.GetFileContent(PathOf(itemId)));
         }
@@ -197,7 +197,7 @@ namespace Read2Me.Tests.Services.Audio
         public async Task AnUncommittedRecording_LeavesTheItemsExistingAudioAlone()
         {
             var itemId = await SeedItemAsync();
-            await Sut().RecordAsync(_folder, itemId, Clean(), "In a hole in the ground", TestContext.Current.CancellationToken);
+            await Sut().RecordAsync(_folder, itemId, Clean(), "Pieces of eight!", TestContext.Current.CancellationToken);
             var recorded = _fs.GetFileContent(PathOf(itemId));
 
             await using (var db = await OpenDbAsync())

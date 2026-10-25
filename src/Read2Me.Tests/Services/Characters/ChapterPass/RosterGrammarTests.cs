@@ -14,11 +14,11 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         [Fact]
         public void Two_name_roster_grammar_matches_the_prototype()
         {
-            var grammar = RosterGrammar.ForRoster(["Pug", "Tomas"]);
+            var grammar = RosterGrammar.ForRoster(["Holmes", "Lestrade"]);
 
             Assert.Equal(
                 "root ::= name \" |\" voice\n" +
-                "name ::= \"Pug\" | \"Tomas\" | \"Unknown\"\n" +
+                "name ::= \"Holmes\" | \"Lestrade\" | \"Unknown\"\n" +
                 "voice ::= ( \" \" [^\\n|]{1,40} )?",
                 grammar);
         }
@@ -34,55 +34,55 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         [Fact]
         public void Duplicates_collapse_and_a_roster_name_unknown_is_dropped()
         {
-            var grammar = RosterGrammar.ForRoster(["Pug", "unknown", "Pug", "Kulgan"]);
+            var grammar = RosterGrammar.ForRoster(["Holmes", "unknown", "Holmes", "Watson"]);
 
-            Assert.Contains("name ::= \"Pug\" | \"Kulgan\" | \"Unknown\"\n", grammar);
+            Assert.Contains("name ::= \"Holmes\" | \"Watson\" | \"Unknown\"\n", grammar);
         }
 
         [Fact]
         public void Single_name_grammar_fixes_the_name()
         {
             Assert.Equal(
-                "root ::= \"Pug\" \" |\" voice\n" +
+                "root ::= \"Holmes\" \" |\" voice\n" +
                 "voice ::= ( \" \" [^\\n|]{1,40} )?",
-                RosterGrammar.ForName("Pug"));
+                RosterGrammar.ForName("Holmes"));
         }
 
         [Theory]
-        [InlineData("Pug | angry", "Pug", "angry")]
-        [InlineData("Pug |", "Pug", null)]
-        [InlineData("Pug |   ", "Pug", null)]
-        [InlineData("Pug | soft, hesitant ", "Pug", "soft, hesitant")]
-        [InlineData("Pug", "Pug", null)]
+        [InlineData("Holmes | angry", "Holmes", "angry")]
+        [InlineData("Holmes |", "Holmes", null)]
+        [InlineData("Holmes |   ", "Holmes", null)]
+        [InlineData("Holmes | soft, hesitant ", "Holmes", "soft, hesitant")]
+        [InlineData("Holmes", "Holmes", null)]
         [InlineData("Unknown | shouting", AttributionWire.Unknown, null)]
-        [InlineData("Pug | plain", "Pug", null)]
-        [InlineData("Pug | Plain ", "Pug", null)]
-        [InlineData("Pug | PLAIN", "Pug", null)]
-        [InlineData("Pug | plainly annoyed", "Pug", "plainly annoyed")]
+        [InlineData("Holmes | plain", "Holmes", null)]
+        [InlineData("Holmes | Plain ", "Holmes", null)]
+        [InlineData("Holmes | PLAIN", "Holmes", null)]
+        [InlineData("Holmes | plainly annoyed", "Holmes", "plainly annoyed")]
         public void Parses_a_name_and_delivery(string raw, string name, string? delivery)
         {
-            Assert.True(RosterGrammar.TryParse(raw, ["Pug", "Tomas"], out var n, out var d));
+            Assert.True(RosterGrammar.TryParse(raw, ["Holmes", "Lestrade"], out var n, out var d));
             Assert.Equal(name, n);
             Assert.Equal(delivery, d);
         }
 
         [Theory]
-        [InlineData("Pug | plain", null)]
-        [InlineData("Pug | Plain ", null)]
-        [InlineData("Pug | plainly annoyed", "plainly annoyed")]
-        [InlineData("Pug | dry, amused", "dry, amused")]
+        [InlineData("Holmes | plain", null)]
+        [InlineData("Holmes | Plain ", null)]
+        [InlineData("Holmes | plainly annoyed", "plainly annoyed")]
+        [InlineData("Holmes | dry, amused", "dry, amused")]
         public void A_voice_only_answer_of_plain_has_no_delivery(string raw, string? delivery)
         {
             Assert.Equal(delivery, RosterGrammar.ParseDelivery(raw));
         }
 
         [Theory]
-        [InlineData("Kulgan | calm")]
-        [InlineData("pug | calm")]
+        [InlineData("Watson | calm")]
+        [InlineData("holmes | calm")]
         [InlineData("")]
         public void A_name_not_on_the_list_does_not_parse(string raw)
         {
-            Assert.False(RosterGrammar.TryParse(raw, ["Pug", "Tomas"], out _, out _));
+            Assert.False(RosterGrammar.TryParse(raw, ["Holmes", "Lestrade"], out _, out _));
         }
     }
 }

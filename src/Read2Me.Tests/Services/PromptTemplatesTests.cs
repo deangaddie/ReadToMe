@@ -32,8 +32,8 @@ namespace Read2Me.Tests.Services
         {
             var result = PromptTemplates.Render(
                 "{{book_title}} and {{book_title}}",
-                new Dictionary<string, string> { [PromptTemplates.BookTitle] = "Dune" });
-            Assert.Equal("Dune and Dune", result);
+                new Dictionary<string, string> { [PromptTemplates.BookTitle] = "Dracula" });
+            Assert.Equal("Dracula and Dracula", result);
         }
 
         [Fact]
@@ -223,16 +223,16 @@ namespace Read2Me.Tests.Services
         public void BuildKnownCharactersJson_EmitsNameAndAliasesPerCharacter()
         {
             var json = PromptTemplates.BuildKnownCharactersJson([
-                new PromptTemplates.RosterCharacter("Bilbo", ["Mr. Baggins"]),
-                new PromptTemplates.RosterCharacter("Thorin", []),
+                new PromptTemplates.RosterCharacter("Jim", ["Mr. Hawkins"]),
+                new PromptTemplates.RosterCharacter("Flint", []),
             ]);
 
             var doc = JsonDocument.Parse(json);
             Assert.Equal(2, doc.RootElement.GetArrayLength());
-            Assert.Equal("Bilbo", doc.RootElement[0].GetProperty("name").GetString());
-            Assert.Equal(["Mr. Baggins"],
+            Assert.Equal("Jim", doc.RootElement[0].GetProperty("name").GetString());
+            Assert.Equal(["Mr. Hawkins"],
                 doc.RootElement[0].GetProperty("aliases").EnumerateArray().Select(a => a.GetString()));
-            Assert.Equal("Thorin", doc.RootElement[1].GetProperty("name").GetString());
+            Assert.Equal("Flint", doc.RootElement[1].GetProperty("name").GetString());
             Assert.Equal(0, doc.RootElement[1].GetProperty("aliases").GetArrayLength());
         }
 

@@ -11,16 +11,16 @@ namespace Read2Me.Tests.Services.Characters
     public class SpeechMarkersTests
     {
         private static readonly IReadOnlySet<string> Roster =
-            SpeechMarkers.Roster(["Narrator", "Hari Seldon", "Seldon", "Jessica", "Lady Jessica"]);
+            SpeechMarkers.Roster(["Narrator", "Lady Catherine de Bourgh", "Elizabeth", "Catherine", "Lady Catherine"]);
 
         [Theory]
-        [InlineData("Q. Who are you?", "Q.")]
-        [InlineData("A: Hari Seldon.", "A:")]
-        [InlineData("Q: Who are you?", "Q:")]
-        [InlineData("GD. The commission rules.", "GD.")]
-        [InlineData("Seldon: I am.", "Seldon:")]
-        [InlineData("SELDON: I am.", "SELDON:")]
-        [InlineData("Lady Jessica: The sleeper must awaken.", "Lady Jessica:")]
+        [InlineData("Q. Who made the world?", "Q.")]
+        [InlineData("A: God made the world.", "A:")]
+        [InlineData("Q: Who is God?", "Q:")]
+        [InlineData("JH. The Count is out.", "JH.")]
+        [InlineData("Elizabeth: I am.", "Elizabeth:")]
+        [InlineData("ELIZABETH: I am.", "ELIZABETH:")]
+        [InlineData("Lady Catherine: I am not to be trifled with.", "Lady Catherine:")]
         [InlineData("—What is the law?— the voice asked.", "—…—")]
         [InlineData("He thought —I am!— and cried.", "—…—")]
         [InlineData("Lucy—I call the thing by its name—saw it at once.", "—…—")]
@@ -29,10 +29,10 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal(expected, SpeechMarkers.KeyOf(text, Roster));
 
         [Theory]
-        [InlineData("Iron: Strength +2")]
-        [InlineData("7 September.—I am writing this by the light of a candle.—")]
+        [InlineData("Later: the Morning of 16 May.—God preserve my sanity, for to this I am reduced.")]
+        [InlineData("7 September.—The first thing Van Helsing said to me when we met at Liverpool Street was:—")]
         [InlineData("The night was cold and nobody spoke.")]
-        [InlineData("The Very Old Lady Jessica: words.")]
+        [InlineData("The Very Old Lady Catherine: words.")]
         [InlineData("ABC. text")]
         [InlineData("Q.")]
         [InlineData("Q.No space after the initial.")]
@@ -47,7 +47,7 @@ namespace Read2Me.Tests.Services.Characters
 
         [Fact]
         public void KeyOf_NamePrefixOffTheRoster_FallsThroughToEmDashSpeech() =>
-            Assert.Equal("—…—", SpeechMarkers.KeyOf("Iron: —Strike!— it says.", Roster));
+            Assert.Equal("—…—", SpeechMarkers.KeyOf("Later: —Come here!— it says.", Roster));
 
         [Fact]
         public void KeyOf_EmDashSpeechLongerThanTheLimit_IsNull() =>
@@ -55,6 +55,6 @@ namespace Read2Me.Tests.Services.Characters
 
         [Fact]
         public void KeyOf_EmptyRoster_NeverKeysANamePrefix() =>
-            Assert.Null(SpeechMarkers.KeyOf("Seldon: I am.", SpeechMarkers.Roster([])));
+            Assert.Null(SpeechMarkers.KeyOf("Elizabeth: I am.", SpeechMarkers.Roster([])));
     }
 }

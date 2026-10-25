@@ -332,9 +332,9 @@ namespace Read2Me.Tests.Services.Characters
         }
 
         [Theory]
-        [InlineData("Seldon", null, true)]          // a Character's name
-        [InlineData("Hari Seldon", "Seldon", true)] // an alias
-        [InlineData("Gaal Dornick", null, false)]   // on the roster, but not the prefix
+        [InlineData("Darcy", null, true)]                // a Character's name
+        [InlineData("Fitzwilliam Darcy", "Darcy", true)] // an alias
+        [InlineData("Jane Bennet", null, false)]         // on the roster, but not the prefix
         public async Task Release_NamePrefix_ReleasesOnlyARosterName(string name, string? alias, bool released)
         {
             var b = new BookHierarchyBuilder(OpenDbAsync);
@@ -343,7 +343,7 @@ namespace Read2Me.Tests.Services.Characters
             b.WithCharacter("speaker", character);
             await b.AddVolume("vol", v => v
                 .AddPart("part", p => p
-                    .AddChapter("ch", c => c.AddTranscript("s", "Seldon:", 5))))
+                    .AddChapter("ch", c => c.AddTranscript("s", "Darcy:", 5))))
                 .BuildAsync();
 
             var result = await ReleaseAsync(NarrationReleaseScope.Chapter, b.ChapterId("ch"));

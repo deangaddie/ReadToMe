@@ -6,43 +6,43 @@ namespace Read2Me.Tests.Services.Pronunciations;
 
 public class PronunciationMatcherTests
 {
-    private static readonly Pronunciation Kulgan = Entry("Kulgan", "KULL-gun");
+    private static readonly Pronunciation Watson = Entry("Watson", "WAT-sun");
     private static readonly Pronunciation Hermione = Entry("Hermione", "Her-MY-oh-nee");
-    private static readonly Pronunciation MinasTirith = Entry("Minas Tirith", "MEE-nas TEER-ith");
-    private static readonly Pronunciation Tirith = Entry("Tirith", "TEER-ith");
-    private static readonly Pronunciation Eowyn = Entry("Éowyn", "AY-oh-win");
+    private static readonly Pronunciation VanHelsing = Entry("Van Helsing", "VAN HEL-sing");
+    private static readonly Pronunciation Helsing = Entry("Helsing", "HEL-sing");
+    private static readonly Pronunciation Emile = Entry("Émile", "AY-meel");
 
     private static Pronunciation Entry(string written, string spoken) =>
         new() { Id = Guid.NewGuid(), WrittenForm = written, SpokenForm = spoken };
 
     [Theory]
     // Possessive and punctuation neighbours: the characters either side are not letters or digits.
-    [InlineData("Kulgan's tower.", "KULL-gun's tower.")]
-    [InlineData("Master Kulgan, wait!", "Master KULL-gun, wait!")]
-    [InlineData("“Kulgan” he said", "“KULL-gun” he said")]
-    [InlineData("a Kulgan-like frown", "a KULL-gun-like frown")]
+    [InlineData("Watson's tower.", "WAT-sun's tower.")]
+    [InlineData("Master Watson, wait!", "Master WAT-sun, wait!")]
+    [InlineData("“Watson” he said", "“WAT-sun” he said")]
+    [InlineData("a Watson-like frown", "a WAT-sun-like frown")]
     // No partial words.
-    [InlineData("A Kulganite and MacKulgan.", "A Kulganite and MacKulgan.")]
-    [InlineData("Kulgan2 and 2Kulgan", "Kulgan2 and 2Kulgan")]
+    [InlineData("A Watsonite and MacWatson.", "A Watsonite and MacWatson.")]
+    [InlineData("Watson2 and 2Watson", "Watson2 and 2Watson")]
     // Twice, left to right.
-    [InlineData("Kulgan and Kulgan", "KULL-gun and KULL-gun")]
+    [InlineData("Watson and Watson", "WAT-sun and WAT-sun")]
     public void WholeWordsOnly(string text, string spoken)
     {
-        Assert.Equal(spoken, new PronunciationMatcher([Kulgan]).SpokenTextOf(text));
+        Assert.Equal(spoken, new PronunciationMatcher([Watson]).SpokenTextOf(text));
     }
 
     [Theory]
     // Title case: the spoken form's first letter follows, the rest stays as entered.
-    [InlineData("Kulgan came.", "KULL-gun came.")]
+    [InlineData("Watson came.", "WAT-sun came.")]
     // Lower case: only the first letter follows, so the stress capitals survive.
-    [InlineData("kulgan came.", "kULL-gun came.")]
+    [InlineData("watson came.", "wAT-sun came.")]
     // All upper: the whole spoken form is upper-cased.
-    [InlineData("KULGAN!", "KULL-GUN!")]
+    [InlineData("WATSON!", "WAT-SUN!")]
     // Mixed: the first letter rules.
-    [InlineData("kULGAN", "kULL-gun")]
+    [InlineData("wATSON", "wAT-sun")]
     public void TheMatchsCaseCarriesOver(string text, string spoken)
     {
-        Assert.Equal(spoken, new PronunciationMatcher([Kulgan]).SpokenTextOf(text));
+        Assert.Equal(spoken, new PronunciationMatcher([Watson]).SpokenTextOf(text));
     }
 
     [Theory]
@@ -64,50 +64,50 @@ public class PronunciationMatcherTests
     }
 
     [Theory]
-    [InlineData("to Minas Tirith.", "to MEE-nas TEER-ith.")]
-    [InlineData("to Minas\n  Tirith.", "to MEE-nas TEER-ith.")]
-    [InlineData("to Minas\tTirith.", "to MEE-nas TEER-ith.")]
-    [InlineData("to MinasTirith.", "to MinasTirith.")]
+    [InlineData("to Van Helsing.", "to VAN HEL-sing.")]
+    [InlineData("to Van\n  Helsing.", "to VAN HEL-sing.")]
+    [InlineData("to Van\tHelsing.", "to VAN HEL-sing.")]
+    [InlineData("to VanHelsing.", "to VanHelsing.")]
     public void AMultiWordForm_MatchesAnyRunOfWhitespace(string text, string spoken)
     {
-        Assert.Equal(spoken, new PronunciationMatcher([MinasTirith]).SpokenTextOf(text));
+        Assert.Equal(spoken, new PronunciationMatcher([VanHelsing]).SpokenTextOf(text));
     }
 
     [Theory]
-    [InlineData("Minas Tirith fell.", "MEE-nas TEER-ith fell.")]
-    [InlineData("Tirith fell.", "TEER-ith fell.")]
-    [InlineData("Minas Tirith and Tirith", "MEE-nas TEER-ith and TEER-ith")]
+    [InlineData("Van Helsing fell.", "VAN HEL-sing fell.")]
+    [InlineData("Helsing fell.", "HEL-sing fell.")]
+    [InlineData("Van Helsing and Helsing", "VAN HEL-sing and HEL-sing")]
     public void TheLongerFormWins_WhereTwoOverlap(string text, string spoken)
     {
         // Listed shorter first: precedence is length, not order.
-        Assert.Equal(spoken, new PronunciationMatcher([Tirith, MinasTirith]).SpokenTextOf(text));
+        Assert.Equal(spoken, new PronunciationMatcher([Helsing, VanHelsing]).SpokenTextOf(text));
     }
 
     [Fact]
     public void ALongerFormThatFailsItsWordEdge_LeavesTheShorterOneToMatch()
     {
-        var matcher = new PronunciationMatcher([Entry("Minas", "MEE-nas"), Entry("Minas Tir", "wrong")]);
+        var matcher = new PronunciationMatcher([Entry("Van", "VAN"), Entry("Van Hel", "wrong")]);
 
-        Assert.Equal("MEE-nas Tirith", matcher.SpokenTextOf("Minas Tirith"));
+        Assert.Equal("VAN Helsing", matcher.SpokenTextOf("Van Helsing"));
     }
 
     [Fact]
     public void ASpokenForm_IsNeverRescanned()
     {
-        // "Pug" → "Kulgan" must not then become "KULL-gun".
-        var matcher = new PronunciationMatcher([Entry("Pug", "Kulgan"), Kulgan]);
+        // "Holmes" → "Watson" must not then become "WAT-sun".
+        var matcher = new PronunciationMatcher([Entry("Holmes", "Watson"), Watson]);
 
-        Assert.Equal("Kulgan met KULL-gun.", matcher.SpokenTextOf("Pug met Kulgan."));
+        Assert.Equal("Watson met WAT-sun.", matcher.SpokenTextOf("Holmes met Watson."));
     }
 
     [Theory]
-    [InlineData("Éowyn rode.", "AY-oh-win rode.")]
-    [InlineData("éowyn rode.", "aY-oh-win rode.")]
-    [InlineData("ÉOWYN!", "AY-OH-WIN!")]
-    [InlineData("Éowynë rode.", "Éowynë rode.")]
+    [InlineData("Émile rode.", "AY-meel rode.")]
+    [InlineData("émile rode.", "aY-meel rode.")]
+    [InlineData("ÉMILE!", "AY-MEEL!")]
+    [InlineData("Émileë rode.", "Émileë rode.")]
     public void UnicodeLetters_AreLettersForCaseAndForWordEdges(string text, string spoken)
     {
-        Assert.Equal(spoken, new PronunciationMatcher([Eowyn]).SpokenTextOf(text));
+        Assert.Equal(spoken, new PronunciationMatcher([Emile]).SpokenTextOf(text));
     }
 
     [Fact]
@@ -115,35 +115,35 @@ public class PronunciationMatcherTests
     {
         var matcher = new PronunciationMatcher([]);
 
-        var spoken = matcher.Apply("Kulgan came.");
+        var spoken = matcher.Apply("Watson came.");
 
-        Assert.Equal("Kulgan came.", spoken.Text);
+        Assert.Equal("Watson came.", spoken.Text);
         Assert.Empty(spoken.Matches);
     }
 
     [Fact]
     public void Matches_AreSpansInTheOriginalText_NamingTheirEntry()
     {
-        var matcher = new PronunciationMatcher([Kulgan, Tirith, MinasTirith]);
-        const string text = "Kulgan's road to Minas  Tirith.";
+        var matcher = new PronunciationMatcher([Watson, Helsing, VanHelsing]);
+        const string text = "Watson's note to Van  Helsing.";
 
         var spoken = matcher.Apply(text);
 
         Assert.Equal(
         [
-            new PronunciationMatch(0, 6, Kulgan.Id),
-            new PronunciationMatch(17, 13, MinasTirith.Id),
+            new PronunciationMatch(0, 6, Watson.Id),
+            new PronunciationMatch(17, 12, VanHelsing.Id),
         ], spoken.Matches);
-        Assert.Equal("KULL-gun's road to MEE-nas TEER-ith.", spoken.Text);
+        Assert.Equal("WAT-sun's note to VAN HEL-sing.", spoken.Text);
         Assert.Equal(spoken.Matches, matcher.MatchesIn(text));
     }
 
     [Fact]
     public void RegexCharactersInAWrittenForm_AreLiteral()
     {
-        var matcher = new PronunciationMatcher([Entry("Dr. No", "Doctor No")]);
+        var matcher = new PronunciationMatcher([Entry("Dr. Seward", "Doctor Seward")]);
 
-        Assert.Equal("Doctor No said.", matcher.SpokenTextOf("Dr. No said."));
-        Assert.Equal("Drx No said.", matcher.SpokenTextOf("Drx No said."));
+        Assert.Equal("Doctor Seward said.", matcher.SpokenTextOf("Dr. Seward said."));
+        Assert.Equal("Drx Seward said.", matcher.SpokenTextOf("Drx Seward said."));
     }
 }

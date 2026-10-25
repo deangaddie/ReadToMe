@@ -264,7 +264,7 @@ namespace Read2Me.Tests.Services.BookEdits
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("BOOK ONE", v => v
                     .AddPart("PART I", p => p
-                        .AddChapter("THE MULE", c => c.AddParagraph("p1", pp => pp.AddNarration("i1", "Text.")))
+                        .AddChapter("THE FIVE ORANGE PIPS", c => c.AddParagraph("p1", pp => pp.AddNarration("i1", "Text.")))
                         .AddChapter("Ordinary", c => c.AddParagraph("p2", pp => pp.AddNarration("i2", "Text."))))
                     .AddPart("Part Two", p => p
                         .AddChapter("ANOTHER", c => c.AddParagraph("p3", pp => pp.AddNarration("i3", "Text.")))))

@@ -277,17 +277,17 @@ namespace Read2Me.Tests.Services.BookEdits
         }
 
         [Theory]
-        [InlineData(CaseMode.Sentence, "Hari Seldon spoke on Trantor")]
-        [InlineData(CaseMode.Title, "Hari Seldon Spoke on Trantor")]
-        [InlineData(CaseMode.Upper, "HARI SELDON SPOKE ON TRANTOR")]
+        [InlineData(CaseMode.Sentence, "Fitzwilliam Darcy rode to Pemberley")]
+        [InlineData(CaseMode.Title, "Fitzwilliam Darcy Rode to Pemberley")]
+        [InlineData(CaseMode.Upper, "FITZWILLIAM DARCY RODE TO PEMBERLEY")]
         public async Task Propose_ChangeCase_KeepsTheNamesTheBookUses(CaseMode mode, string expected)
         {
-            var reader = new BookTextReader(["He met Hari Seldon there.", "They left for Trantor.", "he spoke", "on"]);
+            var reader = new BookTextReader(["He met Fitzwilliam Darcy there.", "They left for Pemberley.", "he rode", "to"]);
             var program = Program(new EditTransform(TransformKind.ChangeCase, CaseMode: mode));
 
             var proposals = await new BookEditProposalService(new FakeLlmCompletionRunner(), NewSettings(),
                     reader, reader, NullLogger<BookEditProposalService>.Instance)
-                .ProposeAsync(Folder, program, [Target(1, "HARI SELDON SPOKE ON TRANTOR")],
+                .ProposeAsync(Folder, program, [Target(1, "FITZWILLIAM DARCY RODE TO PEMBERLEY")],
                     null, false, CancellationToken.None);
 
             Assert.Equal(expected, proposals[0].NewValue);

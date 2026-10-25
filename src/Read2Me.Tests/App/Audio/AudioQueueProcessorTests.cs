@@ -38,10 +38,10 @@ namespace Read2Me.Tests.App.Audio
         private static readonly PipelineRequest DefaultRequest = new(
             Folder: new ProjectFolderId(FolderName),
             ParagraphItemId: Guid.NewGuid(),
-            SourceText: "In a hole in the ground",
-            Speaker: "Bilbo",
+            SourceText: "Pieces of eight!",
+            Speaker: "Jim",
             VoiceInstructions: "whispered",
-            RefAudioPath: "/voices/bilbo/voice.wav",
+            RefAudioPath: "/voices/jim/voice.wav",
             TtsConfig: new ParagraphTtsServiceConfig { Id = 1, Name = "Test", Type = ParagraphTtsServiceType.VoxCpm2, SettingsJson = "{}" },
             TtsSettingsOverrideJson: null,
             MaxAttempts: 1,
@@ -51,7 +51,7 @@ namespace Read2Me.Tests.App.Audio
         private static PipelineResult OkResult() => new(
             AudioBytes: [0x52, 0x49, 0x46, 0x46],
             Normalize: new NormalizeOutcome(Ok: true, Reason: null),
-            Verify: new VerifyOutcome(Ok: true, Wer: 0.0, Reason: null, Transcript: "In a hole in the ground", Rescued: false),
+            Verify: new VerifyOutcome(Ok: true, Wer: 0.0, Reason: null, Transcript: "Pieces of eight!", Rescued: false),
             Outcome: new WorkOutcome.Ok());
 
         /// The pipeline is total, so an AI failure reaches the processor as a value, not a throw.
@@ -62,12 +62,12 @@ namespace Read2Me.Tests.App.Audio
             Outcome: outcome);
 
         private static ResolutionResult SuccessResolution(Guid? itemId = null) => new(
-            Speaker: "Bilbo",
-            SourceText: "In a hole in the ground",
+            Speaker: "Jim",
+            SourceText: "Pieces of eight!",
             Request: DefaultRequest with { ParagraphItemId = itemId ?? DefaultRequest.ParagraphItemId },
             FailureReason: null);
 
-        private static ResolutionResult FailureResolution(string reason, string? speaker = "Bilbo", string? text = "In a hole in the ground") =>
+        private static ResolutionResult FailureResolution(string reason, string? speaker = "Jim", string? text = "Pieces of eight!") =>
             new(Speaker: speaker, SourceText: text, Request: null, FailureReason: reason);
 
         public AudioQueueProcessorTests()
@@ -104,7 +104,7 @@ namespace Read2Me.Tests.App.Audio
 
             await _sut.ProcessItemAsync(queued, TestContext.Current.CancellationToken);
 
-            Assert.Single(_events.OfType<ItemStarted>(), e => e.Attempt == 1 && e.Character == "Bilbo");
+            Assert.Single(_events.OfType<ItemStarted>(), e => e.Attempt == 1 && e.Character == "Jim");
         }
 
         /// <summary>
@@ -238,12 +238,12 @@ namespace Read2Me.Tests.App.Audio
         [Fact]
         public async Task ResolverFailure_WithSpeakerAndText_PublishesItemStartedWithThem()
         {
-            _resolver.Result = FailureResolution("No default voice for Bilbo", speaker: "Bilbo", text: "Some text");
+            _resolver.Result = FailureResolution("No default voice for Jim", speaker: "Jim", text: "Some text");
             var queued = MakeItem();
 
             await _sut.ProcessItemAsync(queued, TestContext.Current.CancellationToken);
 
-            Assert.Contains(_events, e => e is ItemStarted s && s.Character == "Bilbo" && s.Text == "Some text");
+            Assert.Contains(_events, e => e is ItemStarted s && s.Character == "Jim" && s.Text == "Some text");
         }
 
         private sealed class RecordingQueue : IAudioQueue

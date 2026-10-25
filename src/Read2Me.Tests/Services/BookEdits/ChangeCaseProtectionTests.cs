@@ -11,80 +11,91 @@ namespace Read2Me.Tests.Services.BookEdits
     {
         private const string AllCapsPattern = EditProgramSchema.AllCapsPattern;
 
-        /// <summary>A Foundation-like book: the survey's all-caps values (which carry no case
-        /// evidence) plus prose that uses the names mid-sentence and the ordinary words in lowercase.
-        /// "four" and "kingdoms" are below the word threshold on their own, so only the phrase rule
-        /// keeps "Four Kingdoms".</summary>
-        private static readonly string[] FoundationBook =
+        /// <summary>A book of real Project Gutenberg lines (Dracula, the Sherlock Holmes stories, Alice,
+        /// Pride and Prejudice, the Gutenberg licence and a footnote from The Prince): the survey's
+        /// all-caps values (which carry no case evidence) plus prose that uses the names mid-sentence
+        /// and the ordinary words in lowercase. "red" is below the word threshold and hyphen parts
+        /// count on their own, so "Red-headed League" keeps only "League".</summary>
+        private static readonly string[] GutenbergBook =
         [
-            "PART IV",
-            "HARI SELDON— . . . born in the 11,988th year of the Galactic Era;",
-            "ENCYCLOPEDIA GALACTICA",
-            "“TAXIS TO ALL POINTS.”",
-            "TRANTOR— . . . At the beginning of the thirteenth millennium,",
-            "PSYCHOHISTORY— . . . Gaal Dornick, using nonmathematical concepts,",
-            "…the last strong Emperor, Cleon II. The first Chief Commissioner.",
-            "THE MAYORS",
-            "THE FOUR KINGDOMS— The name given to those portions of the Province of Anacreon",
-            "THE TRADERS",
-            "THE MERCHANT",
-            "PRINCES",
-            "I’m just a sucker who happened to land on Glyptal IV the day after the mail.",
-            "“It’s on Orsha II. Twenty parsecs off.",
-            "but for the reign of Stannell VI, and he died fifty years ago.",
-            "it works on Korell, where UV light is not to be found on street corners.",
-            "KORELL— . . . And so after three years of a war",
-            "ISAAC ASIMOV began his Foundation Series at the age of twenty-one,",
-            "THE FOUNDATION NOVELS",
-            "THE ROBOT NOVELS",
-            "Gaal Dornick had met Hari Seldon on Trantor before he left for Terminus.",
-            "He said Hari Seldon was a great man, and that the Foundation would last.",
-            "The ships of Korell came in the night; the Encyclopedia Galactica was finished.",
-            "It rested on a scientific foundation, as the Foundation itself did.",
-            "the Robot series and the Foundation series were written by Isaac Asimov",
-            "Not even the Four Kingdoms could stand; the Four Kingdoms fell, and later the Four Kingdoms rose.",
-            "there were four kingdoms once",
-            .. Enumerable.Repeat("the four winds blew over the kingdoms", 8),
-            "the traders came, the traders left, as traders do, and the Traders guild said nothing",
-            "a merchant, a merchant's son and a merchant's wife met the Merchant at the merchant hall",
-            "psychohistory is a science of mobs",
+            "CHAPTER IV",
+            "“MY DEAR MR. SHERLOCK HOLMES,—You really did it very well. You took me in completely.",
+            "MINA MURRAY’S JOURNAL",
+            "labelled “ORANGE MARMALADE”, but to her great disappointment it was empty",
+            "JONATHAN HARKER’S JOURNAL—continued",
+            "“THE RED-HEADED LEAGUE IS DISSOLVED. October 9, 1890.”",
+            "Louis XII divorced his wife, Jeanne, daughter of Louis XI, and married in 1499 Anne of Brittany,",
+            "widow of Charles VIII, in order to retain the Duchy of Brittany for the crown.",
+            "THE FIVE ORANGE PIPS",
+            "THE RED-HEADED LEAGUE",
+            "THE MAN WITH THE TWISTED LIP",
+            "THE ESCAPED WOLF.",
+            "PERILOUS ADVENTURE OF OUR INTERVIEWER.",
+            "Most people start at our website which has the main PG search facility: www.gutenberg.org.",
+            "A HAMPSTEAD MYSTERY.",
+            "SIR WILLIAM stayed only a week at Hunsford",
+            "YOU AGREE THAT THE FOUNDATION, THE TRADEMARK OWNER, AND ANY DISTRIBUTOR",
+            "procession, came THE KING AND QUEEN OF HEARTS.",
+            "I leave a photograph which he might care to possess; and I remain, dear Mr. Sherlock Holmes,",
+            "“That was Miss Mina Murray?” Again I assented.",
+            "he told me of a diary kept by Jonathan Harker when abroad",
+            "I was so absorbed in that wonderful diary of Jonathan Harker and that other of his wife",
+            "The neighbourhood of Hampstead is just at present exercised with a series of events",
+            "It was at Sir William Lucas’s, where a large party were assembled.",
+            "I defy even Sir William Lucas himself to produce a more valuable son-in-law.",
+            "The King and Queen of Hearts were seated on their throne when they arrived,",
+            "“Herald, read the accusation!” said the King.",
+            "The Project Gutenberg Literary Archive Foundation (“the Foundation” or PGLAF), owns a compilation copyright",
+            "I asked him if he could tell me what had become of the Red-headed League.",
+            "Wilson’s assistant counts for a good deal in this mystery of the Red-headed League.",
+            "by hearing the very remarkable narrative of the Red-headed League.",
+            "All red-headed men who are sound in body and mind and above the age of twenty-one years, are eligible.",
+            "Wilson, that I was a red-headed man.",
+            "He was himself red-headed, and he had a great sympathy for all red-headed men;",
+            "there would be millions of red-headed men who would apply.",
+            "Fleet Street was choked with red-headed folk, and Pope’s Court looked like a coster’s orange barrow.",
+            "What, the red-headed man?",
+            "upon a corner house, announced the place where our red-headed client carried on his business.",
+            "there are no red-headed clients to vex us with their conundrums.",
+            "from the extraordinary story of the red-headed copier of the Encyclopædia down to the visit to Saxe-Coburg Square",
+            "Your red-headed idea was very new and effective.",
         ];
 
-        private static readonly ProtectionSet Foundation = ProtectionSet.Build(FoundationBook);
+        private static readonly ProtectionSet Gutenberg = ProtectionSet.Build(GutenbergBook);
 
         [Theory]
-        // The survey's 19 sample rows ("Simulation", protected column)
-        [InlineData("HARI SELDON— . . . born in the 11,988th year", "Hari Seldon— . . . born in the 11,988th year")]
-        [InlineData("ENCYCLOPEDIA GALACTICA", "Encyclopedia Galactica")]
-        [InlineData("“TAXIS TO ALL POINTS.”", "“Taxis to all points.”")]
-        [InlineData("TRANTOR— . . . At the beginning", "Trantor— . . . At the beginning")]
-        [InlineData("PSYCHOHISTORY— . . . Gaal Dornick", "Psychohistory— . . . Gaal Dornick")]
-        [InlineData("…the last strong Emperor, Cleon II. The first", "…the last strong Emperor, Cleon II. The first")]
-        [InlineData("THE MAYORS", "The mayors")]
-        [InlineData("THE FOUR KINGDOMS— The name", "The Four Kingdoms— The name")]
-        [InlineData("THE TRADERS", "The traders")]
-        [InlineData("THE MERCHANT", "The merchant")]
-        [InlineData("land on Glyptal IV the day", "land on Glyptal IV the day")]
-        [InlineData("“It’s on Orsha II. Twenty", "“It’s on Orsha II. Twenty")]
-        [InlineData("reign of Stannell VI, and", "reign of Stannell VI, and")]
-        [InlineData("where UV light is not", "where UV light is not")]
-        [InlineData("KORELL— . . .", "Korell— . . .")]
-        [InlineData("ISAAC ASIMOV began", "Isaac Asimov began")]
-        [InlineData("THE FOUNDATION NOVELS", "The Foundation novels")]
-        [InlineData("THE ROBOT NOVELS", "The Robot novels")]
-        [InlineData("PART IV", "Part IV")]
-        public void Sentence_FoundationSurveyRows(string value, string expected)
+        // The survey's 19 sample rows ("Simulation", protected column), as Gutenberg lines of the same shape
+        [InlineData("“MY DEAR MR. SHERLOCK HOLMES,—You really did it very well.", "“My dear Mr. Sherlock Holmes,—You really did it very well.")]
+        [InlineData("MINA MURRAY’S JOURNAL", "Mina Murray’s journal")]
+        [InlineData("“ORANGE MARMALADE”", "“Orange marmalade”")]
+        [InlineData("JONATHAN HARKER’S JOURNAL—continued", "Jonathan Harker’s journal—continued")]
+        [InlineData("“THE RED-HEADED LEAGUE IS DISSOLVED. October 9, 1890.”", "“The red-headed League is dissolved. October 9, 1890.”")]
+        [InlineData("Louis XII divorced his wife, Jeanne", "Louis XII divorced his wife, Jeanne")]
+        [InlineData("THE FIVE ORANGE PIPS", "The five orange pips")]
+        [InlineData("THE RED-HEADED LEAGUE", "The red-headed League")]
+        [InlineData("THE MAN WITH THE TWISTED LIP", "The man with the twisted lip")]
+        [InlineData("THE ESCAPED WOLF.", "The escaped wolf.")]
+        [InlineData("widow of Charles VIII, in order", "widow of Charles VIII, in order")]
+        [InlineData("daughter of Louis XI, and married", "daughter of Louis XI, and married")]
+        [InlineData("married in 1499 Anne of Brittany", "married in 1499 Anne of Brittany")]
+        [InlineData("the main PG search facility", "the main PG search facility")]
+        [InlineData("A HAMPSTEAD MYSTERY.", "A Hampstead mystery.")]
+        [InlineData("SIR WILLIAM stayed only a week", "Sir William stayed only a week")]
+        [InlineData("YOU AGREE THAT THE FOUNDATION, THE TRADEMARK OWNER", "You agree that the Foundation, the trademark owner")]
+        [InlineData("THE KING AND QUEEN OF HEARTS", "The King and Queen of Hearts")]
+        [InlineData("CHAPTER IV", "Chapter IV")]
+        public void Sentence_SurveyRows(string value, string expected)
         {
-            Assert.Equal(expected, DeterministicTransformer.ChangeCase(value, AllCapsPattern, CaseMode.Sentence, Foundation));
+            Assert.Equal(expected, DeterministicTransformer.ChangeCase(value, AllCapsPattern, CaseMode.Sentence, Gutenberg));
         }
 
         [Theory]
-        [InlineData("THE FOUR KINGDOMS", "The Four Kingdoms")]
-        [InlineData("THE MAYORS OF TERMINUS", "The Mayors of Terminus")]
-        [InlineData("HARI SELDON AND THE FOUNDATION", "Hari Seldon and the Foundation")]
+        [InlineData("THE RED-HEADED LEAGUE", "The Red-Headed League")]
+        [InlineData("THE NEIGHBOURHOOD OF HAMPSTEAD", "The Neighbourhood of Hampstead")]
+        [InlineData("SHERLOCK HOLMES AND THE FOUNDATION", "Sherlock Holmes and the Foundation")]
         public void Title_KeepsNamesAndSmallWords(string value, string expected)
         {
-            Assert.Equal(expected, DeterministicTransformer.ChangeCase(value, null, CaseMode.Title, Foundation));
+            Assert.Equal(expected, DeterministicTransformer.ChangeCase(value, null, CaseMode.Title, Gutenberg));
         }
 
         [Theory]
@@ -158,11 +169,11 @@ namespace Read2Me.Tests.Services.BookEdits
         {
             string[] book =
             [
-                "the Commission of Public Safety met",
+                "the Committee of Public Safety met",
                 .. Enumerable.Repeat("the public safety of the town", 5),
             ];
-            Assert.Equal("Commission of Public Safety— . . .",
-                ChangeCase("COMMISSION OF PUBLIC SAFETY— . . .", CaseMode.Sentence, book));
+            Assert.Equal("Committee of Public Safety— . . .",
+                ChangeCase("COMMITTEE OF PUBLIC SAFETY— . . .", CaseMode.Sentence, book));
             Assert.Equal("The public safety", ChangeCase("THE PUBLIC SAFETY", CaseMode.Sentence, book));
         }
 
@@ -177,17 +188,17 @@ namespace Read2Me.Tests.Services.BookEdits
         [Fact]
         public void Possessive_CountsAndRestoresOnTheStem()
         {
-            string[] book = ["it was Seldon's plan"];
-            Assert.Equal("Seldon's plan", ChangeCase("SELDON'S PLAN", CaseMode.Sentence, book));
-            Assert.Equal("The plan was Seldon’s", ChangeCase("THE PLAN WAS SELDON’S", CaseMode.Sentence, book));
+            string[] book = ["it was Bingley's letter"];
+            Assert.Equal("Bingley's letter", ChangeCase("BINGLEY'S LETTER", CaseMode.Sentence, book));
+            Assert.Equal("The letter was Bingley’s", ChangeCase("THE LETTER WAS BINGLEY’S", CaseMode.Sentence, book));
         }
 
         [Fact]
         public void Hyphen_PartsCountAndRestoreOnTheirOwn()
         {
-            string[] book = ["a Trantor-born man", "the born leader"];
-            Assert.Equal("Trantor-born traders", ChangeCase("TRANTOR-BORN TRADERS", CaseMode.Sentence, book));
-            Assert.Equal("Trantor-Born Traders", ChangeCase("TRANTOR-BORN TRADERS", CaseMode.Title, book));
+            string[] book = ["a Longbourn-born man", "the born leader"];
+            Assert.Equal("Longbourn-born clerks", ChangeCase("LONGBOURN-BORN CLERKS", CaseMode.Sentence, book));
+            Assert.Equal("Longbourn-Born Clerks", ChangeCase("LONGBOURN-BORN CLERKS", CaseMode.Title, book));
         }
 
         [Fact]
@@ -214,11 +225,11 @@ namespace Read2Me.Tests.Services.BookEdits
         }
 
         [Theory]
-        [InlineData(CaseMode.Upper, "HARI SELDON SPOKE")]
-        [InlineData(CaseMode.Lower, "hari seldon spoke")]
+        [InlineData(CaseMode.Upper, "SHERLOCK HOLMES SPOKE")]
+        [InlineData(CaseMode.Lower, "sherlock holmes spoke")]
         public void UpperAndLower_IgnoreTheProtectionSet(CaseMode mode, string expected)
         {
-            Assert.Equal(expected, DeterministicTransformer.ChangeCase("Hari Seldon spoke", null, mode, Foundation));
+            Assert.Equal(expected, DeterministicTransformer.ChangeCase("Sherlock Holmes spoke", null, mode, Gutenberg));
         }
 
         private static string ChangeCase(string value, CaseMode mode, IEnumerable<string> book)

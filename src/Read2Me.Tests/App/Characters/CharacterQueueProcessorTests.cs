@@ -101,7 +101,7 @@ namespace Read2Me.Tests.App.Characters
             new(status, new AttributionAnswer(answered, itemIds), reason);
 
         /// <summary>A fully attributed answer: the paragraph's one dialog item, for the named speaker.</summary>
-        private static AttributionOutcome Resolved(string speaker = "Bilbo", string voice = "") =>
+        private static AttributionOutcome Resolved(string speaker = "Jim", string voice = "") =>
             Answer(AttributionStatus.Resolved, null, DialogIds(), Says(0, speaker, voice));
 
         /// <summary>The one attribution the command carried.</summary>
@@ -125,12 +125,12 @@ namespace Read2Me.Tests.App.Characters
             // A dialog item at index 0 and a narration item at index 1, both answered.
             var dialogId = Guid.NewGuid();
             _attribution.Outcome = Answer(AttributionStatus.Resolved, null, [dialogId, null],
-                Says(0, "Bilbo", "Whisper"), Says(1, "narrator"));
+                Says(0, "Jim", "Whisper"), Says(1, "narrator"));
             _resolver.ResolvedId = charId;
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
-            Assert.Equal("Bilbo", _resolver.Names.Single());
+            Assert.Equal("Jim", _resolver.Names.Single());
 
             // Only the dialog item is stamped: the narration index has no id behind it and is dropped.
             var attribution = SingleAttribution();
@@ -164,7 +164,7 @@ namespace Read2Me.Tests.App.Characters
             _resolver.ResolvedId = charId;
             var ids = DialogIds(2);
             // Index 1 is a dialog item the answer never mentions: nothing to stamp for it at all.
-            _attribution.Outcome = Answer(AttributionStatus.Unknown, null, ids, Says(0, "Bilbo"));
+            _attribution.Outcome = Answer(AttributionStatus.Unknown, null, ids, Says(0, "Jim"));
             _reader.Unattributed = 1;
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
@@ -186,7 +186,7 @@ namespace Read2Me.Tests.App.Characters
             var ids = DialogIds();
             _resolver.ResolvedId = Guid.NewGuid();
             _attribution.Outcome = Answer(AttributionStatus.Resolved, null, ids,
-                Says(0, "Bilbo"), Says(7, "Frodo"), Says(-1, "Sam"));
+                Says(0, "Jim"), Says(7, "Livesey"), Says(-1, "Gray"));
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
@@ -246,7 +246,7 @@ namespace Read2Me.Tests.App.Characters
         [Fact]
         public async Task CancelledSpeakerCreate_DoesNotMarkFailed()
         {
-            _attribution.Outcome = Resolved("Gandalf");
+            _attribution.Outcome = Resolved("Silver");
             _resolver.Refusal = new OperationCanceledException("Cancelled before commit.");
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
@@ -259,7 +259,7 @@ namespace Read2Me.Tests.App.Characters
         [Fact]
         public async Task ContendedSpeakerCreate_FailsWithTheContention()
         {
-            _attribution.Outcome = Resolved("Gandalf");
+            _attribution.Outcome = Resolved("Silver");
             _resolver.Refusal = new InvalidOperationException("Another write is still in progress.");
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
@@ -289,8 +289,8 @@ namespace Read2Me.Tests.App.Characters
         [Fact]
         public async Task SpeakerCreateRefusedWhileRestoring_RunsAgainAfterTheRestore()
         {
-            _attribution.Outcome = Resolved("Gandalf");
-            _resolver.Refusal = new ProjectRestoringException("Writing character 'Gandalf' failed: Project is restoring");
+            _attribution.Outcome = Resolved("Silver");
+            _resolver.Refusal = new ProjectRestoringException("Writing character 'Silver' failed: Project is restoring");
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
@@ -342,11 +342,11 @@ namespace Read2Me.Tests.App.Characters
             var charId = Guid.NewGuid();
             _catalog.Narrator = new NarratorIdentity(Guid.NewGuid(), "Dr. Watson", true);
             _resolver.ResolvedId = charId;
-            _attribution.Outcome = Resolved("Bilbo");
+            _attribution.Outcome = Resolved("Jim");
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 
-            Assert.Equal("Bilbo", _resolver.Names.Single());
+            Assert.Equal("Jim", _resolver.Names.Single());
             Assert.Equal(charId, SingleAttribution().CharacterId);
         }
 
@@ -359,7 +359,7 @@ namespace Read2Me.Tests.App.Characters
             _queue.Enqueue(items);
             _resolver.ResolvedId = Guid.NewGuid();
             _attribution.Outcome = Answer(AttributionStatus.Resolved, null, DialogIds(2),
-                Says(0, "Bilbo"), Says(1, "Frodo"));
+                Says(0, "Jim"), Says(1, "Livesey"));
 
             await _sut.ProcessItemAsync(items[0], CancellationToken.None);
 
@@ -436,8 +436,8 @@ namespace Read2Me.Tests.App.Characters
             _resolver.ResolvedId = Guid.NewGuid();
             // Stream yields the step-0 resolve first; by the time the second item streams, the first
             // must already be applied (chip flipped to done).
-            _attribution.StreamResults.Enqueue((early, Resolved("Bilbo")));
-            _attribution.StreamResults.Enqueue((late, Resolved("Frodo")));
+            _attribution.StreamResults.Enqueue((early, Resolved("Jim")));
+            _attribution.StreamResults.Enqueue((late, Resolved("Livesey")));
 
             await _sut.ProcessItemAsync(early, CancellationToken.None);
 
@@ -531,7 +531,7 @@ namespace Read2Me.Tests.App.Characters
             var items = new[] { MakeChapterItem(chapterId), MakeChapterItem(chapterId) };
             _queue.Enqueue(items);
 
-            _attribution.ThrowException = new ProjectRestoringException("Writing character 'Gandalf' failed: Project is restoring");
+            _attribution.ThrowException = new ProjectRestoringException("Writing character 'Silver' failed: Project is restoring");
 
             await _sut.ProcessItemAsync(items[0], CancellationToken.None);
 
