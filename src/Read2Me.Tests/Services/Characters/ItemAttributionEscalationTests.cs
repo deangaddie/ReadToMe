@@ -209,13 +209,13 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void UnlistedSpeakerNamedByNarrationTag_TriggerNone()
         {
-            // "…and Tathar said," is direct textual evidence for a first appearance, so the answer
-            // is confident and lands now — the character is created on apply — rather than costing
-            // a walk down the whole escalation chain.
+            // "Mr. Darcy …, and said," is direct textual evidence for a first appearance, so the
+            // answer is confident and lands now — the character is created on apply — rather than
+            // costing a walk down the whole escalation chain.
             var trigger = DeriveTrigger(
-                Answer(Says(1, "Tathar")),
-                Items(NarrationItem("Borric motioned for the boys to approach, and Tathar said, "),
-                      DialogItem("“Which of you found this outworlder?”")));
+                Answer(Says(1, "Darcy")),
+                Items(NarrationItem("Mr. Darcy drew his chair a little towards her, and said, "),
+                      DialogItem("“You cannot have been always at Longbourn.”")));
             Assert.Equal(EscalationTrigger.None, trigger);
         }
 
@@ -223,8 +223,8 @@ namespace Read2Me.Tests.Services.Characters
         public void UnlistedSpeakerNamedByPossessiveInNarration_TriggerNone()
         {
             var trigger = DeriveTrigger(
-                Answer(Says(1, "Tathar")),
-                Items(NarrationItem("Tathar’s gaze did not waver. "), DialogItem()));
+                Answer(Says(1, "Arthur")),
+                Items(NarrationItem("Arthur’s father is better. "), DialogItem()));
             Assert.Equal(EscalationTrigger.None, trigger);
         }
 
@@ -241,10 +241,10 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void UnlistedSpeakerMatchingOnlyPartOfANarrationWord_TriggerUnlistedName()
         {
-            // "Tom" must not be attested by "Tomas" — whole-word match only.
+            // "Art" must not be attested by "Arthur" — whole-word match only.
             var trigger = DeriveTrigger(
-                Answer(Says(1, "Tom")),
-                Items(NarrationItem("Tomas began haltingly. "), DialogItem()));
+                Answer(Says(1, "Art")),
+                Items(NarrationItem("Arthur’s father is better. "), DialogItem()));
             Assert.Equal(EscalationTrigger.UnlistedName, trigger);
         }
 
@@ -253,8 +253,9 @@ namespace Read2Me.Tests.Services.Characters
         {
             // Attestation clears the unlisted name, so the unattributed item is what is left.
             var trigger = DeriveTrigger(
-                Answer(Says(1, "Tathar"), Says(2, "unknown")),
-                Items(NarrationItem("Tathar said, "), DialogItem(), DialogItem()));
+                Answer(Says(1, "Darcy"), Says(2, "unknown")),
+                Items(NarrationItem("Mr. Darcy drew his chair a little towards her, and said, "),
+                      DialogItem(), DialogItem()));
             Assert.Equal(EscalationTrigger.Unknown, trigger);
         }
 

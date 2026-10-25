@@ -14,11 +14,11 @@ namespace Read2Me.Tests.Services.Characters.Rules
     {
         private static readonly IReadOnlyList<RosterEntry> Roster =
         [
-            new("Pug", []),
-            new("Kulgan", ["the magician"]),
-            new("Tomas", ["Tom"]),
-            new("Carline", []),
-            new("Lord Borric", []),
+            new("Holmes", []),
+            new("Watson", ["the doctor"]),
+            new("Elizabeth", ["Lizzy"]),
+            new("Irene Adler", []),
+            new("Sir William", []),
         ];
 
         private static ContextItem N(string text) =>
@@ -40,33 +40,33 @@ namespace Read2Me.Tests.Services.Characters.Rules
         public void T1_post_tag_with_the_verb_first_names_the_speaker()
         {
             var quote = D("“We must go,”");
-            var tags = Tag(null, P(quote, N("said Pug.")));
+            var tags = Tag(null, P(quote, N("said Holmes.")));
 
-            Assert.Equal(new RuleTag("Pug", "T1-post-vs"), TagOf(tags, quote));
+            Assert.Equal(new RuleTag("Holmes", "T1-post-vs"), TagOf(tags, quote));
         }
 
         [Fact]
         public void T1_post_tag_with_the_subject_first_names_the_speaker()
         {
             var quote = D("“We must go,”");
-            var tags = Tag(null, P(quote, N("Pug said.")));
+            var tags = Tag(null, P(quote, N("Holmes said.")));
 
-            Assert.Equal(new RuleTag("Pug", "T1-post-sv"), TagOf(tags, quote));
+            Assert.Equal(new RuleTag("Holmes", "T1-post-sv"), TagOf(tags, quote));
         }
 
         [Fact]
         public void T1_pre_tag_names_the_speaker()
         {
             var quote = D("“Sit down.”");
-            var tags = Tag(null, P(N("Kulgan said,"), quote));
+            var tags = Tag(null, P(N("Watson said,"), quote));
 
-            Assert.Equal(new RuleTag("Kulgan", "T1-pre"), TagOf(tags, quote));
+            Assert.Equal(new RuleTag("Watson", "T1-pre"), TagOf(tags, quote));
         }
 
         [Fact]
         public void Narration_items_are_never_tagged()
         {
-            var narration = N("said Pug.");
+            var narration = N("said Holmes.");
             var tags = Tag(null, P(D("“We must go,”"), narration));
 
             Assert.Null(TagOf(tags, narration));
@@ -77,25 +77,25 @@ namespace Read2Me.Tests.Services.Characters.Rules
         public void T3_pronoun_pre_tag_resolves_to_the_subject_of_the_sentence_before()
         {
             var quote = D("“Listen.”");
-            var tags = Tag(null, P(N("Kulgan lit his pipe. He said,"), quote));
+            var tags = Tag(null, P(N("Watson lit his pipe. He said,"), quote));
 
-            Assert.Equal(new RuleTag("Kulgan", "T3-pron-pre"), TagOf(tags, quote));
+            Assert.Equal(new RuleTag("Watson", "T3-pron-pre"), TagOf(tags, quote));
         }
 
         [Fact]
         public void T3_pronoun_post_tag_resolves_within_the_paragraph()
         {
             var quote = D("“Come,”");
-            var tags = Tag(null, P(N("Kulgan smiled."), quote, N("he said.")));
+            var tags = Tag(null, P(N("Watson smiled."), quote, N("he said.")));
 
-            Assert.Equal(new RuleTag("Kulgan", "T3-pron-post-sv"), TagOf(tags, quote));
+            Assert.Equal(new RuleTag("Watson", "T3-pron-post-sv"), TagOf(tags, quote));
         }
 
         [Fact]
         public void Gender_guard_an_antecedent_sentence_with_an_opposite_pronoun_does_not_resolve()
         {
             var quote = D("“Listen.”");
-            var tags = Tag(null, P(N("Kulgan looked at her. He said,"), quote));
+            var tags = Tag(null, P(N("Watson looked at her. He said,"), quote));
 
             Assert.Null(TagOf(tags, quote));
         }
@@ -104,7 +104,7 @@ namespace Read2Me.Tests.Services.Characters.Rules
         public void T3_never_crosses_into_the_previous_paragraph()
         {
             var quote = D("“Come,”");
-            var tags = Tag(null, P(N("Kulgan smiled.")), P(quote, N("he said.")));
+            var tags = Tag(null, P(N("Watson smiled.")), P(quote, N("he said.")));
 
             Assert.Null(TagOf(tags, quote));
         }
@@ -113,16 +113,16 @@ namespace Read2Me.Tests.Services.Characters.Rules
         public void T4_an_action_beat_before_the_first_quote_names_the_speaker()
         {
             var quote = D("“I am ready.”");
-            var tags = Tag(null, P(N("Pug stood up."), quote));
+            var tags = Tag(null, P(N("Holmes stood up."), quote));
 
-            Assert.Equal(new RuleTag("Pug", "T4-beat"), TagOf(tags, quote));
+            Assert.Equal(new RuleTag("Holmes", "T4-beat"), TagOf(tags, quote));
         }
 
         [Fact]
         public void Mid_beat_a_beat_before_a_later_quote_is_never_an_answer()
         {
             var second = D("“I am ready.”");
-            var tags = Tag(null, P(D("“Yes.”"), N("Pug stood up."), second));
+            var tags = Tag(null, P(D("“Yes.”"), N("Holmes stood up."), second));
 
             Assert.Empty(tags);
             Assert.Null(TagOf(tags, second));
@@ -133,17 +133,17 @@ namespace Read2Me.Tests.Services.Characters.Rules
         {
             var first = D("“We must go,”");
             var second = D("“The storm is coming.”");
-            var tags = Tag(null, P(first, N("said Pug."), second));
+            var tags = Tag(null, P(first, N("said Holmes."), second));
 
-            Assert.Equal(new RuleTag("Pug", "T1-post-vs"), TagOf(tags, first));
-            Assert.Equal(new RuleTag("Pug", "T2-prop"), TagOf(tags, second));
+            Assert.Equal(new RuleTag("Holmes", "T1-post-vs"), TagOf(tags, first));
+            Assert.Equal(new RuleTag("Holmes", "T2-prop"), TagOf(tags, second));
         }
 
         [Fact]
         public void Embedded_quote_guard_a_quoted_phrase_mid_sentence_is_not_a_turn()
         {
-            var phrase = D("“Galacian Girls”");
-            var tags = Tag(null, P(D("“Look,”"), N("said Pug, who was humming"), phrase, N("all night.")));
+            var phrase = D("“The Dailygraph”");
+            var tags = Tag(null, P(D("“Look,”"), N("said Holmes, who was reading"), phrase, N("all night.")));
 
             Assert.Null(TagOf(tags, phrase));
         }
@@ -152,7 +152,7 @@ namespace Read2Me.Tests.Services.Characters.Rules
         public void Mid_beat_guard_another_character_acting_between_quotes_blocks_propagation()
         {
             var second = D("“Now.”");
-            var tags = Tag(null, P(D("“Go,”"), N("said Pug. Kulgan frowned."), second));
+            var tags = Tag(null, P(D("“Go,”"), N("said Holmes. Watson frowned."), second));
 
             Assert.Null(TagOf(tags, second));
         }
@@ -161,7 +161,7 @@ namespace Read2Me.Tests.Services.Characters.Rules
         public void Back_guard_propagation_back_only_crosses_a_post_tag_fragment()
         {
             var before = D("“What shall I do?”");
-            var tags = Tag(null, P(before, N("The room was dark."), D("“Wait,”"), N("said Pug.")));
+            var tags = Tag(null, P(before, N("The room was dark."), D("“Wait,”"), N("said Holmes.")));
 
             Assert.Null(TagOf(tags, before));
         }
@@ -170,7 +170,7 @@ namespace Read2Me.Tests.Services.Characters.Rules
         public void Person_clash_guard_an_unresolved_first_person_tag_blocks_propagation()
         {
             var second = D("“No,”");
-            var tags = Tag(null, P(D("“Go,”"), N("said Pug."), second, N("I said.")));
+            var tags = Tag(null, P(D("“Go,”"), N("said Holmes."), second, N("I said.")));
 
             Assert.Null(TagOf(tags, second));
         }
@@ -181,13 +181,13 @@ namespace Read2Me.Tests.Services.Characters.Rules
             var p1 = D("“To the keep.”");
             var p2 = D("“Why?”");
             var tags = Tag(null,
-                P(D("“Where are we going?”"), N("asked Pug.")),
+                P(D("“Where are we going?”"), N("asked Holmes.")),
                 P(p1),
                 P(p2),
-                P(D("“Because the duke asked,”"), N("said Kulgan.")));
+                P(D("“Because the inspector asked,”"), N("said Watson.")));
 
-            Assert.Equal(new RuleTag("Kulgan", "T5-alt"), TagOf(tags, p1));
-            Assert.Equal(new RuleTag("Pug", "T5-alt"), TagOf(tags, p2));
+            Assert.Equal(new RuleTag("Watson", "T5-alt"), TagOf(tags, p1));
+            Assert.Equal(new RuleTag("Holmes", "T5-alt"), TagOf(tags, p2));
         }
 
         [Fact]
@@ -195,11 +195,11 @@ namespace Read2Me.Tests.Services.Characters.Rules
         {
             var p2 = D("“Why?”");
             var tags = Tag(null,
-                P(D("“Where are we going?”"), N("asked Pug.")),
+                P(D("“Where are we going?”"), N("asked Holmes.")),
                 P(N("The wind rose.")),
                 P(D("“To the keep.”")),
                 P(p2),
-                P(D("“Because the duke asked,”"), N("said Kulgan.")));
+                P(D("“Because the inspector asked,”"), N("said Watson.")));
 
             Assert.Null(TagOf(tags, p2));
         }
@@ -208,7 +208,7 @@ namespace Read2Me.Tests.Services.Characters.Rules
         public void Reported_speech_is_not_a_tag()
         {
             var quote = D("“Fine,”");
-            var tags = Tag(null, P(quote, N("Pug said he would come.")));
+            var tags = Tag(null, P(quote, N("Holmes said he would come.")));
 
             Assert.Null(TagOf(tags, quote));
         }
@@ -218,7 +218,7 @@ namespace Read2Me.Tests.Services.Characters.Rules
         {
             var pre = D("“Yes.”");
             var post = D("“Yes,”");
-            var tags = Tag(null, P(N("Pug and Kulgan said,"), pre), P(post, N("said Pug and Kulgan.")));
+            var tags = Tag(null, P(N("Holmes and Watson said,"), pre), P(post, N("said Holmes and Watson.")));
 
             Assert.Null(TagOf(tags, pre));
             Assert.Null(TagOf(tags, post));
@@ -229,17 +229,17 @@ namespace Read2Me.Tests.Services.Characters.Rules
         {
             var noun = D("“Sit,”");
             var name = D("“Hurry,”");
-            var tags = Tag(null, P(noun, N("said the magician.")), P(name, N("said Tom.")));
+            var tags = Tag(null, P(noun, N("said the doctor.")), P(name, N("said Lizzy.")));
 
-            Assert.Equal(new RuleTag("Kulgan", "T1-post-vs"), TagOf(tags, noun));
-            Assert.Equal(new RuleTag("Tomas", "T1-post-vs"), TagOf(tags, name));
+            Assert.Equal(new RuleTag("Watson", "T1-post-vs"), TagOf(tags, noun));
+            Assert.Equal(new RuleTag("Elizabeth", "T1-post-vs"), TagOf(tags, name));
         }
 
         [Fact]
         public void An_honorific_alone_gives_no_tag()
         {
             var quote = D("“Halt,”");
-            var tags = Tag(null, P(quote, N("said Lord.")));
+            var tags = Tag(null, P(quote, N("said Sir.")));
 
             Assert.Null(TagOf(tags, quote));
         }
@@ -261,7 +261,7 @@ namespace Read2Me.Tests.Services.Characters.Rules
         {
             var first = D("“Run,”");
             var second = D("“Now.”");
-            var tags = Tag(null, P(first, N("said Laurie."), second));
+            var tags = Tag(null, P(first, N("said Renfield."), second));
 
             Assert.Empty(tags);
         }
@@ -271,9 +271,9 @@ namespace Read2Me.Tests.Services.Characters.Rules
         {
             var first = D("“We must go,”");
             var second = D("“The storm is coming.”");
-            var tags = SpeechTagRules.TagChapter([P(first, N("said Pug."), second)], Roster, new RuleTiers(T2: false));
+            var tags = SpeechTagRules.TagChapter([P(first, N("said Holmes."), second)], Roster, new RuleTiers(T2: false));
 
-            Assert.Equal(new RuleTag("Pug", "T1-post-vs"), TagOf(tags, first));
+            Assert.Equal(new RuleTag("Holmes", "T1-post-vs"), TagOf(tags, first));
             Assert.Null(TagOf(tags, second));
         }
 
@@ -281,9 +281,9 @@ namespace Read2Me.Tests.Services.Characters.Rules
 
         private static readonly IReadOnlyList<RosterEntry> DiscoverRoster =
         [
-            new("Pug", []),
-            new("Kulgan", ["the magician"]),
-            new("Duke Borric", []),
+            new("Holmes", []),
+            new("Watson", ["the doctor"]),
+            new("Sir William Lucas", []),
         ];
 
         private static IReadOnlyList<DiscoveredName> Discover(params ChapterParagraph[] chapter) =>
@@ -292,37 +292,37 @@ namespace Read2Me.Tests.Services.Characters.Rules
         [Fact]
         public void Discover_finds_a_said_tag_name_missing_from_the_roster()
         {
-            var found = Discover(P(D("“We must go,”"), N("said Laurie.")));
+            var found = Discover(P(D("“We must go,”"), N("said Renfield.")));
 
-            Assert.Equal([new DiscoveredName("Laurie", 1, "said Laurie.")], found);
+            Assert.Equal([new DiscoveredName("Renfield", 1, "said Renfield.")], found);
         }
 
         [Fact]
         public void Discover_drops_a_leading_ly_adverb()
         {
-            var found = Discover(P(D("“We must go,”"), N("said Suddenly Laurie.")));
+            var found = Discover(P(D("“We must go,”"), N("said Suddenly Renfield.")));
 
-            Assert.Equal("Laurie", Assert.Single(found).Name);
+            Assert.Equal("Renfield", Assert.Single(found).Name);
         }
 
         [Fact]
         public void Discover_drops_a_leading_opener()
         {
-            var found = Discover(P(D("“We must go,”"), N("said Well Laurie.")));
+            var found = Discover(P(D("“We must go,”"), N("said Well Renfield.")));
 
-            Assert.Equal("Laurie", Assert.Single(found).Name);
+            Assert.Equal("Renfield", Assert.Single(found).Name);
         }
 
         [Fact]
         public void Discover_ignores_an_honorific_alone()
         {
-            Assert.Empty(Discover(P(D("“We must go,”"), N("said Lord."))));
+            Assert.Empty(Discover(P(D("“We must go,”"), N("said Sir."))));
         }
 
         [Fact]
         public void Discover_ignores_a_mention_sharing_a_word_with_a_roster_name()
         {
-            Assert.Empty(Discover(P(D("“We must go,”"), N("said Lord Borric."))));
+            Assert.Empty(Discover(P(D("“We must go,”"), N("said Lady Lucas."))));
         }
 
         [Fact]
@@ -335,12 +335,12 @@ namespace Read2Me.Tests.Services.Characters.Rules
         public void Discover_counts_every_tag_and_keeps_the_first_example_in_first_seen_order()
         {
             var found = Discover(
-                P(D("“A,”"), N("said Nogamu.")),
-                P(N("Laurie said,"), D("“B.”")),
-                P(D("“C,”"), N("said Nogamu quietly.")));
+                P(D("“A,”"), N("said Quincey.")),
+                P(N("Renfield said,"), D("“B.”")),
+                P(D("“C,”"), N("said Quincey quietly.")));
 
             Assert.Equal(
-                [new DiscoveredName("Nogamu", 2, "said Nogamu."), new DiscoveredName("Laurie", 1, "Laurie said,")],
+                [new DiscoveredName("Quincey", 2, "said Quincey."), new DiscoveredName("Renfield", 1, "Renfield said,")],
                 found);
         }
     }

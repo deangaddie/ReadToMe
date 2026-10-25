@@ -36,11 +36,11 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void FileName_PartialBuild_CarriesTheDatedMarker()
         {
-            var name = AssemblyOutputs.FileName("Dune", partial: true, new DateTime(2026, 9, 19));
+            var name = AssemblyOutputs.FileName("Dracula", partial: true, new DateTime(2026, 9, 19));
 
-            Assert.Equal("Dune_partial_20260919.m4b", name);
+            Assert.Equal("Dracula_partial_20260919.m4b", name);
             Assert.True(AssemblyOutputs.IsPartial(name));
-            Assert.False(AssemblyOutputs.IsPartial("Dune.m4b"));
+            Assert.False(AssemblyOutputs.IsPartial("Dracula.m4b"));
         }
 
         [Fact]
@@ -52,14 +52,14 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void List_ReturnsM4bsNewestFirst_AndSkipsEverythingElse()
         {
-            File.SetLastWriteTimeUtc(Seed("Dune.m4b", bytes: 10), new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc));
-            File.SetLastWriteTimeUtc(Seed("Dune_partial_20260919.m4b", bytes: 3), new DateTime(2026, 9, 19, 0, 0, 0, DateTimeKind.Utc));
-            Seed("Dune.m4b.tmp");
+            File.SetLastWriteTimeUtc(Seed("Dracula.m4b", bytes: 10), new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc));
+            File.SetLastWriteTimeUtc(Seed("Dracula_partial_20260919.m4b", bytes: 3), new DateTime(2026, 9, 19, 0, 0, 0, DateTimeKind.Utc));
+            Seed("Dracula.m4b.tmp");
             Seed("notes.txt");
 
             var outputs = AssemblyOutputs.List(_projectDir);
 
-            Assert.Equal(new[] { "Dune_partial_20260919.m4b", "Dune.m4b" }, outputs.Select(o => o.FileName));
+            Assert.Equal(new[] { "Dracula_partial_20260919.m4b", "Dracula.m4b" }, outputs.Select(o => o.FileName));
             Assert.True(outputs[0].IsPartial);
             Assert.False(outputs[1].IsPartial);
             Assert.Equal(10, outputs[1].SizeBytes);
@@ -69,26 +69,26 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void TryResolve_ExistingOutput_GivesItsPath()
         {
-            var seeded = Seed("Dune.m4b");
+            var seeded = Seed("Dracula.m4b");
 
-            Assert.True(AssemblyOutputs.TryResolve(_projectDir, "Dune.m4b", out var path));
+            Assert.True(AssemblyOutputs.TryResolve(_projectDir, "Dracula.m4b", out var path));
             Assert.Equal(seeded, path);
         }
 
         [Theory]
-        [InlineData("../Dune.m4b")]
-        [InlineData("..\\Dune.m4b")]
-        [InlineData("sub/Dune.m4b")]
-        [InlineData("Dune.m4b.tmp")]
+        [InlineData("../Dracula.m4b")]
+        [InlineData("..\\Dracula.m4b")]
+        [InlineData("sub/Dracula.m4b")]
+        [InlineData("Dracula.m4b.tmp")]
         [InlineData("notes.txt")]
         [InlineData("missing.m4b")]
         [InlineData("")]
         public void TryResolve_AnythingElse_IsRefused(string fileName)
         {
-            Seed("Dune.m4b");
-            Seed("Dune.m4b.tmp");
+            Seed("Dracula.m4b");
+            Seed("Dracula.m4b.tmp");
             Seed("notes.txt");
-            File.WriteAllBytes(Path.Combine(_projectDir, "Dune.m4b"), new byte[1]);
+            File.WriteAllBytes(Path.Combine(_projectDir, "Dracula.m4b"), new byte[1]);
 
             Assert.False(AssemblyOutputs.TryResolve(_projectDir, fileName, out _));
         }

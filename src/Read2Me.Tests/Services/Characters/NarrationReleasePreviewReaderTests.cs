@@ -66,8 +66,8 @@ namespace Read2Me.Tests.Services.Characters
                         c.AddTranscript("q", "Q.", 5);
                         c.AddTranscript("a", "A.", 4);
                         c.AddParagraph("a5", p => p
-                                .AddNarration("a5-item-1", "A. Hari Seldon.")
-                                .AddNarration("a5-item-2", "A mathematician."))
+                                .AddNarration("a5-item-1", "A. Fitzwilliam Darcy.")
+                                .AddNarration("a5-item-2", "A gentleman."))
                             .AddParagraph("tagged", p => p
                                 .AddRawItem("tagged-dialog", ParagraphItemType.Speech, "\"Hi,\"", AliceId)
                                 .AddNarration("tagged-tag", "he said."))

@@ -111,14 +111,14 @@ namespace Read2Me.Tests.Services.Voice
             var runner = new FakeLlmCompletionRunner().Completes(PlanJson);
             var sut = Create(runner, Config());
 
-            var result = await sut.GeneratePlanAsync("Dune", "Herbert", "Paul");
+            var result = await sut.GeneratePlanAsync("Dracula", "Stoker", "Arthur");
 
             Assert.Equal(VoiceDesignPromptService.GenerateStatus.Success, result.Status);
             Assert.NotNull(result.Voices);
             Assert.Equal("Default", Assert.Single(result.Voices).Name);
 
             var request = Assert.Single(runner.Requests);
-            Assert.Equal("Voice plan: Paul", request.Label);
+            Assert.Equal("Voice plan: Arthur", request.Label);
             Assert.Equal(CompletionShape.Array, request.Shape);
             Assert.Equal(VoicePlanSchema.JsonSchema, request.JsonSchema);
             // Plans keep thinking: change points across a published book are recall-heavy.
@@ -131,7 +131,7 @@ namespace Read2Me.Tests.Services.Voice
             var runner = new FakeLlmCompletionRunner().Completes("not json");
             var sut = Create(runner, Config());
 
-            var result = await sut.GeneratePlanAsync("Dune", "Herbert", "Paul");
+            var result = await sut.GeneratePlanAsync("Dracula", "Stoker", "Arthur");
 
             Assert.Equal(VoiceDesignPromptService.GenerateStatus.Failed, result.Status);
             Assert.Null(result.Voices);
@@ -144,7 +144,7 @@ namespace Read2Me.Tests.Services.Voice
             var runner = new FakeLlmCompletionRunner();
             var sut = Create(runner, config: null);
 
-            var result = await sut.GeneratePlanAsync("Dune", "Herbert", "Paul");
+            var result = await sut.GeneratePlanAsync("Dracula", "Stoker", "Arthur");
 
             Assert.Equal(VoiceDesignPromptService.GenerateStatus.NoLlmConfigured, result.Status);
             Assert.Empty(runner.Requests);
@@ -158,9 +158,9 @@ namespace Read2Me.Tests.Services.Voice
             var sut = Create(new FakeLlmCompletionRunner(),
                 template: "{{book_title}} by {{book_author}} — {{character_name}}");
 
-            var result = await sut.BuildRenderedPromptAsync("Dune", "Herbert", "Paul");
+            var result = await sut.BuildRenderedPromptAsync("Dracula", "Stoker", "Arthur");
 
-            Assert.Equal("Dune by Herbert — Paul", result);
+            Assert.Equal("Dracula by Stoker — Arthur", result);
         }
 
         [Theory]
@@ -171,7 +171,7 @@ namespace Read2Me.Tests.Services.Voice
             var sut = Create(new FakeLlmCompletionRunner(), template: "Before\n{{also_narrates}}\nAfter");
 
             var result = await sut.BuildRenderedPlanPromptAsync(
-                "Dune", "Herbert", "Paul", isNarrator: false, alsoNarrates: alsoNarrates);
+                "Dracula", "Stoker", "Arthur", isNarrator: false, alsoNarrates: alsoNarrates);
 
             const string sentence =
                 "This character also narrates the entire book — the same voice reads all the prose, not only this character's dialogue. Choose a clear, even delivery that can sustain hours of narration.";

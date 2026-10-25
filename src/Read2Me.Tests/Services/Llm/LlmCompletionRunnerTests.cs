@@ -635,19 +635,19 @@ namespace Read2Me.Tests.Services.Llm
         [Fact]
         public async Task SystemPromptAndGrammar_PassThroughToClient()
         {
-            var llm = new ChunkedLlmClient().Content("Pug | calm");
+            var llm = new ChunkedLlmClient().Content("Holmes | calm");
             var runner = Runner(llm);
 
             await runner.RunAsync(
                 new LlmRunRequest(Config(), "p", "L", Shape: CompletionShape.None,
-                    SystemPrompt: "sys", Grammar: "root ::= \"Pug\""),
+                    SystemPrompt: "sys", Grammar: "root ::= \"Holmes\""),
                 CancellationToken.None);
             await runner.RunAsync(
                 new LlmRunRequest(Config(), "p", "L", Shape: CompletionShape.None),
                 CancellationToken.None);
 
             Assert.Equal("sys", llm.Calls[0].SystemPrompt);
-            Assert.Equal("root ::= \"Pug\"", llm.Calls[0].Grammar);
+            Assert.Equal("root ::= \"Holmes\"", llm.Calls[0].Grammar);
             Assert.Null(llm.Calls[1].SystemPrompt);
             Assert.Null(llm.Calls[1].Grammar);
         }
@@ -682,7 +682,7 @@ namespace Read2Me.Tests.Services.Llm
         [Fact]
         public async Task Completed_CarriesTheLastTimingsReading()
         {
-            var llm = new ChunkedLlmClient().Content("Pug").Metrics(ChapterReading);
+            var llm = new ChunkedLlmClient().Content("Holmes").Metrics(ChapterReading);
             var runner = Runner(llm);
 
             var result = await runner.RunAsync(

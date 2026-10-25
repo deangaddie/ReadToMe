@@ -50,7 +50,7 @@ namespace Read2Me.Tests.Services.Audio
         }
 
         [Theory]
-        [InlineData("“Master Kulgan. . . ,” said Pug.")]
+        [InlineData("“Master Holmes. . . ,” said Watson.")]
         [InlineData("He waited . . . and nothing came.")]
         [InlineData("He waited. . . . Nothing came.")]
         public void SpacedEllipsis_DoesNotCauseSplit(string text)

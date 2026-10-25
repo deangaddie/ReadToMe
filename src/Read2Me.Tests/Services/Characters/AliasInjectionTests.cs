@@ -58,32 +58,32 @@ namespace Read2Me.Tests.Services.Characters
         public async Task GetCharactersWithAliasesAsync_IncludesAliases()
         {
             await SeedProjectAsync();
-            var charId = await CreateCharacterAsync("Bilbo");
-            await AddAliasAsync(charId, "Mr. Baggins");
-            await AddAliasAsync(charId, "Old Bilbo");
+            var charId = await CreateCharacterAsync("Jim");
+            await AddAliasAsync(charId, "Mr. Hawkins");
+            await AddAliasAsync(charId, "Young Jim");
 
             var characters = await _reader.GetCharactersWithAliasesAsync(_folder);
-            var bilbo = characters.Single(c => c.Name == "Bilbo");
+            var jim = characters.Single(c => c.Name == "Jim");
 
-            Assert.Equal(2, bilbo.Aliases.Count);
-            Assert.Contains(bilbo.Aliases, a => a.Name == "Mr. Baggins");
-            Assert.Contains(bilbo.Aliases, a => a.Name == "Old Bilbo");
+            Assert.Equal(2, jim.Aliases.Count);
+            Assert.Contains(jim.Aliases, a => a.Name == "Mr. Hawkins");
+            Assert.Contains(jim.Aliases, a => a.Name == "Young Jim");
         }
 
         [Fact]
         public async Task KnownCharactersJson_ContainsAliasesForEachCharacter()
         {
             await SeedProjectAsync();
-            var charId = await CreateCharacterAsync("Bilbo");
-            await AddAliasAsync(charId, "Mr. Baggins");
+            var charId = await CreateCharacterAsync("Jim");
+            await AddAliasAsync(charId, "Mr. Hawkins");
 
             var characters = await _reader.GetCharactersWithAliasesAsync(_folder);
             var serialized = PromptTemplates.BuildKnownCharactersJson(
                 characters.Select(c => new PromptTemplates.RosterCharacter(
                     c.Name, [.. c.Aliases.Select(a => a.Name)])));
 
-            Assert.Contains("\"name\":\"Bilbo\"", serialized.Replace(" ", ""));
-            Assert.Contains("\"Mr. Baggins\"", serialized);
+            Assert.Contains("\"name\":\"Jim\"", serialized.Replace(" ", ""));
+            Assert.Contains("\"Mr. Hawkins\"", serialized);
         }
 
         [Fact]
@@ -91,24 +91,24 @@ namespace Read2Me.Tests.Services.Characters
         {
             // Simulate the queue worker alias-matching logic.
             await SeedProjectAsync();
-            var charId = await CreateCharacterAsync("Bilbo");
-            await AddAliasAsync(charId, "Mr. Baggins");
+            var charId = await CreateCharacterAsync("Jim");
+            await AddAliasAsync(charId, "Mr. Hawkins");
 
             var characters = await _reader.GetCharactersWithAliasesAsync(_folder);
 
             // LLM returned the alias name
-            var llmName = "Mr. Baggins";
+            var llmName = "Mr. Hawkins";
             var existing = characters.FirstOrDefault(c =>
                 string.Equals(c.Name, llmName, StringComparison.OrdinalIgnoreCase) ||
                 c.Aliases.Any(a => string.Equals(a.Name, llmName, StringComparison.OrdinalIgnoreCase)));
 
             Assert.NotNull(existing);
-            Assert.Equal("Bilbo", existing!.Name);
+            Assert.Equal("Jim", existing!.Name);
             Assert.Equal(charId, existing.Id);
 
             // No duplicate character should be created when alias resolves
             var allCharacters = await _reader.GetCharactersAsync(_folder);
-            Assert.Equal(2, allCharacters.Count); // Narrator + Bilbo only
+            Assert.Equal(2, allCharacters.Count); // Narrator + Jim only
         }
     }
 }

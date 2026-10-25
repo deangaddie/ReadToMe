@@ -37,7 +37,7 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         private static ChapterPassPrompt Build(
             IReadOnlyList<ChapterParagraph> snapshot, IEnumerable<ChapterParagraph> queued,
             IReadOnlyList<Character>? roster = null) =>
-            new("Magician", "Raymond E. Feist", roster ?? [SeedNarrator, Char("Pug"), Char("Kulgan")],
+            new("The Adventures of Sherlock Holmes", "Arthur Conan Doyle", roster ?? [SeedNarrator, Char("Holmes"), Char("Watson")],
                 snapshot, queued.Select(p => p.ParagraphId).ToHashSet());
 
         private const string Question0 =
@@ -47,17 +47,17 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         public void System_text_is_the_lab_v1_prompt_with_the_delivery_cue_rules()
         {
             var p0 = Para(Dialog("“Hi.”"));
-            var prompt = Build([p0], [p0], [SeedNarrator, Char("Pug", "Squire Pug", "Pug of Crydee"), Char("Kulgan")]);
+            var prompt = Build([p0], [p0], [SeedNarrator, Char("Holmes", "Mr. Sherlock Holmes", "Holmes of Baker Street"), Char("Watson")]);
 
             Assert.Equal(
                 """
-                You identify who speaks each line of dialogue in the novel "Magician" by Raymond E. Feist.
+                You identify who speaks each line of dialogue in the novel "The Adventures of Sherlock Holmes" by Arthur Conan Doyle.
 
                 Each dialogue item in the passage is marked ⟦paragraph.item⟧. Items already attributed show the speaker as {Name} before the marker.
 
                 Choices (the whole book's cast, NOT a list of who is present):
-                - Pug (also: Squire Pug, Pug of Crydee)
-                - Kulgan
+                - Holmes (also: Mr. Sherlock Holmes, Holmes of Baker Street)
+                - Watson
                 Unknown: not identified — the visible text has not yet named or uniquely described the speaker
 
                 Rules:
@@ -87,9 +87,9 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         public void A_roster_name_unknown_is_left_out_of_the_choices()
         {
             var p0 = Para(Dialog("“Hi.”"));
-            var prompt = Build([p0], [p0], [SeedNarrator, Char("Pug"), Char("Unknown")]);
+            var prompt = Build([p0], [p0], [SeedNarrator, Char("Holmes"), Char("Unknown")]);
 
-            Assert.Equal(["Pug"], prompt.Names);
+            Assert.Equal(["Holmes"], prompt.Names);
             Assert.DoesNotContain("- Unknown", prompt.SystemText);
         }
 
@@ -97,14 +97,14 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         public void User_message_renders_narration_plain_and_dialog_with_markers_and_labels()
         {
             var p0 = Para(Narr("The boy ran."), Dialog("“Wait!”"), Narr("he cried."));
-            var p1 = Para(Dialog("“Come back,” said Kulgan.", "Kulgan"));
+            var p1 = Para(Dialog("“Come back,” said Watson.", "Watson"));
             var p2 = Para(Dialog("“No.”"));
             var prompt = Build([p0, p1, p2], [p0, p2]);
 
             Assert.Equal(
                 "Passage:\n" +
                 "[0] The boy ran. ⟦0.1⟧“Wait!” he cried.\n" +
-                "[1] {Kulgan} ⟦1.0⟧“Come back,” said Kulgan.\n" +
+                "[1] {Watson} ⟦1.0⟧“Come back,” said Watson.\n" +
                 "[2] ⟦2.0⟧“No.”\n\n" +
                 Question0,
                 prompt.UserMessage(0, 1));
@@ -113,15 +113,15 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         [Fact]
         public void Stamps_on_queued_paragraphs_are_hidden()
         {
-            var p0 = Para(Dialog("“Hi.”", "Pug"));
-            var p1 = Para(Dialog("“Ho.”", "Kulgan"));
+            var p0 = Para(Dialog("“Hi.”", "Holmes"));
+            var p1 = Para(Dialog("“Ho.”", "Watson"));
             var prompt = Build([p0, p1], [p1]);
 
             var message = prompt.UserMessage(1, 0);
 
-            Assert.Contains("[0] {Pug} ⟦0.0⟧“Hi.”\n", message);
+            Assert.Contains("[0] {Holmes} ⟦0.0⟧“Hi.”\n", message);
             Assert.Contains("[1] ⟦1.0⟧“Ho.”", message);
-            Assert.DoesNotContain("{Kulgan}", message);
+            Assert.DoesNotContain("{Watson}", message);
         }
 
         [Fact]
@@ -144,9 +144,9 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             var p1 = Para(Dialog("“C”"));
             var prompt = Build([p0, p1], [p0, p1]);
 
-            prompt.SetLabel(0, 2, "Pug");
+            prompt.SetLabel(0, 2, "Holmes");
 
-            Assert.Contains("[0] ⟦0.0⟧“A” x {Pug} ⟦0.2⟧“B”\n[1] ⟦1.0⟧“C”", prompt.UserMessage(1, 0));
+            Assert.Contains("[0] ⟦0.0⟧“A” x {Holmes} ⟦0.2⟧“B”\n[1] ⟦1.0⟧“C”", prompt.UserMessage(1, 0));
         }
 
         /// <summary>
@@ -159,10 +159,10 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
         {
             var paras = new List<ChapterParagraph>
             {
-                Para(Narr("Night fell."), Dialog("“Who's there?”"), Narr("asked Pug.")),
+                Para(Narr("Night fell."), Dialog("“Who's there?”"), Narr("asked Holmes.")),
                 Para(Dialog("“Me.”"), Dialog("“Who?”")),
                 Para(Narr("Silence.")),
-                Para(Dialog("“Kulgan!”", "Kulgan")),
+                Para(Dialog("“Watson!”", "Watson")),
                 Para(Dialog("“Go.”")),
             };
             var queued = new[] { paras[0], paras[1], paras[4] };
@@ -180,7 +180,7 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             {
                 var (k, ii) = asks[n];
                 var before = prompt.UserMessage(k, ii);
-                var name = n % 2 == 0 ? "Pug" : "Kulgan";
+                var name = n % 2 == 0 ? "Holmes" : "Watson";
                 prompt.SetLabel(k, ii, name);
                 var after = prompt.UserMessage(asks[n + 1].K, asks[n + 1].Ii);
 
@@ -248,12 +248,12 @@ namespace Read2Me.Tests.Services.Characters.ChapterPass
             for (var k = 10; k < 15; k++)
             {
                 var before = prompt.UserMessage(k, 1);
-                prompt.SetLabel(k, 1, "Pug");
+                prompt.SetLabel(k, 1, "Holmes");
                 var after = prompt.UserMessage(k + 1, 1);
 
                 var lineStart = before.IndexOf($"\n[{k}] ", StringComparison.Ordinal);
                 var upToCurrent = before[..(before.IndexOf('\n', lineStart + 1) + 1)];
-                var expected = upToCurrent.Replace($"⟦{k}.1⟧", "{Pug} " + $"⟦{k}.1⟧", StringComparison.Ordinal);
+                var expected = upToCurrent.Replace($"⟦{k}.1⟧", "{Holmes} " + $"⟦{k}.1⟧", StringComparison.Ordinal);
 
                 Assert.StartsWith("Passage:\n[5] N5. ⟦5.1⟧“L5”\n", after, StringComparison.Ordinal);
                 Assert.StartsWith(expected, after, StringComparison.Ordinal);

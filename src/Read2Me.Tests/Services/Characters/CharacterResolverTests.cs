@@ -70,22 +70,22 @@ namespace Read2Me.Tests.Services.Characters
         public async Task ResolveOrCreate_ExactName_ReturnsExisting()
         {
             await SeedProjectAsync();
-            var existing = await CreateCharacterAsync("Bilbo");
+            var existing = await CreateCharacterAsync("Jim");
 
-            var resolved = await _resolver.ResolveOrCreateAsync(_folder, "Bilbo", CancellationToken.None);
+            var resolved = await _resolver.ResolveOrCreateAsync(_folder, "Jim", CancellationToken.None);
 
             Assert.Equal(existing, resolved);
             var all = await _reader.GetCharactersAsync(_folder);
-            Assert.Equal(2, all.Count); // Narrator + Bilbo
+            Assert.Equal(2, all.Count); // Narrator + Jim
         }
 
         [Fact]
         public async Task ResolveOrCreate_DifferentCase_ReturnsExisting()
         {
             await SeedProjectAsync();
-            var existing = await CreateCharacterAsync("Bilbo");
+            var existing = await CreateCharacterAsync("Jim");
 
-            var resolved = await _resolver.ResolveOrCreateAsync(_folder, "BILBO", CancellationToken.None);
+            var resolved = await _resolver.ResolveOrCreateAsync(_folder, "JIM", CancellationToken.None);
 
             Assert.Equal(existing, resolved);
             var all = await _reader.GetCharactersAsync(_folder);
@@ -96,12 +96,12 @@ namespace Read2Me.Tests.Services.Characters
         public async Task ResolveOrCreate_MatchesAlias_ReturnsCanonical()
         {
             await SeedProjectAsync();
-            var bilboId = await CreateCharacterAsync("Bilbo");
-            await AddAliasAsync(bilboId, "Mr. Baggins");
+            var jimId = await CreateCharacterAsync("Jim");
+            await AddAliasAsync(jimId, "Mr. Hawkins");
 
-            var resolved = await _resolver.ResolveOrCreateAsync(_folder, "mr. baggins", CancellationToken.None);
+            var resolved = await _resolver.ResolveOrCreateAsync(_folder, "mr. hawkins", CancellationToken.None);
 
-            Assert.Equal(bilboId, resolved);
+            Assert.Equal(jimId, resolved);
             var all = await _reader.GetCharactersAsync(_folder);
             Assert.Equal(2, all.Count);
         }
@@ -111,11 +111,11 @@ namespace Read2Me.Tests.Services.Characters
         {
             await SeedProjectAsync();
 
-            var resolved = await _resolver.ResolveOrCreateAsync(_folder, "Gandalf", CancellationToken.None);
+            var resolved = await _resolver.ResolveOrCreateAsync(_folder, "Silver", CancellationToken.None);
 
             Assert.NotEqual(Guid.Empty, resolved);
             var all = await _reader.GetCharactersAsync(_folder);
-            Assert.Equal(2, all.Count); // Narrator + Gandalf
+            Assert.Equal(2, all.Count); // Narrator + Silver
         }
 
         [Fact]
@@ -123,8 +123,8 @@ namespace Read2Me.Tests.Services.Characters
         {
             await SeedProjectAsync();
 
-            var first = await _resolver.ResolveOrCreateAsync(_folder, "Gandalf", CancellationToken.None);
-            var second = await _resolver.ResolveOrCreateAsync(_folder, "Gandalf", CancellationToken.None);
+            var first = await _resolver.ResolveOrCreateAsync(_folder, "Silver", CancellationToken.None);
+            var second = await _resolver.ResolveOrCreateAsync(_folder, "Silver", CancellationToken.None);
 
             Assert.Equal(first, second);
             var all = await _reader.GetCharactersAsync(_folder);
@@ -142,9 +142,9 @@ namespace Read2Me.Tests.Services.Characters
             await SeedProjectAsync();
 
             var created = await _resolver.ResolveOrCreateWithOutcomeAsync(
-                _folder, "Gandalf", CancellationToken.None);
+                _folder, "Silver", CancellationToken.None);
             var found = await _resolver.ResolveOrCreateWithOutcomeAsync(
-                _folder, "gandalf", CancellationToken.None);
+                _folder, "silver", CancellationToken.None);
 
             var receipt = Assert.IsType<BookMutationOutcome.Committed>(created.Outcome).Receipt;
             Assert.Equal(created.Id, receipt.Effects.CreatedId);
@@ -161,7 +161,7 @@ namespace Read2Me.Tests.Services.Characters
         public async Task ResolveOrCreateWithOutcome_WhenAnotherWriterCreatesTheNameFirst_FindsTheWinner()
         {
             await SeedProjectAsync();
-            var winner = await CreateCharacterAsync("Gandalf");
+            var winner = await CreateCharacterAsync("Silver");
             var stale = Substitute.For<ICharacterReader>();
             stale.GetCharactersWithAliasesAsync(_folder).Returns(
                 _ => Task.FromResult(new List<Character>()),
@@ -169,7 +169,7 @@ namespace Read2Me.Tests.Services.Characters
             var resolver = new CharacterResolver(stale, _mutations);
 
             var (outcome, id) = await resolver.ResolveOrCreateWithOutcomeAsync(
-                _folder, "Gandalf", CancellationToken.None);
+                _folder, "Silver", CancellationToken.None);
 
             Assert.IsType<BookMutationOutcome.NoChange>(outcome);
             Assert.Equal(winner, id);
@@ -187,7 +187,7 @@ namespace Read2Me.Tests.Services.Characters
             using var held = await HoldTheWriteLockAsync();
 
             var (outcome, id) = await _resolver.ResolveOrCreateWithOutcomeAsync(
-                _folder, "Gandalf", CancellationToken.None);
+                _folder, "Silver", CancellationToken.None);
 
             Assert.Equal(BookMutationRejection.Conflict,
                 Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
@@ -200,7 +200,7 @@ namespace Read2Me.Tests.Services.Characters
             await SeedProjectAsync();
 
             var (outcome, id) = await _resolver.ResolveOrCreateWithOutcomeAsync(
-                _folder, "Gandalf", new CancellationToken(canceled: true));
+                _folder, "Silver", new CancellationToken(canceled: true));
 
             Assert.Equal(BookMutationRejection.Cancelled,
                 Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
@@ -218,7 +218,7 @@ namespace Read2Me.Tests.Services.Characters
             await SeedProjectAsync();
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-                _resolver.ResolveOrCreateAsync(_folder, "Gandalf", new CancellationToken(canceled: true)));
+                _resolver.ResolveOrCreateAsync(_folder, "Silver", new CancellationToken(canceled: true)));
         }
 
         [Fact]
@@ -228,7 +228,7 @@ namespace Read2Me.Tests.Services.Characters
             using var held = await HoldTheWriteLockAsync();
 
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                _resolver.ResolveOrCreateAsync(_folder, "Gandalf", CancellationToken.None));
+                _resolver.ResolveOrCreateAsync(_folder, "Silver", CancellationToken.None));
 
             Assert.Contains("still in progress", ex.Message);
             Assert.DoesNotContain("neither created nor found", ex.Message);
@@ -245,7 +245,7 @@ namespace Read2Me.Tests.Services.Characters
             using var held = await HoldTheWriteLockAsync();
 
             var outcome = await _resolver.ApplyDiscoveredAsync(
-                _folder, "Gandalf", ["Mithrandir"], CancellationToken.None);
+                _folder, "Silver", ["Long John"], CancellationToken.None);
 
             Assert.Equal(BookMutationRejection.Conflict,
                 Assert.IsType<BookMutationOutcome.Rejected>(outcome).Reason);
@@ -263,7 +263,7 @@ namespace Read2Me.Tests.Services.Characters
             var handler = new CreateCharacterHandler(_resolver);
 
             var result = await handler.HandleAsync(
-                new CreateCharacterCommand(_folder, "Gandalf"), CancellationToken.None);
+                new CreateCharacterCommand(_folder, "Silver"), CancellationToken.None);
 
             Assert.IsType<BookMutationOutcome.Rejected>(result.Outcome);
             Assert.Null(result.EntityId);
@@ -280,13 +280,13 @@ namespace Read2Me.Tests.Services.Characters
             await SeedProjectAsync();
 
             var outcome = await _resolver.ApplyDiscoveredAsync(
-                _folder, "Gandalf", ["Mithrandir", "Greyhame"], CancellationToken.None);
+                _folder, "Silver", ["Long John", "Barbecue"], CancellationToken.None);
 
             Assert.IsType<BookMutationOutcome.Committed>(outcome);
 
-            var gandalf = (await _reader.GetCharactersWithAliasesAsync(_folder))
-                .Single(c => c.Name == "Gandalf");
-            Assert.Equal(["Greyhame", "Mithrandir"], gandalf.Aliases.Select(a => a.Name).Order());
+            var silver = (await _reader.GetCharactersWithAliasesAsync(_folder))
+                .Single(c => c.Name == "Silver");
+            Assert.Equal(["Barbecue", "Long John"], silver.Aliases.Select(a => a.Name).Order());
         }
 
         /// <summary>
@@ -297,16 +297,16 @@ namespace Read2Me.Tests.Services.Characters
         public async Task ApplyDiscovered_OnAKnownName_AddsTheAliasesWithoutCreatingASecondCharacter()
         {
             await SeedProjectAsync();
-            var frodoId = await CreateCharacterAsync("Frodo");
+            var liveseyId = await CreateCharacterAsync("Livesey");
 
             var outcome = await _resolver.ApplyDiscoveredAsync(
-                _folder, "frodo", ["Ringbearer"], CancellationToken.None);
+                _folder, "livesey", ["Doctor"], CancellationToken.None);
 
             Assert.IsType<BookMutationOutcome.NoChange>(outcome);
 
             var roster = await _reader.GetCharactersWithAliasesAsync(_folder);
-            var frodo = Assert.Single(roster, c => c.Id == frodoId);
-            Assert.Equal("Ringbearer", Assert.Single(frodo.Aliases).Name);
+            var livesey = Assert.Single(roster, c => c.Id == liveseyId);
+            Assert.Equal("Doctor", Assert.Single(livesey.Aliases).Name);
         }
     }
 }

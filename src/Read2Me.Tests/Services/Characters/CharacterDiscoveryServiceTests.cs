@@ -42,7 +42,7 @@ namespace Read2Me.Tests.Services.Characters
             private static readonly Guid PartId = Guid.NewGuid();
 
             public override Task<Project?> GetProjectAsync(ProjectFolderId folderId) =>
-                Task.FromResult<Project?>(new Project { BookTitle = "The Hobbit", Author = "J.R.R. Tolkien" });
+                Task.FromResult<Project?>(new Project { BookTitle = "Treasure Island", Author = "Robert Louis Stevenson" });
 
             public override Task<List<Volume>> GetVolumesAsync(ProjectFolderId folderId) =>
                 Task.FromResult(new List<Volume> { new() { Id = VolumeId, Title = "Vol 1" } });
@@ -54,19 +54,19 @@ namespace Read2Me.Tests.Services.Characters
                 Task.FromResult(parentLevel switch
                 {
                     BookNodeLevel.Volume => new HierarchyChildren([new Part { Id = PartId }], null, null),
-                    BookNodeLevel.Part => new HierarchyChildren(null, [new Chapter { Id = Guid.NewGuid(), Title = "An Unexpected Party" }], null),
+                    BookNodeLevel.Part => new HierarchyChildren(null, [new Chapter { Id = Guid.NewGuid(), Title = "The Old Sea-dog at the Admiral Benbow" }], null),
                     _ => new HierarchyChildren(null, null, null),
                 });
 
             public override Task<List<Character>> GetCharactersWithAliasesAsync(ProjectFolderId folderId) =>
                 Task.FromResult(new List<Character>
                 {
-                    new() { Id = Guid.NewGuid(), Name = "Gandalf", Aliases = [new CharacterAlias { Name = "the wizard" }] },
+                    new() { Id = Guid.NewGuid(), Name = "Silver", Aliases = [new CharacterAlias { Name = "the cook" }] },
                 });
         }
 
         private const string ValidJson =
-            """{ "reasoning": "well-known cast", "characters": [ { "name": "Bilbo", "aliases": ["Mr. Baggins"] } ] }""";
+            """{ "reasoning": "well-known cast", "characters": [ { "name": "Jim", "aliases": ["Mr. Hawkins"] } ] }""";
 
         private static async Task RegisterActiveConfigAsync(LlmSettingsService svc)
         {
@@ -98,8 +98,8 @@ namespace Read2Me.Tests.Services.Characters
 
             Assert.Equal(DiscoveryStatus.Ok, outcome.Status);
             var c = Assert.Single(outcome.Characters);
-            Assert.Equal("Bilbo", c.Name);
-            Assert.Equal(["Mr. Baggins"], c.Aliases);
+            Assert.Equal("Jim", c.Name);
+            Assert.Equal(["Mr. Hawkins"], c.Aliases);
         }
 
         // ── Throughput Run boundary ────────────────────────────────────────────
@@ -174,11 +174,11 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Equal(CharacterDiscoverySchema.JsonSchema, request.JsonSchema);
 
             var prompt = request.Prompt;
-            Assert.Contains("The Hobbit", prompt);
-            Assert.Contains("J.R.R. Tolkien", prompt);
-            Assert.Contains("An Unexpected Party", prompt);   // chapter outline
-            Assert.Contains("Gandalf", prompt);               // known character
-            Assert.Contains("the wizard", prompt);            // known alias
+            Assert.Contains("Treasure Island", prompt);
+            Assert.Contains("Robert Louis Stevenson", prompt);
+            Assert.Contains("The Old Sea-dog at the Admiral Benbow", prompt); // chapter outline
+            Assert.Contains("Silver", prompt);                                // known character
+            Assert.Contains("the cook", prompt);                              // known alias
         }
 
         [Theory]

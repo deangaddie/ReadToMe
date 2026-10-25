@@ -76,7 +76,7 @@ namespace Read2Me.Tests.Services.Audio
             MaxAttempts: 3,
             WerThreshold: 0.15,
             FfmpegPath: null,
-            Speaker: "Bilbo");
+            Speaker: "Jim");
 
         /// <summary>
         /// The row the whole slice exists for. A managed service the watchdog is already recovering

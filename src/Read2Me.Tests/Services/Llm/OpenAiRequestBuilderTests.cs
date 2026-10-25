@@ -215,7 +215,7 @@ namespace Read2Me.Tests.Services.Llm
         public void BuildChatBody_WithGrammar_EmitsTopLevelGrammarAndNoResponseFormat()
         {
             var cfg = new LlmServerConfig { BaseUrl = "http://x" };
-            const string grammar = "root ::= \"Pug\" | \"Unknown\"";
+            const string grammar = "root ::= \"Holmes\" | \"Unknown\"";
             var json = OpenAiRequestBuilder.BuildChatBody(cfg, "hi", stream: true, grammar: grammar);
 
             using var doc = System.Text.Json.JsonDocument.Parse(json);

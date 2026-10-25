@@ -110,9 +110,9 @@ public class EpubNavStructureTests
         };
         var content = Content("ch1.html");
 
-        var result = EpubFileReader.TryBuildFromNav(nav, content, content, "Magician", NoReadingOrder);
+        var result = EpubFileReader.TryBuildFromNav(nav, content, content, "A Tale of Two Cities", NoReadingOrder);
 
-        Assert.Equal("Magician", result!.Volumes[0].Title);
+        Assert.Equal("A Tale of Two Cities", result!.Volumes[0].Title);
     }
 
     [Fact]
@@ -121,18 +121,18 @@ public class EpubNavStructureTests
         var nav = new List<EpubNavigationItem>
         {
             GroupItem("Foreword", [LeafItem("ch0.html", "ch0.html")]),
-            GroupItem("Book I - Pug And Tomas", [LeafItem("ch1.html", "ch1.html"), LeafItem("ch2.html", "ch2.html")]),
-            GroupItem("Book II - Milamber", [LeafItem("ch3.html", "ch3.html")]),
+            GroupItem("Book the First—Recalled to Life", [LeafItem("ch1.html", "ch1.html"), LeafItem("ch2.html", "ch2.html")]),
+            GroupItem("Book the Second—the Golden Thread", [LeafItem("ch3.html", "ch3.html")]),
         };
         var content = Content("ch0.html", "ch1.html", "ch2.html", "ch3.html");
 
-        var result = EpubFileReader.TryBuildFromNav(nav, content, content, "Magician", NoReadingOrder);
+        var result = EpubFileReader.TryBuildFromNav(nav, content, content, "A Tale of Two Cities", NoReadingOrder);
 
         Assert.NotNull(result);
         Assert.Equal(3, result.Volumes[0].Parts.Count);
         Assert.Equal("Foreword", result.Volumes[0].Parts[0].Title);
-        Assert.Equal("Book I - Pug And Tomas", result.Volumes[0].Parts[1].Title);
-        Assert.Equal("Book II - Milamber", result.Volumes[0].Parts[2].Title);
+        Assert.Equal("Book the First—Recalled to Life", result.Volumes[0].Parts[1].Title);
+        Assert.Equal("Book the Second—the Golden Thread", result.Volumes[0].Parts[2].Title);
     }
 
     [Fact]
