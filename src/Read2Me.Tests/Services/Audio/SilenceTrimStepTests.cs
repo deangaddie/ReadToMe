@@ -76,30 +76,12 @@ namespace Read2Me.Tests.Services.Audio
 
     /// <summary>
     /// Real-ffmpeg tests — the trim itself and the trimmed-to-nothing guard can only be observed
-    /// against the actual filter. Skipped when ffmpeg is not on PATH, per the repo's existing
-    /// ffmpeg-gated pattern.
+    /// against the actual filter.
+    /// Skipped when <see cref="TestFfmpeg.Require"/> finds no ffmpeg.
     /// </summary>
     public class SilenceTrimStepIntegrationTests
     {
         private static SilenceTrimStep NewStep() => new(NullLogger<SilenceTrimStep>.Instance);
-
-        private static bool FfmpegAvailable()
-        {
-            try
-            {
-                var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "ffmpeg",
-                    Arguments = "-version",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                });
-                p?.WaitForExit(3000);
-                return p?.ExitCode == 0;
-            }
-            catch { return false; }
-        }
 
         /// <summary>Canonical WAV (24 kHz mono 16-bit): silence, then a tone, then silence.</summary>
         private static byte[] Wav(int leadingSilenceMs, int toneMs, int trailingSilenceMs)
@@ -145,11 +127,11 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task TrimsDeadAirFromBothEnds_KeepingTheSpeechAndThePad()
         {
-            if (!FfmpegAvailable()) return;
+            var ffmpeg = TestFfmpeg.Require();
 
             var input = Wav(leadingSilenceMs: 2000, toneMs: 1000, trailingSilenceMs: 2000);
 
-            var result = await NewStep().ProcessAsync(input, null, null, CancellationToken.None);
+            var result = await NewStep().ProcessAsync(input, ffmpeg, null, CancellationToken.None);
 
             Assert.True(result.Applied);
             Assert.Null(result.Reason);
@@ -160,13 +142,13 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task ShortItemAfterLongDeadAir_IsTrimmed_NotSkipped()
         {
-            if (!FfmpegAvailable()) return;
+            var ffmpeg = TestFfmpeg.Require();
 
             // The case the absolute-floor guard exists to protect: a legitimate trim removing
             // ~90% of the clip.
             var input = Wav(leadingSilenceMs: 2000, toneMs: 300, trailingSilenceMs: 2000);
 
-            var result = await NewStep().ProcessAsync(input, null, null, CancellationToken.None);
+            var result = await NewStep().ProcessAsync(input, ffmpeg, null, CancellationToken.None);
 
             Assert.True(result.Applied);
             Assert.InRange(CanonicalWav.DurationMs(result.Audio.Length), 350, 500);
@@ -175,11 +157,11 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task AllSilence_GuardFires_ReturningTheInputUnchanged()
         {
-            if (!FfmpegAvailable()) return;
+            var ffmpeg = TestFfmpeg.Require();
 
             var input = Wav(leadingSilenceMs: 2000, toneMs: 0, trailingSilenceMs: 0);
 
-            var result = await NewStep().ProcessAsync(input, null, null, CancellationToken.None);
+            var result = await NewStep().ProcessAsync(input, ffmpeg, null, CancellationToken.None);
 
             Assert.False(result.Applied);
             Assert.Equal("trim would remove nearly all audio", result.Reason);

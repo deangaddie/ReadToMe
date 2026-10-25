@@ -261,8 +261,8 @@ namespace Read2Me.Tests.Services.Audio
     // ── Integration tests (ffmpeg-gated) ─────────────────────────────────────
 
     /// <summary>
-    /// Real-ffmpeg tests. Skipped when ffprobe / ffmpeg are not on PATH.
-    /// Mirrors the pattern used by <c>FfmpegAudioNormalizerTests</c>.
+    /// Real-ffmpeg tests, run against <see cref="TestFfmpeg.Require"/>. The encoder looks for
+    /// ffprobe beside that ffmpeg, then on PATH; without it these fail rather than skip.
     /// </summary>
     public class AudiobookEncoderIntegrationTests : IDisposable
     {
@@ -270,24 +270,6 @@ namespace Read2Me.Tests.Services.Audio
 
         private AudiobookEncoder NewEncoder() =>
             new(NullLogger<AudiobookEncoder>.Instance);
-
-        private static bool FfmpegAvailable()
-        {
-            try
-            {
-                var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "ffmpeg",
-                    Arguments = "-version",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                });
-                p?.WaitForExit(3000);
-                return p?.ExitCode == 0;
-            }
-            catch { return false; }
-        }
 
         private string Track(string path) { _tempFiles.Add(path); return path; }
 
@@ -329,13 +311,12 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task GetDurationAsync_RealWav_ReturnsApproximateDuration()
         {
-            if (!FfmpegAvailable())
-                return; // skip
+            var ffmpeg = TestFfmpeg.Require();
 
             var wav = Track(WriteTinyWav(durationMs: 500));
             var encoder = NewEncoder();
 
-            var dur = await encoder.GetDurationAsync(wav, null);
+            var dur = await encoder.GetDurationAsync(wav, ffmpeg);
 
             Assert.InRange(dur.TotalMilliseconds, 490, 510);
         }
@@ -343,31 +324,29 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task GetSilenceAsync_ProducesCanonicalWav_CorrectDuration()
         {
-            if (!FfmpegAvailable())
-                return;
+            var ffmpeg = TestFfmpeg.Require();
 
             var encoder = NewEncoder();
-            var path = await encoder.GetSilenceAsync(ms: 1000, ffmpegPath: null);
+            var path = await encoder.GetSilenceAsync(ms: 1000, ffmpeg);
             Track(path);
 
             Assert.True(File.Exists(path));
             Assert.True(new FileInfo(path).Length > 0);
 
             // Probe the generated file to confirm duration ≈ 1 s
-            var dur = await encoder.GetDurationAsync(path, null);
+            var dur = await encoder.GetDurationAsync(path, ffmpeg);
             Assert.InRange(dur.TotalMilliseconds, 990, 1010);
         }
 
         [Fact]
         public async Task GetSilenceAsync_SameMs_ReturnsSamePathWithoutRegeneration()
         {
-            if (!FfmpegAvailable())
-                return;
+            var ffmpeg = TestFfmpeg.Require();
 
             var encoder = NewEncoder();
-            var path1 = await encoder.GetSilenceAsync(500, null);
+            var path1 = await encoder.GetSilenceAsync(500, ffmpeg);
             Track(path1);
-            var path2 = await encoder.GetSilenceAsync(500, null);
+            var path2 = await encoder.GetSilenceAsync(500, ffmpeg);
 
             Assert.Equal(path1, path2);
         }
@@ -375,15 +354,14 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task EncodeAsync_ProducesM4bWithExpectedDuration()
         {
-            if (!FfmpegAvailable())
-                return;
+            var ffmpeg = TestFfmpeg.Require();
 
             var encoder = NewEncoder();
 
             // Two 1-second WAVs + 500 ms silence between them → ~2.5 s total
             var wav1 = Track(WriteTinyWav(1000));
             var wav2 = Track(WriteTinyWav(1000));
-            var silencePath = Track(await encoder.GetSilenceAsync(500, null));
+            var silencePath = Track(await encoder.GetSilenceAsync(500, ffmpeg));
 
             // Build concat list file
             var concatText = ConcatListBuilder.Build(new[] { wav1, silencePath, wav2 });
@@ -406,7 +384,7 @@ namespace Read2Me.Tests.Services.Audio
                 concatPath, metaPath, null, outputPath,
                 totalDuration,
                 new Progress<double>(v => progressValues.Add(v)),
-                null);
+                ffmpeg);
 
             // File exists and is non-empty
             Assert.True(File.Exists(outputPath));
