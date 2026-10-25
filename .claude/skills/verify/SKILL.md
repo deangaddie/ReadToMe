@@ -18,9 +18,9 @@ cd src/Read2Me.Web && bun run dev                                        # optio
 The host serves whatever bundle was last built (`pwsh scripts/build-web.ps1`); the dev server
 serves the source. Restart `bun run dev` after adding a file reached through `@app/*`.
 
-Always pass the tool workspace. Development config points the workspace at `D:\Dev\Read\WS`,
-which belongs to the owner for trying things out: leave it alone. `tools/browse/workspace/` is
-git-ignored and starts with a fresh `app.db`; delete it to start clean. Its books come with the
+Always pass the tool workspace. The workspace in `appsettings.Local.json` belongs to the owner for
+trying things out: leave it alone. `tools/browse/workspace/` is git-ignored and starts with a fresh
+`app.db`; delete it to start clean. Its books come with the
 tools: Project Gutenberg epubs in `tools/browse/books/`, imported with `bookProject('dracula')`
 (or a text project from `throwawayProject`). Never use a book that is not from Project Gutenberg.
 A fresh `app.db` has no ffmpeg path, so set it (Settings → Audio processing) before anything

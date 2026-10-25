@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Read2Me.App.Configuration;
 using Read2Me.Core.Configuration;
 using Read2Me.AppData;
 using Read2Me.Services;
@@ -21,6 +22,7 @@ namespace Read2Me.App
             var configuration = new ConfigurationBuilder()
                 .AddJsonFile("appsettings.json")
                 .AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"}.json", optional: true)
+                .AddJsonFile(LocalSettings.FileName, optional: true)
                 .Build();
 
             Log.Logger = new LoggerConfiguration()
@@ -54,6 +56,7 @@ namespace Read2Me.App
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
                 .UseSerilog()
+                .ConfigureAppConfiguration((context, config) => LocalSettings.AddTo(config, context.HostingEnvironment))
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
                     webBuilder.UseStartup<Startup>();
