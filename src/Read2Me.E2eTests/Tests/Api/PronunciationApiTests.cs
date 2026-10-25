@@ -77,15 +77,15 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
     {
         var folder = $"api-pronunciations-{Guid.NewGuid():N}";
         var book = await app.SeedNarrationBookAsync(folder, "Part One",
-            ["Pug ran. Pug fell.", "Pug slept.", "Kulgan read."]);
+            ["Holmes ran. Holmes fell.", "Holmes slept.", "Watson read."]);
         var narrator = Read2Me.Data.ProjectDbContext.NarratorId;
-        Assert.Equal(HttpStatusCode.Created, (await AddAsync(folder, "Pug", "Pugg")).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await AddAsync(folder, "Holmes", "Holmz")).StatusCode);
         await app.SeedItemAudioAsync(folder, book.ItemId("n2"), narrator);
 
-        var pug = Assert.Single(await ListAsync(folder));
-        Assert.Equal(3, pug.GetProperty("matchCount").GetInt32());
-        Assert.Equal(2, pug.GetProperty("itemCount").GetInt32());
-        Assert.Equal(1, pug.GetProperty("withAudioCount").GetInt32());
+        var holmes = Assert.Single(await ListAsync(folder));
+        Assert.Equal(3, holmes.GetProperty("matchCount").GetInt32());
+        Assert.Equal(2, holmes.GetProperty("itemCount").GetInt32());
+        Assert.Equal(1, holmes.GetProperty("withAudioCount").GetInt32());
     }
 
     [Theory]
@@ -228,45 +228,45 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
     [Fact]
     public async Task An_add_discards_the_audio_of_the_items_it_newly_matches_and_counts_what_needs_generating()
     {
-        var (folder, book) = await SeedWithAudioAsync(["Pug ran.", "Pug slept.", "Kulgan read."], "n1", "n3");
+        var (folder, book) = await SeedWithAudioAsync(["Holmes ran.", "Holmes slept.", "Watson read."], "n1", "n3");
 
-        var added = await AddAsync(folder, "Pug", "Pugg");
+        var added = await AddAsync(folder, "Holmes", "Holmz");
 
         Assert.Equal(HttpStatusCode.Created, added.StatusCode);
         var answer = await JsonOf(added);
         Assert.Equal(1, answer.GetProperty("audioDiscardCount").GetInt32());
         Assert.Equal(2, answer.GetProperty("needsAudioCount").GetInt32()); // n1 discarded, n2 never had any
-        Assert.Equal("Pug", answer.GetProperty("writtenForm").GetString());
+        Assert.Equal("Holmes", answer.GetProperty("writtenForm").GetString());
         Assert.Equal(["n3"], await WithAudioAsync(folder, book, 3));
     }
 
     [Fact]
     public async Task A_spoken_form_edit_discards_the_audio_of_the_entrys_matches()
     {
-        var (folder, book) = await SeedWithAudioAsync(["Pug ran.", "Pug slept.", "Kulgan read."]);
-        var pug = await AddedIdAsync(folder, "Pug", "Pugg");
+        var (folder, book) = await SeedWithAudioAsync(["Holmes ran.", "Holmes slept.", "Watson read."]);
+        var holmes = await AddedIdAsync(folder, "Holmes", "Holmz");
         await app.SeedItemAudioAsync(folder, book.ItemId("n1"), Read2Me.Data.ProjectDbContext.NarratorId);
         await app.SeedItemAudioAsync(folder, book.ItemId("n3"), Read2Me.Data.ProjectDbContext.NarratorId);
 
-        var edited = await EditAsync(folder, pug, "Pug", "Puhg");
+        var edited = await EditAsync(folder, holmes, "Holmes", "Hohmz");
 
         Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
         var answer = await JsonOf(edited);
         Assert.Equal(1, answer.GetProperty("audioDiscardCount").GetInt32());
-        Assert.Equal("Puhg", answer.GetProperty("spokenForm").GetString());
-        Assert.Equal(pug, answer.GetProperty("id").GetGuid());
+        Assert.Equal("Hohmz", answer.GetProperty("spokenForm").GetString());
+        Assert.Equal(holmes, answer.GetProperty("id").GetGuid());
         Assert.Equal(["n3"], await WithAudioAsync(folder, book, 3));
     }
 
     [Fact]
     public async Task A_written_form_edit_discards_the_audio_of_its_old_and_new_matches()
     {
-        var (folder, book) = await SeedWithAudioAsync(["Pug ran.", "Tomas slept.", "Kulgan read."]);
-        var pug = await AddedIdAsync(folder, "Pug", "Pugg");
+        var (folder, book) = await SeedWithAudioAsync(["Holmes ran.", "Lestrade slept.", "Watson read."]);
+        var holmes = await AddedIdAsync(folder, "Holmes", "Holmz");
         foreach (var item in new[] { "n1", "n2", "n3" })
             await app.SeedItemAudioAsync(folder, book.ItemId(item), Read2Me.Data.ProjectDbContext.NarratorId);
 
-        var edited = await EditAsync(folder, pug, "Kulgan", "Pugg");
+        var edited = await EditAsync(folder, holmes, "Watson", "Holmz");
 
         Assert.Equal(2, (await JsonOf(edited)).GetProperty("audioDiscardCount").GetInt32());
         Assert.Equal(["n2"], await WithAudioAsync(folder, book, 3));
@@ -275,16 +275,16 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
     [Fact]
     public async Task An_overlapping_add_discards_only_where_the_winner_changes_what_is_said()
     {
-        var (folder, book) = await SeedWithAudioAsync(["Minas Tirith fell.", "Tirith stood.", "Minas wept."]);
-        await AddedIdAsync(folder, "Tirith", "TEER-ith");
+        var (folder, book) = await SeedWithAudioAsync(["Van Helsing fell.", "Helsing stood.", "Van wept."]);
+        await AddedIdAsync(folder, "Helsing", "HEL-sing");
         foreach (var item in new[] { "n1", "n2", "n3" })
             await app.SeedItemAudioAsync(folder, book.ItemId(item), Read2Me.Data.ProjectDbContext.NarratorId);
 
-        // The longer entry wins in n1, but says what "Tirith" alone already made of it.
-        var same = await AddAsync(folder, "Minas Tirith", "Minas TEER-ith");
+        // The longer entry wins in n1, but says what "Helsing" alone already made of it.
+        var same = await AddAsync(folder, "Van Helsing", "Van HEL-sing");
         Assert.Equal(0, (await JsonOf(same)).GetProperty("audioDiscardCount").GetInt32());
 
-        var different = await EditAsync(folder, (await JsonOf(same)).GetProperty("id").GetGuid(), "Minas Tirith", "MEE-nas TEER-ith");
+        var different = await EditAsync(folder, (await JsonOf(same)).GetProperty("id").GetGuid(), "Van Helsing", "VAHN HEL-sing");
         Assert.Equal(1, (await JsonOf(different)).GetProperty("audioDiscardCount").GetInt32());
         Assert.Equal(["n2", "n3"], await WithAudioAsync(folder, book, 3));
     }
@@ -292,13 +292,13 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
     [Fact]
     public async Task A_delete_discards_the_audio_of_its_old_matches_and_is_a_Delete_step()
     {
-        var (folder, book) = await SeedWithAudioAsync(["Pug ran.", "Pug slept.", "Kulgan read."]);
-        var pug = await AddedIdAsync(folder, "Pug", "Pugg");
+        var (folder, book) = await SeedWithAudioAsync(["Holmes ran.", "Holmes slept.", "Watson read."]);
+        var holmes = await AddedIdAsync(folder, "Holmes", "Holmz");
         await app.SeedItemAudioAsync(folder, book.ItemId("n2"), Read2Me.Data.ProjectDbContext.NarratorId);
         await app.SeedItemAudioAsync(folder, book.ItemId("n3"), Read2Me.Data.ProjectDbContext.NarratorId);
         var steps = (await StepsAsync(folder)).Count;
 
-        var deleted = await DeleteAsync(folder, pug);
+        var deleted = await DeleteAsync(folder, holmes);
 
         Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
         var answer = await JsonOf(deleted);
@@ -309,7 +309,7 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         var after = await StepsAsync(folder);
         Assert.Equal(steps + 1, after.Count);
         var step = after[0];
-        Assert.Equal("Pronunciation: delete \"Pug\"", step.GetProperty("label").GetString());
+        Assert.Equal("Pronunciation: delete \"Holmes\"", step.GetProperty("label").GetString());
         Assert.Equal("delete", step.GetProperty("action").GetString());
     }
 
@@ -331,12 +331,12 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
     [Fact]
     public async Task Saving_an_unchanged_entry_writes_nothing_lands_no_step_and_keeps_the_audio()
     {
-        var (folder, book) = await SeedWithAudioAsync(["Pug ran."]);
-        var pug = await AddedIdAsync(folder, "Pug", "Pugg");
+        var (folder, book) = await SeedWithAudioAsync(["Holmes ran."]);
+        var holmes = await AddedIdAsync(folder, "Holmes", "Holmz");
         await app.SeedItemAudioAsync(folder, book.ItemId("n1"), Read2Me.Data.ProjectDbContext.NarratorId);
         var before = (await StepsAsync(folder)).Count;
 
-        var saved = await EditAsync(folder, pug, " Pug ", "Pugg");
+        var saved = await EditAsync(folder, holmes, " Holmes ", "Holmz");
 
         Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
         Assert.Equal(0, (await JsonOf(saved)).GetProperty("audioDiscardCount").GetInt32());
@@ -363,9 +363,9 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
     [Fact]
     public async Task A_Restore_to_before_an_add_discards_the_audio_of_its_matches()
     {
-        var (folder, book) = await SeedWithAudioAsync(["Pug ran.", "Pug slept.", "Kulgan read."]);
+        var (folder, book) = await SeedWithAudioAsync(["Holmes ran.", "Holmes slept.", "Watson read."]);
         var before = await HeadAsync(folder);
-        await AddedIdAsync(folder, "Pug", "Pugg");
+        await AddedIdAsync(folder, "Holmes", "Holmz");
         await app.SeedItemAudioAsync(folder, book.ItemId("n1"), Read2Me.Data.ProjectDbContext.NarratorId);
         await app.SeedItemAudioAsync(folder, book.ItemId("n3"), Read2Me.Data.ProjectDbContext.NarratorId);
 
@@ -380,10 +380,10 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
     [Fact]
     public async Task A_Restore_to_before_a_spoken_form_edit_discards_the_audio_of_the_entrys_matches()
     {
-        var (folder, book) = await SeedWithAudioAsync(["Pug ran.", "Pug slept.", "Kulgan read."]);
-        var pug = await AddedIdAsync(folder, "Pug", "Pugg");
+        var (folder, book) = await SeedWithAudioAsync(["Holmes ran.", "Holmes slept.", "Watson read."]);
+        var holmes = await AddedIdAsync(folder, "Holmes", "Holmz");
         var before = await HeadAsync(folder);
-        await EditAsync(folder, pug, "Pug", "Puhg");
+        await EditAsync(folder, holmes, "Holmes", "Hohmz");
         foreach (var item in new[] { "n1", "n2", "n3" })
             await app.SeedItemAudioAsync(folder, book.ItemId(item), Read2Me.Data.ProjectDbContext.NarratorId);
 
@@ -392,16 +392,16 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         Assert.Equal((2, 2), (preview, restored.GetProperty("audioDiscardCount").GetInt32()));
         Assert.Equal(2, restored.GetProperty("needsAudioCount").GetInt32());
         Assert.Equal(["n3"], await WithAudioAsync(folder, book, 3));
-        Assert.Equal("Pugg", Assert.Single(await ListAsync(folder)).GetProperty("spokenForm").GetString());
+        Assert.Equal("Holmz", Assert.Single(await ListAsync(folder)).GetProperty("spokenForm").GetString());
     }
 
     [Fact]
     public async Task A_Restore_to_before_a_delete_discards_the_audio_of_the_entrys_old_matches()
     {
-        var (folder, book) = await SeedWithAudioAsync(["Pug ran.", "Pug slept.", "Kulgan read."]);
-        var pug = await AddedIdAsync(folder, "Pug", "Pugg");
+        var (folder, book) = await SeedWithAudioAsync(["Holmes ran.", "Holmes slept.", "Watson read."]);
+        var holmes = await AddedIdAsync(folder, "Holmes", "Holmz");
         var before = await HeadAsync(folder);
-        await DeleteAsync(folder, pug);
+        await DeleteAsync(folder, holmes);
         await app.SeedItemAudioAsync(folder, book.ItemId("n2"), Read2Me.Data.ProjectDbContext.NarratorId);
         await app.SeedItemAudioAsync(folder, book.ItemId("n3"), Read2Me.Data.ProjectDbContext.NarratorId);
 
@@ -410,19 +410,19 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         Assert.Equal((1, 1), (preview, restored.GetProperty("audioDiscardCount").GetInt32()));
         Assert.Equal(2, restored.GetProperty("needsAudioCount").GetInt32());
         Assert.Equal(["n3"], await WithAudioAsync(folder, book, 3));
-        Assert.Equal(pug, Assert.Single(await ListAsync(folder)).GetProperty("id").GetGuid());
+        Assert.Equal(holmes, Assert.Single(await ListAsync(folder)).GetProperty("id").GetGuid());
     }
 
     [Fact]
     public async Task An_item_whose_text_and_spoken_text_both_change_in_a_Restore_is_counted_once()
     {
-        var (folder, book) = await SeedWithAudioAsync(["Pug ran.", "Pug slept.", "Kulgan read."]);
+        var (folder, book) = await SeedWithAudioAsync(["Holmes ran.", "Holmes slept.", "Watson read."]);
         var before = await HeadAsync(folder);
         var edited = await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
-            new StringContent($$"""{ "type": "UpdateParagraphItemText", "itemId": "{{book.ItemId("n1")}}", "text": "Pug walked." }""",
+            new StringContent($$"""{ "type": "UpdateParagraphItemText", "itemId": "{{book.ItemId("n1")}}", "text": "Holmes walked." }""",
                 Encoding.UTF8, "application/json"));
         Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
-        await AddedIdAsync(folder, "Pug", "Pugg");
+        await AddedIdAsync(folder, "Holmes", "Holmz");
         foreach (var item in new[] { "n1", "n2", "n3" })
             await app.SeedItemAudioAsync(folder, book.ItemId(item), Read2Me.Data.ProjectDbContext.NarratorId);
 
@@ -436,11 +436,11 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
     [Fact]
     public async Task A_Restore_that_leaves_the_list_as_it_is_keeps_the_audio_of_its_matches()
     {
-        var (folder, book) = await SeedWithAudioAsync(["Pug ran.", "Pug slept.", "Kulgan read."]);
-        await AddedIdAsync(folder, "Pug", "Pugg");
+        var (folder, book) = await SeedWithAudioAsync(["Holmes ran.", "Holmes slept.", "Watson read."]);
+        await AddedIdAsync(folder, "Holmes", "Holmz");
         var before = await HeadAsync(folder);
         var edited = await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
-            new StringContent($$"""{ "type": "UpdateParagraphItemText", "itemId": "{{book.ItemId("n3")}}", "text": "Kulgan wrote." }""",
+            new StringContent($$"""{ "type": "UpdateParagraphItemText", "itemId": "{{book.ItemId("n3")}}", "text": "Watson wrote." }""",
                 Encoding.UTF8, "application/json"));
         Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
         foreach (var item in new[] { "n1", "n2", "n3" })
@@ -512,17 +512,17 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
     public async Task The_impact_of_a_draft_counts_what_saving_it_then_discards(string change)
     {
         var (folder, book) = await SeedWithAudioAsync(
-            ["Pug ran. Pug fell.", "Pug slept.", "Kulgan read.", "Tomas sang."]);
-        var pug = await AddedIdAsync(folder, "Pug", "Pugg");
+            ["Holmes ran. Holmes fell.", "Holmes slept.", "Watson read.", "Lestrade sang."]);
+        var holmes = await AddedIdAsync(folder, "Holmes", "Holmz");
         foreach (var item in new[] { "n1", "n3", "n4" })
             await app.SeedItemAudioAsync(folder, book.ItemId(item), Read2Me.Data.ProjectDbContext.NarratorId);
         object draft = change switch
         {
-            "add" => new { writtenForm = "Kulgan", spokenForm = "KULL-gun" },
-            "spoken" => new { id = pug, writtenForm = "Pug", spokenForm = "Puhg" },
-            "written" => new { id = pug, writtenForm = "Tomas", spokenForm = "Pugg" },
-            "overlap" => new { writtenForm = "Pug ran", spokenForm = "Pugg runs" }, // wins over "Pug" in n1 only
-            _ => new { id = pug, delete = true },
+            "add" => new { writtenForm = "Watson", spokenForm = "WAT-sun" },
+            "spoken" => new { id = holmes, writtenForm = "Holmes", spokenForm = "Hohmz" },
+            "written" => new { id = holmes, writtenForm = "Lestrade", spokenForm = "Holmz" },
+            "overlap" => new { writtenForm = "Holmes ran", spokenForm = "Holmz runs" }, // wins over "Holmes" in n1 only
+            _ => new { id = holmes, delete = true },
         };
         var stepsBefore = (await StepsAsync(folder)).Count;
 
@@ -533,11 +533,11 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         Assert.Equal(stepsBefore, (await StepsAsync(folder)).Count);
         var saved = change switch
         {
-            "add" => await AddAsync(folder, "Kulgan", "KULL-gun"),
-            "spoken" => await EditAsync(folder, pug, "Pug", "Puhg"),
-            "written" => await EditAsync(folder, pug, "Tomas", "Pugg"),
-            "overlap" => await AddAsync(folder, "Pug ran", "Pugg runs"),
-            _ => await DeleteAsync(folder, pug),
+            "add" => await AddAsync(folder, "Watson", "WAT-sun"),
+            "spoken" => await EditAsync(folder, holmes, "Holmes", "Hohmz"),
+            "written" => await EditAsync(folder, holmes, "Lestrade", "Holmz"),
+            "overlap" => await AddAsync(folder, "Holmes ran", "Holmz runs"),
+            _ => await DeleteAsync(folder, holmes),
         };
         Assert.Equal(counted, (await JsonOf(saved)).GetProperty("audioDiscardCount").GetInt32());
         Assert.Equal(change == "written" ? 2 : 1, counted);
@@ -548,20 +548,20 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
     {
         var folder = $"api-pronunciations-{Guid.NewGuid():N}";
         var book = await app.SeedNarrationBookAsync(folder, "Part One",
-            ["The rain fell. Minas Tirith stood.", "Tirith slept. Kulgan read.", "Nothing here."]);
-        var minas = await AddedIdAsync(folder, "Minas Tirith", "MEE-nas TEER-ith");
-        await AddedIdAsync(folder, "Kulgan", "KULL-gun");
+            ["The rain fell. Van Helsing stood.", "Helsing slept. Watson read.", "Nothing here."]);
+        var vanHelsing = await AddedIdAsync(folder, "Van Helsing", "VAHN HEL-sing");
+        await AddedIdAsync(folder, "Watson", "WAT-sun");
         await app.SeedItemAudioAsync(folder, book.ItemId("n2"), Read2Me.Data.ProjectDbContext.NarratorId);
 
-        var impact = await JsonOf(await ImpactAsync(folder, new { writtenForm = "tirith", spokenForm = "TEER-ith" }));
+        var impact = await JsonOf(await ImpactAsync(folder, new { writtenForm = "helsing", spokenForm = "HEL-sing" }));
 
-        Assert.Equal(1, impact.GetProperty("matchCount").GetInt32()); // "Minas Tirith" wins in n1
+        Assert.Equal(1, impact.GetProperty("matchCount").GetInt32()); // "Van Helsing" wins in n1
         Assert.Equal(1, impact.GetProperty("itemCount").GetInt32());
         Assert.Equal(1, impact.GetProperty("withAudioCount").GetInt32());
         Assert.Equal(1, impact.GetProperty("audioDiscardCount").GetInt32());
         Assert.Equal(JsonValueKind.Null, impact.GetProperty("duplicateOf").ValueKind);
         var overlap = Assert.Single(impact.GetProperty("overlaps").EnumerateArray());
-        Assert.Equal(minas, overlap.GetProperty("id").GetGuid());
+        Assert.Equal(vanHelsing, overlap.GetProperty("id").GetGuid());
         Assert.False(overlap.GetProperty("draftWins").GetBoolean());
 
         var match = Assert.Single(impact.GetProperty("matches").EnumerateArray());
@@ -570,27 +570,27 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         Assert.Equal("ch1", match.GetProperty("chapterTitle").GetString());
         Assert.Equal("Narrator", match.GetProperty("speaker").GetString());
         Assert.True(match.GetProperty("hasAudio").GetBoolean());
-        Assert.Equal("Tirith slept.", match.GetProperty("sentence").GetString());
+        Assert.Equal("Helsing slept.", match.GetProperty("sentence").GetString());
         Assert.Equal(0, match.GetProperty("matchStart").GetInt32());
-        Assert.Equal(6, match.GetProperty("matchLength").GetInt32());
-        Assert.Equal("TEER-ith slept.", match.GetProperty("spokenSentence").GetString());
+        Assert.Equal(7, match.GetProperty("matchLength").GetInt32());
+        Assert.Equal("HEL-sing slept.", match.GetProperty("spokenSentence").GetString());
         Assert.Equal(0, match.GetProperty("spokenMatchStart").GetInt32());
         Assert.Equal(8, match.GetProperty("spokenMatchLength").GetInt32());
 
-        var duplicate = await JsonOf(await ImpactAsync(folder, new { writtenForm = "KULGAN", spokenForm = "x" }));
-        Assert.Equal("Kulgan", duplicate.GetProperty("duplicateOf").GetProperty("writtenForm").GetString());
+        var duplicate = await JsonOf(await ImpactAsync(folder, new { writtenForm = "WATSON", spokenForm = "x" }));
+        Assert.Equal("Watson", duplicate.GetProperty("duplicateOf").GetProperty("writtenForm").GetString());
         var second = await JsonOf(await ImpactAsync(folder, new { writtenForm = "read", spokenForm = "red" }));
         var readMatch = Assert.Single(second.GetProperty("matches").EnumerateArray());
-        Assert.Equal("Kulgan read.", readMatch.GetProperty("sentence").GetString());
+        Assert.Equal("Watson read.", readMatch.GetProperty("sentence").GetString());
         Assert.Equal(7, readMatch.GetProperty("matchStart").GetInt32());
-        Assert.Equal("KULL-gun red.", readMatch.GetProperty("spokenSentence").GetString());
-        Assert.Equal(9, readMatch.GetProperty("spokenMatchStart").GetInt32());
+        Assert.Equal("WAT-sun red.", readMatch.GetProperty("spokenSentence").GetString());
+        Assert.Equal(8, readMatch.GetProperty("spokenMatchStart").GetInt32());
         Assert.Equal(3, readMatch.GetProperty("spokenMatchLength").GetInt32());
-        // The match's case carries over: a sentence-initial "Kulgan" respelt "kool-gan" reads "Kool-gan".
-        var initial = Assert.Single((await JsonOf(await ImpactAsync(folder, new { id = (Guid?)null, writtenForm = "Kulgan", spokenForm = "kool-gan" })))
+        // The match's case carries over: a sentence-initial "Watson" respelt "wot-son" reads "Wot-son".
+        var initial = Assert.Single((await JsonOf(await ImpactAsync(folder, new { id = (Guid?)null, writtenForm = "Watson", spokenForm = "wot-son" })))
             .GetProperty("matches").EnumerateArray());
         var spokenSentence = initial.GetProperty("spokenSentence").GetString()!;
-        Assert.Equal("Kool-gan", spokenSentence.Substring(initial.GetProperty("spokenMatchStart").GetInt32(), initial.GetProperty("spokenMatchLength").GetInt32()));
+        Assert.Equal("Wot-son", spokenSentence.Substring(initial.GetProperty("spokenMatchStart").GetInt32(), initial.GetProperty("spokenMatchLength").GetInt32()));
     }
 
     [Fact]
@@ -625,32 +625,32 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
     {
         app.FakeAi.Reset();
         var folder = $"api-pronunciations-{Guid.NewGuid():N}";
-        var book = await app.SeedNarrationBookAsync(folder, "Part One", ["Pug ran. Kulgan read the stormy book."]);
+        var book = await app.SeedNarrationBookAsync(folder, "Part One", ["Holmes ran. Watson read the stormy book."]);
         await app.SeedNarratorVoiceAsync(folder);
-        var kulgan = await AddedIdAsync(folder, "Kulgan", "KULL-gun");
+        var watson = await AddedIdAsync(folder, "Watson", "WAT-sun");
         await AddedIdAsync(folder, "stormy", "storm-ee");
         var steps = (await StepsAsync(folder)).Count;
 
         var match = Assert.Single((await JsonOf(await ImpactAsync(folder,
-            new { id = kulgan, writtenForm = "Kulgan", spokenForm = "KOOL-gan" }))).GetProperty("matches").EnumerateArray());
-        Assert.Equal(9, match.GetProperty("sentenceStart").GetInt32());
+            new { id = watson, writtenForm = "Watson", spokenForm = "WOT-son" }))).GetProperty("matches").EnumerateArray());
+        Assert.Equal(12, match.GetProperty("sentenceStart").GetInt32());
 
-        var draft = new { id = kulgan, writtenForm = "Kulgan", spokenForm = "KOOL-gan" };
-        var drafted = await TryAsync(folder, new { itemId = book.ItemId("n1"), sentenceStart = 9, draft, asWritten = false, voice = "item" });
-        var asWritten = await TryAsync(folder, new { itemId = book.ItemId("n1"), sentenceStart = 9, draft, asWritten = true, voice = "item" });
-        var saved = await TryAsync(folder, new { itemId = book.ItemId("n1"), sentenceStart = 9, asWritten = false, voice = "item" });
+        var draft = new { id = watson, writtenForm = "Watson", spokenForm = "WOT-son" };
+        var drafted = await TryAsync(folder, new { itemId = book.ItemId("n1"), sentenceStart = 12, draft, asWritten = false, voice = "item" });
+        var asWritten = await TryAsync(folder, new { itemId = book.ItemId("n1"), sentenceStart = 12, draft, asWritten = true, voice = "item" });
+        var saved = await TryAsync(folder, new { itemId = book.ItemId("n1"), sentenceStart = 12, asWritten = false, voice = "item" });
 
         Assert.Equal(HttpStatusCode.OK, drafted.StatusCode);
         Assert.Equal("audio/wav", drafted.Content.Headers.ContentType?.MediaType);
         Assert.Equal("RIFF", Encoding.ASCII.GetString((await drafted.Content.ReadAsByteArrayAsync())[..4]));
-        Assert.Equal(["KOOL-gan read the storm-ee book.", "Kulgan read the stormy book.", "KULL-gun read the storm-ee book."],
+        Assert.Equal(["WOT-son read the storm-ee book.", "Watson read the stormy book.", "WAT-sun read the storm-ee book."],
             SpeechInputs());
         Assert.Equal(HttpStatusCode.OK, asWritten.StatusCode);
         Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
 
         // Nothing is stored: no step, the list as it was, the item still without audio.
         Assert.Equal(steps, (await StepsAsync(folder)).Count);
-        Assert.Equal("KULL-gun", (await ListAsync(folder)).Single(e => e.GetProperty("id").GetGuid() == kulgan)
+        Assert.Equal("WAT-sun", (await ListAsync(folder)).Single(e => e.GetProperty("id").GetGuid() == watson)
             .GetProperty("spokenForm").GetString());
         Assert.Empty(await WithAudioAsync(folder, book, 1));
     }
@@ -686,7 +686,7 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
     public async Task A_try_out_of_an_unknown_item_is_404_of_no_sentence_400_and_without_a_voice_422()
     {
         var folder = await SeedAsync();
-        var book = await app.SeedNarrationBookAsync($"{folder}-b", "Part One", ["Pug ran."]);
+        var book = await app.SeedNarrationBookAsync($"{folder}-b", "Part One", ["Holmes ran."]);
 
         Assert.Equal(HttpStatusCode.NotFound, (await TryAsync(folder,
             new { itemId = Guid.NewGuid(), sentenceStart = 0, asWritten = false, voice = "item" })).StatusCode);
@@ -697,7 +697,7 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         Assert.Equal(HttpStatusCode.BadRequest, (await TryAsync($"{folder}-b", new
         {
             itemId = book.ItemId("n1"), sentenceStart = 0, asWritten = false, voice = "item",
-            draft = new { writtenForm = "'Pug", spokenForm = "x" },
+            draft = new { writtenForm = "'Holmes", spokenForm = "x" },
         })).StatusCode);
     }
 
@@ -821,26 +821,26 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
     [Fact]
     public async Task A_span_names_the_sentence_it_is_in_and_the_longest_written_form_wins()
     {
-        var (folder, book) = await SeedWithAudioAsync(["Pug ran. Minas Tirith fell."]);
-        await AddedIdAsync(folder, "Pug", "PUHG");
-        var minas = await AddedIdAsync(folder, "Minas Tirith", "MEE-nas TEER-ith");
-        await AddedIdAsync(folder, "Tirith", "TEER-ith");
+        var (folder, book) = await SeedWithAudioAsync(["Holmes ran. Van Helsing fell."]);
+        await AddedIdAsync(folder, "Holmes", "HOHMZ");
+        var vanHelsing = await AddedIdAsync(folder, "Van Helsing", "VAHN HEL-sing");
+        await AddedIdAsync(folder, "Helsing", "HEL-sing");
 
         var spans = (await MatchesAsync(folder, [book.ChapterId("ch1")])).GetProperty("spans").EnumerateArray().ToList();
 
         Assert.Equal(2, spans.Count);
-        Assert.Equal(9, spans[1].GetProperty("start").GetInt32());
-        Assert.Equal(12, spans[1].GetProperty("length").GetInt32());
-        Assert.Equal(minas, spans[1].GetProperty("pronunciationId").GetGuid());
-        Assert.Equal(9, spans[1].GetProperty("sentenceStart").GetInt32());
+        Assert.Equal(12, spans[1].GetProperty("start").GetInt32());
+        Assert.Equal(11, spans[1].GetProperty("length").GetInt32());
+        Assert.Equal(vanHelsing, spans[1].GetProperty("pronunciationId").GetGuid());
+        Assert.Equal(12, spans[1].GetProperty("sentenceStart").GetInt32());
     }
 
     [Fact]
     public async Task Matches_read_at_a_step_and_none_or_unknown_chapters_answer_nothing()
     {
-        var (folder, book) = await SeedWithAudioAsync(["Pug ran."]);
+        var (folder, book) = await SeedWithAudioAsync(["Holmes ran."]);
         var started = (await StepsAsync(folder))[0].GetProperty("stepId").GetGuid();
-        await AddedIdAsync(folder, "Pug", "PUHG");
+        await AddedIdAsync(folder, "Holmes", "HOHMZ");
 
         Assert.Single((await MatchesAsync(folder, [book.ChapterId("ch1")])).GetProperty("spans").EnumerateArray());
         var then = await MatchesAsync(folder, [book.ChapterId("ch1")], at: started);

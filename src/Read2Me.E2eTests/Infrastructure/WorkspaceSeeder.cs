@@ -179,30 +179,41 @@ public static class WorkspaceSeeder
                     "“Only me,” came the reply.", characterId: null)));
 
     /// <summary>
-    /// Creates a project whose chapter is a trial transcript: ten unquoted <c>Q:</c>/<c>A:</c>
-    /// paragraphs the quote scan stamped as narration ("pq1"…"pq5" with items "q1"…"q5", "pa1"…"pa5"
-    /// with "a1"…"a5"), one plain narration paragraph ("pplain", item "plain"), then one quoted
-    /// paragraph whose speech tag ("tag") is narration beside an unattributed line ("quote").
-    /// A Chapter release frees the ten — each marker repeats five times — and leaves the plain
-    /// narration and the tag alone.
+    /// Creates a project whose chapter is a catechism lesson (the Baltimore Catechism's Lesson
+    /// First, from Project Gutenberg): ten unquoted <c>Q:</c>/<c>A:</c> paragraphs the quote scan
+    /// stamped as narration ("pq1"…"pq5" with items "q1"…"q5", "pa1"…"pa5" with "a1"…"a5"), one
+    /// plain narration paragraph ("pplain", item "plain"), then one quoted paragraph whose speech
+    /// tag ("tag") is narration beside an unattributed line ("quote"). A Chapter release frees the
+    /// ten — each marker repeats five times — and leaves the plain narration and the tag alone.
     /// </summary>
     public static Task<BookHierarchyBuilder> SeedTranscriptProjectAsync(
         IServiceProvider services, string workspaceDir, string folderName,
         string title, string author, string characterName = "Alice") =>
         SeedBookAsync(services, workspaceDir, folderName, title, author, characterName, c =>
         {
-            string[] questions = ["Your name?", "Your occupation?", "Your age?", "Your home?", "Your purpose?"];
-            string[] answers = ["Hari Seldon.", "Psychohistorian.", "Forty.", "Trantor.", "To save it."];
+            string[] questions =
+            [
+                "Who made the world?", "Who is God?", "What is man?", "Why did God make you?",
+                "What must we do to save our souls?",
+            ];
+            string[] answers =
+            [
+                "God made the world.",
+                "God is the Creator of heaven and earth, and of all things.",
+                "Man is a creature composed of body and soul, and made to the image and likeness of God.",
+                "God made me to know Him, to love Him, and to serve Him in this world, and to be happy with Him forever in the next.",
+                "To save our souls, we must worship God by faith, hope, and charity;",
+            ];
             for (var n = 1; n <= 5; n++)
             {
                 var i = n;
                 c.AddParagraph($"pq{i}", p => p.AddNarration($"q{i}", $"Q: {questions[i - 1]}"))
                  .AddParagraph($"pa{i}", p => p.AddNarration($"a{i}", $"A: {answers[i - 1]}"));
             }
-            c.AddParagraph("pplain", p => p.AddNarration("plain", "The court fell silent."))
+            c.AddParagraph("pplain", p => p.AddNarration("plain", "The class fell silent."))
              .AddParagraph("pquoted", p => p
-                .AddRawItem("quote", ParagraphItemType.Speech, "“Order,”", characterId: null)
-                .AddNarration("tag", "the Commissioner said."));
+                .AddRawItem("quote", ParagraphItemType.Speech, "“Again,”", characterId: null)
+                .AddNarration("tag", "the teacher said."));
         });
 
     /// One volume, one chapter named "ch1", one known character; the caller fills the chapter.
@@ -447,11 +458,11 @@ public static class WorkspaceSeeder
                             var para = p;
                             if (para % 2 == 1)
                                 ch.AddParagraph($"c{chapter}p{para}", x => x.AddNarration($"c{chapter}n{para}",
-                                    $"Paragraph {para} of chapter {chapter} tells of the long road across the desert, " +
-                                    "where the wind carried the smell of spice and the horizon never came any closer."));
+                                    $"Paragraph {para} of chapter {chapter} tells of the long trail to Dawson, " +
+                                    "where the dogs toiled in the traces and the snow never stopped falling."));
                             else
                                 ch.AddParagraph($"c{chapter}p{para}", x => x.AddCharacterLine($"c{chapter}l{para}",
-                                    $"“We will reach the sietch before the second moon, or not at all,” she said, in paragraph {para}.",
+                                    $"“We will reach Dawson before the river breaks, or not at all,” she said, in paragraph {para}.",
                                     characterName));
                         }
                     });

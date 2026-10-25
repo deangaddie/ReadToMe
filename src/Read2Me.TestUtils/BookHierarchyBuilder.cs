@@ -306,7 +306,7 @@ public sealed class BookHierarchyBuilder
 
         /// <summary>
         /// <paramref name="count"/> narration-only paragraphs <c>{prefix}1</c>… whose text starts with
-        /// <paramref name="marker"/> (<c>"Q."</c>, <c>"Seldon:"</c>); each one's item is
+        /// <paramref name="marker"/> (<c>"Q."</c>, <c>"Darcy:"</c>); each one's item is
         /// <c>{prefix}N-item</c>. A transcript the import split stamped as narration.
         /// </summary>
         public ChapterScope AddTranscript(string prefix, string marker, int count)

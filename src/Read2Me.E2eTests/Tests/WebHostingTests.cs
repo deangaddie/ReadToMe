@@ -19,7 +19,7 @@ public class WebHostingTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     [Theory]
     [InlineData("/app")]
     [InlineData("/app/")]
-    [InlineData("/app/projects/foundation")]
+    [InlineData("/app/projects/pride-and-prejudice")]
     public async Task Without_bundle_app_routes_return_not_built_page(string path)
     {
         RemoveBundle();
@@ -38,7 +38,7 @@ public class WebHostingTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     [Theory]
     [InlineData("/app")]
     [InlineData("/app/")]
-    [InlineData("/app/projects/foundation")]
+    [InlineData("/app/projects/pride-and-prejudice")]
     public async Task With_bundle_app_routes_return_index_uncached(string path)
     {
         StageBundle();
@@ -102,9 +102,9 @@ public class WebHostingTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     /// </summary>
     [Theory]
     [InlineData("/app2")]
-    [InlineData("/app2/projects/foundation")]
+    [InlineData("/app2/projects/pride-and-prejudice")]
     [InlineData("/blazor")]
-    [InlineData("/project/foundation")]
+    [InlineData("/project/pride-and-prejudice")]
     [InlineData("/llm-settings")]
     [InlineData("/llm-prompts")]
     [InlineData("/audio-processing-settings")]
