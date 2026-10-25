@@ -27,7 +27,7 @@ namespace Read2Me.Services.Characters.Rules
     /// Roster name matching (the prototype's <c>buildNameIndex</c>). A capitalised name or alias becomes a form:
     /// its honorific words and its other words. A mention matches a form when all its non-honorific
     /// words are the form's, and its honorifics (if both have any) are too; exactly one matching
-    /// character is a hit, several are ambiguous. An all-lowercase alias ("the magician") is a noun
+    /// character is a hit, several are ambiguous. An all-lowercase alias ("the doctor") is a noun
     /// phrase looked up whole, without its article.
     /// </summary>
     internal sealed class NameIndex
@@ -66,7 +66,7 @@ namespace Read2Me.Services.Characters.Rules
 
         public static NameIndex Build(IReadOnlyList<RosterEntry> roster) => new(roster);
 
-        /// <summary>Matches capitalised mention tokens ("Lord", "Borric") against the roster forms.</summary>
+        /// <summary>Matches capitalised mention tokens ("Lord", "Godalming") against the roster forms.</summary>
         public NameMatch Match(IReadOnlyList<string> tokens)
         {
             var stripped = tokens.Select(Strip).ToList();
@@ -92,7 +92,7 @@ namespace Read2Me.Services.Characters.Rules
             };
         }
 
-        /// <summary>Looks a lowercase noun phrase ("magician", "old man") up among the noun aliases.</summary>
+        /// <summary>Looks a lowercase noun phrase ("doctor", "old man") up among the noun aliases.</summary>
         public NameMatch Noun(IReadOnlyList<string> words)
         {
             var key = string.Join(" ", words.Select(Lc));

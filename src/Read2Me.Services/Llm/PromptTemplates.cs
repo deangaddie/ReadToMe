@@ -425,9 +425,9 @@ namespace Read2Me.Services.Llm
 
             For each character return:
             - "name": the character's primary name, as a listener would most naturally refer
-              to them (e.g. "Bilbo", not "Mr. Bilbo Baggins").
+              to them (e.g. "Elizabeth", not "Miss Elizabeth Bennet").
             - "aliases": every other name, title, epithet or nickname the text uses for that
-              same character (e.g. "Mr. Baggins", "the hobbit"). Use an empty list if there
+              same character (e.g. "Lizzy", "Miss Eliza", "the second daughter"). Use an empty list if there
               are none.
 
             The characters already in the project are listed below — you may still include

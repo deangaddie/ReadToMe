@@ -304,7 +304,7 @@ export class PronunciationEditor extends R2mElement {
             html`<input
               data-field="written"
               maxlength=${WRITTEN_FORM_MAX}
-              placeholder="Kulgan"
+              placeholder="Watson"
               .value=${live(this.written())}
               ?disabled=${readOnly !== null}
               @input=${(e: Event) => this.edit('written', e)}

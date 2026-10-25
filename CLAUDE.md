@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `src/Read2Me.slnx` — .NET 10 solution (slnx format, not sln).
 
+## Sample books
+
+Tests, specs, docs, research and tools use only public-domain books from Project Gutenberg, quoted or bundled. This covers what the repo uses, not what a user imports into the app.
+
 ## Commands
 
 ```bash

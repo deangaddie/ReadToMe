@@ -311,7 +311,7 @@ export interface NarrationReleasePreviewDto {
   speechMarkers: SpeechMarkerCountDto[];
 }
 
-/** A speech marker as written (`Q.`, `Seldon:`, `—…—`) and how many paragraphs it releases. */
+/** A speech marker as written (`Q.`, `Darcy:`, `—…—`) and how many paragraphs it releases. */
 export interface SpeechMarkerCountDto {
   marker: string;
   paragraphs: number;

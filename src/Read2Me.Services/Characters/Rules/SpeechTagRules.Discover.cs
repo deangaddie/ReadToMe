@@ -23,8 +23,8 @@ namespace Read2Me.Services.Characters.Rules
         /// <summary>
         /// The names the chapter's speech tags use that the roster does not know, in first-seen order
         /// (case-insensitively distinct). A tag's mention loses leading openers and <c>-ly</c> adverbs
-        /// ("said Suddenly Laurie"); a mention of honorifics only ("said Lord") and one sharing a
-        /// non-honorific word with any roster name or alias ("Lord Borric" beside "Duke Borric") are
+        /// ("said Suddenly Jabez"); a mention of honorifics only ("said Lord") and one sharing a
+        /// non-honorific word with any roster name or alias ("Mrs. Bennet" beside "Mr. Bennet") are
         /// skipped. <paramref name="roster"/> must leave out the seed Narrator row.
         /// </summary>
         public static IReadOnlyList<DiscoveredName> DiscoverNames(

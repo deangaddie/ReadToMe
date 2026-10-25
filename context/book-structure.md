@@ -17,7 +17,7 @@ Use these terms exactly in code, tests, and discussion.
 
 ## Characters
 
-- **Alias** — alternate name for a Character (e.g. "Mr. Baggins" for "Bilbo Baggins"). Stored in `CharacterAliases`. Injected into the LLM attribution prompt alongside the canonical name and matched case-insensitively when attribution resolves a name (`CharacterResolver`), so an alternate name resolves to the existing canonical Character instead of a duplicate.
+- **Alias** — alternate name for a Character (e.g. "Lizzy" for "Elizabeth Bennet"). Stored in `CharacterAliases`. Injected into the LLM attribution prompt alongside the canonical name and matched case-insensitively when attribution resolves a name (`CharacterResolver`), so an alternate name resolves to the existing canonical Character instead of a duplicate.
 
 ## Book view
 

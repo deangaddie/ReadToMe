@@ -4,7 +4,7 @@ import type { ShellContext } from '@app/route-meta';
 export interface NavItem {
   label: string;
   icon: IconName;
-  /** App-relative link (`projects/dune/book`), resolved against `<base href>` like every link. */
+  /** App-relative link (`projects/dracula/book`), resolved against `<base href>` like every link. */
   link: string;
   /** `true` matches the link exactly (the project overview must not stay active on /book). */
   exact?: boolean;
