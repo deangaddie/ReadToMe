@@ -121,7 +121,7 @@ namespace Read2Me.Services.Characters.Rules
                         var opposite = pron == "he" ? Fem : Masc;
                         if (cand[k].W.Any(x => opposite.Contains(Lc(x))))
                             return null;
-                        // "He turned to Pug" cannot be Pug
+                        // "He turned to Holmes" cannot be Holmes
                         if (RosterMentions(idx, ownWords).Contains(sub.Name!))
                             return null;
                         return sub.Name;
@@ -179,7 +179,7 @@ namespace Read2Me.Services.Characters.Rules
                             ? SplitSentences(q.Pre).LastOrDefault() ?? ""
                             : SplitSentences(TrimStartCommas(q.Post)).FirstOrDefault() ?? "");
                         string? nm;
-                        // "Kulgan lit his pipe, and once he was satisfied …, he said,": the antecedent is the tag sentence's own subject
+                        // "Watson lit his pipe, and once he was satisfied …, he said,": the antecedent is the tag sentence's own subject
                         var ownSub = t.Form == "pre" ? SentenceSubject(idx, own) : null;
                         var ownOpposite = t.Np.P == "he" ? Fem : Masc;
                         if (ownSub is { Kind: NpKind.Name }
@@ -230,7 +230,7 @@ namespace Read2Me.Services.Characters.Rules
                 if (sub is null)
                     continue;
                 var vi = w.FindIndex(x => Lc(x) is "voice" or "voices");
-                var voiceOk = vi > 0 && IsPoss(w[vi - 1]) && sub.Kind == NpKind.Name; // "Laurie’s voice brought him …"
+                var voiceOk = vi > 0 && IsPoss(w[vi - 1]) && sub.Kind == NpKind.Name; // "Jabez’s voice brought him …"
                 if (sub.Kind == NpKind.Unres || (vi >= 0 && !voiceOk))
                 {
                     q.BeatOther = true;

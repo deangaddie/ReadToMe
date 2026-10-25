@@ -9,7 +9,7 @@ namespace Read2Me.Services.BookEdits
     /// result has the same length as the input, so callers can take matched spans from it.</summary>
     internal static class CaseChanger
     {
-        // Letters joined by apostrophes or hyphens; a word touching a digit (PS3551) is not a word.
+        // Letters joined by apostrophes or hyphens; a word touching a digit (PG1661) is not a word.
         private static readonly Regex Word = new(
             @"(?<![\p{L}\p{M}\p{N}])[\p{L}\p{M}]+(?:['’-][\p{L}\p{M}]+)*(?![\p{L}\p{M}\p{N}])",
             RegexOptions.Compiled);
@@ -115,7 +115,7 @@ namespace Read2Me.Services.BookEdits
             return i >= 0 && value[i] is '.' or '!' or '?' or ':';
         }
 
-        /// <summary>The letters before an apostrophe (Seldon's → Seldon), or the whole word.</summary>
+        /// <summary>The letters before an apostrophe (Darcy's → Darcy), or the whole word.</summary>
         internal static string Stem(string word)
         {
             var apostrophe = word.IndexOfAny(['\'', '’']);

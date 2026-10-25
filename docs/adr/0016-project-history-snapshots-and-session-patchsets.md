@@ -8,6 +8,9 @@ history model (branch `research/onshape-history-model`). It respects [ADR 0007](
 Book mutation receipts stay in-memory and non-durable. History is a separate store with a separate purpose, not the
 outbox that ADR rejected.
 
+On 2026-10-25 the name of the measured book, which is not on Project Gutenberg, was replaced with a neutral label.
+Every number is unchanged.
+
 ## Context
 
 Users get **History** ([context/history.md](../../context/history.md)): a linear list of **History steps**, one per user
@@ -21,7 +24,7 @@ Generated item audio, audio reviews and Pipeline checkpoints are not state.
 Each project is one SQLite `project.db` (EF Core, rollback journal, migrated on open). Every state write commits
 through `BookMutations.CommitAsync`: one transaction under a per-project lock.
 
-Measured on the Dune project (8,414 paragraphs / 14,895 items):
+Measured on a large novel project (8,414 paragraphs / 14,895 items):
 - A `VACUUM INTO` copy is 6.19 MiB and takes 21 ms.
 - A per-step session changeset is 2 KB for one paragraph edit and 1.6 MiB for a whole-book bulk assign.
 

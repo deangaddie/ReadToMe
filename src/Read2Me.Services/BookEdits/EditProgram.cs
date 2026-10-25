@@ -58,8 +58,8 @@ namespace Read2Me.Services.BookEdits
 
     public static class EditProgramSchema
     {
-        /// <summary>The ready-made change_case pattern for all-caps words and runs ("HARI SELDON",
-        /// "SELDON'S", "TRANTOR-BORN"). The planner prompt hands it to the model verbatim and the
+        /// <summary>The ready-made change_case pattern for all-caps words and runs ("FITZWILLIAM DARCY",
+        /// "DARCY'S", "PEMBERLEY-BORN"). The planner prompt hands it to the model verbatim and the
         /// describer names it in plain words.</summary>
         public const string AllCapsPattern = @"\b\p{Lu}{2,}(?:['’]\p{Lu}+)?(?:[ -]+\p{Lu}+(?:['’]\p{Lu}+)?)*\b";
 

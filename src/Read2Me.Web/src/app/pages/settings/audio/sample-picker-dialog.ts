@@ -18,7 +18,7 @@ export function snippet(text: string): string {
   return text.length <= SNIPPET_LENGTH ? text : `${text.slice(0, SNIPPET_LENGTH)}…`;
 }
 
-/** "Hardin · Hardin Voice · Foundation" — character (or Narration), voice when known, project. */
+/** "Elizabeth · Elizabeth Voice · Pride and Prejudice" — character (or Narration), voice when known, project. */
 export function provenance(sample: RecentAudioSample): string {
   return [sample.characterName ?? 'Narration', sample.voiceName, sample.projectTitle]
     .filter((part): part is string => !!part)

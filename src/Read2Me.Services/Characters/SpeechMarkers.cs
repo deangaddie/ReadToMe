@@ -7,11 +7,11 @@ namespace Read2Me.Services.Characters;
 /// paragraph's marker key out. Three shapes, tried in order, first match wins:
 /// <list type="bullet">
 /// <item><b>Initial prefix</b> — one or two capitals, a period or colon, whitespace and more text
-/// (<c>Q. Who are you?</c>, <c>A: Hari Seldon.</c>), keyed as written (<c>Q.</c> and <c>Q:</c> are
+/// (<c>Q. Who are you?</c>, <c>A: Fitzwilliam Darcy.</c>), keyed as written (<c>Q.</c> and <c>Q:</c> are
 /// different keys).</item>
 /// <item><b>Name prefix</b> — one to four capitalised words, a colon and whitespace, where the words
-/// are on the book's roster (<c>Seldon:</c>), keyed as written. The roster gate keeps ability lists
-/// such as <c>Iron: Strength +2</c> out.</item>
+/// are on the book's roster (<c>Darcy:</c>), keyed as written. The roster gate keeps labels
+/// such as <c>Later: the Count came back.</c> out.</item>
 /// <item><b>Em-dash speech</b> — <c>—</c> and a capital, up to 600 non-dash characters, <c>—</c>,
 /// where the opening dash follows the paragraph start, whitespace, a letter or a comma
 /// (<c>—What is the law?— the voice asked.</c>). The leading condition keeps a diary header such as

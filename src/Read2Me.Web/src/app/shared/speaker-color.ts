@@ -2,7 +2,7 @@
  * Deterministic per-character hue (design §7, `r2m-speaker-chip`).
  *
  * The same character id always lands on the same hue, in every session and on every screen, so a
- * producer learns "Hardin is teal" once. Saturation and lightness are fixed per colour scheme so the
+ * producer learns "Elizabeth is teal" once. Saturation and lightness are fixed per colour scheme so the
  * chip stays legible on both light and dark surfaces; only the hue varies.
  */
 

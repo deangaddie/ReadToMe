@@ -2,7 +2,7 @@ import type { ConfirmOptions } from '@app/ui/dialogs';
 
 /**
  * The Pronunciations permanent-change confirm (conventions 12). Delete keeps its own title and body,
- * as Reread's does, since the spec words it: "Delete “Kulgan”?", the word going back to how the
+ * as Reread's does, since the spec words it: "Delete “Watson”?", the word going back to how the
  * provider reads it, then the audio it costs only when any item loses some. Always red: it removes
  * an entry the user made. Save asks nothing; the filled-in editor is its own confirm, its cost on
  * the advice line before the click.

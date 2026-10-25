@@ -8,7 +8,7 @@ namespace Read2Me.Services.Characters
         /// <summary>Injected into the discovery prompt via {{response_format}} and shown read-only in the UI.</summary>
         public const string JsonExample =
             "{ \"reasoning\": \"brief note on how you identified the cast\", " +
-            "\"characters\": [ { \"name\": \"Bilbo Baggins\", \"aliases\": [\"Bilbo\", \"Mr. Baggins\"] } ] }";
+            "\"characters\": [ { \"name\": \"Elizabeth Bennet\", \"aliases\": [\"Elizabeth\", \"Lizzy\"] } ] }";
 
         /// <summary>
         /// Sent as response_format json_schema so the server constrains generation to this shape.

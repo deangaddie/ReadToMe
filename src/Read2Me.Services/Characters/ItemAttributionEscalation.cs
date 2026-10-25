@@ -185,7 +185,7 @@ namespace Read2Me.Services.Characters
 
         /// <summary>
         /// True when an unlisted speaker's name appears as a whole word in this paragraph's own
-        /// narration items — an attribution tag such as "…and Tathar said,". That is direct textual
+        /// narration items — an attribution tag such as "…and Darcy said,". That is direct textual
         /// evidence, so the name is a first appearance rather than a hallucination and the answer
         /// need not escalate: the final accept will create the character.
         /// <para>
@@ -211,8 +211,8 @@ namespace Read2Me.Services.Characters
 
         /// <summary>
         /// Case-insensitive whole-word containment: the match may not sit inside a longer word, so
-        /// speaker "Tom" is not attested by the narration word "Tomas", while a possessive
-        /// ("Tathar's") still attests.
+        /// speaker "Art" is not attested by the narration word "Arthur", while a possessive
+        /// ("Darcy's") still attests.
         /// </summary>
         private static bool ContainsWholeWord(string haystack, string needle)
         {

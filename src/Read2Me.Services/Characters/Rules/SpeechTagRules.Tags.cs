@@ -14,7 +14,7 @@ namespace Read2Me.Services.Characters.Rules
 
         /// <summary>
         /// A noun phrase: a roster <see cref="Name"/>, a pronoun <see cref="P"/>, an unresolved
-        /// speaker phrase (<see cref="Why"/>, e.g. <c>unknown:Laurie</c>), or a coordinator.
+        /// speaker phrase (<see cref="Why"/>, e.g. <c>unknown:Jabez</c>), or a coordinator.
         /// </summary>
         private sealed record Np(NpKind Kind, string? Name = null, string? P = null, string? Why = null)
         {
@@ -118,7 +118,7 @@ namespace Read2Me.Services.Characters.Rules
         private static List<string> Range(IReadOnlyList<string> w, int start, int end) =>
             [.. w.Skip(start).Take(Math.Max(0, end - start))];
 
-        /// <summary>A capitalised mention, allowing one leading capitalised common word to be dropped ("Suddenly Pug").</summary>
+        /// <summary>A capitalised mention, allowing one leading capitalised common word to be dropped ("Suddenly Holmes").</summary>
         private static Np NpFromMention(NameIndex idx, IReadOnlyList<string> toks)
         {
             var r = idx.Match(toks);
@@ -207,7 +207,7 @@ namespace Read2Me.Services.Characters.Rules
                     s--;
                 var prev = LcAt(w, s - 1);
                 if (Prep.Contains(prev))
-                    return null; // object: "then to Laurie said"
+                    return null; // object: "then to Jabez said"
                 if (prev == "and")
                     return Np.Unres("compound");
                 return NpFromMention(idx, Range(w, s, j + 1));
@@ -296,7 +296,7 @@ namespace Read2Me.Services.Characters.Rules
             return output;
         }
 
-        /// <summary>A tag after a quote: <c>“…,” said Pug</c> / <c>Pug said</c> / <c>he said</c> / <c>the man said</c>.</summary>
+        /// <summary>A tag after a quote: <c>“…,” said Holmes</c> / <c>Holmes said</c> / <c>he said</c> / <c>the man said</c>.</summary>
         private static TagHit? PostTag(NameIndex idx, Quote q)
         {
             var frag = TrimStartCommas(q.Post);
@@ -307,7 +307,7 @@ namespace Read2Me.Services.Characters.Rules
                 return null;
             var endsSoft = SoftQuoteEnd().IsMatch(q.Text) || IsLowerStart(frag);
 
-            // verb-first: said Pug / said his lady / returned she
+            // verb-first: said Holmes / said his lady / returned she
             var i = 0;
             while (i < w.Count && IsAdverb(Lc(w[i])) && Lc(w[i]) != "then")
                 i++;
@@ -317,7 +317,7 @@ namespace Read2Me.Services.Characters.Rules
                 return vs is null ? null : new TagHit(vs, "post-vs");
             }
 
-            // subject-first: Pug said / he said / the magician exclaimed
+            // subject-first: Holmes said / he said / the doctor exclaimed
             var np = NpForward(idx, w, 0);
             if (np is null)
                 return null;
@@ -337,7 +337,7 @@ namespace Read2Me.Services.Characters.Rules
                 j++;
             if (!SpeechVerbs.Contains(LcAt(w, j)))
                 return null;
-            // reported speech ("Pug said he would", "said nothing") is not a tag
+            // reported speech ("Holmes said he would", "said nothing") is not a tag
             if (Reported.Contains(LcAt(w, j + 1)))
                 return null;
             if (np.Kind == NpKind.Pron && !endsSoft)
@@ -347,7 +347,7 @@ namespace Read2Me.Services.Characters.Rules
             return new TagHit(np, "post-sv");
         }
 
-        /// <summary>A tag before a quote: <c>Kulgan said, “…”</c> / <c>Pug nodded and said, “…”</c>.</summary>
+        /// <summary>A tag before a quote: <c>Watson said, “…”</c> / <c>Holmes nodded and said, “…”</c>.</summary>
         private static TagHit? PreTag(NameIndex idx, Quote q)
         {
             var frag = TrimEndOpenQuotes(q.Pre);

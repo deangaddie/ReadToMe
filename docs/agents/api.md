@@ -288,7 +288,7 @@ unattributed dialog. `scope` is `Part`, `Chapter` or `Paragraph` — there is no
 - **`Part` / `Chapter`** release only the **narration-only paragraphs** (no dialog item at all) that
   carry a **speech marker** repeated in at least 5 narration-only paragraphs of their own chapter:
   an initial prefix (`Q.`, `A:`), a name prefix naming a Character or alias of the book
-  (`Seldon:`), or em-dash speech (`—What is it?— she asked.`). The real narration around a
+  (`Darcy:`), or em-dash speech (`—What is it?— she asked.`). The real narration around a
   transcript keeps the narrator. Each chapter of a Part is judged by its own markers. The
   thresholds are fixed; there is no unfiltered Chapter/Part release (ADR 0015).
 - **`Paragraph`** is unfiltered: it releases that narration-only paragraph whatever its text says —
@@ -327,7 +327,7 @@ assigned, not doubled — and it answers that character's id:
 ```bash
 curl -s -X POST http://localhost:5000/api/projects/{folder}/commands \
   -H 'content-type: application/json' \
-  -d '{ "type": "CreateCharacterAndAssign", "name": "Gaal Dornick", "paragraphIds": ["<id>", "<id>"] }'
+  -d '{ "type": "CreateCharacterAndAssign", "name": "Jane Bennet", "paragraphIds": ["<id>", "<id>"] }'
 # → { "newEntityId": "<character id>" }
 ```
 
@@ -459,25 +459,25 @@ curl -s 'http://localhost:5000/api/projects/{folder}/pronunciations/matches?chap
 # The Book view's marks: spans in book order in the named chapters, offsets into the item's text; the
 # entries they name, sorted by written form. Unknown chapters match nothing.
 curl -s -X POST http://localhost:5000/api/projects/{folder}/pronunciations \
-  -H 'content-type: application/json' -d '{ "writtenForm": "Kulgan", "spokenForm": "KULL-gun" }'
+  -H 'content-type: application/json' -d '{ "writtenForm": "Watson", "spokenForm": "WAT-sun" }'
 # → 201 with the entry plus audioDiscardCount and needsAudioCount. Both forms trimmed, inner whitespace
 # collapsed. 400: written form not 1–100 characters or not starting and ending with a letter or digit,
 # spoken form not 1–200 characters; 409: another entry has that written form, ignoring case.
-# One History step: Pronunciation: add "Kulgan" (action pronunciation).
+# One History step: Pronunciation: add "Watson" (action pronunciation).
 curl -s -X PUT http://localhost:5000/api/projects/{folder}/pronunciations/{id} \
-  -H 'content-type: application/json' -d '{ "writtenForm": "Kulgan", "spokenForm": "KUHL-gun" }'
+  -H 'content-type: application/json' -d '{ "writtenForm": "Watson", "spokenForm": "WOT-sun" }'
 # → 200, same answer and refusals as the add; 404 unknown id. Unchanged forms write nothing, no step.
-# Step: Pronunciation: edit "Kulgan" (action pronunciation).
+# Step: Pronunciation: edit "Watson" (action pronunciation).
 curl -s -X DELETE http://localhost:5000/api/projects/{folder}/pronunciations/{id}
-# → { audioDiscardCount, needsAudioCount }; 404 unknown id. Step: Pronunciation: delete "Kulgan" (action delete).
+# → { audioDiscardCount, needsAudioCount }; 404 unknown id. Step: Pronunciation: delete "Watson" (action delete).
 curl -s -X POST http://localhost:5000/api/projects/{folder}/pronunciations/impact \
-  -H 'content-type: application/json' -d '{ "id": null, "writtenForm": "Kulgan", "spokenForm": "KULL-gun", "delete": false }'
+  -H 'content-type: application/json' -d '{ "id": null, "writtenForm": "Watson", "spokenForm": "WAT-sun", "delete": false }'
 # → { matchCount, itemCount, withAudioCount, audioDiscardCount, overlaps: [{ id, writtenForm, spokenForm, draftWins }],
 #     duplicateOf, matches: [{ itemId, chapterId, chapterTitle, speaker, hasAudio, sentence, sentenceStart,
 #     matchStart, matchLength, spokenSentence, spokenMatchStart, spokenMatchLength }] }  A dry run: no step; audioDiscardCount is what saving the draft discards.
 curl -s -X POST http://localhost:5000/api/projects/{folder}/pronunciations/try -o try.wav \
   -H 'content-type: application/json' \
-  -d '{ "itemId": "…", "sentenceStart": 9, "draft": { "id": null, "writtenForm": "Kulgan", "spokenForm": "KOOL-gan" },
+  -d '{ "itemId": "…", "sentenceStart": 9, "draft": { "id": null, "writtenForm": "Watson", "spokenForm": "WAHT-sun" },
         "asWritten": false, "voice": { "voiceId": "…" } }'
 # → the WAV body (audio/wav): the item's sentence starting at sentenceStart (an impact match's), with the list
 # (the draft in its entry's place) applied unless asWritten, in the voice named or "item" (the item's own

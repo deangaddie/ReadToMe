@@ -3,7 +3,7 @@ using Read2Me.Services.Characters;
 namespace Read2Me.Services.Llm
 {
     /// <summary>
-    /// The Hobbit sample values a prompt template is previewed with. Shared by the preview endpoint
+    /// The Pride and Prejudice sample values a prompt template is previewed with. Shared by the preview endpoint
     /// (<c>POST /api/settings/prompts/{kind}/preview</c>) and the catalog, so
     /// every preview shows the same book.
     /// </summary>
@@ -15,9 +15,9 @@ namespace Read2Me.Services.Llm
     public static class PromptPreviewSamples
     {
         private static readonly string SampleRoster = PromptTemplates.BuildKnownCharactersJson([
-            new PromptTemplates.RosterCharacter("Bilbo", ["Mr. Baggins", "the hobbit"]),
-            new PromptTemplates.RosterCharacter("Gandalf", ["the wizard"]),
-            new PromptTemplates.RosterCharacter("Thorin", []),
+            new PromptTemplates.RosterCharacter("Elizabeth", ["Lizzy", "Miss Eliza"]),
+            new PromptTemplates.RosterCharacter("Darcy", ["Mr. Darcy"]),
+            new PromptTemplates.RosterCharacter("Bingley", ["the new tenant"]),
         ]);
 
         private static ContextItem Narration(string text) =>
@@ -29,33 +29,33 @@ namespace Read2Me.Services.Llm
         private static ContextParagraph Paragraph(params ContextItem[] items) =>
             new(string.Concat(items.Select(i => i.Text)), items);
 
-        private static readonly ContextParagraph SampleRoad =
-            Paragraph(Narration("The road goes ever on and on, down from the door where it began."));
+        private static readonly ContextParagraph SampleOpening =
+            Paragraph(Narration("It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife."));
 
-        private static readonly ContextParagraph SampleGandalf =
-            Paragraph(Dialog("\"You are a very fine person, Mr. Baggins,\"", "Gandalf"),
-                      Narration(" said Gandalf."));
+        private static readonly ContextParagraph SampleDarcy =
+            Paragraph(Dialog("\"She is tolerable, but not handsome enough to tempt me,\"", "Darcy"),
+                      Narration(" said Mr. Darcy."));
 
         private static readonly ContextParagraph SampleQuery =
-            Paragraph(Dialog("\"I'm going on an adventure!\"", AttributionWire.Unknown),
-                      Narration(" he cried."));
+            Paragraph(Dialog("\"I could easily forgive his pride, if he had not mortified mine,\"", AttributionWire.Unknown),
+                      Narration(" she replied."));
 
-        private static readonly ContextParagraph SampleWestering =
-            Paragraph(Narration("He paused and looked back. The sun was already westering."));
+        private static readonly ContextParagraph SampleWindow =
+            Paragraph(Narration("She paused at the window. The carriage was already at the door."));
 
         private static readonly ContextParagraph SampleSettled =
             Paragraph(Dialog("\"Then it is settled,\"", AttributionWire.Unknown),
-                      Narration(" said the dwarf."));
+                      Narration(" said her father."));
 
         private static readonly ParagraphContext SampleContext =
-            new(SampleQuery, [SampleRoad, SampleGandalf], [SampleWestering]);
+            new(SampleQuery, [SampleOpening, SampleDarcy], [SampleWindow]);
 
         private static readonly ParagraphBatchContext SampleBatchContext =
             new([
-                new BatchContextEntry(SampleRoad.Text, SampleRoad.Items, null),
-                new BatchContextEntry(SampleGandalf.Text, SampleGandalf.Items, null),
+                new BatchContextEntry(SampleOpening.Text, SampleOpening.Items, null),
+                new BatchContextEntry(SampleDarcy.Text, SampleDarcy.Items, null),
                 new BatchContextEntry(SampleQuery.Text, SampleQuery.Items, 0),
-                new BatchContextEntry(SampleWestering.Text, SampleWestering.Items, null),
+                new BatchContextEntry(SampleWindow.Text, SampleWindow.Items, null),
                 new BatchContextEntry(SampleSettled.Text, SampleSettled.Items, 1),
             ], [], []);
 
@@ -63,13 +63,13 @@ namespace Read2Me.Services.Llm
         public static IReadOnlyDictionary<string, string> Character { get; } =
             new Dictionary<string, string>
             {
-                [PromptTemplates.BookTitle] = "The Hobbit",
-                [PromptTemplates.BookAuthor] = "J.R.R. Tolkien",
+                [PromptTemplates.BookTitle] = "Pride and Prejudice",
+                [PromptTemplates.BookAuthor] = "Jane Austen",
                 [PromptTemplates.KnownCharacters] = SampleRoster,
                 [PromptTemplates.ContextJson] = PromptTemplates.BuildContextJson(SampleContext),
-                [PromptTemplates.CharacterName] = "Gandalf",
+                [PromptTemplates.CharacterName] = "Darcy",
                 [PromptTemplates.ResponseFormat] = ItemAttributionSchema.JsonExample,
-                [PromptTemplates.NarratorIdentity] = NarratorPromptText.IdentityParagraph("Bilbo"),
+                [PromptTemplates.NarratorIdentity] = NarratorPromptText.IdentityParagraph("Elizabeth"),
             };
 
         /// <summary>Batch attribution (Full and Simple).</summary>
@@ -100,9 +100,9 @@ namespace Read2Me.Services.Llm
             {
                 [PromptTemplates.BookOutline] = """
                     1 volume(s), 1 part(s), 3 chapter(s).
-                    Chapter 1: An Unexpected Party
-                    Chapter 2: Roast Mutton
-                    Chapter 3: A Short Rest
+                    Chapter 1: Chapter I
+                    Chapter 2: Chapter II
+                    Chapter 3: Chapter III
                     """,
                 [PromptTemplates.ResponseFormat] = CharacterDiscoverySchema.JsonExample,
             };

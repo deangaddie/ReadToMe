@@ -138,7 +138,7 @@ public class SettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 
         var rendered = JsonDocument.Parse(await response.Content.ReadAsStringAsync())
             .RootElement.GetProperty("rendered").GetString();
-        Assert.Equal("Design a voice for Gandalf in The Hobbit by J.R.R. Tolkien. {{not_a_token}}", rendered);
+        Assert.Equal("Design a voice for Darcy in Pride and Prejudice by Jane Austen. {{not_a_token}}", rendered);
 
         // Each kind previews with its own values: the narrator plan names the narrator.
         var narrator = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/settings/prompts/narrator-voice-plan/preview",

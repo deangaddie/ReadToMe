@@ -8,11 +8,14 @@ built on the same branch). Respects [ADR 0005](0005-frozen-paragraph-item-bounda
 [ADR 0006](0006-narration-is-a-speaker-not-an-item-type.md) and
 [ADR 0007](0007-book-mutations-reconcile-book-view-projections.md).
 
+On 2026-10-25 the names of the measured books that are not on Project Gutenberg were replaced with neutral labels
+(Book A to Book D). Every number is unchanged.
+
 ## Context
 
 Release narration, as first built, cleared the narrator stamp from **every** narration-only paragraph in a Chapter
-or Part. A transcript chapter such as *Foundation* P1 Ch6 released its 72 `Q.`/`A.` paragraphs, and all the real
-narration around them too. The attribution in use (the Chapter style on `gemma-12b`, [ADR 0013](0013-chapter-pass-attribution-opt-in.md))
+or Part. A transcript chapter, P1 Ch6 of Book A (a novel with `Q.`/`A.` transcripts), released its 72 `Q.`/`A.`
+paragraphs, and all the real narration around them too. The attribution in use (the Chapter style on `gemma-12b`, [ADR 0013](0013-chapter-pass-attribution-opt-in.md))
 has no Narrator answer, so it cannot hand real narration back. On the live check, the 11 released narration
 paragraphs came back as 9 `unknown` and **2 wrong names**. On the labelled corpus (9 chapters, 435 released items),
 the baseline made **33 silent errors, all on narration**. The wrong name was usually the character the narration
@@ -25,18 +28,18 @@ Three routes were prototyped and measured (silent errors on the corpus):
 |---|---|---|---|
 | Baseline (release everything) | 33 | 0 / 329 | — |
 | Narrator answer in the grammar | 31 | 269 / 329 | prompt + grammar change |
-| Classify step (speech vs narration) | 22 | 284 / 329 | +16% calls, +39% wall on Foundation |
+| Classify step (speech vs narration) | 22 | 284 / 329 | +16% calls, +39% wall on Book A |
 | **Release filter** | **≈1** | 328 / 329 stay narrator | none — no LLM change |
 
 The filter, measured with `corpus/filter.mjs --roster --min 5`:
 
 - Corpus: paragraph precision 97/98, recall 97/105. 1 of 329 narration items released, 97 of 106 speech items
   released.
-- Whole books (Foundation, Magician, Pride and Prejudice, Sherlock Holmes, Dracula, Dune, He Who Fights With
-  Monsters 13; about 10.2k narration-only paragraphs): **0 false-positive paragraphs**. Only Foundation (`Q.` ×36,
-  `A.` ×36) and Magician (`—…—` ×26) release anything.
-- Without the roster gate, HWFWM releases 80 ability-list lines (`Iron:`, `Bronze:`, `Silver:`, `Gold:`, 20 each).
-  With a minimum of 3 instead of 5, Dracula and Dune each release 3 em-dash parentheticals. That is why both gates
+- Whole books (Book A, Book B (a fantasy novel), Pride and Prejudice, Sherlock Holmes, Dracula, Book C (a long
+  novel), Book D (the 13th book of a game-style series with ability lists); about 10.2k narration-only paragraphs):
+  **0 false-positive paragraphs**. Only Book A (`Q.` ×36, `A.` ×36) and Book B (`—…—` ×26) release anything.
+- Without the roster gate, Book D releases 80 ability-list lines (`Iron:`, `Bronze:`, `Silver:`, `Gold:`, 20 each).
+  With a minimum of 3 instead of 5, Dracula and Book C each release 3 em-dash parentheticals. That is why both gates
   exist.
 
 ## Decision
@@ -46,7 +49,7 @@ The filter, measured with `corpus/filter.mjs --roster --min 5`:
   chapter**. The three shapes are tried in order, and the first match is the paragraph's one key:
   - **Initial prefix**: `^[A-Z]{1,2}[.:]\s+\S`, keyed as written (`Q.` and `Q:` count separately).
   - **Name prefix**: 1–4 capitalised words, a colon and a space, where the words are a Character name or alias of
-    the book (case-insensitive). Keyed as written (`Seldon:`).
+    the book (case-insensitive). Keyed as written (`Darcy:`).
   - **Em-dash speech**: `—` and a capital, up to 600 non-dash characters, then `—`. The opening dash must follow the
     paragraph start, whitespace, a letter or a comma. All matches share the single key `—…—`.
 
@@ -66,11 +69,11 @@ The filter, measured with `corpus/filter.mjs --roster --min 5`:
 
 ## Consequences
 
-- End to end with the baseline Chapter answers: about **1 silent error** (Magician 22 [89]: labelled narrator but
+- End to end with the baseline Chapter answers: about **1 silent error** (Book B 22 [89]: labelled narrator but
   holding em-dash thought-speech, so arguably right). This is an estimate. The baseline answers were made with
   everything released, so the context labels differ slightly.
-- **Residual misses stay narrator, by design.** These are quoted speech inside narrator-stamped items (Magician ONE
-  #23/#26), open-quote continuation paragraphs (Holmes II #13), unmarked verse or song (Dune #89–93), and any marker
+- **Residual misses stay narrator, by design.** These are quoted speech inside narrator-stamped items (Book B ONE
+  #23/#26), open-quote continuation paragraphs (Holmes II #13), unmarked verse or song (Book C #89–93), and any marker
   that repeats fewer than 5 times in its chapter. Leaving them as narrator is today's state, not a new error. The
   producer fixes them with a Paragraph release or the speaker chip.
 - **`NAME:` recall is unproven.** The corpus has no play-script chapter. Only its false-positive gate is measured.
