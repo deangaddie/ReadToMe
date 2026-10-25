@@ -46,7 +46,7 @@ afterEach(() => document.body.replaceChildren());
 
 async function mount(items: CharacterLineDto[], loading = false) {
   const el = document.createElement('r2m-character-lines');
-  el.folder = 'dune';
+  el.folder = 'dracula';
   el.lines = items;
   el.loading = loading;
   const opened: CharacterLineDto[] = [];
@@ -103,7 +103,7 @@ describe('r2m-character-lines', () => {
     await context.rendered();
     expect(context.querySelector('[data-action="load-context"]')).not.toBeNull();
 
-    api.on('GET', '/api/projects/dune/paragraphs/p0/context', (_, url) => {
+    api.on('GET', '/api/projects/dracula/paragraphs/p0/context', (_, url) => {
       expect(url.searchParams.get('chapterId')).toBe('c1');
       expect(url.searchParams.get('before')).toBe('3');
       expect(url.searchParams.get('after')).toBe('2');
@@ -145,7 +145,7 @@ describe('r2m-character-lines', () => {
     await el.rendered();
     const context = el.querySelector<LineContext>('r2m-line-context')!;
     const windows: [string | null, string | null][] = [];
-    api.on('GET', '/api/projects/dune/paragraphs/p0/context', (_, url) => {
+    api.on('GET', '/api/projects/dracula/paragraphs/p0/context', (_, url) => {
       windows.push([url.searchParams.get('before'), url.searchParams.get('after')]);
       return CONTEXT;
     });
@@ -165,7 +165,9 @@ describe('r2m-character-lines', () => {
     expect(context.querySelector('[data-action="context-previous"]')).toBeNull();
     expect(context.querySelector('[data-action="context-next"]')).not.toBeNull();
 
-    api.on('GET', '/api/projects/dune/paragraphs/p0/context', () => problem(404, 'not in chapter'));
+    api.on('GET', '/api/projects/dracula/paragraphs/p0/context', () =>
+      problem(404, 'not in chapter'),
+    );
     await context.more('after');
     await context.rendered();
     expect(context.querySelector('.line-context__error')?.textContent).toContain('not in chapter');

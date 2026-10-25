@@ -315,11 +315,11 @@ describe('LiveService', () => {
   it('re-joins remembered groups and requests a fresh snapshot on reconnect', async () => {
     service.start();
     await settle();
-    await service.joinProject('foundation');
+    await service.joinProject('pride-and-prejudice');
     await service.joinStream('llm');
     const resynced: LiveSnapshot[] = [];
     service.resynced((s) => resynced.push(s));
-    expect(current().calls('JoinProject')).toEqual([['foundation']]);
+    expect(current().calls('JoinProject')).toEqual([['pride-and-prejudice']]);
     expect(current().calls('JoinStream')).toEqual([['llm']]);
     expect(current().calls('GetSnapshot')).toHaveLength(1);
 
@@ -329,38 +329,43 @@ describe('LiveService', () => {
     current().retry(3);
     expect(service.statusLabel()).toBe('Reconnecting… attempt 3');
 
-    current().results.set('GetSnapshot', () => snapshot({ foundation: project('foundation', 9) }));
+    current().results.set('GetSnapshot', () =>
+      snapshot({ 'pride-and-prejudice': project('pride-and-prejudice', 9) }),
+    );
     current().recover();
     await settle();
 
     expect(service.state()).toBe('connected');
     expect(service.attempt()).toBe(0);
-    expect(current().calls('JoinProject')).toEqual([['foundation'], ['foundation']]);
+    expect(current().calls('JoinProject')).toEqual([
+      ['pride-and-prejudice'],
+      ['pride-and-prejudice'],
+    ]);
     expect(current().calls('JoinStream')).toEqual([['llm'], ['llm']]);
     expect(current().calls('GetSnapshot')).toHaveLength(2);
     expect(resynced).toHaveLength(1);
-    expect(service.projects()['foundation']?.revision).toBe(9);
+    expect(service.projects()['pride-and-prejudice']?.revision).toBe(9);
   });
 
   it('reference-counts project membership and joins only while connected', async () => {
-    await service.joinProject('foundation'); // before start: remembered, not invoked
+    await service.joinProject('pride-and-prejudice'); // before start: remembered, not invoked
     service.start();
     await settle();
-    expect(current().calls('JoinProject')).toEqual([['foundation']]);
+    expect(current().calls('JoinProject')).toEqual([['pride-and-prejudice']]);
 
-    await service.joinProject('Foundation'); // case-insensitive second reference
-    await service.joinProject('foundation');
+    await service.joinProject('Pride-and-Prejudice'); // case-insensitive second reference
+    await service.joinProject('pride-and-prejudice');
     expect(current().calls('JoinProject')).toHaveLength(1);
 
-    await service.leaveProject('foundation');
-    await service.leaveProject('FOUNDATION');
+    await service.leaveProject('pride-and-prejudice');
+    await service.leaveProject('PRIDE-AND-PREJUDICE');
     expect(current().calls('LeaveProject')).toHaveLength(0);
-    await service.leaveProject('foundation');
-    expect(current().calls('LeaveProject')).toEqual([['foundation']]);
+    await service.leaveProject('pride-and-prejudice');
+    expect(current().calls('LeaveProject')).toEqual([['pride-and-prejudice']]);
     expect(service.joinedProjects()).toEqual([]);
-    expect(service.projects()['foundation']).toBeUndefined();
+    expect(service.projects()['pride-and-prejudice']).toBeUndefined();
 
-    await service.leaveProject('foundation'); // extra leave is a no-op
+    await service.leaveProject('pride-and-prejudice'); // extra leave is a no-op
     expect(current().calls('LeaveProject')).toHaveLength(1);
   });
 
@@ -384,22 +389,22 @@ describe('LiveService', () => {
     service.start();
     await settle();
     const receipts: Receipt[] = [];
-    service.receipts('foundation', (r) => receipts.push(r));
+    service.receipts('pride-and-prejudice', (r) => receipts.push(r));
 
     current().emit('receipt', receipt('other', ORIGIN_ID));
-    current().emit('receipt', receipt('Foundation', ORIGIN_ID));
-    current().emit('receipt', receipt('foundation', 'someone-else'));
+    current().emit('receipt', receipt('Pride-and-Prejudice', ORIGIN_ID));
+    current().emit('receipt', receipt('pride-and-prejudice', 'someone-else'));
 
     expect(receipts.map((r) => [r.folder, r.isOwn])).toEqual([
-      ['Foundation', true],
-      ['foundation', false],
+      ['Pride-and-Prejudice', true],
+      ['pride-and-prejudice', false],
     ]);
   });
 
   it('folds messages into the snapshot-shaped signals and the typed streams', async () => {
     service.start();
     await settle();
-    await service.joinProject('foundation');
+    await service.joinProject('pride-and-prejudice');
     const assemblies: string[] = [];
     service.on('assembly', (m) => assemblies.push(m.kind));
 
@@ -420,13 +425,13 @@ describe('LiveService', () => {
       processed: 2,
       total: 5,
       failed: 1,
-      currentVoiceName: 'Hardin',
+      currentVoiceName: 'Elizabeth',
     });
     expect(service.voiceBatch()).toMatchObject({
       isRunning: true,
       processed: 2,
       failed: 1,
-      currentVoiceName: 'Hardin',
+      currentVoiceName: 'Elizabeth',
       currentOperation: 'prompts',
     });
 
@@ -441,7 +446,7 @@ describe('LiveService', () => {
     expect(service.serviceStatus()).toEqual({ llama: 'Ready', whisper: 'Stopped' });
 
     current().emit('nodeStatus', {
-      folder: 'FOUNDATION',
+      folder: 'PRIDE-AND-PREJUDICE',
       nodes: {
         n1: {
           attributionRemaining: 2,
@@ -455,22 +460,27 @@ describe('LiveService', () => {
       folderAudioRemaining: 12,
     });
     current().emit('nodeStatus', {
-      folder: 'foundation',
+      folder: 'pride-and-prejudice',
       nodes: { n1: null },
       folderAudioRemaining: 11,
     });
-    expect(service.projects()['foundation']).toMatchObject({ nodes: {}, folderAudioRemaining: 11 });
+    expect(service.projects()['pride-and-prejudice']).toMatchObject({
+      nodes: {},
+      folderAudioRemaining: 11,
+    });
 
     current().emit('itemStatus', {
-      folder: 'foundation',
+      folder: 'pride-and-prejudice',
       paragraphs: { p1: { status: 'Queued' } },
       items: { i1: { status: 'Processing', audioVersion: 3 } },
     });
-    expect(service.projects()['foundation']?.paragraphs['p1']).toEqual({ status: 'Queued' });
-    expect(service.projects()['foundation']?.items['i1']?.audioVersion).toBe(3);
+    expect(service.projects()['pride-and-prejudice']?.paragraphs['p1']).toEqual({
+      status: 'Queued',
+    });
+    expect(service.projects()['pride-and-prejudice']?.items['i1']?.audioVersion).toBe(3);
 
-    current().emit('receipt', receipt('foundation', 'x'));
-    expect(service.projects()['foundation']?.revision).toBe(7);
+    current().emit('receipt', receipt('pride-and-prejudice', 'x'));
+    expect(service.projects()['pride-and-prejudice']?.revision).toBe(7);
     expect(service.latest()['receipt']).toMatchObject({ mutationName: 'CreateCharacterMutation' });
   });
 
@@ -523,8 +533,8 @@ describe('LiveService', () => {
     let runs = 0;
     const dispose = effect((onCleanup) => {
       runs++;
-      void service.joinProject('foundation');
-      onCleanup(() => void service.leaveProject('foundation'));
+      void service.joinProject('pride-and-prejudice');
+      onCleanup(() => void service.leaveProject('pride-and-prejudice'));
     });
     service.start();
     await settle();
@@ -535,7 +545,7 @@ describe('LiveService', () => {
 
     expect(runs).toBe(1);
     expect(c.calls('LeaveProject')).toEqual([]);
-    expect(c.calls('JoinProject')).toEqual([['foundation'], ['foundation']]);
+    expect(c.calls('JoinProject')).toEqual([['pride-and-prejudice'], ['pride-and-prejudice']]);
     dispose();
   });
 });

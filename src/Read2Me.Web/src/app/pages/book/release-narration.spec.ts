@@ -36,12 +36,12 @@ describe('releaseConfirm', () => {
     expect(
       releaseConfirm(
         'Part',
-        'The Psychohistorians',
+        'Dr. Seward’s Diary',
         preview(26, 0, [{ marker: '—…—', paragraphs: 26 }]),
       ),
     ).toEqual({
       title: 'Release narration',
-      message: 'Release 26 narration paragraphs in The Psychohistorians? Speech markers: —…— ×26.',
+      message: 'Release 26 narration paragraphs in Dr. Seward’s Diary? Speech markers: —…— ×26.',
       confirmLabel: 'Release',
       destructive: false,
     });
@@ -49,10 +49,10 @@ describe('releaseConfirm', () => {
 
   it('singular forms for one paragraph and one item with audio', () => {
     expect(
-      releaseConfirm('Chapter', 'Chapter 1', preview(1, 1, [{ marker: 'Seldon:', paragraphs: 1 }]))
+      releaseConfirm('Chapter', 'Chapter 1', preview(1, 1, [{ marker: 'Darcy:', paragraphs: 1 }]))
         ?.message,
     ).toBe(
-      'Release 1 narration paragraph in Chapter 1? Speech markers: Seldon: ×1. ' +
+      'Release 1 narration paragraph in Chapter 1? Speech markers: Darcy: ×1. ' +
         '1 has audio, which will be discarded.',
     );
   });

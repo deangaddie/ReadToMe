@@ -83,7 +83,7 @@ describe('r2m-outlet', () => {
   });
 
   it('a nested outlet renders the next level', async () => {
-    const { outlet } = await start('projects/dune/book');
+    const { outlet } = await start('projects/dracula/book');
     const project = outlet.firstElementChild;
     expect(project?.localName).toBe('x-outlet-project');
     expect(project?.querySelector('r2m-outlet')?.firstElementChild?.localName).toBe(
@@ -93,23 +93,23 @@ describe('r2m-outlet', () => {
 
   it('swaps the element when the route changes', async () => {
     const { outlet, router } = await start('projects');
-    router.navigate('projects/dune/book');
+    router.navigate('projects/dracula/book');
     await settle();
     expect(outlet.firstElementChild?.localName).toBe('x-outlet-project');
   });
 
   it('keeps the element when only a param changes', async () => {
-    const { outlet, router } = await start('projects/dune/book');
+    const { outlet, router } = await start('projects/dracula/book');
     const project = outlet.firstElementChild;
-    router.navigate('projects/foundation/book');
+    router.navigate('projects/pride-and-prejudice/book');
     await settle();
     expect(outlet.firstElementChild).toBe(project);
   });
 
   it('loads a lazy route before creating its element', async () => {
-    const { outlet, router } = await start('projects/dune/book');
+    const { outlet, router } = await start('projects/dracula/book');
     expect(customElements.get('x-outlet-cast')).toBeUndefined();
-    router.navigate('projects/dune/cast');
+    router.navigate('projects/dracula/cast');
     await settle();
     expect(lazyLoads).toBe(1);
     const inner = outlet.querySelector('r2m-outlet');

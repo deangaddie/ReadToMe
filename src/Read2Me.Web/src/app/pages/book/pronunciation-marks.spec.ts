@@ -11,35 +11,35 @@ import {
 } from './pronunciation-marks';
 import { paragraphText } from './reader-rows';
 
-const span = (start: number, length: number, pronunciationId = 'pug', sentenceStart = 0) =>
+const span = (start: number, length: number, pronunciationId = 'holmes', sentenceStart = 0) =>
   ({ start, length, pronunciationId, sentenceStart }) satisfies MarkSpan;
 
 const report: PronunciationSpanReport = {
   pronunciations: [
-    { id: 'kul', writtenForm: 'Kulgan', spokenForm: 'KULL-gun' },
-    { id: 'pug', writtenForm: 'Pug', spokenForm: 'PUHG' },
+    { id: 'wat', writtenForm: 'Watson', spokenForm: 'WAT-sun' },
+    { id: 'holmes', writtenForm: 'Holmes', spokenForm: 'HOHMZ' },
   ],
   spans: [
     {
       itemId: 'i1',
       start: 0,
-      length: 3,
-      pronunciationId: 'pug',
+      length: 6,
+      pronunciationId: 'holmes',
       sentenceStart: 0,
     },
     {
       itemId: 'i2',
       start: 4,
       length: 6,
-      pronunciationId: 'kul',
+      pronunciationId: 'wat',
       sentenceStart: 0,
     },
     {
       itemId: 'i1',
-      start: 9,
-      length: 3,
-      pronunciationId: 'pug',
-      sentenceStart: 9,
+      start: 12,
+      length: 6,
+      pronunciationId: 'holmes',
+      sentenceStart: 12,
     },
   ],
 };
@@ -62,19 +62,22 @@ const item = (id: string, text: string | null, flags: Partial<ParagraphItemDto> 
 describe('indexSpans', () => {
   it('groups the spans by item in order and keys the entries by id', () => {
     const { byItem, entries } = indexSpans(report);
-    expect(byItem['i1']).toEqual([span(0, 3), span(9, 3, 'pug', 9)]);
-    expect(byItem['i2']).toEqual([span(4, 6, 'kul')]);
-    expect(entries['kul']?.spokenForm).toBe('KULL-gun');
+    expect(byItem['i1']).toEqual([span(0, 6), span(12, 6, 'holmes', 12)]);
+    expect(byItem['i2']).toEqual([span(4, 6, 'wat')]);
+    expect(entries['wat']?.spokenForm).toBe('WAT-sun');
   });
 });
 
 describe('segmentsOf', () => {
   it('cuts the text around each span, keeping every character', () => {
-    const segments = segmentsOf('Pug ran. Pug fell.', [span(0, 3), span(9, 3, 'pug', 9)]);
+    const segments = segmentsOf('Holmes ran. Holmes fell.', [
+      span(0, 6),
+      span(12, 6, 'holmes', 12),
+    ]);
     expect(segments.map((s) => [s.text, s.mark?.start ?? null])).toEqual([
-      ['Pug', 0],
+      ['Holmes', 0],
       [' ran. ', null],
-      ['Pug', 9],
+      ['Holmes', 12],
       [' fell.', null],
     ]);
   });
@@ -84,9 +87,9 @@ describe('segmentsOf', () => {
   });
 
   it('keeps to the range and drops a span outside it or past the text', () => {
-    const segments = segmentsOf('  Pug ran.  ', [span(2, 3), span(20, 3)], 2, 10);
+    const segments = segmentsOf('  Holmes ran.  ', [span(2, 6), span(20, 3)], 2, 13);
     expect(segments.map((s) => [s.text, !!s.mark])).toEqual([
-      ['Pug', true],
+      ['Holmes', true],
       [' ran.', false],
     ]);
   });
@@ -94,30 +97,32 @@ describe('segmentsOf', () => {
 
 describe('markedText', () => {
   it('underlines each span as a focusable mark and leaves the text unchanged', () => {
-    const el = host(markedText('i1', 'Pug ran. Pug fell.', [span(0, 3), span(9, 3, 'pug', 9)]));
-    expect(el.textContent).toBe('Pug ran. Pug fell.');
+    const el = host(
+      markedText('i1', 'Holmes ran. Holmes fell.', [span(0, 6), span(12, 6, 'holmes', 12)]),
+    );
+    expect(el.textContent).toBe('Holmes ran. Holmes fell.');
     const marks = [...el.querySelectorAll<HTMLElement>('.r2m-pron-mark')];
-    expect(marks.map((m) => m.textContent)).toEqual(['Pug', 'Pug']);
+    expect(marks.map((m) => m.textContent)).toEqual(['Holmes', 'Holmes']);
     expect(marks[1]!.getAttribute('tabindex')).toBe('0');
     expect(marks[1]!.dataset['itemId']).toBe('i1');
-    expect(marks[1]!.dataset['pronunciationId']).toBe('pug');
-    expect(marks[1]!.dataset['sentenceStart']).toBe('9');
+    expect(marks[1]!.dataset['pronunciationId']).toBe('holmes');
+    expect(marks[1]!.dataset['sentenceStart']).toBe('12');
   });
 
   it('says where each mark starts in the item text, and lights the marks of the entries named', () => {
     const el = host(
-      markedText('i1', 'Pug met Kulgan.', [span(0, 3), span(8, 6, 'kul')], {
-        lit: new Set(['kul']),
+      markedText('i1', 'Holmes met Watson.', [span(0, 6), span(11, 6, 'wat')], {
+        lit: new Set(['wat']),
       }),
     );
     const marks = [...el.querySelectorAll<HTMLElement>('.r2m-pron-mark')];
-    expect(marks.map((m) => m.dataset['start'])).toEqual(['0', '8']);
+    expect(marks.map((m) => m.dataset['start'])).toEqual(['0', '11']);
     expect(marks.map((m) => m.classList.contains('r2m-pron-mark--lit'))).toEqual([false, true]);
   });
 
   it('is plain text for an item without spans', () => {
-    const el = host(markedText('i1', 'Pug ran.', undefined));
-    expect(el.textContent).toBe('Pug ran.');
+    const el = host(markedText('i1', 'Holmes ran.', undefined));
+    expect(el.textContent).toBe('Holmes ran.');
     expect(el.querySelector('.r2m-pron-mark')).toBeNull();
   });
 });
@@ -127,29 +132,29 @@ describe('proseOf', () => {
     const paragraph = {
       id: 'p1',
       items: [
-        item('i1', '  Pug ran. '),
+        item('i1', '  Holmes ran. '),
         item('gap', null, { isPause: true }),
-        item('i2', 'Then Kulgan came.'),
+        item('i2', 'Then Watson came.'),
       ],
     } as unknown as ParagraphDto;
-    const el = host(proseOf(paragraph, { i1: [span(2, 3)], i2: [span(5, 6, 'kul')] }));
+    const el = host(proseOf(paragraph, { i1: [span(2, 6)], i2: [span(5, 6, 'wat')] }));
     expect(el.textContent).toBe(paragraphText(paragraph));
     expect([...el.querySelectorAll('.r2m-pron-mark')].map((m) => m.textContent)).toEqual([
-      'Pug',
-      'Kulgan',
+      'Holmes',
+      'Watson',
     ]);
   });
 
   it("holds each item's text in its own run, saying where in the item it starts", () => {
     const paragraph = {
       id: 'p1',
-      items: [item('i1', '  Pug ran. '), item('i2', 'Then Kulgan came.')],
+      items: [item('i1', '  Holmes ran. '), item('i2', 'Then Watson came.')],
     } as unknown as ParagraphDto;
     const el = host(proseOf(paragraph, {}));
     const runs = [...el.querySelectorAll<HTMLElement>('[data-item-text]')];
     expect(runs.map((r) => [r.dataset['itemText'], r.dataset['textFrom'], r.textContent])).toEqual([
-      ['i1', '2', 'Pug ran.'],
-      ['i2', '0', 'Then Kulgan came.'],
+      ['i1', '2', 'Holmes ran.'],
+      ['i2', '0', 'Then Watson came.'],
     ]);
   });
 });
@@ -182,19 +187,19 @@ function rangeOver(root: HTMLElement, text: string, upTo?: string): Range {
 describe('selectedPlace', () => {
   const paragraph = {
     id: 'p1',
-    items: [item('i1', '  Pug ran. '), item('i2', 'Then Kulgan came.')],
+    items: [item('i1', '  Holmes ran. '), item('i2', 'Then Watson came.')],
   } as unknown as ParagraphDto;
 
   it('is the item, the offset in its text where the selection starts, and the selected text', () => {
     const el = host(proseOf(paragraph, {}));
-    expect(selectedPlace(rangeOver(el, 'Kulgan'))).toEqual({
+    expect(selectedPlace(rangeOver(el, 'Watson'))).toEqual({
       itemId: 'i2',
       offset: 5,
-      text: 'Kulgan',
+      text: 'Watson',
     });
     expect(selectedPlace(rangeOver(el, 'ran'))).toEqual({
       itemId: 'i1',
-      offset: 6,
+      offset: 9,
       text: 'ran',
     });
     el.remove();
@@ -202,12 +207,14 @@ describe('selectedPlace', () => {
 
   it('counts the text of the marks before it', () => {
     const el = host(
-      html`<span data-item-text="i1">${markedText('i1', 'Pug met Kulgan.', [span(0, 3)])}</span>`,
+      html`<span data-item-text="i1"
+        >${markedText('i1', 'Holmes met Watson.', [span(0, 6)])}</span
+      >`,
     );
-    expect(selectedPlace(rangeOver(el, 'Kulgan'))).toEqual({
+    expect(selectedPlace(rangeOver(el, 'Watson'))).toEqual({
       itemId: 'i1',
-      offset: 8,
-      text: 'Kulgan',
+      offset: 11,
+      text: 'Watson',
     });
     el.remove();
   });
@@ -215,7 +222,7 @@ describe('selectedPlace', () => {
   it('is none for a selection across two items, outside any item, or empty', () => {
     const el = host(proseOf(paragraph, {}));
     expect(selectedPlace(rangeOver(el, 'ran', 'Then'))).toBeNull();
-    const collapsed = rangeOver(el, 'Kulgan');
+    const collapsed = rangeOver(el, 'Watson');
     collapsed.collapse(true);
     expect(selectedPlace(collapsed)).toBeNull();
     el.remove();

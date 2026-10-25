@@ -163,7 +163,7 @@ describe('deriveJobs', () => {
           processed: 3,
           total: 12,
           failed: 1,
-          currentVoiceName: 'Hari Seldon',
+          currentVoiceName: 'Fitzwilliam Darcy',
           currentOperation: 'Generating prompts',
           lastError: null,
         },
@@ -177,7 +177,7 @@ describe('deriveJobs', () => {
       completed: 3,
       total: 12,
       failed: 1,
-      detail: 'Hari Seldon',
+      detail: 'Fitzwilliam Darcy',
       cancellable: true,
     });
   });

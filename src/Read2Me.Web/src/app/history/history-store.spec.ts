@@ -7,7 +7,7 @@ import { FakeApi, problem } from '../../testing/fake-api';
 import { FakeLive } from '../../testing/fake-live';
 import { HistoryStore } from './history-store';
 
-const PATH = '/api/projects/dune/history';
+const PATH = '/api/projects/dracula/history';
 
 function step(sequence: number, overrides: Partial<HistoryStep> = {}): HistoryStep {
   return {
@@ -60,7 +60,7 @@ describe('HistoryStore', () => {
     } as unknown as ToastService);
     override(Router, { navigate: (path: string) => navigated.push(path) } as unknown as Router);
     store = new HistoryStore();
-    store.open('dune');
+    store.open('dracula');
   });
 
   afterEach(() => {
@@ -68,9 +68,9 @@ describe('HistoryStore', () => {
     resetServices();
   });
 
-  const landed = (s: HistoryStep, folder = 'dune') =>
+  const landed = (s: HistoryStep, folder = 'dracula') =>
     live.emit('history', { kind: 'stepLanded', folder, step: s });
-  const closed = (s: HistoryStep, folder = 'dune') =>
+  const closed = (s: HistoryStep, folder = 'dracula') =>
     live.emit('history', { kind: 'stepClosed', folder, step: s });
   const ids = () => store.steps().map((s) => s.stepId);
 
@@ -123,7 +123,7 @@ describe('HistoryStore', () => {
     landed(step(2, { label: 'Attribution', isOpen: true }));
     live.emit('history', {
       kind: 'stepChanged',
-      folder: 'dune',
+      folder: 'dracula',
       step: step(2, {
         label: 'Attribution and voice batch',
         isOpen: true,
@@ -161,7 +161,7 @@ describe('HistoryStore', () => {
       endedAt: _end,
       ...omitted
     } = step(2);
-    live.emit('history', { kind: 'stepLanded', folder: 'dune', step: omitted });
+    live.emit('history', { kind: 'stepLanded', folder: 'dracula', step: omitted });
 
     expect(store.steps()[0]).toEqual(
       step(2, { note: null, summary: null, action: null, restoredFromStepId: null, endedAt: null }),
@@ -172,7 +172,7 @@ describe('HistoryStore', () => {
     api.on('GET', PATH, dto([step(1)]));
     await store.load();
 
-    landed(step(2), 'arrakis');
+    landed(step(2), 'alices-adventures-in-wonderland');
 
     expect(ids()).toEqual(['s1']);
   });
@@ -181,9 +181,14 @@ describe('HistoryStore', () => {
     api.on('GET', PATH, dto([step(1)]));
     await store.load();
 
-    live.emit('history', { kind: 'restoring', folder: 'dune', phase: 'started' });
+    live.emit('history', { kind: 'restoring', folder: 'dracula', phase: 'started' });
     landed(step(2));
-    live.emit('history', { kind: 'restoring', folder: 'dune', phase: 'finished', step: step(2) });
+    live.emit('history', {
+      kind: 'restoring',
+      folder: 'dracula',
+      phase: 'finished',
+      step: step(2),
+    });
 
     expect(ids()).toEqual(['s2', 's1']);
   });
@@ -241,12 +246,12 @@ describe('HistoryStore', () => {
   });
 
   describe('viewing a step', () => {
-    const BOOK = '/api/projects/dune/book';
+    const BOOK = '/api/projects/dracula/book';
     const readBook = async () => {
-      await use(BookApi).overview('dune');
+      await use(BookApi).overview('dracula');
       return api.calls('GET', BOOK).at(-1)?.search;
     };
-    const busyChanged = (reason?: string, folder = 'dune') =>
+    const busyChanged = (reason?: string, folder = 'dracula') =>
       live.emit('history', { kind: 'busyChanged', folder, ...(reason ? { reason } : {}) });
 
     beforeEach(async () => {
@@ -302,7 +307,7 @@ describe('HistoryStore', () => {
 
     it('reads the busy reason with the list', async () => {
       store.close();
-      store.open('dune');
+      store.open('dracula');
       api.on('GET', PATH, { ...dto([step(1)]), busy: { reason: 'Assembly running' } });
       await store.load();
 
@@ -331,7 +336,7 @@ describe('HistoryStore', () => {
 
     it("ignores another project's busy change", () => {
       store.view('s2');
-      busyChanged('Voice batch running', 'arrakis');
+      busyChanged('Voice batch running', 'alices-adventures-in-wonderland');
 
       expect(store.viewing()).toBe('s2');
       expect(store.busy()).toBeNull();
@@ -341,7 +346,7 @@ describe('HistoryStore', () => {
       store.view('s2');
       store.close();
 
-      expect(use(StepView).at('dune')).toBeNull();
+      expect(use(StepView).at('dracula')).toBeNull();
       expect(await readBook()).toBe('');
     });
   });
@@ -351,7 +356,7 @@ describe('HistoryStore', () => {
     const RESTORE2 = `${STEP2}/restore`;
     const restoreStep = (sequence: number, from: string) =>
       step(sequence, { label: `Restore to 'Edit text' (09:00)`, restoredFromStepId: from });
-    const restoring = (phase: 'started' | 'finished', s?: HistoryStep, folder = 'dune') =>
+    const restoring = (phase: 'started' | 'finished', s?: HistoryStep, folder = 'dracula') =>
       live.emit('history', { kind: 'restoring', folder, phase, ...(s ? { step: s } : {}) });
 
     beforeEach(async () => {
@@ -428,7 +433,7 @@ describe('HistoryStore', () => {
 
       actions.find((a) => a.label === 'Show in Book')?.run();
 
-      expect(navigated).toEqual(['projects/dune/book']);
+      expect(navigated).toEqual(['projects/dracula/book']);
     });
 
     it('Undo restore restores the step that was the tip before', async () => {
@@ -452,7 +457,7 @@ describe('HistoryStore', () => {
 
     it('Undo restore takes the tip before from the answer, with no list read', async () => {
       const unread = new HistoryStore();
-      unread.open('dune');
+      unread.open('dracula');
       api.on('POST', `${PATH}/s3/restore`, {
         step: restoreStep(5, 's3'),
         audioDiscardCount: 0,
@@ -542,7 +547,7 @@ describe('HistoryStore', () => {
 
     it('names the Restore step itself when the list has never been read', async () => {
       store.close();
-      store.open('dune');
+      store.open('dracula');
       const s4 = step(4, { label: "Restore to 'Split chapter' (14:02)", restoredFromStepId: 's2' });
 
       restoring('finished', s4);
@@ -554,7 +559,7 @@ describe('HistoryStore', () => {
 
     it('reads the restoring flag with the list', async () => {
       store.close();
-      store.open('dune');
+      store.open('dracula');
       api.on('GET', PATH, { ...dto([step(1)]), restoring: true });
       await store.load();
 

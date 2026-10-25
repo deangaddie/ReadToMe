@@ -32,13 +32,13 @@ function match(i: number, speaker: string | null = 'Narrator'): PronunciationMat
     chapterTitle: 'Chapter 1',
     speaker,
     hasAudio: false,
-    sentence: `Kulgan ${i}.`,
+    sentence: `Watson ${i}.`,
     sentenceStart: 0,
     matchStart: 0,
     matchLength: 6,
-    spokenSentence: `KULL-gun ${i}.`,
+    spokenSentence: `WAT-sun ${i}.`,
     spokenMatchStart: 0,
-    spokenMatchLength: 8,
+    spokenMatchLength: 7,
   };
 }
 
@@ -139,13 +139,13 @@ describe('voicePicker', () => {
 
   it('lists voices by character, the narrator first, defaulting to its default voice', () => {
     const cast = [
-      character('pug', 'Pug'),
-      character('kulgan', 'Kulgan'),
+      character('watson', 'Watson'),
+      character('holmes', 'Holmes'),
       character('nar', 'Narrator', { isNarrator: true }),
     ];
     const voices = new Map([
-      ['pug', voicesOf('p1', voice('p1', 'Pug young'))],
-      ['kulgan', voicesOf('k1', voice('k1', 'Kulgan'), voice('k2', 'Kulgan draft', false))],
+      ['holmes', voicesOf('p1', voice('p1', 'Holmes young'))],
+      ['watson', voicesOf('k1', voice('k1', 'Watson'), voice('k2', 'Watson draft', false))],
       ['nar', voicesOf('n2', voice('n1', 'Warm'), voice('n2', 'Dry'))],
     ]);
     const picker = voicePicker(cast, voices);
@@ -157,8 +157,8 @@ describe('voicePicker', () => {
           { id: 'n2', name: 'Dry' },
         ],
       },
-      { character: 'Kulgan', voices: [{ id: 'k1', name: 'Kulgan' }] },
-      { character: 'Pug', voices: [{ id: 'p1', name: 'Pug young' }] },
+      { character: 'Holmes', voices: [{ id: 'p1', name: 'Holmes young' }] },
+      { character: 'Watson', voices: [{ id: 'k1', name: 'Watson' }] },
     ]);
     expect(picker.defaultVoice).toEqual({ voiceId: 'n2' });
   });
@@ -166,21 +166,24 @@ describe('voicePicker', () => {
   it('puts the character the narrator link names first', () => {
     const cast = [
       character('nar', 'Narrator', { isNarrator: true }),
-      character('pug', 'Pug', { narratesBook: true }),
+      character('holmes', 'Holmes', { narratesBook: true }),
     ];
     const voices = new Map([
       ['nar', voicesOf('n1', voice('n1', 'Warm'))],
-      ['pug', voicesOf('p1', voice('p1', 'Pug'))],
+      ['holmes', voicesOf('p1', voice('p1', 'Holmes'))],
     ]);
     const picker = voicePicker(cast, voices);
-    expect(picker.groups.map((g) => g.character)).toEqual(['Pug', 'Narrator']);
+    expect(picker.groups.map((g) => g.character)).toEqual(['Holmes', 'Narrator']);
     expect(picker.defaultVoice).toEqual({ voiceId: 'p1' });
   });
 
   it('falls back to the first voice without a narrator voice, and the item voice without any', () => {
-    const cast = [character('nar', 'Narrator', { isNarrator: true }), character('pug', 'Pug')];
+    const cast = [
+      character('nar', 'Narrator', { isNarrator: true }),
+      character('holmes', 'Holmes'),
+    ];
     expect(
-      voicePicker(cast, new Map([['pug', voicesOf(null, voice('p1', 'Pug'))]])).defaultVoice,
+      voicePicker(cast, new Map([['holmes', voicesOf(null, voice('p1', 'Holmes'))]])).defaultVoice,
     ).toEqual({ voiceId: 'p1' });
     expect(voicePicker(cast, new Map())).toEqual({
       groups: [],
@@ -225,7 +228,7 @@ describe('why the other controls are off', () => {
   it('spoken-form plays wait for a spoken form', () => {
     expect(spokenPlayBlockedReason('  ')).toBe('Type a spoken form to hear it');
     expect(spokenPlayBlockedReason(null)).toBe('Type a spoken form to hear it');
-    expect(spokenPlayBlockedReason('KULL-gun')).toBeNull();
+    expect(spokenPlayBlockedReason('WAT-sun')).toBeNull();
   });
 
   it('Swap and Other samples need a match no card shows', () => {
@@ -258,7 +261,7 @@ const at = (
   itemId: string,
   sentenceStart: number,
   matchStart: number,
-  sentence = 'Pug ran far.',
+  sentence = 'Holmes ran far.',
 ) => ({
   itemId,
   chapterId: 'c1',

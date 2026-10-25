@@ -141,13 +141,13 @@ describe('PromptService', () => {
     const { result, input, type, confirm } = await openPrompt({
       title: 'Rename',
       label: 'Name',
-      initial: 'Hardin',
+      initial: 'Elizabeth',
     });
-    expect(input.value).toBe('Hardin');
+    expect(input.value).toBe('Elizabeth');
     expect(document.querySelector('.r2m-field__label')?.textContent).toBe('Name');
-    await type('  Salvor Hardin ');
+    await type('  Elizabeth Bennet ');
     confirm.click();
-    expect(await result).toBe('Salvor Hardin');
+    expect(await result).toBe('Elizabeth Bennet');
   });
 
   it('resolves null on Cancel', async () => {
@@ -164,9 +164,9 @@ describe('PromptService', () => {
 
   it('Enter submits a single-line prompt', async () => {
     const { result, input, type } = await openPrompt({ title: 'Rename' });
-    await type('Gaal');
+    await type('Jane');
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    expect(await result).toBe('Gaal');
+    expect(await result).toBe('Jane');
   });
 
   it('a required prompt cannot be confirmed while blank', async () => {
@@ -176,7 +176,7 @@ describe('PromptService', () => {
     expect(confirm.disabled).toBe(true);
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     expect(document.querySelector('dialog')).not.toBeNull();
-    await type('Anselm');
+    await type('Wickham');
     expect(confirm.disabled).toBe(false);
   });
 

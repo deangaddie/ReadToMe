@@ -19,7 +19,7 @@ import { type EditWithAiDialog, openEditWithAiDialog } from './edit-with-ai-dial
 import './edit-with-ai-dialog';
 
 /** Ported from the Angular TestBed spec, case for case. */
-const BASE = '/api/projects/dune/book-edits';
+const BASE = '/api/projects/dracula/book-edits';
 
 const PLAN: PlanBookEditResponse = {
   status: 'Ok',
@@ -122,7 +122,7 @@ describe('r2m-edit-with-ai-dialog', () => {
         return Promise.resolve(applyError);
       },
     } as unknown as BookEditor;
-    result = openEditWithAiDialog('dune', editor);
+    result = openEditWithAiDialog('dracula', editor);
     await Promise.resolve();
     dialog = document.querySelector<EditWithAiDialog>('r2m-edit-with-ai-dialog')!;
     await dialog.rendered();

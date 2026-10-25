@@ -9,16 +9,16 @@ import type { SpeakerMenu, SpeakerRosterEntry } from './speaker-menu';
  * `await menu.rendered()` stands in for `fixture.whenStable()`.
  */
 const ROSTER: SpeakerRosterEntry[] = [
-  { id: 'c-hardin', name: 'Hardin', aliases: ['Salvor'] },
-  { id: 'c-pirenne', name: 'Pirenne' },
+  { id: 'c-elizabeth', name: 'Elizabeth', aliases: ['Lizzy'] },
+  { id: 'c-bingley', name: 'Bingley' },
   { id: 'c-narr', name: 'Narrator', isNarrator: true },
-  { id: 'c-anselm', name: 'Anselm' },
+  { id: 'c-wickham', name: 'Wickham' },
 ];
 
 async function mount() {
   const menu = document.createElement('r2m-speaker-menu') as SpeakerMenu;
   menu.roster = ROSTER;
-  menu.selectedId = 'c-pirenne';
+  menu.selectedId = 'c-bingley';
   const events = { picked: [] as string[], cleared: 0, created: [] as string[] };
   menu.addEventListener('pick', (e) => events.picked.push((e as CustomEvent<string>).detail));
   menu.addEventListener('clear', () => events.cleared++);
@@ -44,16 +44,16 @@ afterEach(() => document.body.replaceChildren());
 describe('r2m-speaker-menu', () => {
   it('lists the narrator first, then the rest alphabetically, marking the selection', async () => {
     const { menu } = await mount();
-    expect(names(menu)).toEqual(['Narrator', 'Anselm', 'Hardin', 'Pirenne']);
+    expect(names(menu)).toEqual(['Narrator', 'Bingley', 'Elizabeth', 'Wickham']);
     expect(menu.querySelector('.r2m-speaker-menu__row--selected')?.textContent).toContain(
-      'Pirenne',
+      'Bingley',
     );
   });
 
   it('filters by name or alias, case-insensitively', async () => {
     const { menu, type } = await mount();
-    await type('salv');
-    expect(names(menu)).toEqual(['Hardin']);
+    await type('lizz');
+    expect(names(menu)).toEqual(['Elizabeth']);
     await type('zzz');
     expect(menu.querySelector('.r2m-speaker-menu__empty')?.textContent).toBe('No matches');
   });
@@ -61,34 +61,36 @@ describe('r2m-speaker-menu', () => {
   it('emits pick on row click, clear and create with the search text from the footer', async () => {
     const { menu, events, type } = await mount();
     menu.querySelectorAll<HTMLButtonElement>('.r2m-speaker-menu__row')[2]!.click();
-    expect(events.picked).toEqual(['c-hardin']);
+    expect(events.picked).toEqual(['c-elizabeth']);
 
-    await type('Gaal');
+    await type('Jane');
     const actions = menu.querySelectorAll<HTMLButtonElement>('.r2m-speaker-menu__action');
     actions[0]!.click();
     actions[1]!.click();
     expect(events.cleared).toBe(1);
-    expect(events.created).toEqual(['Gaal']);
+    expect(events.created).toEqual(['Jane']);
   });
 
   it('navigates with arrow keys and picks the active row on Enter', async () => {
     const { menu, events, press } = await mount();
-    // Nothing is highlighted on open: the first ArrowDown lands on the narrator, the second on Anselm.
+    // Nothing is highlighted on open: the first ArrowDown lands on the narrator, the second on Bingley.
     press('ArrowDown', menu);
     press('ArrowDown', menu);
     press('Enter', menu);
-    expect(events.picked).toEqual(['c-anselm']);
+    expect(events.picked).toEqual(['c-bingley']);
   });
 
   it('typing highlights the first match, and Enter picks it', async () => {
     const { menu, events, type, press } = await mount();
-    await type('ha');
-    expect(menu.querySelector('.r2m-speaker-menu__row--active')?.textContent).toContain('Hardin');
+    await type('eli');
+    expect(menu.querySelector('.r2m-speaker-menu__row--active')?.textContent).toContain(
+      'Elizabeth',
+    );
     expect(
       menu.querySelector('.r2m-speaker-menu__input')?.getAttribute('aria-activedescendant'),
     ).toBe(menu.querySelector('.r2m-speaker-menu__row--active')?.id);
     press('Enter');
-    expect(events.picked).toEqual(['c-hardin']);
+    expect(events.picked).toEqual(['c-elizabeth']);
   });
 
   it('highlights while typing the way a browser sends keys (keydown before input)', async () => {
@@ -102,15 +104,15 @@ describe('r2m-speaker-menu', () => {
 
   it('Enter straight after typing picks the first match, before the list has re-rendered', async () => {
     const { input, events, press } = await mount();
-    input.value = 'pir';
+    input.value = 'bing';
     input.dispatchEvent(new Event('input'));
     press('Enter'); // no await: the render has not happened yet
-    expect(events.picked).toEqual(['c-pirenne']);
+    expect(events.picked).toEqual(['c-bingley']);
   });
 
   it('deleting the search back to empty drops the highlight, so Enter picks nobody', async () => {
     const { menu, events, type, press } = await mount();
-    await type('ha');
+    await type('eli');
     await type('');
     expect(menu.querySelector('.r2m-speaker-menu__row--active')).toBeNull();
     press('Enter');
@@ -119,22 +121,22 @@ describe('r2m-speaker-menu', () => {
 
   it('Enter on a search that matches nobody creates that character', async () => {
     const { events, type, press } = await mount();
-    await type(' Gaal ');
+    await type(' Jane ');
     press('Enter');
-    expect(events.created).toEqual(['Gaal']);
+    expect(events.created).toEqual(['Jane']);
     expect(events.picked).toEqual([]);
   });
 
   it('Enter on a footer button is left to that button, even with a row highlighted', async () => {
     const { menu, events, type, press } = await mount();
-    await type('ha');
+    await type('eli');
     const clear = menu.querySelector<HTMLButtonElement>('.r2m-speaker-menu__action')!;
     const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
     clear.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(false);
     expect(events.picked).toEqual([]);
     press('Enter');
-    expect(events.picked).toEqual(['c-hardin']);
+    expect(events.picked).toEqual(['c-elizabeth']);
   });
 
   it('a bare Enter in the empty search picks nobody', async () => {

@@ -19,14 +19,14 @@ import './project-shell';
 import { formatBuildDate } from './project-store';
 import './overview-page';
 
-const BASE = '/api/projects/dune';
+const BASE = '/api/projects/dracula';
 
 const DETAIL: ProjectDetailDto = {
-  folderName: 'dune',
-  title: 'Dune',
-  bookTitle: 'Dune',
-  author: 'Frank Herbert',
-  filename: 'dune.epub',
+  folderName: 'dracula',
+  title: 'Dracula',
+  bookTitle: 'Dracula',
+  author: 'Bram Stoker',
+  filename: 'dracula.epub',
   fileType: 'Epub',
   coverImage: null,
   narratorOnlyMode: true,
@@ -118,7 +118,7 @@ async function render(
 ) {
   api.on('GET', BASE, detail).on('GET', `${BASE}/status`, s);
   api.on('GET', `${BASE}/assembly/outputs`, outputs);
-  navigation = installNavigation('projects/dune');
+  navigation = installNavigation('projects/dracula');
   const router = new Router();
   override(Router, router);
   router.start(ROUTES, async () => true);
@@ -142,15 +142,15 @@ describe('r2m-overview-page', () => {
     expect(text(page.querySelector('[data-step="speakers"]'))).toContain('3 paragraphs unassigned');
     const details = page.querySelector('r2m-project-details-panel')!;
     expect(details.textContent).toContain('Narrated by Watson');
-    expect(details.textContent).toContain('dune.epub');
+    expect(details.textContent).toContain('dracula.epub');
     expect(details.querySelector('a.details__cast-link')?.getAttribute('href')).toBe(
-      'projects/dune/cast/w',
+      'projects/dracula/cast/w',
     );
     expect(details.querySelector<HTMLInputElement>('input[name=narratorOnly]')?.checked).toBe(true);
   });
 
   it('viewing a History step, the rows still open pages but nothing on the page changes the project (ticket 32)', async () => {
-    use(StepView).view('dune', 's8');
+    use(StepView).view('dracula', 's8');
     const page = await render(
       status({
         checkpoints: {
@@ -192,7 +192,7 @@ describe('r2m-overview-page', () => {
       .on('GET', `${BASE}/status`, status());
     api.on('GET', `${BASE}/assembly/outputs`, []);
     api.on('DELETE', `${BASE}/cover`, undefined);
-    navigation = installNavigation('projects/dune');
+    navigation = installNavigation('projects/dracula');
     const router = new Router();
     override(Router, router);
     router.start(ROUTES, async () => true);
@@ -279,7 +279,7 @@ describe('r2m-overview-page', () => {
       isDone: false,
     };
     live.emit('nodeStatus', {
-      folder: 'dune',
+      folder: 'dracula',
       nodes: { v1: attributed, v2: attributed },
       folderAudioRemaining: 4,
     });
@@ -355,15 +355,15 @@ describe('r2m-overview-page', () => {
   it('navigation actions route to cast, the Book page (modes and ?action= deep links) and export', async () => {
     // Each navigation leaves the overview, so every action starts from a fresh page.
     const routes: [string, string][] = [
-      ['checkStructure', 'projects/dune/book?mode=read'],
-      ['manualReread', 'projects/dune/book?action=manual-reread'],
-      ['openSpeakers', 'projects/dune/book?mode=speakers'],
-      ['openCast', 'projects/dune/cast'],
-      ['reviewText', 'projects/dune/book?mode=read'],
-      ['editWithAi', 'projects/dune/book?action=edit-ai'],
-      ['addTitles', 'projects/dune/book?action=titles'],
-      ['openAudioMode', 'projects/dune/book?mode=audio'],
-      ['assemble', 'projects/dune/export'],
+      ['checkStructure', 'projects/dracula/book?mode=read'],
+      ['manualReread', 'projects/dracula/book?action=manual-reread'],
+      ['openSpeakers', 'projects/dracula/book?mode=speakers'],
+      ['openCast', 'projects/dracula/cast'],
+      ['reviewText', 'projects/dracula/book?mode=read'],
+      ['editWithAi', 'projects/dracula/book?action=edit-ai'],
+      ['addTitles', 'projects/dracula/book?action=titles'],
+      ['openAudioMode', 'projects/dracula/book?mode=audio'],
+      ['assemble', 'projects/dracula/export'],
     ];
     for (const [action, expected] of routes) {
       document.body.replaceChildren();
@@ -513,21 +513,21 @@ describe('r2m-overview-page', () => {
 
   it('editing the title inline PATCHes and shows the returned detail', async () => {
     const page = await render();
-    api.on('PATCH', BASE, { ...DETAIL, title: 'Dune Messiah' });
+    api.on('PATCH', BASE, { ...DETAIL, title: "Dracula's Guest" });
     const edit = page.querySelector<HTMLButtonElement>(
       '.details__title .r2m-inline-edit__display',
     )!;
     edit.click();
     await page.rendered();
     const input = page.querySelector<HTMLInputElement>('.details__title input')!;
-    input.value = 'Dune Messiah';
+    input.value = "Dracula's Guest";
     input.dispatchEvent(new Event('input'));
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
     await settle();
     await page.rendered();
 
-    expect(api.calls('PATCH', BASE).map((r) => r.body)).toEqual([{ title: 'Dune Messiah' }]);
-    expect(page.querySelector('.r2m-page-header__title')?.textContent).toBe('Dune Messiah');
+    expect(api.calls('PATCH', BASE).map((r) => r.body)).toEqual([{ title: "Dracula's Guest" }]);
+    expect(page.querySelector('.r2m-page-header__title')?.textContent).toBe("Dracula's Guest");
   });
 
   it('the narrator-only switch PUTs the policy and refetches the detail', async () => {
@@ -560,7 +560,12 @@ describe('r2m-overview-page', () => {
 
   it('shows the newest build on the export step', async () => {
     const page = await render(status(), [
-      { fileName: 'dune.m4b', sizeBytes: 1, createdAt: '2026-09-19T10:00:00Z', isPartial: false },
+      {
+        fileName: 'dracula.m4b',
+        sizeBytes: 1,
+        createdAt: '2026-09-19T10:00:00Z',
+        isPartial: false,
+      },
     ]);
     const exportStep = page.querySelector('[data-step="export"]')!;
     expect(text(exportStep)).toContain(`Last build: ${formatBuildDate('2026-09-19T10:00:00Z')}`);

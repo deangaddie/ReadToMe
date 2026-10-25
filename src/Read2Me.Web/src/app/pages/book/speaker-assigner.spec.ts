@@ -91,10 +91,10 @@ describe('SpeakerAssigner', () => {
     assigner = new SpeakerAssigner(
       { run, execute } as unknown as BookEditor,
       {
-        folder: signal('dune'),
-        speakers: signal({ names: { h: 'Hardin' }, narrator: null }),
+        folder: signal('dracula'),
+        speakers: signal({ names: { h: 'Elizabeth' }, narrator: null }),
         overview: signal({
-          characters: [{ id: 'h', name: 'Hardin', aliases: [{ id: 'a', name: 'Salvor' }] }],
+          characters: [{ id: 'h', name: 'Elizabeth', aliases: [{ id: 'a', name: 'Lizzy' }] }],
         }),
         chapters,
       } as unknown as BookStore,
@@ -105,7 +105,7 @@ describe('SpeakerAssigner', () => {
   it('an item pick posts SetItemCharacter, then forgets the paragraph outcome', async () => {
     await assigner.assign({ kind: 'item', itemId: 'i2', paragraphId: 'p1' }, 'h');
     expect(run).toHaveBeenCalledWith({ type: 'SetItemCharacter', itemId: 'i2', characterId: 'h' });
-    expect(clearOutcome).toHaveBeenCalledWith('dune', 'p1');
+    expect(clearOutcome).toHaveBeenCalledWith('dracula', 'p1');
     // The line had no audio to lose: no permanent-change confirm.
     expect(confirm).not.toHaveBeenCalled();
   });
@@ -158,19 +158,19 @@ describe('SpeakerAssigner', () => {
   });
 
   it('new character: one CreateCharacterAndAssign names the item, then forgets the outcome', async () => {
-    await assigner.createAndAssign({ kind: 'item', itemId: 'i2', paragraphId: 'p1' }, '  Gaal ');
+    await assigner.createAndAssign({ kind: 'item', itemId: 'i2', paragraphId: 'p1' }, '  Jane ');
     expect(run.mock.calls).toEqual([
-      [{ type: 'CreateCharacterAndAssign', name: 'Gaal', itemId: 'i2' }],
+      [{ type: 'CreateCharacterAndAssign', name: 'Jane', itemId: 'i2' }],
     ]);
     expect(execute).not.toHaveBeenCalled();
-    expect(clearOutcome).toHaveBeenCalledWith('dune', 'p1');
+    expect(clearOutcome).toHaveBeenCalledWith('dracula', 'p1');
     // i2 had no audio to lose.
     expect(confirm).not.toHaveBeenCalled();
   });
 
   it('new character onto voiced lines asks about the audio before anything is written', async () => {
     confirm.mockResolvedValueOnce(false);
-    await assigner.createAndAssign({ kind: 'paragraph', paragraphId: 'p1' }, 'Gaal');
+    await assigner.createAndAssign({ kind: 'paragraph', paragraphId: 'p1' }, 'Jane');
     expect(confirm).toHaveBeenCalledWith(
       expect.objectContaining({ message: expect.stringContaining('Discards audio on 1 item.') }),
     );
@@ -178,22 +178,22 @@ describe('SpeakerAssigner', () => {
   });
 
   it('new character named like a roster speaker or alias keeps its audio and asks nothing', async () => {
-    await assigner.createAndAssign({ kind: 'item', itemId: 'i1', paragraphId: 'p1' }, 'hardin');
-    await assigner.createAndAssign({ kind: 'item', itemId: 'i1', paragraphId: 'p1' }, 'salvor');
+    await assigner.createAndAssign({ kind: 'item', itemId: 'i1', paragraphId: 'p1' }, 'elizabeth');
+    await assigner.createAndAssign({ kind: 'item', itemId: 'i1', paragraphId: 'p1' }, 'lizzy');
     expect(confirm).not.toHaveBeenCalled();
     expect(run).toHaveBeenCalledWith({
       type: 'CreateCharacterAndAssign',
-      name: 'hardin',
+      name: 'elizabeth',
       itemId: 'i1',
     });
   });
 
   it('new character with a blank search asks for the name, then sends one command', async () => {
-    promptText.mockResolvedValueOnce('Gaal');
+    promptText.mockResolvedValueOnce('Jane');
     await assigner.createAndAssign({ kind: 'item', itemId: 'i2', paragraphId: 'p1' }, '  ');
     expect(promptText).toHaveBeenCalledTimes(1);
     expect(run.mock.calls).toEqual([
-      [{ type: 'CreateCharacterAndAssign', name: 'Gaal', itemId: 'i2' }],
+      [{ type: 'CreateCharacterAndAssign', name: 'Jane', itemId: 'i2' }],
     ]);
   });
 
@@ -205,20 +205,20 @@ describe('SpeakerAssigner', () => {
 
   it('new character: a refused write forgets no outcome', async () => {
     run.mockResolvedValueOnce(false);
-    await assigner.createAndAssign({ kind: 'item', itemId: 'i2', paragraphId: 'p1' }, 'Gaal');
+    await assigner.createAndAssign({ kind: 'item', itemId: 'i2', paragraphId: 'p1' }, 'Jane');
     expect(clearOutcome).not.toHaveBeenCalled();
   });
 
   it('new character over a selection previews, confirms with the typed name, then writes once', async () => {
-    await assigner.createAndAssign({ kind: 'selection', paragraphIds: ['p1', 'p2'] }, 'Gaal');
+    await assigner.createAndAssign({ kind: 'selection', paragraphIds: ['p1', 'p2'] }, 'Jane');
     expect(confirm).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Assign Gaal to selection' }),
+      expect.objectContaining({ title: 'Assign Jane to selection' }),
     );
     expect(run.mock.calls).toEqual([
-      [{ type: 'CreateCharacterAndAssign', name: 'Gaal', paragraphIds: ['p1', 'p2'] }],
+      [{ type: 'CreateCharacterAndAssign', name: 'Jane', paragraphIds: ['p1', 'p2'] }],
     ]);
     expect(toasts).toEqual([
-      { kind: 'success', message: 'Assigned Gaal to 3 lines in 2 paragraphs.' },
+      { kind: 'success', message: 'Assigned Jane to 3 lines in 2 paragraphs.' },
     ]);
   });
 
@@ -226,12 +226,12 @@ describe('SpeakerAssigner', () => {
     paragraphs.set({ p1: { outcome: { kind: 'Failed' } }, p2: null });
     await assigner.assign({ kind: 'selection', paragraphIds: ['p1', 'p2', 'p3'] }, 'h');
 
-    expect(bulkAssignPreview).toHaveBeenCalledWith('dune', ['p1', 'p2', 'p3']);
+    expect(bulkAssignPreview).toHaveBeenCalledWith('dracula', ['p1', 'p2', 'p3']);
     expect(confirm).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: 'Assign Hardin to selection',
+        title: 'Assign Elizabeth to selection',
         message:
-          'Hardin becomes the speaker for 3 dialog lines in 2 paragraphs. Existing speakers are ' +
+          'Elizabeth becomes the speaker for 3 dialog lines in 2 paragraphs. Existing speakers are ' +
           'replaced. 1 selected paragraph have no dialog and stay unchanged.',
       }),
     );
@@ -240,9 +240,9 @@ describe('SpeakerAssigner', () => {
       paragraphIds: ['p1', 'p2', 'p3'],
       characterId: 'h',
     });
-    expect(clearOutcome.mock.calls).toEqual([['dune', 'p1']]);
+    expect(clearOutcome.mock.calls).toEqual([['dracula', 'p1']]);
     expect(toasts).toEqual([
-      { kind: 'success', message: 'Assigned Hardin to 3 lines in 2 paragraphs.' },
+      { kind: 'success', message: 'Assigned Elizabeth to 3 lines in 2 paragraphs.' },
     ]);
   });
 
@@ -274,7 +274,7 @@ describe('SpeakerAssigner', () => {
     const released = await assigner.releaseNarration('Chapter', 'c6', 'Chapter 6');
 
     expect(released).toBe(true);
-    expect(releaseNarrationPreview).toHaveBeenCalledWith('dune', 'Chapter', 'c6');
+    expect(releaseNarrationPreview).toHaveBeenCalledWith('dracula', 'Chapter', 'c6');
     expect(confirm).toHaveBeenCalledWith(
       expect.objectContaining({
         message:
@@ -314,7 +314,7 @@ describe('SpeakerAssigner', () => {
       speechMarkers: [],
     });
     expect(await assigner.releaseNarration('Paragraph', 'p7', 'Q: Your name?')).toBe(true);
-    expect(releaseNarrationPreview).toHaveBeenCalledWith('dune', 'Paragraph', 'p7');
+    expect(releaseNarrationPreview).toHaveBeenCalledWith('dracula', 'Paragraph', 'p7');
     expect(confirm).not.toHaveBeenCalled();
     expect(run.mock.calls).toEqual([
       [{ type: 'ReleaseNarration', scope: 'Paragraph', nodeId: 'p7' }],

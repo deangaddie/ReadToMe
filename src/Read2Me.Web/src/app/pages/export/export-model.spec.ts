@@ -131,9 +131,9 @@ describe('runBanner', () => {
       status: 'error',
       label: 'Failed: Error opening input',
     });
-    expect(runBanner({ ...idle, outcome: 'completed', outputFileName: 'Dune.m4b' })).toEqual({
+    expect(runBanner({ ...idle, outcome: 'completed', outputFileName: 'Dracula.m4b' })).toEqual({
       status: 'ok',
-      label: 'Finished: Dune.m4b',
+      label: 'Finished: Dracula.m4b',
     });
   });
 

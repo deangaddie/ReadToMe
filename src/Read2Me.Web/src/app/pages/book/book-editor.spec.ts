@@ -8,7 +8,7 @@ import type { BookStore } from './book-store';
 
 /** Ported from the Angular TestBed spec, case for case; the fakes go in through `override()`. */
 class FakeStore {
-  readonly folder = signal<string | null>('dune');
+  readonly folder = signal<string | null>('dracula');
   readonly stale = signal<string | null>(null);
   refreshed = 0;
   waiters: ((hit: boolean) => void)[] = [];
@@ -73,7 +73,7 @@ describe('BookEditor', () => {
   it('posts the command and is done once its own receipt arrives, without reloading', async () => {
     const run = editor.run({ type: 'AddPauses' });
     await flush();
-    expect(execute.calls).toEqual([['dune', { type: 'AddPauses' }]]);
+    expect(execute.calls).toEqual([['dracula', { type: 'AddPauses' }]]);
     expect(editor.saving()).toBe(true);
     expect(editor.locked()).toBe(true);
 
@@ -86,7 +86,7 @@ describe('BookEditor', () => {
 
   it('execute answers with the host response, so a create can use the id it resolved', async () => {
     execute.once(async () => ({ newEntityId: 'c-new' }));
-    const created = editor.execute({ type: 'CreateCharacter', name: 'Gaal' });
+    const created = editor.execute({ type: 'CreateCharacter', name: 'Jane' });
     await flush();
     store.settle(true);
     expect(await created).toEqual({ newEntityId: 'c-new' });
@@ -145,14 +145,14 @@ describe('BookEditor', () => {
   });
 
   it('is locked and read-only while a History step is viewed, and sends nothing', async () => {
-    use(StepView).view('dune', 's8');
+    use(StepView).view('dracula', 's8');
     expect(editor.locked()).toBe(true);
     expect(editor.readOnly()).toBe(VIEWING_READ_ONLY);
 
     expect(await editor.run({ type: 'AddPauses' })).toBe(false);
     expect(execute.calls).toEqual([]);
 
-    use(StepView).clear('dune');
+    use(StepView).clear('dracula');
     expect(editor.locked()).toBe(false);
     expect(editor.readOnly()).toBeNull();
   });
@@ -160,7 +160,7 @@ describe('BookEditor', () => {
   it('reread and manual reread go through the same wait', async () => {
     const reread = editor.reread();
     await flush();
-    expect(importFile.calls).toEqual([['dune', true]]);
+    expect(importFile.calls).toEqual([['dracula', true]]);
     store.settle(true);
     expect(await reread).toBe(true);
 
@@ -173,7 +173,7 @@ describe('BookEditor', () => {
     };
     const manual = editor.rereadManually(request);
     await flush();
-    expect(importManually.calls).toEqual([['dune', request]]);
+    expect(importManually.calls).toEqual([['dracula', request]]);
     store.settle(false);
     expect(await manual).toBe(true);
     expect(store.refreshed).toBe(1);

@@ -12,7 +12,7 @@ import { CastStore } from '../cast-store';
 import { ProviderSchemas } from './provider-schemas';
 import './voice-card';
 
-const BASE = '/api/projects/dune';
+const BASE = '/api/projects/dracula';
 const COMMANDS = `${BASE}/commands`;
 const VOICES = `${BASE}/characters/alice/voices`;
 
@@ -98,7 +98,7 @@ async function mount(v: VoiceDto, isDefault = false) {
   api.on('GET', `${BASE}/characters/alice/voice-rules`, []);
   api.on('GET', `${BASE}/characters/alice/voice-rules/preview`, []);
   api.on('POST', COMMANDS, { outcome: 'Committed' });
-  await store.open('dune');
+  await store.open('dracula');
   await store.select('alice');
   const host = document.createElement('div');
   provide(host, CastStore, store);
@@ -148,7 +148,9 @@ describe('r2m-voice-card', () => {
     );
     expect(card.querySelector('.voice-card__star--on')).not.toBeNull();
     expect(button(card, 'set-default')).toBeNull();
-    expect(button(card, 'edit-audio')?.getAttribute('href')).toBe('projects/dune/voices/v1/editor');
+    expect(button(card, 'edit-audio')?.getAttribute('href')).toBe(
+      'projects/dracula/voices/v1/editor',
+    );
     // The header stops its controls' clicks so they don't toggle the panel, but the link keeps
     // its default (the navigation) while anything else in the header loses it.
     const linkClick = new MouseEvent('click', { bubbles: true, cancelable: true });
@@ -159,7 +161,7 @@ describe('r2m-voice-card', () => {
     expect(buttonClick.defaultPrevented).toBe(true);
     expect(card.querySelector('[data-mode=reference]')).not.toBeNull();
     expect(card.querySelector('r2m-audio-player')?.src).toBe(
-      '/workspace/dune/voices/alice/v1.wav?v=0',
+      '/workspace/dracula/voices/alice/v1.wav?v=0',
     );
   });
 
@@ -168,11 +170,11 @@ describe('r2m-voice-card', () => {
       el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
 
     it('the reference audio plays at the step; every edit control is off with the reason', async () => {
-      use(StepView).view('dune', 's8');
+      use(StepView).view('dracula', 's8');
       const card = await mount(voice({ source: 'Uploaded', audioFileName: 'voices/alice/v1.wav' }));
 
       expect(card.querySelector('r2m-audio-player')?.src).toBe(
-        '/workspace/dune/voices/alice/v1.wav?v=0&at=s8',
+        '/workspace/dracula/voices/alice/v1.wav?v=0&at=s8',
       );
       for (const action of ['set-default', 'delete-voice', 'save-description', 'save-transcript']) {
         expect(button(card, action).disabled).toBe(true);
@@ -191,7 +193,7 @@ describe('r2m-voice-card', () => {
     });
 
     it('a prompt voice keeps its player but Save, Regenerate and Generate audio are off', async () => {
-      use(StepView).view('dune', 's8');
+      use(StepView).view('dracula', 's8');
       const card = await mount(
         voice({ designPrompt: 'warm', audioFileName: 'voices/alice/v1.wav' }),
       );

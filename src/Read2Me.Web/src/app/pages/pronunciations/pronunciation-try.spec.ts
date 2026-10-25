@@ -15,7 +15,7 @@ import { FakeApi } from '../../../testing/fake-api';
 import type { PronunciationTry } from './pronunciation-try';
 import './pronunciation-try';
 
-const BASE = '/api/projects/magician';
+const BASE = '/api/projects/the-adventures-of-sherlock-holmes';
 const TRY = `${BASE}/pronunciations/try`;
 
 const character = (id: string, name: string, flags: Partial<CharacterSummaryDto> = {}) =>
@@ -40,13 +40,13 @@ function match(i: number, speaker: string | null = 'Narrator'): PronunciationMat
     chapterTitle: `Ch ${i}`,
     speaker,
     hasAudio: i % 2 === 0,
-    sentence: `So Kulgan said ${i}.`,
+    sentence: `So Watson said ${i}.`,
     sentenceStart: 4,
     matchStart: 3,
     matchLength: 6,
-    spokenSentence: `So KULL-gun said ${i}.`,
+    spokenSentence: `So WAT-sun said ${i}.`,
     spokenMatchStart: 3,
-    spokenMatchLength: 8,
+    spokenMatchLength: 7,
   };
 }
 
@@ -68,15 +68,15 @@ beforeEach(() => {
     problem: (p: { detail?: string }) => problems.push(p.detail),
   } as unknown as ToastService);
   api.on('GET', `${BASE}/characters/summary`, [
-    character('pug', 'Pug'),
+    character('holmes', 'Holmes'),
     character('nar', 'Narrator', { isNarrator: true }),
-    character('tomas', 'Tomas', { readyVoiceCount: 0 }),
+    character('lestrade', 'Lestrade', { readyVoiceCount: 0 }),
   ]);
   api.on('GET', `${BASE}/characters/nar/voices`, {
     defaultVoiceId: 'n1',
     voices: [voice('n1', 'Warm')],
   });
-  api.on('GET', `${BASE}/characters/pug/voices`, {
+  api.on('GET', `${BASE}/characters/holmes/voices`, {
     defaultVoiceId: 'p1',
     voices: [voice('p1', 'Young')],
   });
@@ -86,9 +86,9 @@ afterEach(() => el?.remove());
 
 async function mount(matches: PronunciationMatchInBook[], readOnly: string | null = null) {
   el = document.createElement('r2m-pronunciation-try') as PronunciationTry;
-  el.folder = 'magician';
+  el.folder = 'the-adventures-of-sherlock-holmes';
   el.matchesInBook = matches;
-  el.draft = { id: 'k1', writtenForm: 'Kulgan', spokenForm: 'KOOL-gan', delete: false };
+  el.draft = { id: 'k1', writtenForm: 'Watson', spokenForm: 'WOT-sun', delete: false };
   el.readOnly = readOnly;
   document.body.append(el);
   await settle();
@@ -114,10 +114,10 @@ describe('Try it', () => {
     expect(first.querySelector('[data-role=meta]')!.textContent!.replace(/\s+/g, ' ').trim()).toBe(
       'Ch 0 · Narrator · has audio',
     );
-    expect(first.querySelector('.pron-try__mark')!.textContent).toBe('KULL-gun');
+    expect(first.querySelector('.pron-try__mark')!.textContent).toBe('WAT-sun');
     expect(
       first.querySelector('.pron-try__sentence')!.textContent!.replace(/\s+/g, ' ').trim(),
-    ).toBe('So KULL-gun said 0.');
+    ).toBe('So WAT-sun said 0.');
     expect(cards()[1]!.querySelector('[data-role=meta]')!.textContent).toContain('Unattributed');
   });
 
@@ -126,11 +126,11 @@ describe('Try it', () => {
     const select = cards()[0]!.querySelector<HTMLSelectElement>('[data-role=voice]')!;
     expect([...select.querySelectorAll('optgroup')].map((g) => g.label)).toEqual([
       'Narrator',
-      'Pug',
+      'Holmes',
     ]);
     expect([...select.options].map((o) => o.textContent!.trim())).toEqual([
       'Narrator: Warm',
-      'Pug: Young',
+      'Holmes: Young',
       "This item's own voice",
     ]);
     expect(select.value).toBe('n1');
@@ -167,14 +167,14 @@ describe('Try it', () => {
       {
         itemId: 'i0',
         sentenceStart: 4,
-        draft: { id: 'k1', writtenForm: 'Kulgan', spokenForm: 'KOOL-gan', delete: false },
+        draft: { id: 'k1', writtenForm: 'Watson', spokenForm: 'WOT-sun', delete: false },
         asWritten: false,
         voice: { voiceId: 'p1' },
       },
       {
         itemId: 'i0',
         sentenceStart: 4,
-        draft: { id: 'k1', writtenForm: 'Kulgan', spokenForm: 'KOOL-gan', delete: false },
+        draft: { id: 'k1', writtenForm: 'Watson', spokenForm: 'WOT-sun', delete: false },
         asWritten: true,
         voice: { voiceId: 'p1' },
       },

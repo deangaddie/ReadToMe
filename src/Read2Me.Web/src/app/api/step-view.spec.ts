@@ -19,48 +19,48 @@ describe('StepView', () => {
 
   it('names the step a folder is viewed at, and nothing for another folder or once cleared', () => {
     const view = use(StepView);
-    view.view('dune', 's8');
-    expect(view.at('dune')).toBe('s8');
+    view.view('dracula', 's8');
+    expect(view.at('dracula')).toBe('s8');
     expect(view.at('emma')).toBeNull();
     view.clear('emma');
-    expect(view.at('dune')).toBe('s8');
-    view.clear('dune');
-    expect(view.at('dune')).toBeNull();
+    expect(view.at('dracula')).toBe('s8');
+    view.clear('dracula');
+    expect(view.at('dracula')).toBeNull();
   });
 
   it('adds ?at= to every Project state read of the viewed project, beside its own query', async () => {
-    use(StepView).view('dune', 's8');
+    use(StepView).view('dracula', 's8');
     const { api, urls } = client();
 
-    await api.get('/api/projects/dune/book');
-    await api.get('/api/projects/dune');
-    await api.get('/api/projects/dune/characters/c1/voice-rules/preview', { chapterId: 'ch' });
+    await api.get('/api/projects/dracula/book');
+    await api.get('/api/projects/dracula');
+    await api.get('/api/projects/dracula/characters/c1/voice-rules/preview', { chapterId: 'ch' });
 
     expect(urls).toEqual([
-      '/api/projects/dune/book?at=s8',
-      '/api/projects/dune?at=s8',
-      '/api/projects/dune/characters/c1/voice-rules/preview?chapterId=ch&at=s8',
+      '/api/projects/dracula/book?at=s8',
+      '/api/projects/dracula?at=s8',
+      '/api/projects/dracula/characters/c1/voice-rules/preview?chapterId=ch&at=s8',
     ]);
   });
 
   it('leaves live reads, writes, other projects and the current project alone', async () => {
     const { api, urls } = client();
-    await api.get('/api/projects/dune/book');
-    use(StepView).view('dune', 's8');
+    await api.get('/api/projects/dracula/book');
+    use(StepView).view('dracula', 's8');
 
-    await api.get('/api/projects/dune/history');
-    await api.get('/api/projects/dune/audio/reviews');
+    await api.get('/api/projects/dracula/history');
+    await api.get('/api/projects/dracula/audio/reviews');
     await api.get('/api/projects/emma/book');
     await api.get('/api/projects');
-    await api.patch('/api/projects/dune', {});
+    await api.patch('/api/projects/dracula', {});
 
     expect(urls).toEqual([
-      '/api/projects/dune/book',
-      '/api/projects/dune/history',
-      '/api/projects/dune/audio/reviews',
+      '/api/projects/dracula/book',
+      '/api/projects/dracula/history',
+      '/api/projects/dracula/audio/reviews',
       '/api/projects/emma/book',
       '/api/projects',
-      '/api/projects/dune',
+      '/api/projects/dracula',
     ]);
   });
 
@@ -72,13 +72,15 @@ describe('StepView', () => {
   });
 
   it('reads state files at the viewed step; item takes, which are not Project state, never', () => {
-    use(StepView).view('dune', 's8');
-    expect(stateFileUrl('dune', 'voices/paul.wav', 3)).toBe(
-      '/workspace/dune/voices/paul.wav?v=3&at=s8',
+    use(StepView).view('dracula', 's8');
+    expect(stateFileUrl('dracula', 'voices/arthur.wav', 3)).toBe(
+      '/workspace/dracula/voices/arthur.wav?v=3&at=s8',
     );
-    expect(stateFileUrl('dune', 'cover.jpg')).toBe('/workspace/dune/cover.jpg?at=s8');
-    expect(voiceOriginalUrl('dune', 'v1')).toBe('/api/projects/dune/voices/v1/original.wav?at=s8');
-    expect(workspaceUrl('dune', 'audio/i1.wav')).toBe('/workspace/dune/audio/i1.wav');
+    expect(stateFileUrl('dracula', 'cover.jpg')).toBe('/workspace/dracula/cover.jpg?at=s8');
+    expect(voiceOriginalUrl('dracula', 'v1')).toBe(
+      '/api/projects/dracula/voices/v1/original.wav?at=s8',
+    );
+    expect(workspaceUrl('dracula', 'audio/i1.wav')).toBe('/workspace/dracula/audio/i1.wav');
     expect(stateFileUrl('emma', 'cover.jpg')).toBe('/workspace/emma/cover.jpg');
   });
 });

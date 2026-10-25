@@ -17,7 +17,7 @@ import { ProjectStore } from '../../project/project-store';
 import { CastStore } from '../cast-store';
 import './voice-rules-section';
 
-const BASE = '/api/projects/dune';
+const BASE = '/api/projects/dracula';
 const COMMANDS = `${BASE}/commands`;
 
 function row(name: string, overrides: Partial<CharacterSummaryDto> = {}): CharacterSummaryDto {
@@ -132,7 +132,7 @@ async function mount(
   api.on('GET', `${BASE}/characters/${character.id}/voice-rules`, rules);
   api.on('GET', `${BASE}/characters/${character.id}/voice-rules/preview`, preview);
   api.on('POST', COMMANDS, { outcome: 'Committed' });
-  await store.open('dune');
+  await store.open('dracula');
   await store.select(character.id);
   const host = document.createElement('div');
   provide(host, CastStore, store);
@@ -209,7 +209,7 @@ describe('r2m-voice-rules-section', () => {
   });
 
   it('viewing a History step, Add rule, Move and Delete are off with the reason; the preview shows (ticket 32)', async () => {
-    use(StepView).view('dune', 's8');
+    use(StepView).view('dracula', 's8');
     const section = await mount({ ...row('Alice'), voiceCount: 1 }, [DEFAULT, ONWARD, SINGLE]);
     const reason = (el: Element | null) =>
       el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;

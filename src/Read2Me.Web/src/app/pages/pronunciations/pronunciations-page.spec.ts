@@ -21,15 +21,15 @@ import type { PronunciationsPage } from './pronunciations-page';
 import '../project/project-shell';
 import './pronunciations-page';
 
-const PROJECT = '/api/projects/magician';
+const PROJECT = '/api/projects/the-adventures-of-sherlock-holmes';
 const LIST = `${PROJECT}/pronunciations`;
 
 const DETAIL: ProjectDetailDto = {
-  folderName: 'magician',
-  title: 'Magician',
-  bookTitle: 'Magician',
-  author: 'Raymond E. Feist',
-  filename: 'magician.epub',
+  folderName: 'the-adventures-of-sherlock-holmes',
+  title: 'The Adventures of Sherlock Holmes',
+  bookTitle: 'The Adventures of Sherlock Holmes',
+  author: 'Arthur Conan Doyle',
+  filename: 'the-adventures-of-sherlock-holmes.epub',
   fileType: 'Epub',
   coverImage: null,
   narratorOnlyMode: false,
@@ -73,9 +73,9 @@ function entry(
 }
 
 const ENTRIES = [
-  entry('Crydee', 'CRY-dee', { itemCount: 20, withAudioCount: 5 }),
-  entry('Kulgan', 'KULL-gun', { itemCount: 9, withAudioCount: 3 }),
-  entry('Pug', 'pug'),
+  entry('Baker Street', 'BAY-ker street', { itemCount: 20, withAudioCount: 5 }),
+  entry('Watson', 'WAT-sun', { itemCount: 9, withAudioCount: 3 }),
+  entry('Holmes', 'holmes'),
 ];
 
 const ROUTES: RouteDef[] = [
@@ -88,7 +88,7 @@ const ROUTES: RouteDef[] = [
 
 function receipt(facets: string): Receipt {
   return {
-    folder: 'magician',
+    folder: 'the-adventures-of-sherlock-holmes',
     mutationName: 'SetPronunciationMutation',
     mutationId: 'm',
     revision: 2,
@@ -134,7 +134,9 @@ beforeEach(() => {
 });
 afterEach(() => document.body.replaceChildren());
 
-async function render(path = 'projects/magician/pronunciations'): Promise<PronunciationsPage> {
+async function render(
+  path = 'projects/the-adventures-of-sherlock-holmes/pronunciations',
+): Promise<PronunciationsPage> {
   api.on('GET', PROJECT, DETAIL).on('GET', `${PROJECT}/status`, STATUS);
   api.on('GET', LIST, () => list);
   installNavigation(path);
@@ -171,9 +173,9 @@ describe('r2m-pronunciations-page', () => {
   it('lists each entry with its written and spoken forms, items and items with audio', async () => {
     const page = await render();
     expect(rows(page)).toEqual([
-      ['Crydee', 'CRY-dee', '20', '5'],
-      ['Kulgan', 'KULL-gun', '9', '3'],
-      ['Pug', 'pug', '3', '–'],
+      ['Baker Street', 'BAY-ker street', '20', '5'],
+      ['Watson', 'WAT-sun', '9', '3'],
+      ['Holmes', 'holmes', '3', '–'],
     ]);
     expect(page.querySelector('.pron__hint')?.textContent).toContain('Pick a pronunciation');
   });
@@ -190,10 +192,10 @@ describe('r2m-pronunciations-page', () => {
   it('search filters by written or spoken form', async () => {
     const page = await render();
     const search = page.querySelector<HTMLInputElement>('input[type=search]')!;
-    search.value = 'gun';
+    search.value = 'sun';
     search.dispatchEvent(new Event('input'));
     await page.rendered();
-    expect(rows(page).map((r) => r[0])).toEqual(['Kulgan']);
+    expect(rows(page).map((r) => r[0])).toEqual(['Watson']);
     search.value = 'zzz';
     search.dispatchEvent(new Event('input'));
     await page.rendered();
@@ -203,19 +205,21 @@ describe('r2m-pronunciations-page', () => {
   });
 
   it('?entry= opens that entry in the editor (the Book view’s Edit pencil), then drops the param', async () => {
-    const page = await render('projects/magician/pronunciations?entry=kulgan');
+    const page = await render(
+      'projects/the-adventures-of-sherlock-holmes/pronunciations?entry=watson',
+    );
     await rerender(page);
-    expect(editorOf(page)?.entry?.writtenForm).toBe('Kulgan');
+    expect(editorOf(page)?.entry?.writtenForm).toBe('Watson');
     expect(use(Router).query().get('entry')).toBeNull();
   });
 
   it('a row opens its entry in the editor and marks it; the editor closing empties the pane', async () => {
     const page = await render();
-    page.querySelector<HTMLElement>('.pron__row[data-id=kulgan]')!.click();
+    page.querySelector<HTMLElement>('.pron__row[data-id=watson]')!.click();
     await rerender(page);
     expect(page.querySelector('.pron--editing')).not.toBeNull();
-    expect(page.querySelector('.pron__row--selected')?.getAttribute('data-id')).toBe('kulgan');
-    expect(editorOf(page)?.entry?.writtenForm).toBe('Kulgan');
+    expect(page.querySelector('.pron__row--selected')?.getAttribute('data-id')).toBe('watson');
+    expect(editorOf(page)?.entry?.writtenForm).toBe('Watson');
 
     editorOf(page)!.dispatchEvent(new CustomEvent('editor-close'));
     await page.rendered();
@@ -240,19 +244,19 @@ describe('r2m-pronunciations-page', () => {
     await sleep(REFETCH_DEBOUNCE_MS + 50);
     expect(reads()).toBe(before);
 
-    list = [...ENTRIES, entry('Tomas', 'TOM-us')];
+    list = [...ENTRIES, entry('Lestrade', 'les-TRAHD')];
     liveFake.emit('receipt', receipt('Pronunciations'));
     await sleep(REFETCH_DEBOUNCE_MS + 50);
     await rerender(page);
     expect(reads()).toBe(before + 1);
-    expect(rows(page).map((r) => r[0])).toEqual(['Crydee', 'Kulgan', 'Pug', 'Tomas']);
+    expect(rows(page).map((r) => r[0])).toEqual(['Baker Street', 'Watson', 'Holmes', 'Lestrade']);
   });
 
   it('closes the editor when its entry is deleted elsewhere', async () => {
     const page = await render();
-    page.querySelector<HTMLElement>('.pron__row[data-id=pug]')!.click();
+    page.querySelector<HTMLElement>('.pron__row[data-id=holmes]')!.click();
     await rerender(page);
-    list = ENTRIES.filter((e) => e.id !== 'pug');
+    list = ENTRIES.filter((e) => e.id !== 'holmes');
     liveFake.emit('receipt', receipt('Pronunciations'));
     await sleep(REFETCH_DEBOUNCE_MS + 50);
     await rerender(page);
@@ -269,33 +273,33 @@ describe('r2m-pronunciations-page', () => {
       duplicateOf: null,
       matches: [],
     });
-    api.on('DELETE', `${LIST}/kulgan`, {
+    api.on('DELETE', `${LIST}/watson`, {
       audioDiscardCount: 3,
       needsAudioCount: 3,
     });
     const page = await render();
     page
-      .querySelector<HTMLButtonElement>('.pron__row[data-id=kulgan] [data-action=delete-row]')!
+      .querySelector<HTMLButtonElement>('.pron__row[data-id=watson] [data-action=delete-row]')!
       .click();
     await rerender(page);
     expect(confirms.map((c) => c.message)).toEqual([
-      'Kulgan goes back to how the provider reads it. 3 items lose their audio.',
+      'Watson goes back to how the provider reads it. 3 items lose their audio.',
     ]);
-    expect(api.calls('DELETE', `${LIST}/kulgan`)).toHaveLength(1);
+    expect(api.calls('DELETE', `${LIST}/watson`)).toHaveLength(1);
     expect(editorOf(page)).toBeNull();
   });
 
   it('turns delete off while audio generation runs for the project, and tells the editor', async () => {
     const page = await render();
     liveFake.emit('itemStatus', {
-      folder: 'magician',
+      folder: 'the-adventures-of-sherlock-holmes',
       paragraphs: {},
       items: { i1: { status: 'Queued' } },
     });
-    page.querySelector<HTMLElement>('.pron__row[data-id=kulgan]')!.click();
+    page.querySelector<HTMLElement>('.pron__row[data-id=watson]')!.click();
     await rerender(page);
     const del = page.querySelector<HTMLButtonElement>(
-      '.pron__row[data-id=kulgan] [data-action=delete-row]',
+      '.pron__row[data-id=watson] [data-action=delete-row]',
     )!;
     expect(del.disabled).toBe(true);
     expect(del.closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(AUDIO_RUNNING);
@@ -303,7 +307,7 @@ describe('r2m-pronunciations-page', () => {
   });
 
   it('shows the viewed step’s list read-only', async () => {
-    use(StepView).view('magician', 's8');
+    use(StepView).view('the-adventures-of-sherlock-holmes', 's8');
     const page = await render();
     expect(api.calls('GET', LIST).at(-1)!.search).toBe('?at=s8');
     const add = page.querySelector<HTMLButtonElement>('[data-action=add]')!;
@@ -313,17 +317,17 @@ describe('r2m-pronunciations-page', () => {
     expect(del.disabled).toBe(true);
     expect(del.closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(VIEWING_READ_ONLY);
 
-    page.querySelector<HTMLElement>('.pron__row[data-id=kulgan]')!.click();
+    page.querySelector<HTMLElement>('.pron__row[data-id=watson]')!.click();
     await rerender(page);
     expect(editorOf(page)!.readOnly).toBe(VIEWING_READ_ONLY);
   });
 
   it('guards leaving with an unsaved draft', async () => {
     const page = await render();
-    page.querySelector<HTMLElement>('.pron__row[data-id=kulgan]')!.click();
+    page.querySelector<HTMLElement>('.pron__row[data-id=watson]')!.click();
     await rerender(page);
     expect(page.hasUnsavedChanges()).toBe(false);
-    editorOf(page)!.spoken.set('KULL-gn');
+    editorOf(page)!.spoken.set('WAT-sn');
     expect(page.hasUnsavedChanges()).toBe(true);
   });
 });

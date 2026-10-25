@@ -23,13 +23,13 @@ describe('r2m-stream-llm', () => {
       { kind: 'runStarted' },
       {
         kind: 'requestStarted',
-        paragraphPreview: 'Hardin leaned back',
+        paragraphPreview: 'Elizabeth leaned back',
         prompt: 'THE PROMPT',
         configId: 'c',
         configName: 'gemma-26b',
       },
       { kind: 'thinkingDelta', text: 'hmm' },
-      { kind: 'contentDelta', text: '{"speaker":"Hardin"}' },
+      { kind: 'contentDelta', text: '{"speaker":"Elizabeth"}' },
       { kind: 'streamCompleted', tokensOut: 12, generationMs: 1234, tokensPerSecond: 9.72 },
     ];
     await el.rendered();
@@ -37,14 +37,16 @@ describe('r2m-stream-llm', () => {
     expect(el.querySelector('.r2m-stream-llm__marker')?.textContent).toContain('Run started');
     const turn = el.querySelector('.r2m-stream-llm__turn')!;
     expect(turn.getAttribute('data-state')).toBe('completed');
-    expect(turn.querySelector('.r2m-stream-llm__preview')?.textContent).toBe('Hardin leaned back');
+    expect(turn.querySelector('.r2m-stream-llm__preview')?.textContent).toBe(
+      'Elizabeth leaned back',
+    );
     expect(turn.querySelector('.r2m-stream-llm__config')?.textContent).toBe('gemma-26b');
     expect(turn.querySelector('.r2m-status-chip')?.textContent).toContain('Completed');
     expect(turn.querySelector('.r2m-stream-llm__stats')?.textContent).toBe(
       '12 tok · 9.7 tok/s · 1.2 s',
     );
     expect(turn.querySelector('.r2m-stream-llm__response')?.textContent).toBe(
-      '{"speaker":"Hardin"}',
+      '{"speaker":"Elizabeth"}',
     );
     expect(turn.querySelector('.r2m-stream-llm__section--thinking pre')?.textContent).toBe('hmm');
     expect(turn.querySelector('.r2m-stream-llm__section pre')?.textContent).toBe('THE PROMPT');

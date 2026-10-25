@@ -18,7 +18,7 @@ import type { VoiceEditorPage } from './voice-editor-page';
 import '../project/project-shell';
 import './voice-editor-page';
 
-const BASE = '/api/projects/dune';
+const BASE = '/api/projects/dracula';
 const VOICE_URL = `${BASE}/voices/v1`;
 const CATALOG_URL = '/api/audio/steps/catalog';
 const PREVIEW_URL = `${VOICE_URL}/editor/preview`;
@@ -26,11 +26,11 @@ const APPLY_URL = `${VOICE_URL}/editor/apply`;
 const RESTORE_URL = `${VOICE_URL}/editor/restore`;
 
 const DETAIL: ProjectDetailDto = {
-  folderName: 'dune',
-  title: 'Dune',
-  bookTitle: 'Dune',
-  author: 'Frank Herbert',
-  filename: 'dune.epub',
+  folderName: 'dracula',
+  title: 'Dracula',
+  bookTitle: 'Dracula',
+  author: 'Bram Stoker',
+  filename: 'dracula.epub',
   fileType: 'Epub',
   coverImage: null,
   narratorOnlyMode: false,
@@ -170,7 +170,7 @@ async function render(voice: VoiceDto | Response = VOICE) {
   api.on('GET', BASE, DETAIL).on('GET', `${BASE}/status`, STATUS);
   api.on('GET', VOICE_URL, voice);
   api.on('GET', CATALOG_URL, CATALOG);
-  installNavigation('projects/dune/voices/v1/editor');
+  installNavigation('projects/dracula/voices/v1/editor');
   const router = new Router();
   override(Router, router);
   router.start(ROUTES, async () => true);
@@ -217,7 +217,7 @@ describe('r2m-voice-editor-page', () => {
     ).toEqual(['denoise', 'hiss-reduce', 'silence-trim']);
     expect(text(page.querySelector('.r2m-page-header__subtitle'))).toBe('Main');
     expect(page.querySelector('[data-testid="original-player"] audio')?.getAttribute('src')).toBe(
-      '/workspace/dune/voices/alice/v1-main.wav?v=0',
+      '/workspace/dracula/voices/alice/v1-main.wav?v=0',
     );
     expect(button(page, 'preview').disabled).toBe(true);
     expect(button(page, 'apply').disabled).toBe(true);
@@ -227,11 +227,11 @@ describe('r2m-voice-editor-page', () => {
     expect(page.querySelector('[data-action="restore"]')).toBeNull();
     expect(
       page.querySelector<HTMLAnchorElement>('[data-action="back"]')?.getAttribute('href'),
-    ).toBe('projects/dune/cast/alice');
+    ).toBe('projects/dracula/cast/alice');
   });
 
   it('viewing a History step, the original plays at the step; Preview, Apply and Restore are off (ticket 32)', async () => {
-    use(StepView).view('dune', 's8');
+    use(StepView).view('dracula', 's8');
     const page = await render({ ...VOICE, isEdited: true });
     await tick(page, 'denoise');
     const reason = (el: Element | null) =>
@@ -247,7 +247,7 @@ describe('r2m-voice-editor-page', () => {
   });
 
   it('viewing a History step, a step still opens but its tick and dials are off with the reason (ticket 35)', async () => {
-    use(StepView).view('dune', 's8');
+    use(StepView).view('dracula', 's8');
     const page = await render();
     page.querySelector<HTMLElement>('[data-step="denoise"]')!.click();
     await page.rendered();
@@ -343,7 +343,7 @@ describe('r2m-voice-editor-page', () => {
       'Voice audio updated.',
     );
     expect(page.querySelector('[data-testid="original-player"] audio')?.getAttribute('src')).toBe(
-      '/api/projects/dune/voices/v1/original.wav?v=1',
+      '/api/projects/dracula/voices/v1/original.wav?v=1',
     );
   });
 
@@ -391,7 +391,7 @@ describe('r2m-voice-editor-page', () => {
 
     expect(text(page.querySelector('.r2m-empty-state'))).toContain('That voice no longer exists.');
     expect(page.querySelector('.r2m-empty-state__action')?.getAttribute('href')).toBe(
-      'projects/dune/cast',
+      'projects/dracula/cast',
     );
   });
 

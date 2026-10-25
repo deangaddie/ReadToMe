@@ -7,7 +7,7 @@ import type { AddVoiceRuleDialog } from './add-voice-rule-dialog';
 import { openAddVoiceRuleDialog } from './add-voice-rule-dialog';
 import './add-voice-rule-dialog';
 
-const BASE = '/api/projects/dune';
+const BASE = '/api/projects/dracula';
 
 function voice(id: string, name: string): VoiceDto {
   return {
@@ -50,7 +50,7 @@ beforeEach(() => {
 afterEach(() => document.body.replaceChildren());
 
 async function open(voices = [voice('va', 'Voice A'), voice('vb', 'Voice B')]) {
-  const result = openAddVoiceRuleDialog({ folder: 'dune', characterId: 'alice', voices });
+  const result = openAddVoiceRuleDialog({ folder: 'dracula', characterId: 'alice', voices });
   await settle();
   const dialog = document.querySelector<AddVoiceRuleDialog>('r2m-add-voice-rule-dialog')!;
   await dialog.rendered();

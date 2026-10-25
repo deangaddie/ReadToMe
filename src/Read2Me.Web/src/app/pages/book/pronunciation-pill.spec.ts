@@ -12,10 +12,10 @@ import { PronunciationPanelState } from './pronunciation-panel-store';
 import type { PronunciationPill } from './pronunciation-pill';
 import './pronunciation-pill';
 
-const PUG: PronunciationDto = {
-  id: 'pug',
-  writtenForm: 'Pug',
-  spokenForm: 'PUHG',
+const HOLMES: PronunciationDto = {
+  id: 'holmes',
+  writtenForm: 'Holmes',
+  spokenForm: 'HOHMZ',
   matchCount: 1,
   itemCount: 1,
   withAudioCount: 0,
@@ -37,12 +37,12 @@ beforeEach(async () => {
     confirm: async () => true,
   } as unknown as ConfirmService);
   state = new PronunciationPanelState(() => false);
-  state.entries.set([PUG]);
+  state.entries.set([HOLMES]);
 
   host = document.createElement('div');
   const text = document.createElement('span');
   text.dataset['itemText'] = 'i1';
-  render(markedText('i1', 'Then Pug met Kulgan.', []), text);
+  render(markedText('i1', 'Then Holmes met Watson.', []), text);
   host.append(text);
   pill = document.createElement('r2m-pronunciation-pill') as PronunciationPill;
   pill.state = state;
@@ -77,7 +77,7 @@ const button = () => pill.querySelector<HTMLButtonElement>('[data-action=pill]')
 
 describe('the selection pill', () => {
   it('offers Add pronunciation for a selected word, and opens the panel editor pre-filled with it', async () => {
-    await select('Kulgan');
+    await select('Watson');
     expect(button()!.textContent).toContain('Add pronunciation');
 
     button()!.click();
@@ -86,26 +86,26 @@ describe('the selection pill', () => {
     expect(state.open()).toBe(true);
     expect(state.session()).toMatchObject({
       entryId: null,
-      forms: { writtenForm: 'Kulgan', spokenForm: 'Kulgan' },
-      origin: { itemId: 'i1', offset: 13 },
+      forms: { writtenForm: 'Watson', spokenForm: 'Watson' },
+      origin: { itemId: 'i1', offset: 16 },
     });
     expect(button()).toBeNull();
   });
 
   it('offers Edit pronunciation when the selection is already a written form', async () => {
-    await select('Pug');
+    await select('Holmes');
     expect(button()!.textContent).toContain('Edit pronunciation');
     button()!.click();
     await Promise.resolve();
     expect(state.session()).toMatchObject({
-      entryId: 'pug',
+      entryId: 'holmes',
       origin: { itemId: 'i1', offset: 5 },
     });
   });
 
   it('offers nothing while a step is viewed', async () => {
     pill.readOnly = VIEWING_READ_ONLY;
-    await select('Kulgan');
+    await select('Watson');
     expect(button()).toBeNull();
   });
 });

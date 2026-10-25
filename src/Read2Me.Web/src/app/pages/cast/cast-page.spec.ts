@@ -21,22 +21,22 @@ import type { CastPage } from './cast-page';
 import '../project/project-shell';
 import './cast-page';
 
-const BASE = '/api/projects/dune';
+const BASE = '/api/projects/dracula';
 const SUMMARY = `${BASE}/characters/summary`;
 const COMMANDS = `${BASE}/commands`;
 
 function detail(linked = false): ProjectDetailDto {
   return {
-    folderName: 'dune',
-    title: 'Dune',
-    bookTitle: 'Dune',
-    author: 'Frank Herbert',
-    filename: 'dune.epub',
+    folderName: 'dracula',
+    title: 'Dracula',
+    bookTitle: 'Dracula',
+    author: 'Bram Stoker',
+    filename: 'dracula.epub',
     fileType: 'Epub',
     coverImage: null,
     narratorOnlyMode: false,
     narrator: linked
-      ? { characterId: 'paul', displayName: 'Paul', isLinked: true }
+      ? { characterId: 'arthur', displayName: 'Arthur', isLinked: true }
       : { characterId: 'narrator', displayName: 'Narrator', isLinked: false },
   };
 }
@@ -73,13 +73,13 @@ function row(name: string, overrides: Partial<CharacterSummaryDto> = {}): Charac
 
 const ROWS = [
   row('Narrator'),
-  row('Paul', {
+  row('Mina', { lineCount: 9 }),
+  row('Arthur', {
     lineCount: 5,
     voiceCount: 2,
     readyVoiceCount: 1,
-    aliases: [{ id: 'a', name: 'Usul' }],
+    aliases: [{ id: 'a', name: 'Godalming' }],
   }),
-  row('Jessica', { lineCount: 9 }),
 ];
 
 const ROUTES: RouteDef[] = [
@@ -132,7 +132,7 @@ afterEach(() => document.body.replaceChildren());
 
 /** The cast page under the project shell, through a root outlet as in the app. */
 async function render(
-  path = 'projects/dune/cast',
+  path = 'projects/dracula/cast',
   rows = ROWS,
   linked = false,
   voiceNames: Record<string, string[]> = {},
@@ -169,13 +169,13 @@ const text = (el: Element | null) => el?.textContent?.replace(/\s+/g, ' ').trim(
 describe('r2m-cast-page', () => {
   it('lists the roster with the Narrator first, alias counts and readiness chips', async () => {
     const { page } = await render();
-    expect(page.querySelector('.r2m-page-header__subtitle')?.textContent).toBe('Dune');
-    expect(names(page)).toEqual(['Narrator', 'Jessica', 'Paul']);
-    const paul = page.querySelector('.cast__row[data-character-id="paul"]')!;
-    expect(paul.getAttribute('href')).toBe('projects/dune/cast/paul');
-    expect(paul.querySelector('.cast__aliases')?.textContent).toBe('1');
-    expect(paul.querySelector('.cast__aliases')?.getAttribute('data-tooltip')).toBe('Usul');
-    expect(text(paul.querySelector('.r2m-status-chip'))).toContain('1 / 2');
+    expect(page.querySelector('.r2m-page-header__subtitle')?.textContent).toBe('Dracula');
+    expect(names(page)).toEqual(['Narrator', 'Arthur', 'Mina']);
+    const arthur = page.querySelector('.cast__row[data-character-id="arthur"]')!;
+    expect(arthur.getAttribute('href')).toBe('projects/dracula/cast/arthur');
+    expect(arthur.querySelector('.cast__aliases')?.textContent).toBe('1');
+    expect(arthur.querySelector('.cast__aliases')?.getAttribute('data-tooltip')).toBe('Godalming');
+    expect(text(arthur.querySelector('.r2m-status-chip'))).toContain('1 / 2');
     expect(
       page.querySelector('.cast__row[data-character-id="narrator"] .cast__icon--book'),
     ).not.toBeNull();
@@ -186,10 +186,10 @@ describe('r2m-cast-page', () => {
   it('search filters by name or alias and sort reorders', async () => {
     const { page } = await render();
     const search = page.querySelector<HTMLInputElement>('input[type=search]')!;
-    search.value = 'usul';
+    search.value = 'godalming';
     search.dispatchEvent(new Event('input'));
     await page.rendered();
-    expect(names(page)).toEqual(['Paul']);
+    expect(names(page)).toEqual(['Arthur']);
     search.value = 'zzz';
     search.dispatchEvent(new Event('input'));
     await page.rendered();
@@ -200,58 +200,62 @@ describe('r2m-cast-page', () => {
     sort.value = 'lines';
     sort.dispatchEvent(new Event('change'));
     await page.rendered();
-    expect(names(page)).toEqual(['Narrator', 'Jessica', 'Paul']);
+    expect(names(page)).toEqual(['Narrator', 'Mina', 'Arthur']);
     sort.value = 'readiness';
     sort.dispatchEvent(new Event('change'));
     await page.rendered();
-    expect(names(page)).toEqual(['Narrator', 'Paul', 'Jessica']);
+    expect(names(page)).toEqual(['Narrator', 'Arthur', 'Mina']);
   });
 
   it('the route selects the character and marks its row', async () => {
-    const { page } = await render('projects/dune/cast/paul');
+    const { page } = await render('projects/dracula/cast/arthur');
     expect(page.querySelector('.cast--detail')).not.toBeNull();
     expect(page.querySelector('.cast__row--selected')?.getAttribute('data-character-id')).toBe(
-      'paul',
+      'arthur',
     );
     expect(page.querySelector('.cast__row--selected')?.getAttribute('aria-current')).toBe('page');
     const detailEl = page.querySelector('r2m-character-detail')!;
     await detailEl.rendered();
-    expect(detailEl.textContent).toContain('Paul');
-    expect(api.calls('GET', `${BASE}/characters/paul/lines`)).toHaveLength(1);
+    expect(detailEl.textContent).toContain('Arthur');
+    expect(api.calls('GET', `${BASE}/characters/arthur/lines`)).toHaveLength(1);
   });
 
   it('an unknown id says the character was not found and links back', async () => {
-    const { page } = await render('projects/dune/cast/ghost');
+    const { page } = await render('projects/dracula/cast/ghost');
     api.on('GET', `${BASE}/characters/ghost/lines`, []);
     await settle();
     await page.rendered();
     expect(text(page.querySelector('.cast__detail'))).toContain('Character not found');
-    expect(page.querySelector('.cast__detail a')?.getAttribute('href')).toBe('projects/dune/cast');
+    expect(page.querySelector('.cast__detail a')?.getAttribute('href')).toBe(
+      'projects/dracula/cast',
+    );
   });
 
   it('an empty roster shows the empty state', async () => {
-    const { page } = await render('projects/dune/cast', []);
+    const { page } = await render('projects/dracula/cast', []);
     expect(text(page.querySelector('.cast__list'))).toContain('No characters yet');
   });
 
   it('Add character prompts for a name, posts CreateCharacter and opens the new one', async () => {
     const { page } = await render();
-    api.on('POST', COMMANDS, { outcome: 'Committed', newEntityId: 'stilgar' });
+    api.on('POST', COMMANDS, { outcome: 'Committed', newEntityId: 'van-helsing' });
     page.querySelector<HTMLButtonElement>('[data-action="add-character"]')!.click();
     await settle();
     const prompt = document.querySelector('r2m-text-prompt-dialog')!;
     await prompt.rendered();
     const input = prompt.querySelector<HTMLInputElement>('.r2m-text-prompt-dialog__input')!;
-    input.value = 'Stilgar';
+    input.value = 'Van Helsing';
     input.dispatchEvent(new Event('input'));
     await prompt.rendered();
     prompt.querySelector<HTMLButtonElement>('.r2m-text-prompt-dialog__confirm')!.click();
     await settle();
     await settle();
     expect(api.calls('POST', COMMANDS).map((r) => r.body)).toEqual([
-      { type: 'CreateCharacter', name: 'Stilgar' },
+      { type: 'CreateCharacter', name: 'Van Helsing' },
     ]);
-    expect(navigation.calls.at(-1)?.url).toBe('http://localhost/app/projects/dune/cast/stilgar');
+    expect(navigation.calls.at(-1)?.url).toBe(
+      'http://localhost/app/projects/dracula/cast/van-helsing',
+    );
   });
 
   it('the toolbar is off while a voice batch runs', async () => {
@@ -266,8 +270,8 @@ describe('r2m-cast-page', () => {
   });
 
   it('viewing a History step, the toolbar and the narrator banner are off with the reason; rows still select (ticket 32)', async () => {
-    use(StepView).view('dune', 's8');
-    const { page } = await render('projects/dune/cast/paul');
+    use(StepView).view('dracula', 's8');
+    const { page } = await render('projects/dracula/cast/arthur');
     const reason = (el: Element | null) =>
       el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
     for (const action of ['discover', 'generate-prompts', 'generate-audio', 'add-character']) {
@@ -294,39 +298,39 @@ describe('r2m-cast-page', () => {
     api.on('POST', `${BASE}/characters/discover`, {
       status: 'Ok',
       reason: null,
-      characters: [{ name: 'Stilgar', aliases: [], existingCharacterId: null }],
+      characters: [{ name: 'Van Helsing', aliases: [], existingCharacterId: null }],
       collisions: [],
     });
     api.on('POST', `${BASE}/characters/discover/apply`, { applied: 1 });
     page.querySelector<HTMLButtonElement>('[data-action="discover"]')!.click();
     await settle();
     const dialog = document.querySelector('r2m-discovery-dialog')!;
-    expect(dialog.data.roster.map((r) => r.name)).toEqual(['Narrator', 'Paul', 'Jessica']);
+    expect(dialog.data.roster.map((r) => r.name)).toEqual(['Narrator', 'Mina', 'Arthur']);
     await settle();
     await dialog.rendered();
-    api.on('GET', SUMMARY, [...ROWS, row('Stilgar')]);
+    api.on('GET', SUMMARY, [...ROWS, row('Van Helsing')]);
     dialog.querySelector<HTMLButtonElement>('[data-action="apply"]')!.click();
     await settle();
     await settle();
     await page.rendered();
     expect(toasts).toEqual(['1 character added']);
-    expect(names(page)).toContain('Stilgar');
+    expect(names(page)).toContain('Van Helsing');
   });
 
   it('?discover=1 opens discovery once the roster is up and drops the param', async () => {
     api.on('POST', `${BASE}/characters/discover`, () => new Promise(() => undefined));
-    const { page } = await render('projects/dune/cast?discover=1');
+    const { page } = await render('projects/dracula/cast?discover=1');
     await settle();
     expect(preflightTasks).toEqual(['discovery']);
     expect(document.querySelector('r2m-discovery-dialog')).not.toBeNull();
     const last = navigation.calls.at(-1)!;
-    expect(last.url).toBe('http://localhost/app/projects/dune/cast');
+    expect(last.url).toBe('http://localhost/app/projects/dracula/cast');
     expect(last.history).toBe('replace');
     expect(page.isConnected).toBe(true);
   });
 
   it('Generate voice prompts starts the batch at once without voices and opens the drawer', async () => {
-    const { page } = await render('projects/dune/cast', [row('Narrator'), row('Jessica')]);
+    const { page } = await render('projects/dracula/cast', [row('Narrator'), row('Mina')]);
     api.on('POST', `${BASE}/voice-batch/prompts`, { started: true });
     page.querySelector<HTMLButtonElement>('[data-action="generate-prompts"]')!.click();
     await settle();
@@ -373,31 +377,31 @@ describe('r2m-cast-page', () => {
     const { page } = await render();
     api.on('POST', COMMANDS, { outcome: 'Committed' });
     const banner = page.querySelector('r2m-narrator-banner')!;
-    banner.pick('paul');
+    banner.pick('arthur');
     await settle();
     expect(api.calls('POST', COMMANDS).map((r) => r.body)).toEqual([
-      { type: 'SetNarratorCharacter', characterId: 'paul' },
+      { type: 'SetNarratorCharacter', characterId: 'arthur' },
     ]);
   });
 
   it('a linked narrator names the seed row and shows the signpost in its place', async () => {
-    const linkedRows = [row('Narrator'), row('Paul', { narratesBook: true }), row('Jessica')];
-    const { page } = await render('projects/dune/cast/narrator', linkedRows, true, {
+    const linkedRows = [row('Narrator'), row('Mina'), row('Arthur', { narratesBook: true })];
+    const { page } = await render('projects/dracula/cast/narrator', linkedRows, true, {
       narrator: ['Narrator Voice'],
     });
     await settle();
     await page.rendered();
-    expect(names(page)).toEqual(['Narrator → Paul', 'Jessica', 'Paul']);
+    expect(names(page)).toEqual(['Narrator → Arthur', 'Arthur', 'Mina']);
     const signpost = page.querySelector('[data-testid="narrator-signpost"]')!;
-    expect(text(signpost)).toContain('Narrator → Paul');
+    expect(text(signpost)).toContain('Narrator → Arthur');
     expect(text(signpost)).toContain('1 unused narrator voice');
     expect(text(signpost)).toContain('Narrator Voice');
     expect(page.querySelector('r2m-character-detail')).toBeNull();
 
     Array.from(signpost.querySelectorAll('button'))
-      .find((b) => b.textContent?.includes('Go to Paul'))!
+      .find((b) => b.textContent?.includes('Go to Arthur'))!
       .click();
-    expect(navigation.calls.at(-1)?.url).toBe('http://localhost/app/projects/dune/cast/paul');
+    expect(navigation.calls.at(-1)?.url).toBe('http://localhost/app/projects/dracula/cast/arthur');
   });
 
   it('a failed roster load shows the error chip', async () => {
@@ -405,7 +409,7 @@ describe('r2m-cast-page', () => {
     api.on('GET', SUMMARY, () =>
       Response.json({ title: 'Error', status: 500, detail: 'db locked' }, { status: 500 }),
     );
-    navigation = installNavigation('projects/dune/cast');
+    navigation = installNavigation('projects/dracula/cast');
     const router = new Router();
     override(Router, router);
     router.start(ROUTES, async () => true);

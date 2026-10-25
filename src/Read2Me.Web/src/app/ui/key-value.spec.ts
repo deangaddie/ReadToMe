@@ -3,8 +3,8 @@ import { render } from 'lit-html';
 import { type KeyValueRow, keyValue } from './key-value';
 
 const ROWS: KeyValueRow[] = [
-  { label: 'Title', value: 'Foundation' },
-  { label: 'Folder', value: 'foundation', mono: true },
+  { label: 'Title', value: 'Pride and Prejudice' },
+  { label: 'Folder', value: 'pride-and-prejudice', mono: true },
   { label: 'Narrator', value: null },
   { label: 'Items', value: 3415 },
 ];
@@ -20,7 +20,7 @@ describe('keyValue()', () => {
     const labels = Array.from(el.querySelectorAll('dt')).map((n) => n.textContent?.trim());
     const values = Array.from(el.querySelectorAll('dd')).map((n) => n.textContent?.trim());
     expect(labels).toEqual(['Title', 'Folder', 'Narrator', 'Items']);
-    expect(values).toEqual(['Foundation', 'foundation', '—', '3415']);
+    expect(values).toEqual(['Pride and Prejudice', 'pride-and-prejudice', '—', '3415']);
     expect(el.querySelectorAll('dd')[1]?.classList.contains('r2m-key-value__value--mono')).toBe(
       true,
     );

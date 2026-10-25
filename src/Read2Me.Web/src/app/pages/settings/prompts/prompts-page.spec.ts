@@ -210,7 +210,7 @@ describe('r2m-prompts-page', () => {
     api.on('POST', '/api/settings/prompts/character/preview', (body) => {
       const { template } = body as { template: string };
       previews.push(template);
-      return { rendered: template.replace('{{book_title}}', 'The Hobbit') };
+      return { rendered: template.replace('{{book_title}}', 'Pride and Prejudice') };
     });
 
     await openPreview(page);
@@ -218,13 +218,17 @@ describe('r2m-prompts-page', () => {
     await wait(PREVIEW_DEBOUNCE_MS + 50);
     await flush(page);
     expect(previews).toEqual(['Hello {{book_title}}']);
-    expect(page.querySelector('[data-role="preview"]')?.textContent).toBe('Hello The Hobbit');
+    expect(page.querySelector('[data-role="preview"]')?.textContent).toBe(
+      'Hello Pride and Prejudice',
+    );
 
     await type(page, 'Bye {{book_title}}');
     await wait(PREVIEW_DEBOUNCE_MS + 50);
     await flush(page);
     expect(previews).toEqual(['Hello {{book_title}}', 'Bye {{book_title}}']);
-    expect(page.querySelector('[data-role="preview"]')?.textContent).toBe('Bye The Hobbit');
+    expect(page.querySelector('[data-role="preview"]')?.textContent).toBe(
+      'Bye Pride and Prejudice',
+    );
   });
 
   it('a reload reaches an untouched editor without lighting it up as dirty', async () => {

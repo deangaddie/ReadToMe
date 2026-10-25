@@ -40,15 +40,15 @@ const UNATTRIBUTED = item('u');
 
 const ROSTER = [
   { id: NARRATOR_ID, name: 'Narrator', isNarrator: true },
-  { id: 'h', name: 'Hardin' },
+  { id: 'h', name: 'Elizabeth' },
 ];
 
 function ctx(overrides: Partial<RowContext> = {}): RowContext {
   return {
-    folder: 'dune',
+    folder: 'dracula',
     mode: 'audio',
     speakers: {
-      names: { h: 'Hardin' },
+      names: { h: 'Elizabeth' },
       narrator: { characterId: NARRATOR_ID, displayName: 'Narrator', isLinked: false },
     },
     paragraphStatus: {},
@@ -197,7 +197,7 @@ describe('itemRow (speakers)', () => {
       const rows = await openChipMenu(el);
       expect(rows.map((r) => text(r.querySelector('.r2m-speaker-menu__name')))).toEqual([
         'Narrator',
-        'Hardin',
+        'Elizabeth',
       ]);
       rows[1]!.click();
       expect(assigner.assign).toHaveBeenCalledWith(
@@ -400,7 +400,7 @@ describe('itemRow (audio)', () => {
     const player = el.querySelector('r2m-audio-player')!;
     await player.rendered();
     expect(player.querySelector('audio')?.getAttribute('src')).toBe(
-      '/workspace/dune/audio/d.wav?v=3',
+      '/workspace/dracula/audio/d.wav?v=3',
     );
     expect((await mount(ctx(), NARRATION)).querySelector('r2m-audio-player')).toBeNull();
     expect(

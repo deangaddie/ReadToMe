@@ -20,11 +20,11 @@ describe('r2m-stream-audio', () => {
     expect(el.querySelector('.r2m-stream-audio__empty')).not.toBeNull();
 
     el.events = [
-      { kind: 'itemStarted', id: 'i1', attempt: 1, character: 'Hardin', text: 'Hello there.' },
+      { kind: 'itemStarted', id: 'i1', attempt: 1, character: 'Elizabeth', text: 'Hello there.' },
       { kind: 'audioGenerated', id: 'i1', attempt: 1 },
       { kind: 'normalized', id: 'i1', attempt: 1, ok: true },
       { kind: 'postProcessed', id: 'i1', attempt: 1, stepId: 'silence-trim', applied: true },
-      { kind: 'itemStarted', id: 'i2', attempt: 1, character: 'Pirenne' },
+      { kind: 'itemStarted', id: 'i2', attempt: 1, character: 'Bingley' },
       { kind: 'failed', id: 'i2', attempt: 1, reason: 'TTS 500' },
     ];
     await el.rendered();
@@ -32,7 +32,7 @@ describe('r2m-stream-audio', () => {
     const cards = Array.from(el.querySelectorAll('.r2m-stream-audio__card'));
     expect(cards.length).toBe(2);
     const first = cards[0]!;
-    expect(first.querySelector('.r2m-stream-audio__character')?.textContent).toBe('Hardin');
+    expect(first.querySelector('.r2m-stream-audio__character')?.textContent).toBe('Elizabeth');
     expect(first.querySelector('.r2m-stream-audio__text')?.textContent).toBe('Hello there.');
     expect(first.querySelector('.r2m-status-chip')?.textContent).toContain('Running');
     const states = Array.from(first.querySelectorAll('.r2m-stream-audio__phase')).map((p) =>

@@ -32,14 +32,14 @@ describe('AudioGenerator', () => {
     } as unknown as ToastService);
     generator = new AudioGenerator(
       { run } as unknown as BookEditor,
-      { folder: signal('dune') } as unknown as BookStore,
+      { folder: signal('dracula') } as unknown as BookStore,
     );
   });
 
   it('a selection runs the audio preflight, posts the ids and reports the count', async () => {
     expect(await generator.enqueueItems(['i1', 'i2'])).toBe(true);
     expect(ensureReady).toHaveBeenCalledWith('audio');
-    expect(enqueueItems).toHaveBeenCalledWith('dune', ['i1', 'i2']);
+    expect(enqueueItems).toHaveBeenCalledWith('dracula', ['i1', 'i2']);
     expect(toasts).toEqual([{ kind: 'success', message: 'Queued 2 items' }]);
     expect(generator.working()).toBe(false);
   });
@@ -54,13 +54,13 @@ describe('AudioGenerator', () => {
   it('retry re-queues just that item', async () => {
     enqueueItems.mockResolvedValue({ enqueued: 1 });
     expect(await generator.retry('i9')).toBe(true);
-    expect(enqueueItems).toHaveBeenCalledWith('dune', ['i9']);
+    expect(enqueueItems).toHaveBeenCalledWith('dracula', ['i9']);
     expect(toasts).toEqual([{ kind: 'success', message: 'Queued 1 item' }]);
   });
 
   it('a node asks for what still needs audio, with the narrator-only flag', async () => {
     expect(await generator.enqueueNode('chapter', 'c1', true)).toBe(true);
-    expect(enqueue).toHaveBeenCalledWith('dune', {
+    expect(enqueue).toHaveBeenCalledWith('dracula', {
       level: 'chapter',
       nodeId: 'c1',
       needsAudioOnly: true,

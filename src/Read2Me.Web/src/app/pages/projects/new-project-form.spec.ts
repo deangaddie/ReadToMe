@@ -16,25 +16,25 @@ const epub = new File(['x'], 'book.epub');
 
 describe('new project form', () => {
   it('auto-fills the project title from the book title until the user edits it', () => {
-    let d = setBookTitle(EMPTY_DRAFT, 'Foundation');
-    expect(d.title).toBe('Foundation');
+    let d = setBookTitle(EMPTY_DRAFT, 'Pride and Prejudice');
+    expect(d.title).toBe('Pride and Prejudice');
 
-    d = setBookTitle(d, 'Foundation and Empire');
-    expect(d.title).toBe('Foundation and Empire');
+    d = setBookTitle(d, 'Sense and Sensibility');
+    expect(d.title).toBe('Sense and Sensibility');
 
-    d = setTitle(d, 'F&E audiobook');
+    d = setTitle(d, 'S&S audiobook');
     expect(d.titleEdited).toBe(true);
-    d = setBookTitle(d, 'Second Foundation');
-    expect(d.title).toBe('F&E audiobook');
+    d = setBookTitle(d, 'Emma');
+    expect(d.title).toBe('S&S audiobook');
   });
 
   it('clearing an edited project title hands control back to the book title', () => {
-    let d = setTitle(setBookTitle(EMPTY_DRAFT, 'Dune'), 'Mine');
+    let d = setTitle(setBookTitle(EMPTY_DRAFT, 'Dracula'), 'Mine');
     d = setTitle(d, '  ');
     expect(d.titleEdited).toBe(false);
-    expect(d.title).toBe('Dune');
-    d = setBookTitle(d, 'Dune Messiah');
-    expect(d.title).toBe('Dune Messiah');
+    expect(d.title).toBe('Dracula');
+    d = setBookTitle(d, "Dracula's Guest");
+    expect(d.title).toBe("Dracula's Guest");
   });
 
   it('requires book title, project title, author and a file', () => {
@@ -44,7 +44,7 @@ describe('new project form', () => {
       author: 'Author is required',
       file: 'Choose a book file (.epub,.txt)',
     });
-    const full = setFile(setAuthor(setBookTitle(EMPTY_DRAFT, 'Dune'), 'Herbert'), epub);
+    const full = setFile(setAuthor(setBookTitle(EMPTY_DRAFT, 'Dracula'), 'Stoker'), epub);
     expect(isDraftValid(full)).toBe(true);
     expect(isDraftValid({ ...full, author: '   ' })).toBe(false);
   });
@@ -61,11 +61,11 @@ describe('new project form', () => {
   });
 
   it('trims the text fields into the create request', () => {
-    const d = setFile(setAuthor(setBookTitle(EMPTY_DRAFT, ' Dune '), ' Herbert '), epub);
+    const d = setFile(setAuthor(setBookTitle(EMPTY_DRAFT, ' Dracula '), ' Stoker '), epub);
     expect(toCreateRequest(d)).toEqual({
-      title: 'Dune',
-      bookTitle: 'Dune',
-      author: 'Herbert',
+      title: 'Dracula',
+      bookTitle: 'Dracula',
+      author: 'Stoker',
       file: epub,
     });
   });

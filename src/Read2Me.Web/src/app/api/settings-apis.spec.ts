@@ -90,9 +90,9 @@ describe('settings API services', () => {
   });
 
   it('PromptsApi.preview posts the unsaved template and unwraps the rendering', async () => {
-    api.on('POST', '/api/settings/prompts/voice/preview', { rendered: 'Voice for Gandalf' });
+    api.on('POST', '/api/settings/prompts/voice/preview', { rendered: 'Voice for Darcy' });
     expect(await new PromptsApi().preview('voice', 'Voice for {{character_name}}')).toBe(
-      'Voice for Gandalf',
+      'Voice for Darcy',
     );
     expect(api.calls('POST', '/api/settings/prompts/voice/preview')[0]?.body).toEqual({
       template: 'Voice for {{character_name}}',

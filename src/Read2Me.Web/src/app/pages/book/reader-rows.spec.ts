@@ -45,7 +45,7 @@ const para = (id: string, items: ParagraphItemDto[], isPauseParagraph = false): 
 });
 
 const ctx = (narrator: NarratorDto = UNLINKED): SpeakerContext => ({
-  names: { h: 'Hardin', p: 'Pirenne', w: 'Watson' },
+  names: { h: 'Elizabeth', p: 'Bingley', w: 'Watson' },
   narrator,
 });
 
@@ -63,7 +63,12 @@ describe('itemSpeaker', () => {
   it.each([
     ['narration, unlinked', narration(), UNLINKED, { state: 'narration', name: 'Narration' }],
     ['narration, linked', narration(), LINKED, { state: 'narration', name: 'Narrator (Watson)' }],
-    ['a named character', item({ characterId: 'h' }), UNLINKED, { state: 'named', name: 'Hardin' }],
+    [
+      'a named character',
+      item({ characterId: 'h' }),
+      UNLINKED,
+      { state: 'named', name: 'Elizabeth' },
+    ],
     ['no speaker', item(), UNLINKED, { state: 'unknown', name: 'Unknown' }],
     [
       'a deleted character',
@@ -88,20 +93,20 @@ describe('paragraphSpeaker', () => {
     [
       'one speaker with narration',
       [narration(), item({ characterId: 'h' })],
-      { state: 'named', name: 'Hardin' },
+      { state: 'named', name: 'Elizabeth' },
     ],
     ['all unknown dialog', [item(), narration()], { state: 'unknown', name: 'Unknown' }],
     [
       'one known plus unknown',
       [item({ characterId: 'h' }), item()],
-      { state: 'named', name: 'Hardin +?' },
+      { state: 'named', name: 'Elizabeth +?' },
     ],
     [
       'two speakers',
       [item({ characterId: 'h' }), item({ characterId: 'p' })],
       { state: 'mixed', name: 'Mixed' },
     ],
-    ['pauses ignored', [pause(), item({ characterId: 'p' })], { state: 'named', name: 'Pirenne' }],
+    ['pauses ignored', [pause(), item({ characterId: 'p' })], { state: 'named', name: 'Bingley' }],
   ])('%s', (_label, items, expected) => {
     expect(paragraphSpeaker(para('p', items), ctx())).toMatchObject(expected);
   });

@@ -58,17 +58,17 @@ describe('R2mElement', () => {
   it('re-renders when an input changes', async () => {
     const el = mount();
     await el.rendered();
-    el.name = 'Hardin';
+    el.name = 'Elizabeth';
     await el.rendered();
-    expect(el.querySelector('p')?.textContent).toBe('Hello Hardin');
+    expect(el.querySelector('p')?.textContent).toBe('Hello Elizabeth');
   });
 
   it('takes inputs set before it is connected', async () => {
     const el = document.createElement('x-greeter') as Greeter;
-    el.name = 'Gaal';
+    el.name = 'Jane';
     document.body.append(el);
     await el.rendered();
-    expect(el.querySelector('p')?.textContent).toBe('Hello Gaal');
+    expect(el.querySelector('p')?.textContent).toBe('Hello Jane');
   });
 
   it('coalesces several writes in one task into one render', async () => {

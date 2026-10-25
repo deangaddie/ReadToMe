@@ -32,7 +32,7 @@ beforeEach(() => {
 afterEach(() => document.body.replaceChildren());
 
 async function open(merged: CharacterSummaryDto, rows = ROWS) {
-  const result = openMergeDialog({ folder: 'dune', merged, rows });
+  const result = openMergeDialog({ folder: 'dracula', merged, rows });
   await Promise.resolve();
   const dialog = document.querySelector<MergeDialog>('r2m-merge-dialog')!;
   await dialog.rendered();
@@ -86,7 +86,7 @@ describe('r2m-merge-dialog', () => {
   });
 
   it('names the voices the merged character takes with it', async () => {
-    api.on('GET', '/api/projects/dune/characters/bob/voices', {
+    api.on('GET', '/api/projects/dracula/characters/bob/voices', {
       defaultVoiceId: null,
       voices: [{ name: 'Gruff' }, { name: 'Soft' }],
     });
@@ -100,7 +100,7 @@ describe('r2m-merge-dialog', () => {
   });
 
   it('counts the voices when the list cannot be read', async () => {
-    api.on('GET', '/api/projects/dune/characters/bob/voices', () => problem(500, 'down'));
+    api.on('GET', '/api/projects/dracula/characters/bob/voices', () => problem(500, 'down'));
     const { dialog } = await open(row('Bob', 1));
     await settle();
     await dialog.rendered();

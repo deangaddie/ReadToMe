@@ -25,12 +25,12 @@ import { SpeakerAssigner } from './speaker-assigner';
 import '../project/project-shell';
 import './book-page';
 
-const BASE = '/api/projects/dune';
+const BASE = '/api/projects/dracula';
 
 const OVERVIEW: BookOverviewDto = {
   hasContent: true,
   volumes: [{ id: 'v1', title: null }],
-  characters: [{ id: 'h', name: 'Hardin', aliases: [] }],
+  characters: [{ id: 'h', name: 'Elizabeth', aliases: [] }],
   totalParts: 1,
   totalChapters: 2,
   revision: 1,
@@ -127,14 +127,19 @@ beforeEach(() => {
     problem: (p: { detail?: string }) => toasts.push(`problem: ${p.detail}`),
   } as unknown as ToastService);
   api
-    .on('GET', BASE, { folderName: 'dune', title: 'Dune', narrator: null, narratorOnlyMode: false })
+    .on('GET', BASE, {
+      folderName: 'dracula',
+      title: 'Dracula',
+      narrator: null,
+      narratorOnlyMode: false,
+    })
     .on('GET', `${BASE}/status`, STATUS)
     .on('GET', `${BASE}/book`, OVERVIEW)
     .on('GET', `${BASE}/audio/reviews`, {})
     .on('GET', `${BASE}/nodes/volume/v1/children`, { parts: [{ id: 'p1', title: null }] })
     .on('GET', `${BASE}/nodes/part/p1/children`, {
       chapters: [
-        { id: 'c1', title: 'The Encyclopedists' },
+        { id: 'c1', title: 'Jonathan Harker’s Journal' },
         { id: 'c2', title: null },
       ],
     })
@@ -172,7 +177,7 @@ function echoOwnReceipts(respond: (body: unknown) => unknown) {
     revision++;
     for (const listener of listeners) {
       listener({
-        folder: 'dune',
+        folder: 'dracula',
         mutationName: (body as { type: string }).type,
         mutationId: `m${revision}`,
         revision,
@@ -195,18 +200,18 @@ function echoOwnReceipts(respond: (body: unknown) => unknown) {
 describe('r2m-book-page', () => {
   it('shows an empty state when the book has not been read in', async () => {
     api.on('GET', `${BASE}/book`, { ...OVERVIEW, hasContent: false, volumes: [] });
-    const { page } = await start('projects/dune/book');
+    const { page } = await start('projects/dracula/book');
     expect(page.textContent).toContain('The book has not been read in yet');
     expect(page.querySelector('r2m-measured-list')).toBeNull();
     expect(page.querySelector('a.r2m-button')?.getAttribute('href')).toBe('./');
   });
 
   it('opens the first chapter and renders its header and paragraph rows in the list', async () => {
-    const { page, store } = await start('projects/dune/book');
+    const { page, store } = await start('projects/dracula/book');
     // happy-dom gives the list no height, so the edge check (as in a real short viewport) has
     // already asked for the next chapter: the window starts with c1 and may hold c2 too.
     expect(store.window()[0]).toBe('c1');
-    expect(text(page.querySelector('.book__chapter'))).toBe('The Encyclopedists');
+    expect(text(page.querySelector('.book__chapter'))).toBe('Jonathan Harker’s Journal');
     const rows = page.querySelectorAll('.r2m-vlist__row');
     expect(Array.from(rows, (r) => r.getAttribute('data-row-key')).slice(0, 3)).toEqual([
       'chapter:c1',
@@ -236,7 +241,7 @@ describe('r2m-book-page', () => {
       })
       .on('GET', `${BASE}/nodes/part/p1/children`, { chapters: [{ id: 'c1', title: 'One' }] })
       .on('GET', `${BASE}/nodes/part/p2/children`, { chapters: [{ id: 'c2', title: 'Two' }] });
-    const { page, store } = await start('projects/dune/book');
+    const { page, store } = await start('projects/dracula/book');
     await store.openChapter('c2');
     await store.loadPrevious(false);
     await page.rendered();
@@ -262,7 +267,7 @@ describe('r2m-book-page', () => {
   });
 
   it('a single volume with a single part shows no Volume or Part heading', async () => {
-    const { page } = await start('projects/dune/book');
+    const { page } = await start('projects/dracula/book');
     expect(page.querySelector('.book__volume, .book__part')).toBeNull();
   });
 
@@ -281,11 +286,11 @@ describe('r2m-book-page', () => {
       },
       audio: { remaining: 0 },
     });
-    const { page, store } = await start('projects/dune/book');
+    const { page, store } = await start('projects/dracula/book');
     const tree = page.querySelector('nav.book__tree r2m-structure-tree')!;
     const titles = () =>
       Array.from(tree.querySelectorAll('.tree__title')).map((n) => n.textContent?.trim());
-    expect(titles()).toEqual(['The Encyclopedists', 'Untitled chapter 2']);
+    expect(titles()).toEqual(['Jonathan Harker’s Journal', 'Untitled chapter 2']);
     expect(tree.querySelector('[data-node-id=c1] .r2m-count-badge')?.textContent).toContain('3');
     expect(tree.querySelector('[data-node-id=c1]')?.getAttribute('aria-current')).toBe('true');
     expect(store.window()[0]).toBe('c1');
@@ -300,7 +305,7 @@ describe('r2m-book-page', () => {
     // An untitled chapter's heading is its placeholder title, set apart as the tree's is.
     const headings = Array.from(page.querySelectorAll('.book__chapter'));
     expect(headings.map((h) => [text(h), h.classList.contains('r2m-placeholder-title')])).toEqual([
-      ['The Encyclopedists', false],
+      ['Jonathan Harker’s Journal', false],
       ['Untitled chapter 2', true],
     ]);
 
@@ -335,7 +340,7 @@ describe('r2m-book-page', () => {
         },
       ],
     });
-    const { page } = await start('projects/dune/book?mode=speakers');
+    const { page } = await start('projects/dracula/book?mode=speakers');
     const pause = page.querySelector('.book__pause')!;
     const trigger = pause.querySelector<HTMLButtonElement>('.r2m-node-menu__trigger')!;
     expect(trigger.getAttribute('aria-label')).toBe('Actions for Chapter pause');
@@ -360,7 +365,7 @@ describe('r2m-book-page', () => {
     it.each(['read', 'speakers', 'audio'] as const)(
       'in %s mode offers exactly what the tree offers for the same chapter',
       async (mode) => {
-        const { page } = await start(`projects/dune/book?mode=${mode}`);
+        const { page } = await start(`projects/dracula/book?mode=${mode}`);
         await page.rendered();
         for (const id of ['c1', 'c2']) {
           const fromTree = await menuEntries(page, treeTrigger(page, id));
@@ -370,10 +375,10 @@ describe('r2m-book-page', () => {
     );
 
     it("lists the chapter's entries, merges hidden at the ends, shortcuts following the mode", async () => {
-      const { page } = await start('projects/dune/book?mode=speakers');
+      const { page } = await start('projects/dracula/book?mode=speakers');
       await page.rendered();
       expect(headingTrigger(page, 'c1').getAttribute('aria-label')).toBe(
-        'Actions for The Encyclopedists',
+        'Actions for Jonathan Harker’s Journal',
       );
       expect(await menuEntries(page, headingTrigger(page, 'c1'))).toEqual([
         'select-unprocessed',
@@ -408,7 +413,7 @@ describe('r2m-book-page', () => {
         },
         audio: { remaining: 0 },
       });
-      const { page } = await start('projects/dune/book');
+      const { page } = await start('projects/dracula/book');
       await page.rendered();
       expect(treeTrigger(page, 'c1').disabled).toBe(true);
       expect(headingTrigger(page, 'c1').disabled).toBe(true);
@@ -416,7 +421,7 @@ describe('r2m-book-page', () => {
     });
 
     it('is disabled while the editor is locked', async () => {
-      const { page, store } = await start('projects/dune/book');
+      const { page, store } = await start('projects/dracula/book');
       await page.rendered();
       expect(headingTrigger(page, 'c1').disabled).toBe(false);
       // A failed read leaves the view stale, which locks the editor.
@@ -430,10 +435,10 @@ describe('r2m-book-page', () => {
     it('Edit title starts from the stored title and both panes show the new one after the save', async () => {
       const prompts: unknown[] = [];
       override(PromptService, {
-        text: async (o: unknown) => (prompts.push(o), 'Psychohistorians'),
+        text: async (o: unknown) => (prompts.push(o), 'Dr. Seward’s Diary'),
       } as unknown as PromptService);
       api.on('POST', `${BASE}/commands`, { newEntityId: null });
-      const { page, store } = await start('projects/dune/book');
+      const { page, store } = await start('projects/dracula/book');
       await page.rendered();
 
       headingTrigger(page, 'c2').click();
@@ -443,22 +448,22 @@ describe('r2m-book-page', () => {
       // An untitled chapter's rename starts empty, never from its placeholder.
       expect(prompts).toEqual([expect.objectContaining({ initial: '' })]);
       expect(api.calls('POST', `${BASE}/commands`).map((r) => r.body)).toEqual([
-        { type: 'UpdateChapterTitle', chapterId: 'c2', title: 'Psychohistorians' },
+        { type: 'UpdateChapterTitle', chapterId: 'c2', title: 'Dr. Seward’s Diary' },
       ]);
 
       // The receipt's reload reads the stored title back.
       api.on('GET', `${BASE}/nodes/part/p1/children`, {
         chapters: [
-          { id: 'c1', title: 'The Encyclopedists' },
-          { id: 'c2', title: 'Psychohistorians' },
+          { id: 'c1', title: 'Jonathan Harker’s Journal' },
+          { id: 'c2', title: 'Dr. Seward’s Diary' },
         ],
       });
       await store.refresh();
       await page.rendered();
       expect(text(page.querySelector('.book__heading[data-chapter-id=c2] .book__chapter'))).toBe(
-        'Psychohistorians',
+        'Dr. Seward’s Diary',
       );
-      expect(text(page.querySelector('[data-node-id=c2] .tree__title'))).toBe('Psychohistorians');
+      expect(text(page.querySelector('[data-node-id=c2] .tree__title'))).toBe('Dr. Seward’s Diary');
     });
   });
 
@@ -515,7 +520,7 @@ describe('r2m-book-page', () => {
     it.each(['read', 'speakers', 'audio'] as const)(
       'in %s mode offers exactly what the tree offers for the same Volume or Part',
       async (mode) => {
-        const { page } = await startNested(`projects/dune/book?mode=${mode}`);
+        const { page } = await startNested(`projects/dracula/book?mode=${mode}`);
         for (const id of ['v1', 'pa', 'pb']) {
           const fromTree = await menuEntries(page, treeTrigger(page, id));
           expect(fromTree.length).toBeGreaterThan(0);
@@ -525,7 +530,7 @@ describe('r2m-book-page', () => {
     );
 
     it('hides the merges at the ends, as the tree does', async () => {
-      const { page } = await startNested('projects/dune/book?mode=speakers');
+      const { page } = await startNested('projects/dracula/book?mode=speakers');
       expect(headingTrigger(page, 'pa').getAttribute('aria-label')).toBe('Actions for Arrival');
       const first = await menuEntries(page, headingTrigger(page, 'pa'));
       expect(first).toContain('merge-next');
@@ -556,7 +561,7 @@ describe('r2m-book-page', () => {
         },
         audio: { remaining: 0 },
       });
-      const { page, store } = await startNested('projects/dune/book');
+      const { page, store } = await startNested('projects/dracula/book');
       expect(treeTrigger(page, 'pa').disabled).toBe(true);
       expect(headingTrigger(page, 'pa').disabled).toBe(true);
       expect(headingTrigger(page, 'pb').disabled).toBe(false);
@@ -582,7 +587,7 @@ describe('r2m-book-page', () => {
           text: async (o: unknown) => (prompts.push(o), 'Renamed'),
         } as unknown as PromptService);
         api.on('POST', `${BASE}/commands`, { newEntityId: null });
-        const { page } = await startNested('projects/dune/book');
+        const { page } = await startNested('projects/dracula/book');
 
         await choose(page, id, 'edit-title');
         expect(prompts).toEqual([expect.objectContaining({ initial })]);
@@ -598,7 +603,7 @@ describe('r2m-book-page', () => {
             : [],
         )
         .on('POST', `${BASE}/attribution/enqueue`, { enqueued: 1 });
-      const { page } = await startNested('projects/dune/book?mode=speakers');
+      const { page } = await startNested('projects/dracula/book?mode=speakers');
       const selection = use(SelectionStore, page);
       const release = mock(async () => true);
       use(SpeakerAssigner, page).releaseNarration = release;
@@ -619,7 +624,7 @@ describe('r2m-book-page', () => {
   });
 
   it('a tree pick names the chapter in the URL', async () => {
-    const { page } = await start('projects/dune/book');
+    const { page } = await start('projects/dracula/book');
     page.querySelector<HTMLElement>('[data-node-id=c2] .tree__title')!.click();
     for (let i = 0; i < 4; i++) await settle();
     const last = navigation.calls.at(-1)!;
@@ -628,7 +633,7 @@ describe('r2m-book-page', () => {
   });
 
   it('Enter on a focused tree chapter opens it, names it in the URL, marks it current and keeps the focus', async () => {
-    const { page, store } = await start('projects/dune/book');
+    const { page, store } = await start('projects/dracula/book');
     const item = (id: string) =>
       page.querySelector<HTMLElement>(`r2m-structure-tree [data-node-id=${id}]`)!;
     item('c2').focus();
@@ -658,7 +663,7 @@ describe('r2m-book-page', () => {
       })
       .on('GET', `${BASE}/nodes/volume/v2/children`, { parts: [{ id: 'p2', title: 'Late' }] })
       .on('GET', `${BASE}/nodes/part/p2/children`, { chapters: [{ id: 'c3', title: 'Three' }] });
-    const { page, store } = await start('projects/dune/book');
+    const { page, store } = await start('projects/dracula/book');
     const tree = page.querySelector('r2m-structure-tree')!;
     const ids = () =>
       Array.from(tree.querySelectorAll<HTMLElement>('[role=treeitem]')).map(
@@ -676,7 +681,7 @@ describe('r2m-book-page', () => {
   });
 
   it('an opened chapter stays current while the list moves on its own, until the reader scrolls', async () => {
-    const { page } = await start('projects/dune/book?chapter=c2');
+    const { page } = await start('projects/dracula/book?chapter=c2');
     const list = page.querySelector('r2m-measured-list')!;
     const top = (type: string, index: number) =>
       list.dispatchEvent(new CustomEvent(type, { detail: index, bubbles: true }));
@@ -698,7 +703,7 @@ describe('r2m-book-page', () => {
   });
 
   it('?chapter= opens at that chapter instead of the first', async () => {
-    const { page, store } = await start('projects/dune/book?chapter=c2');
+    const { page, store } = await start('projects/dracula/book?chapter=c2');
     expect(store.window()).toContain('c2');
     expect(store.scrollRequest()?.chapterId).toBe('c2');
     expect(page.getAttribute('data-current-chapter')).toBe('c2');
@@ -710,7 +715,7 @@ describe('r2m-book-page', () => {
   });
 
   it('?mode= sets the reader mode; switching mode mirrors it to the URL', async () => {
-    const { page, store } = await start('projects/dune/book?mode=audio');
+    const { page, store } = await start('projects/dracula/book?mode=audio');
     expect(store.mode()).toBe('audio');
     // Audio mode reads voices with the chapter and shows the voice line per item.
     expect(api.calls('GET', `${BASE}/nodes/chapter/c1/voices`)).toHaveLength(1);
@@ -760,7 +765,7 @@ describe('r2m-book-page', () => {
         { id: 'p1', chapterId: 'c1', partId: 'p1', volumeId: 'v1' },
         { id: 'p2', chapterId: 'c1', partId: 'p1', volumeId: 'v1' },
       ]);
-      const { page } = await start('projects/dune/book?mode=speakers');
+      const { page } = await start('projects/dracula/book?mode=speakers');
       expect(bar(page)).toBeNull();
 
       const box = page.querySelector<HTMLInputElement>('[data-node-id=c1] .tree__select')!;
@@ -789,7 +794,7 @@ describe('r2m-book-page', () => {
 
     it('Attribute gates on preflight, posts the selected ids, reports the count and clears the selection', async () => {
       api.on('POST', `${BASE}/attribution/enqueue-paragraphs`, { enqueued: 1 });
-      const { page } = await start('projects/dune/book?mode=speakers');
+      const { page } = await start('projects/dracula/book?mode=speakers');
       const selection = use(SelectionStore, page);
       selection.toggle('p1', A, true);
       await page.rendered();
@@ -816,7 +821,7 @@ describe('r2m-book-page', () => {
       const far = DIALOG('p9');
       far.items[0]!.characterId = 'h';
       api.on('GET', `${BASE}/nodes/chapter/c9/children`, { paragraphs: [far] });
-      const { page } = await start('projects/dune/book?mode=speakers');
+      const { page } = await start('projects/dracula/book?mode=speakers');
       const selection = use(SelectionStore, page);
       selection.toggle('p1', A, true);
       selection.toggle('p9', { chapterId: 'c9', partId: 'p1', volumeId: 'v1' }, true);
@@ -850,7 +855,7 @@ describe('r2m-book-page', () => {
 
     it('a cancelled preflight sends nothing and keeps the selection', async () => {
       ensureReady.mockResolvedValueOnce(false);
-      const { page } = await start('projects/dune/book?mode=speakers');
+      const { page } = await start('projects/dracula/book?mode=speakers');
       const selection = use(SelectionStore, page);
       selection.toggle('p1', A, true);
       await page.rendered();
@@ -862,7 +867,7 @@ describe('r2m-book-page', () => {
     });
 
     it('Bulk assign hands the selection to the assigner and is disarmed while attribution runs', async () => {
-      const { page } = await start('projects/dune/book');
+      const { page } = await start('projects/dracula/book');
       const selection = use(SelectionStore, page);
       const assigner = use(SpeakerAssigner, page);
       const assign = mock(async () => undefined);
@@ -887,7 +892,7 @@ describe('r2m-book-page', () => {
     });
 
     it('Audio mode hides the paragraph checkboxes and bar; the paragraph selection is kept aside', async () => {
-      const { page } = await start('projects/dune/book?mode=audio');
+      const { page } = await start('projects/dracula/book?mode=audio');
       const selection = use(SelectionStore, page);
       selection.toggle('p1', { chapterId: 'c1', partId: null, volumeId: null }, true);
       await page.rendered();
@@ -896,7 +901,7 @@ describe('r2m-book-page', () => {
       expect(bar(page)).toBeNull();
       // The tree's checkboxes now select items, and read as unchecked over that selection.
       const treeBox = page.querySelector<HTMLInputElement>('[data-node-id=c1] .tree__select')!;
-      expect(treeBox.getAttribute('aria-label')).toBe('Select items of The Encyclopedists');
+      expect(treeBox.getAttribute('aria-label')).toBe('Select items of Jonathan Harker’s Journal');
       expect(treeBox.checked).toBe(false);
       expect(selection.count()).toBe(1);
       // The item checkboxes are there, off for the lines nobody can read yet.
@@ -914,7 +919,7 @@ describe('r2m-book-page', () => {
             : [],
         )
         .on('POST', `${BASE}/attribution/enqueue`, { enqueued: 2 });
-      const { page } = await start('projects/dune/book?mode=speakers');
+      const { page } = await start('projects/dracula/book?mode=speakers');
       const open = async () => {
         page.querySelector<HTMLButtonElement>('[data-node-id=c1] .r2m-node-menu__trigger')!.click();
         await page.rendered();
@@ -938,7 +943,7 @@ describe('r2m-book-page', () => {
     });
 
     it('Release narration from a node menu releases the node, then clears the selection and its stale totals', async () => {
-      const { page } = await start('projects/dune/book?mode=speakers');
+      const { page } = await start('projects/dracula/book?mode=speakers');
       const selection = use(SelectionStore, page);
       const assigner = use(SpeakerAssigner, page);
       const release = mock(async () => true);
@@ -953,7 +958,7 @@ describe('r2m-book-page', () => {
         .click();
       for (let i = 0; i < 4; i++) await settle();
 
-      expect(release).toHaveBeenCalledWith('Chapter', 'c1', 'The Encyclopedists');
+      expect(release).toHaveBeenCalledWith('Chapter', 'c1', 'Jonathan Harker’s Journal');
       expect(selection.count()).toBe(0);
       expect(selection.totals()['part-x']).toBeUndefined();
       // The loaded chapter's total is relearnt straight away.
@@ -970,7 +975,7 @@ describe('r2m-book-page', () => {
             : [],
         )
         .on('POST', `${BASE}/attribution/enqueue`, { enqueued: 1 });
-      const { page } = await start('projects/dune/book?mode=speakers');
+      const { page } = await start('projects/dracula/book?mode=speakers');
       const selection = use(SelectionStore, page);
       const release = mock(async () => true);
       use(SpeakerAssigner, page).releaseNarration = release;
@@ -1000,7 +1005,7 @@ describe('r2m-book-page', () => {
     });
 
     it('a release that writes nothing keeps the selection', async () => {
-      const { page } = await start('projects/dune/book?mode=speakers');
+      const { page } = await start('projects/dracula/book?mode=speakers');
       const selection = use(SelectionStore, page);
       use(SpeakerAssigner, page).releaseNarration = mock(async () => false);
       selection.toggle('p1', A, true);
@@ -1024,7 +1029,7 @@ describe('r2m-book-page', () => {
       api.on('GET', `${BASE}/nodes/chapter/c1/children`, {
         paragraphs: [DIALOG('p1'), narration],
       });
-      const { page } = await start('projects/dune/book?mode=speakers');
+      const { page } = await start('projects/dracula/book?mode=speakers');
       const selection = use(SelectionStore, page);
       const release = mock(async () => true);
       use(SpeakerAssigner, page).releaseNarration = release;
@@ -1076,7 +1081,7 @@ describe('r2m-book-page', () => {
           paragraphs: [NARRATION('p1'), DIALOG('p2')],
         })
         .on('GET', `${BASE}/nodes/chapter/c1/item-ids`, [REF]);
-      const { page } = await start('projects/dune/book?mode=audio');
+      const { page } = await start('projects/dracula/book?mode=audio');
       expect(page.querySelector('[data-testid=selection-bar]')).toBeNull();
 
       page.querySelector<HTMLInputElement>('[data-node-id=c1] .tree__select')!.click();
@@ -1105,8 +1110,8 @@ describe('r2m-book-page', () => {
     it('Select needs audio reads with the filter and narrator-only flag; Generate audio queues and clears', async () => {
       api
         .on('GET', BASE, {
-          folderName: 'dune',
-          title: 'Dune',
+          folderName: 'dracula',
+          title: 'Dracula',
           narrator: null,
           narratorOnlyMode: true,
         })
@@ -1117,7 +1122,7 @@ describe('r2m-book-page', () => {
             ? [REF]
             : [],
         );
-      const { page } = await start('projects/dune/book?mode=audio');
+      const { page } = await start('projects/dracula/book?mode=audio');
       const generator = use(AudioGenerator, page);
       const enqueueItems = mock(async () => true);
       generator.enqueueItems = enqueueItems;
@@ -1143,7 +1148,7 @@ describe('r2m-book-page', () => {
       const taken = NARRATION('p1');
       taken.items[0]!.audioFileName = 'p1.wav';
       api.on('GET', `${BASE}/nodes/chapter/c1/children`, { paragraphs: [taken] });
-      const { page } = await start('projects/dune/book?mode=audio');
+      const { page } = await start('projects/dracula/book?mode=audio');
       const generator = use(AudioGenerator, page);
       const enqueueItems = mock(async () => true);
       generator.enqueueItems = enqueueItems;
@@ -1174,7 +1179,7 @@ describe('r2m-book-page', () => {
 
     it('Generate audio for this node hands the node to the generator', async () => {
       api.on('GET', `${BASE}/nodes/chapter/c1/children`, { paragraphs: [NARRATION('p1')] });
-      const { page } = await start('projects/dune/book?mode=audio');
+      const { page } = await start('projects/dracula/book?mode=audio');
       const generator = use(AudioGenerator, page);
       const enqueueNode = mock(async () => true);
       generator.enqueueNode = enqueueNode;
@@ -1208,8 +1213,8 @@ describe('r2m-book-page', () => {
       el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
 
     it('reads at the step; the tabs and tree work, every edit control is off with the reason', async () => {
-      use(StepView).view('dune', 's8');
-      const { page, store } = await start('projects/dune/book');
+      use(StepView).view('dracula', 's8');
+      const { page, store } = await start('projects/dracula/book');
       expect(api.requests.find((r) => r.path === `${BASE}/book`)?.search).toBe('?at=s8');
 
       const actions = page.querySelector<HTMLButtonElement>('[data-testid=book-actions]')!;
@@ -1239,8 +1244,8 @@ describe('r2m-book-page', () => {
     });
 
     it('the selection bar keeps Clear but Attribute and Bulk assign are off with the reason', async () => {
-      use(StepView).view('dune', 's8');
-      const { page } = await start('projects/dune/book');
+      use(StepView).view('dracula', 's8');
+      const { page } = await start('projects/dracula/book');
       const box = page.querySelector<HTMLInputElement>(
         '.r2m-paragraph[data-paragraph-id=p1] input[type=checkbox]',
       )!;
@@ -1391,7 +1396,7 @@ describe('r2m-book-page', () => {
     it('stay shut until the overview has loaded, so the entries cannot move under the pointer', async () => {
       const overview = Promise.withResolvers<BookOverviewDto>();
       api.on('GET', `${BASE}/book`, () => overview.promise);
-      const { page } = await start('projects/dune/book');
+      const { page } = await start('projects/dracula/book');
       const button = page.querySelector<HTMLButtonElement>('[data-testid=book-actions]')!;
       expect(button.disabled).toBe(true);
 
@@ -1520,7 +1525,7 @@ describe('r2m-book-page', () => {
     });
 
     async function open1() {
-      const started = await start('projects/dune/book');
+      const started = await start('projects/dracula/book');
       await open(started.page);
       return started;
     }
@@ -1536,7 +1541,7 @@ describe('r2m-book-page', () => {
       ['manual-reread', 'r2m-manual-reread-dialog'],
     ] as const) {
       it(`?action=${value} drops the param and opens the overflow entry's dialog`, async () => {
-        await start(`projects/dune/book?mode=speakers&action=${value}`);
+        await start(`projects/dracula/book?mode=speakers&action=${value}`);
         for (let i = 0; i < 4; i++) await settle();
         expect(document.querySelectorAll(tag)).toHaveLength(1);
         const url = new URL(lastReplace()!);
@@ -1546,7 +1551,7 @@ describe('r2m-book-page', () => {
     }
 
     it('the manual reread dialog is titled "Reread with split rules"', async () => {
-      await start('projects/dune/book?action=manual-reread');
+      await start('projects/dracula/book?action=manual-reread');
       for (let i = 0; i < 4; i++) await settle();
       const dialog = document.querySelector('r2m-manual-reread-dialog')!;
       await dialog.rendered();
@@ -1554,15 +1559,15 @@ describe('r2m-book-page', () => {
     });
 
     it('an unknown value only drops the param', async () => {
-      await start('projects/dune/book?action=pauses');
+      await start('projects/dracula/book?action=pauses');
       for (let i = 0; i < 4; i++) await settle();
       expect(document.querySelector('dialog')).toBeNull();
       expect(new URL(lastReplace()!).searchParams.has('action')).toBe(false);
     });
 
     it('while a History step is viewed it only drops the param (ticket 32)', async () => {
-      use(StepView).view('dune', 's8');
-      await start('projects/dune/book?action=titles');
+      use(StepView).view('dracula', 's8');
+      await start('projects/dracula/book?action=titles');
       for (let i = 0; i < 4; i++) await settle();
       expect(document.querySelector('r2m-add-titles-dialog')).toBeNull();
       expect(new URL(lastReplace()!).searchParams.has('action')).toBe(false);
@@ -1570,7 +1575,7 @@ describe('r2m-book-page', () => {
 
     it('with no content it only drops the param', async () => {
       api.on('GET', `${BASE}/book`, { ...OVERVIEW, hasContent: false, volumes: [] });
-      await start('projects/dune/book?action=titles');
+      await start('projects/dracula/book?action=titles');
       for (let i = 0; i < 4; i++) await settle();
       expect(document.querySelector('dialog')).toBeNull();
       expect(new URL(lastReplace()!).searchParams.has('action')).toBe(false);
@@ -1579,7 +1584,7 @@ describe('r2m-book-page', () => {
     it('waits while the editor is locked, then opens', async () => {
       const reply = Promise.withResolvers<unknown>();
       echoOwnReceipts(() => reply.promise);
-      const { page, router } = await start('projects/dune/book');
+      const { page, router } = await start('projects/dracula/book');
       // A write in flight locks the editor.
       void use(BookEditor, page).run({ type: 'AddPauses' });
       await settle();
@@ -1595,7 +1600,7 @@ describe('r2m-book-page', () => {
   });
 
   it("the audio selection bar shows Generate audio's advice beside it", async () => {
-    const { page } = await start('projects/dune/book?mode=audio');
+    const { page } = await start('projects/dracula/book?mode=audio');
     use(AudioSelectionStore, page).add([
       { id: 'p1-i', chapterId: 'c1', partId: 'p1', volumeId: 'v1' },
     ]);
@@ -1608,7 +1613,7 @@ describe('r2m-book-page', () => {
 
   it('a failed read shows the stale banner, and Refresh reads again', async () => {
     api.on('GET', `${BASE}/nodes/chapter/c1/children`, () => problem(500, 'db locked'));
-    const { page, store } = await start('projects/dune/book');
+    const { page, store } = await start('projects/dracula/book');
     expect(store.stale()).toContain('db locked');
     const banner = page.querySelector('.book__stale')!;
     expect(text(banner)).toContain('This view may be out of date');

@@ -9,10 +9,10 @@ import type { NewProjectDialog } from './new-project-dialog';
 import type { ProjectsPage } from './projects-page';
 import './projects-page';
 
-const dune: ProjectSummary = {
-  folderName: 'dune',
-  title: 'Dune',
-  author: 'Frank Herbert',
+const dracula: ProjectSummary = {
+  folderName: 'dracula',
+  title: 'Dracula',
+  author: 'Bram Stoker',
   coverImage: 'cover.jpg',
   audioItemTotal: 100,
   audioItemDone: 40,
@@ -70,11 +70,11 @@ const cards = (page: ProjectsPage) =>
 
 describe('r2m-projects-page', () => {
   it('shows skeletons, then a card per project sorted by title', async () => {
-    const page = await render([emma, dune]);
+    const page = await render([emma, dracula]);
     expect(page.querySelector('.projects__skeleton')).toBeNull();
-    expect(cards(page)).toEqual(['dune', 'emma']);
+    expect(cards(page)).toEqual(['dracula', 'emma']);
     const [first, second] = Array.from(page.querySelectorAll('.r2m-project-card'));
-    expect(first?.textContent).toContain('Frank Herbert');
+    expect(first?.textContent).toContain('Bram Stoker');
     expect(second?.textContent).toContain('Not read in yet');
   });
 
@@ -97,18 +97,18 @@ describe('r2m-projects-page', () => {
   });
 
   it('opens a card by navigating to the overview', async () => {
-    const page = await render([dune]);
+    const page = await render([dracula]);
 
     page.querySelector<HTMLButtonElement>('.r2m-project-card__cover')!.click();
 
-    expect(navigation.calls.map((c) => c.url)).toEqual(['http://localhost/app/projects/dune']);
+    expect(navigation.calls.map((c) => c.url)).toEqual(['http://localhost/app/projects/dracula']);
   });
 
   it('New project → Create opens the created folder’s overview', async () => {
-    const page = await render([dune]);
+    const page = await render([dracula]);
     api
       .on('POST', '/api/projects', { folderName: 'Shelf Upload' })
-      .on('GET', '/api/projects', [dune]);
+      .on('GET', '/api/projects', [dracula]);
 
     page.querySelector<HTMLButtonElement>('.projects__new')!.click();
     await settle();
@@ -138,14 +138,14 @@ describe('r2m-projects-page', () => {
   });
 
   it('delete asks for confirmation, then DELETEs and drops the card', async () => {
-    const page = await render([dune, emma]);
-    api.on('DELETE', '/api/projects/dune', undefined);
+    const page = await render([dracula, emma]);
+    api.on('DELETE', '/api/projects/dracula', undefined);
 
     page.querySelector<HTMLButtonElement>('.r2m-project-card__delete')!.click();
     await settle();
     const dialog = document.querySelector('r2m-confirm-dialog')!;
     await dialog.rendered();
-    expect(dialog.textContent).toContain('Delete Dune?');
+    expect(dialog.textContent).toContain('Delete Dracula?');
     expect(dialog.querySelector('.r2m-confirm-dialog__confirm')?.classList).toContain(
       'r2m-button--danger',
     );
@@ -153,13 +153,13 @@ describe('r2m-projects-page', () => {
     await settle();
     await page.rendered();
 
-    expect(api.calls('DELETE', '/api/projects/dune')).toHaveLength(1);
+    expect(api.calls('DELETE', '/api/projects/dracula')).toHaveLength(1);
     expect(cards(page)).toEqual(['emma']);
-    expect(toasts).toEqual(['Deleted Dune']);
+    expect(toasts).toEqual(['Deleted Dracula']);
   });
 
   it('cancelling the confirm sends nothing', async () => {
-    const page = await render([dune]);
+    const page = await render([dracula]);
 
     page.querySelector<HTMLButtonElement>('.r2m-project-card__delete')!.click();
     await settle();
@@ -169,7 +169,7 @@ describe('r2m-projects-page', () => {
     await settle();
     await page.rendered();
 
-    expect(api.calls('DELETE', '/api/projects/dune')).toHaveLength(0);
-    expect(cards(page)).toEqual(['dune']);
+    expect(api.calls('DELETE', '/api/projects/dracula')).toHaveLength(0);
+    expect(cards(page)).toEqual(['dracula']);
   });
 });

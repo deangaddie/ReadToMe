@@ -35,18 +35,18 @@ describe('discardAdvice', () => {
 });
 
 describe('overlapNotes', () => {
-  const tirith = { id: 't', writtenForm: 'Tirith', spokenForm: 'TEER-ith' };
-  const minas = { id: 'm', writtenForm: 'Minas Tirith', spokenForm: 'MEE-nas' };
+  const helsing = { id: 't', writtenForm: 'Helsing', spokenForm: 'HEL-sing' };
+  const vanHelsing = { id: 'm', writtenForm: 'Van Helsing', spokenForm: 'VAN' };
 
   it('says the longer entry wins inside it, and the draft wins over a shorter one', () => {
     expect(
       overlapNotes([
-        { ...minas, draftWins: false },
-        { ...tirith, draftWins: true },
+        { ...vanHelsing, draftWins: false },
+        { ...helsing, draftWins: true },
       ]),
     ).toEqual([
-      'Inside “Minas Tirith”, that longer entry wins.',
-      'Wins over “Tirith” where both match.',
+      'Inside “Van Helsing”, that longer entry wins.',
+      'Wins over “Helsing” where both match.',
     ]);
   });
 
@@ -60,10 +60,10 @@ describe('duplicateWarning', () => {
     expect(
       duplicateWarning({
         id: 'k',
-        writtenForm: 'Kulgan',
-        spokenForm: 'KULL-gun',
+        writtenForm: 'Watson',
+        spokenForm: 'WAT-sun',
       }),
-    ).toBe('“Kulgan” is already in the list.');
+    ).toBe('“Watson” is already in the list.');
   });
 
   it('is null without a duplicate', () => {
@@ -86,15 +86,15 @@ describe('savedToast', () => {
 });
 
 describe('isDirty', () => {
-  const saved = { writtenForm: 'Kulgan', spokenForm: 'KULL-gun' };
+  const saved = { writtenForm: 'Watson', spokenForm: 'WAT-sun' };
 
   it.each([
     [null, { writtenForm: '', spokenForm: '' }, false],
-    [null, { writtenForm: 'Pug', spokenForm: '' }, true],
-    [saved, { writtenForm: 'Kulgan', spokenForm: 'KULL-gun' }, false],
-    [saved, { writtenForm: ' Kulgan ', spokenForm: 'KULL-gun' }, false],
-    [saved, { writtenForm: 'Kulgan', spokenForm: 'KULL-gn' }, true],
-    [saved, { writtenForm: 'kulgan', spokenForm: 'KULL-gun' }, true],
+    [null, { writtenForm: 'Holmes', spokenForm: '' }, true],
+    [saved, { writtenForm: 'Watson', spokenForm: 'WAT-sun' }, false],
+    [saved, { writtenForm: ' Watson ', spokenForm: 'WAT-sun' }, false],
+    [saved, { writtenForm: 'Watson', spokenForm: 'WAT-sn' }, true],
+    [saved, { writtenForm: 'watson', spokenForm: 'WAT-sun' }, true],
   ])('saved %o, draft %o → %p', (original, draft, dirty) => {
     expect(isDirty(original, draft)).toBe(dirty);
   });
@@ -118,9 +118,9 @@ describe('saveBlockedReason', () => {
     [
       {
         ...free,
-        duplicateOf: { id: 'k', writtenForm: 'Kulgan', spokenForm: 'x' },
+        duplicateOf: { id: 'k', writtenForm: 'Watson', spokenForm: 'x' },
       },
-      '“Kulgan” is already in the list.',
+      '“Watson” is already in the list.',
     ],
     [
       { ...free, invalid: 'Written form must start with a letter.' },
@@ -147,17 +147,17 @@ describe('deleteBlockedReason', () => {
 
 describe('filterEntries', () => {
   const entries = [
-    { writtenForm: 'Kulgan', spokenForm: 'KULL-gun' },
-    { writtenForm: 'Pug', spokenForm: 'pug' },
-    { writtenForm: 'Crydee', spokenForm: 'CRY-dee' },
+    { writtenForm: 'Watson', spokenForm: 'WAT-sun' },
+    { writtenForm: 'Holmes', spokenForm: 'holmes' },
+    { writtenForm: 'Baker Street', spokenForm: 'BAY-ker street' },
   ];
 
   it.each([
-    ['', ['Kulgan', 'Pug', 'Crydee']],
-    ['kul', ['Kulgan']],
-    ['  CRY ', ['Crydee']],
-    ['pug', ['Pug']],
-    ['-gun', ['Kulgan']],
+    ['', ['Watson', 'Holmes', 'Baker Street']],
+    ['wat', ['Watson']],
+    ['  BAKER ', ['Baker Street']],
+    ['holmes', ['Holmes']],
+    ['-sun', ['Watson']],
     ['zz', []],
   ])('%p finds %p, by written or spoken form', (query, found) => {
     expect(filterEntries(entries, query).map((e) => e.writtenForm)).toEqual(found);

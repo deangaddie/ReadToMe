@@ -10,11 +10,11 @@ import { FakeApi } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';
 import { PronunciationPanelState } from './pronunciation-panel-store';
 
-const LIST = '/api/projects/magician/pronunciations';
-const PUG: PronunciationDto = {
-  id: 'pug',
-  writtenForm: 'Pug',
-  spokenForm: 'PUHG',
+const LIST = '/api/projects/the-adventures-of-sherlock-holmes/pronunciations';
+const HOLMES: PronunciationDto = {
+  id: 'holmes',
+  writtenForm: 'Holmes',
+  spokenForm: 'HOHMZ',
   matchCount: 3,
   itemCount: 2,
   withAudioCount: 0,
@@ -35,7 +35,7 @@ beforeEach(() => {
   resetServices();
   api = new FakeApi();
   api.install();
-  list = [PUG];
+  list = [HOLMES];
   api.on('GET', LIST, () => Response.json(list));
   live = new FakeLive().install();
   drawerOpen = signal(false);
@@ -67,7 +67,7 @@ describe('the Pronunciations panel and the Activity drawer', () => {
   });
 
   it('share the right-hand space: opening the drawer closes the panel, which keeps its draft to come back to', async () => {
-    await state.add({ writtenForm: 'Kulgan', spokenForm: 'Kulgan' }, { itemId: 'i1', offset: 4 });
+    await state.add({ writtenForm: 'Watson', spokenForm: 'Watson' }, { itemId: 'i1', offset: 4 });
     const session = state.session();
 
     drawerOpen.set(true);
@@ -81,50 +81,50 @@ describe('the Pronunciations panel and the Activity drawer', () => {
 
 describe('the panel editor', () => {
   it('opens the panel on an entry, from the place it was opened from', async () => {
-    await state.edit('pug', { itemId: 'i1', offset: 9 });
+    await state.edit('holmes', { itemId: 'i1', offset: 9 });
     expect(state.open()).toBe(true);
     expect(state.session()).toMatchObject({
-      entryId: 'pug',
+      entryId: 'holmes',
       forms: null,
       origin: { itemId: 'i1', offset: 9 },
     });
   });
 
   it('lights the entry it edits and the row the pointer is on', async () => {
-    await state.edit('pug', null);
-    state.hovered.set('kulgan');
-    expect([...state.lit()].sort()).toEqual(['kulgan', 'pug']);
+    await state.edit('holmes', null);
+    state.hovered.set('watson');
+    expect([...state.lit()].sort()).toEqual(['holmes', 'watson']);
     state.hovered.set(null);
-    expect([...state.lit()]).toEqual(['pug']);
+    expect([...state.lit()]).toEqual(['holmes']);
   });
 
   it('asks before an unsaved draft gives way to another entry, and keeps it on No', async () => {
-    await state.add({ writtenForm: 'Kulgan', spokenForm: 'Kulgan' }, null);
+    await state.add({ writtenForm: 'Watson', spokenForm: 'Watson' }, null);
     const draft = state.session();
     dirty = true;
     confirmAnswer = false;
 
-    expect(await state.edit('pug', null)).toBe(false);
+    expect(await state.edit('holmes', null)).toBe(false);
     expect(confirms).toBe(1);
     expect(state.session()).toBe(draft);
   });
 
   it('does not ask again when the entry already open is opened again', async () => {
-    await state.edit('pug', null);
+    await state.edit('holmes', null);
     dirty = true;
-    expect(await state.edit('pug', { itemId: 'i2', offset: 0 })).toBe(true);
+    expect(await state.edit('holmes', { itemId: 'i2', offset: 0 })).toBe(true);
     expect(confirms).toBe(0);
   });
 
   it('closes when the entry it edits is deleted elsewhere', async () => {
-    state.follow('magician');
+    state.follow('the-adventures-of-sherlock-holmes');
     await sleep(REFETCH_DEBOUNCE_MS + 30);
-    expect(state.entries().map((e) => e.id)).toEqual(['pug']);
-    await state.edit('pug', null);
+    expect(state.entries().map((e) => e.id)).toEqual(['holmes']);
+    await state.edit('holmes', null);
 
     list = [];
     live.emit('receipt', {
-      folder: 'magician',
+      folder: 'the-adventures-of-sherlock-holmes',
       effects: { facets: 'Pronunciations' },
     } as unknown as Receipt);
     await sleep(REFETCH_DEBOUNCE_MS + 30);

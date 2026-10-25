@@ -72,42 +72,42 @@ afterEach(() => document.body.replaceChildren());
 
 describe('r2m-project-shell', () => {
   it('opens the route’s project: joins its hub group and loads detail + status', async () => {
-    await start('projects/dune/book');
-    expect(live.joined).toEqual(['dune']);
-    expect(api.calls('GET', '/api/projects/dune')).toHaveLength(1);
-    expect(api.calls('GET', '/api/projects/dune/status')).toHaveLength(1);
+    await start('projects/dracula/book');
+    expect(live.joined).toEqual(['dracula']);
+    expect(api.calls('GET', '/api/projects/dracula')).toHaveLength(1);
+    expect(api.calls('GET', '/api/projects/dracula/status')).toHaveLength(1);
   });
 
   it('provides the store to the child route it renders', async () => {
-    const { shell } = await start('projects/dune/book');
-    expect(shell.querySelector('x-project-child')?.textContent).toBe('dune');
+    const { shell } = await start('projects/dracula/book');
+    expect(shell.querySelector('x-project-child')?.textContent).toBe('dracula');
   });
 
   it('switches project when the folder param changes without re-mounting', async () => {
-    const { shell, router } = await start('projects/dune/book');
+    const { shell, router } = await start('projects/dracula/book');
     const child = shell.querySelector('x-project-child');
     router.navigate('projects/emma/book');
     await settle();
-    expect(live.left).toEqual(['dune']);
-    expect(live.joined).toEqual(['dune', 'emma']);
+    expect(live.left).toEqual(['dracula']);
+    expect(live.joined).toEqual(['dracula', 'emma']);
     expect(shell.querySelector('x-project-child')).toBe(child);
   });
 
   it('a query-only navigation keeps the project open', async () => {
-    const { router } = await start('projects/dune/book');
-    router.navigate('projects/dune/book', { replace: true, query: { chapter: 'c2' } });
+    const { router } = await start('projects/dracula/book');
+    router.navigate('projects/dracula/book', { replace: true, query: { chapter: 'c2' } });
     await settle();
     expect(live.left).toEqual([]);
-    expect(live.joined).toEqual(['dune']);
-    expect(api.calls('GET', '/api/projects/dune')).toHaveLength(1);
+    expect(live.joined).toEqual(['dracula']);
+    expect(api.calls('GET', '/api/projects/dracula')).toHaveLength(1);
   });
 
   it('publishes the project’s next step into the guide, and clears it on leaving', async () => {
-    api.on('GET', '/api/projects/dune/status', EMPTY_STATUS);
-    const { shell } = await start('projects/dune/book');
+    api.on('GET', '/api/projects/dracula/status', EMPTY_STATUS);
+    const { shell } = await start('projects/dracula/book');
     await settle();
     const guide = use(ProjectGuide);
-    expect(guide.current()?.folder).toBe('dune');
+    expect(guide.current()?.folder).toBe('dracula');
     expect(guide.current()?.next).toMatchObject({
       kind: 'act',
       label: 'Next: Import · Read book',
@@ -117,22 +117,22 @@ describe('r2m-project-shell', () => {
   });
 
   it('leaves the group when the shell leaves the page', async () => {
-    const { shell } = await start('projects/dune/book');
+    const { shell } = await start('projects/dracula/book');
     shell.remove();
-    expect(live.left).toEqual(['dune']);
+    expect(live.left).toEqual(['dracula']);
   });
 
   it('rereads the project at a viewed step and mounts the page afresh, and again back at current', async () => {
-    api.on('GET', '/api/projects/dune/status', EMPTY_STATUS);
-    const { shell } = await start('projects/dune/book');
+    api.on('GET', '/api/projects/dracula/status', EMPTY_STATUS);
+    const { shell } = await start('projects/dracula/book');
     const history = use(HistoryStore, shell.querySelector('x-project-child')!);
     const page = shell.querySelector('x-project-child');
 
     history.view('s1');
     await settle();
 
-    expect(api.calls('GET', '/api/projects/dune').map((r) => r.search)).toEqual(['', '?at=s1']);
-    expect(api.calls('GET', '/api/projects/dune/status').at(-1)?.search).toBe('?at=s1');
+    expect(api.calls('GET', '/api/projects/dracula').map((r) => r.search)).toEqual(['', '?at=s1']);
+    expect(api.calls('GET', '/api/projects/dracula/status').at(-1)?.search).toBe('?at=s1');
     const viewed = shell.querySelector('x-project-child');
     expect(viewed).not.toBeNull();
     expect(viewed).not.toBe(page);
@@ -140,23 +140,23 @@ describe('r2m-project-shell', () => {
     history.backToCurrent();
     await settle();
 
-    expect(api.calls('GET', '/api/projects/dune').at(-1)?.search).toBe('');
+    expect(api.calls('GET', '/api/projects/dracula').at(-1)?.search).toBe('');
     expect(shell.querySelector('x-project-child')).not.toBe(viewed);
   });
 
   it('keeps the past detail when a current read lands after it', async () => {
     let answerCurrent!: (r: unknown) => void;
-    api.on('GET', '/api/projects/dune', (_body, url) =>
+    api.on('GET', '/api/projects/dracula', (_body, url) =>
       url.search
-        ? { folderName: 'dune', title: 'Past' }
+        ? { folderName: 'dracula', title: 'Past' }
         : new Promise((resolve) => (answerCurrent = resolve)),
     );
-    const { shell } = await start('projects/dune/book');
+    const { shell } = await start('projects/dracula/book');
     const child = shell.querySelector('x-project-child')!;
 
     use(HistoryStore, child).view('s1');
     await settle();
-    answerCurrent({ folderName: 'dune', title: 'Current' });
+    answerCurrent({ folderName: 'dracula', title: 'Current' });
     await settle();
 
     expect(use(ProjectStore, shell.querySelector('x-project-child')!).detail()?.title).toBe('Past');

@@ -11,7 +11,7 @@ import type { AddVoiceDialog } from './add-voice-dialog';
 import { ProviderSchemas } from './provider-schemas';
 import './voices-section';
 
-const BASE = '/api/projects/dune';
+const BASE = '/api/projects/dracula';
 const COMMANDS = `${BASE}/commands`;
 
 const ALICE: CharacterSummaryDto = {
@@ -66,7 +66,7 @@ async function mount(voices: VoiceDto[], defaultVoiceId: string | null = null) {
   api.on('GET', `${BASE}/characters/alice/voices`, { defaultVoiceId, voices });
   api.on('GET', `${BASE}/characters/alice/voice-rules`, []);
   api.on('GET', `${BASE}/characters/alice/voice-rules/preview`, []);
-  await store.open('dune');
+  await store.open('dracula');
   await store.select('alice');
   const host = document.createElement('div');
   provide(host, CastStore, store);

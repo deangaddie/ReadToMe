@@ -12,7 +12,7 @@ import { linkedNarratorDeleteMessage } from './character-detail';
 import type { MergeDialog } from './merge-dialog';
 import './character-detail';
 
-const BASE = '/api/projects/dune';
+const BASE = '/api/projects/dracula';
 const COMMANDS = `${BASE}/commands`;
 
 function row(name: string, overrides: Partial<CharacterSummaryDto> = {}): CharacterSummaryDto {
@@ -42,7 +42,7 @@ beforeEach(() => {
   api = new FakeApi();
   api.install();
   override(LiveService, new FakeLive() as unknown as LiveService);
-  navigation = installNavigation('projects/dune/cast/alice');
+  navigation = installNavigation('projects/dracula/cast/alice');
   const router = new Router();
   override(Router, router);
   router.start(
@@ -69,7 +69,7 @@ async function mount(character: CharacterSummaryDto, rows = ROWS) {
   api.on('GET', `${BASE}/characters/${character.id}/voices`, { defaultVoiceId: null, voices: [] });
   api.on('GET', `${BASE}/characters/${character.id}/voice-rules`, []);
   api.on('GET', `${BASE}/characters/${character.id}/voice-rules/preview`, []);
-  await store.open('dune');
+  await store.open('dracula');
   await store.select(character.id);
   const host = document.createElement('div');
   provide(host, CastStore, store);
@@ -108,7 +108,7 @@ describe('r2m-character-detail', () => {
   });
 
   it('viewing a History step, rename, Merge, Delete and the aliases are off with the reason (ticket 32)', async () => {
-    use(StepView).view('dune', 's8');
+    use(StepView).view('dracula', 's8');
     const detail = await mount(ALICE);
     const reason = (el: Element | null) =>
       el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
@@ -212,7 +212,7 @@ describe('r2m-character-detail', () => {
     expect(commands()).toEqual([
       { type: 'MergeCharacters', survivorId: 'bob', mergedId: 'alice', addNameAsAlias: true },
     ]);
-    expect(navigation.calls.at(-1)?.url).toBe('http://localhost/app/projects/dune/cast/bob');
+    expect(navigation.calls.at(-1)?.url).toBe('http://localhost/app/projects/dracula/cast/bob');
   });
 
   it('Delete confirms, then posts DeleteCharacter and leaves the detail', async () => {
@@ -228,7 +228,7 @@ describe('r2m-character-detail', () => {
     await settle();
     await settle();
     expect(commands()).toEqual([{ type: 'DeleteCharacter', characterId: 'alice' }]);
-    expect(navigation.calls.at(-1)?.url).toBe('http://localhost/app/projects/dune/cast');
+    expect(navigation.calls.at(-1)?.url).toBe('http://localhost/app/projects/dracula/cast');
   });
 
   it('deleting the narrating character warns that narration returns to the Narrator voice', async () => {
@@ -250,7 +250,7 @@ describe('r2m-character-detail', () => {
     const detail = await mount(ALICE);
     detail.querySelector<HTMLButtonElement>('.character-lines__text')!.click();
     expect(navigation.calls.at(-1)?.url).toBe(
-      'http://localhost/app/projects/dune/book?mode=speakers&chapter=c7',
+      'http://localhost/app/projects/dracula/book?mode=speakers&chapter=c7',
     );
   });
 
