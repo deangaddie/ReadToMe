@@ -4,13 +4,13 @@ import { launch, throwawayProject, openWeb, post, waitForServer, stamp } from '.
 await waitForServer('http://localhost:5000/api/projects');
 const { page, close } = await launch();
 const project = await throwawayProject(
-  'I\n\nPug ran to the keep. Kulgan waited.\n\n"Pug!" called Tomas.\n\nThe rain kept falling on Crydee.',
+  'I\n\nHolmes ran to the door. Watson waited.\n\n"Holmes!" called Lestrade.\n\nThe rain kept falling on Baker Street.',
 );
 const log = (...a) => console.log(stamp(), ...a);
 const shot = (name) => page.screenshot({ path: `pron-panel-${name}.png` });
 try {
-  await post(`/api/projects/${project.folder}/pronunciations`, { writtenForm: 'Pug', spokenForm: 'PUHG' });
-  await post(`/api/projects/${project.folder}/pronunciations`, { writtenForm: 'Kulgan', spokenForm: 'KULL-gun' });
+  await post(`/api/projects/${project.folder}/pronunciations`, { writtenForm: 'Holmes', spokenForm: 'HOHMZ' });
+  await post(`/api/projects/${project.folder}/pronunciations`, { writtenForm: 'Watson', spokenForm: 'WAT-sun' });
   await page.setViewportSize({ width: 1440, height: 900 });
   await openWeb(page, `/projects/${project.folder}/book?mode=speakers`);
   await page.waitForFunction(() => document.querySelectorAll('.r2m-pron-mark').length >= 3, null, { timeout: 15_000 });
@@ -20,7 +20,7 @@ try {
   await panel.locator('[data-role=row]').first().waitFor();
   log('rows', JSON.stringify(await panel.locator('[data-role=row]').allInnerTexts()));
   await panel.locator('[data-role=row]').first().hover();
-  log('lit while hovering Pug', await page.locator('.r2m-pron-mark--lit').count());
+  log('lit while hovering Holmes', await page.locator('.r2m-pron-mark--lit').count());
   await shot('1-rows-hover');
 
   await panel.locator('[data-role=row]').nth(1).locator('button').click();
@@ -28,26 +28,26 @@ try {
   await page.mouse.move(0, 0);
   await page.locator('r2m-pronunciation-sentence mark').waitFor({ timeout: 5_000 });
   log('editor written', await panel.locator('[data-field=written]').inputValue(), 'sentence', JSON.stringify(await page.locator('r2m-pronunciation-sentence').innerText()));
-  log('lit with Kulgan open', JSON.stringify(await page.locator('.r2m-pron-mark--lit').allInnerTexts()));
+  log('lit with Watson open', JSON.stringify(await page.locator('.r2m-pron-mark--lit').allInnerTexts()));
   await shot('2-editor');
 
   // A mark's pencil opens it in the panel.
-  await page.locator('.r2m-pron-mark', { hasText: 'Pug' }).first().hover();
+  await page.locator('.r2m-pron-mark', { hasText: 'Holmes' }).first().hover();
   const card = page.locator('.pron-card__panel');
   await card.waitFor({ state: 'visible' });
   await card.locator('[data-action=edit-pronunciation]').click();
-  await page.waitForFunction(() => document.querySelector('r2m-pronunciation-panel [data-field=written]')?.value === 'Pug');
-  log('pencil opened Pug in the panel');
+  await page.waitForFunction(() => document.querySelector('r2m-pronunciation-panel [data-field=written]')?.value === 'Holmes');
+  log('pencil opened Holmes in the panel');
 
-  // Select "Crydee": the pill offers Add, and Add pre-fills.
+  // Select "Baker Street": the pill offers Add, and Add pre-fills.
   await panel.locator('[data-action=cancel]').click();
-  const text = page.locator('.r2m-item__text', { hasText: 'Crydee' });
+  const text = page.locator('.r2m-item__text', { hasText: 'Baker Street' });
   await text.evaluate((el) => {
-    const node = [...el.childNodes].find((n) => n.nodeType === 3 && n.data.includes('Crydee'));
+    const node = [...el.childNodes].find((n) => n.nodeType === 3 && n.data.includes('Baker Street'));
     const range = document.createRange();
-    const at = node.data.indexOf('Crydee');
+    const at = node.data.indexOf('Baker Street');
     range.setStart(node, at);
-    range.setEnd(node, at + 'Crydee'.length);
+    range.setEnd(node, at + 'Baker Street'.length);
     getSelection().removeAllRanges();
     getSelection().addRange(range);
   });
@@ -56,8 +56,8 @@ try {
   log('pill', JSON.stringify(await pill.innerText()), 'popover-open', await page.locator('.pron-pill__popover').evaluate((e) => e.matches(':popover-open')));
   await shot('3-pill');
   await pill.click();
-  await page.waitForFunction(() => document.querySelector('r2m-pronunciation-panel [data-field=written]')?.value === 'Crydee');
-  await panel.locator('[data-field=spoken]').fill('CRY-dee');
+  await page.waitForFunction(() => document.querySelector('r2m-pronunciation-panel [data-field=written]')?.value === 'Baker Street');
+  await panel.locator('[data-field=spoken]').fill('BAY-ker street');
   log('add pre-filled; spoken typed');
 
   // Activity takes the space; the draft is there when the panel comes back.

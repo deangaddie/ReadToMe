@@ -4,11 +4,11 @@ import { launch, throwawayProject, openWeb, post, waitForServer, stamp, WEB } fr
 await waitForServer('http://localhost:5000/api/projects');
 const { page, close } = await launch();
 const project = await throwawayProject(
-  'I\n\nPug ran to the keep. Kulgan waited.\n\n"Pug!" called Tomas.\n\nThe rain kept falling.',
+  'I\n\nHolmes ran to the door. Watson waited.\n\n"Holmes!" called Lestrade.\n\nThe rain kept falling.',
 );
 const log = (...a) => console.log(stamp(), ...a);
 try {
-  await post(`/api/projects/${project.folder}/pronunciations`, { writtenForm: 'Pug', spokenForm: 'PUHG' });
+  await post(`/api/projects/${project.folder}/pronunciations`, { writtenForm: 'Holmes', spokenForm: 'HOHMZ' });
   for (const mode of ['read', 'speakers', 'audio']) {
     await openWeb(page, `/projects/${project.folder}/book?mode=${mode}`);
     await page.waitForFunction(() => document.querySelectorAll('.r2m-pron-mark').length >= 2, null, { timeout: 15_000 });
@@ -30,12 +30,12 @@ try {
   await page.screenshot({ path: 'pron-marks-card.png' });
 
   // A save elsewhere: the open view gains a mark.
-  await post(`/api/projects/${project.folder}/pronunciations`, { writtenForm: 'Kulgan', spokenForm: 'KULL-gun' });
-  await page.waitForFunction(() => [...document.querySelectorAll('.r2m-pron-mark')].some((m) => m.textContent === 'Kulgan'), null, { timeout: 5_000 });
-  log('Kulgan marked after save elsewhere');
+  await post(`/api/projects/${project.folder}/pronunciations`, { writtenForm: 'Watson', spokenForm: 'WAT-sun' });
+  await page.waitForFunction(() => [...document.querySelectorAll('.r2m-pron-mark')].some((m) => m.textContent === 'Watson'), null, { timeout: 5_000 });
+  log('Watson marked after save elsewhere');
 
   // Edit pencil opens the entry on the Pronunciations page.
-  await page.locator('.r2m-pron-mark', { hasText: 'Pug' }).first().hover();
+  await page.locator('.r2m-pron-mark', { hasText: 'Holmes' }).first().hover();
   await card.waitFor({ state: 'visible' });
   await card.locator('[data-action=edit-pronunciation]').click();
   await page.waitForSelector('r2m-pronunciation-editor');
