@@ -45,12 +45,11 @@ namespace Read2Me.Tests.Services.Audio
         public async Task NormalizeAsync_Downsamples_To_CanonicalRate()
         {
             // loudnorm runs at an internal 192 kHz; without format args the stored WAV inherits it.
-            if (!FfmpegOnPath())
-                Assert.Skip("ffmpeg not on PATH");
+            var ffmpeg = TestFfmpeg.Require();
 
             using var input = new MemoryStream(SineWav(sampleRate: 48000, seconds: 1));
 
-            var result = await NewNormalizer().NormalizeAsync(input, ffmpegPath: null);
+            var result = await NewNormalizer().NormalizeAsync(input, ffmpeg);
 
             Assert.Equal(NormalizeStatus.Normalized, result.Status);
 
@@ -61,21 +60,6 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Equal(1, BitConverter.ToInt16(wav, 22));      // channels
             Assert.Equal(24000, BitConverter.ToInt32(wav, 24));  // sample rate
             Assert.Equal(16, BitConverter.ToInt16(wav, 34));     // bits per sample
-        }
-
-        private static bool FfmpegOnPath()
-        {
-            try
-            {
-                using var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
-                    "ffmpeg", "-version") { RedirectStandardOutput = true, RedirectStandardError = true });
-                p!.WaitForExit();
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
         }
 
         private static byte[] SineWav(int sampleRate, int seconds)

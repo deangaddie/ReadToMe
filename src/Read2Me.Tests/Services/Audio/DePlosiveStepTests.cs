@@ -52,19 +52,19 @@ namespace Read2Me.Tests.Services.Audio
 
     /// <summary>
     /// Real-ffmpeg round-trip: the filter itself can only be observed against the actual binary.
-    /// Silently no-ops when ffmpeg is absent, per the repo's ffmpeg-gated pattern.
+    /// Skipped when <see cref="TestFfmpeg.Require"/> finds no ffmpeg.
     /// </summary>
     public class DePlosiveStepIntegrationTests
     {
         [Fact]
         public async Task KeepsTheLength_AndStaysUnderFullScale()
         {
-            if (!TestFfmpeg.Available()) return;
+            var ffmpeg = TestFfmpeg.Require();
 
             var input = TestWav.Tone(1000);
             var step = new DePlosiveStep(NullLogger<DePlosiveStep>.Instance);
 
-            var result = await step.ProcessAsync(input, null, null, CancellationToken.None);
+            var result = await step.ProcessAsync(input, ffmpeg, null, CancellationToken.None);
 
             Assert.True(result.Applied);
             Assert.InRange(CanonicalWav.DurationMs(result.Audio.Length), 950, 1050);

@@ -83,17 +83,17 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task MinOutputMs_comes_from_settings_so_the_guard_is_per_scope()
         {
-            if (!FfmpegAvailable()) return;
+            var ffmpeg = TestFfmpeg.Require();
 
             // 900 ms of speech survives the paragraph guard (200 ms) and trips the voice guard (1000).
             var input = Wav(leadingSilenceMs: 1000, toneMs: 900, trailingSilenceMs: 1000);
             var step = new SilenceTrimStep(NullLogger<SilenceTrimStep>.Instance);
 
             var paragraph = await step.ProcessAsync(
-                input, null, Json(new SilenceTrimSettings(ThresholdDb: -50, PadMs: 0, MinOutputMs: 200)),
+                input, ffmpeg, Json(new SilenceTrimSettings(ThresholdDb: -50, PadMs: 0, MinOutputMs: 200)),
                 CancellationToken.None);
             var voice = await step.ProcessAsync(
-                input, null, Json(new SilenceTrimSettings(ThresholdDb: -50, PadMs: 0, MinOutputMs: 1000)),
+                input, ffmpeg, Json(new SilenceTrimSettings(ThresholdDb: -50, PadMs: 0, MinOutputMs: 1000)),
                 CancellationToken.None);
 
             Assert.True(paragraph.Applied);
@@ -104,24 +104,6 @@ namespace Read2Me.Tests.Services.Audio
 
         private static string Json(SilenceTrimSettings settings) =>
             System.Text.Json.JsonSerializer.Serialize(settings, AudioPostProcessJson.Options);
-
-        private static bool FfmpegAvailable()
-        {
-            try
-            {
-                var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "ffmpeg",
-                    Arguments = "-version",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                });
-                p?.WaitForExit(3000);
-                return p?.ExitCode == 0;
-            }
-            catch { return false; }
-        }
 
         private static byte[] Wav(int leadingSilenceMs, int toneMs, int trailingSilenceMs)
         {

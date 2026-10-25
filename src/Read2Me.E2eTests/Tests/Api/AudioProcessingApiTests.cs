@@ -195,7 +195,8 @@ public class AudioProcessingApiTests(E2eAppFixture app) : IClassFixture<E2eAppFi
         var processed = body.GetProperty("processedUrl").GetString()!;
         Assert.StartsWith("/audio-preview/", processed);
 
-        // No ffmpeg on the test host: the step falls back, and both players still have a WAV.
+        // The sample is silence and silence-trim refuses to remove all the audio, so the step falls
+        // back, and both players still have a WAV.
         Assert.False(body.GetProperty("appliedOk").GetBoolean());
         Assert.False(string.IsNullOrEmpty(body.GetProperty("reason").GetString()));
         Assert.Equal(JsonValueKind.Null, body.GetProperty("removedMs").ValueKind);
