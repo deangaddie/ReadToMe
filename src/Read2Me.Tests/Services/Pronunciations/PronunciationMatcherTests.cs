@@ -7,7 +7,7 @@ namespace Read2Me.Tests.Services.Pronunciations;
 public class PronunciationMatcherTests
 {
     private static readonly Pronunciation Watson = Entry("Watson", "WAT-sun");
-    private static readonly Pronunciation Hermione = Entry("Hermione", "Her-MY-oh-nee");
+    private static readonly Pronunciation Moriarty = Entry("Moriarty", "Mor-ee-AR-tee");
     private static readonly Pronunciation VanHelsing = Entry("Van Helsing", "VAN HEL-sing");
     private static readonly Pronunciation Helsing = Entry("Helsing", "HEL-sing");
     private static readonly Pronunciation Emile = Entry("Émile", "AY-meel");
@@ -46,12 +46,12 @@ public class PronunciationMatcherTests
     }
 
     [Theory]
-    [InlineData("Hermione smiled.", "Her-MY-oh-nee smiled.")]
-    [InlineData("said hermione", "said her-MY-oh-nee")]
-    [InlineData("HERMIONE", "HER-MY-OH-NEE")]
+    [InlineData("Moriarty smiled.", "Mor-ee-AR-tee smiled.")]
+    [InlineData("said moriarty", "said mor-ee-AR-tee")]
+    [InlineData("MORIARTY", "MOR-EE-AR-TEE")]
     public void StressCapitals_SurviveTitleAndLowerCase(string text, string spoken)
     {
-        Assert.Equal(spoken, new PronunciationMatcher([Hermione]).SpokenTextOf(text));
+        Assert.Equal(spoken, new PronunciationMatcher([Moriarty]).SpokenTextOf(text));
     }
 
     [Theory]
