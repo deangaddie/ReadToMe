@@ -7,9 +7,9 @@ import { FakeApi, problem } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';
 import { PronunciationMarks } from './pronunciation-marks-store';
 
-const MATCHES = '/api/projects/magician/pronunciations/matches';
+const MATCHES = '/api/projects/the-adventures-of-sherlock-holmes/pronunciations/matches';
 
-function receipt(facets: string, folder = 'magician'): Receipt {
+function receipt(facets: string, folder = 'the-adventures-of-sherlock-holmes'): Receipt {
   return {
     folder,
     mutationName: 'SetPronunciationMutation',
@@ -43,13 +43,13 @@ beforeEach(() => {
   api.install();
   live = new FakeLive().install();
   report = {
-    pronunciations: [{ id: 'pug', writtenForm: 'Pug', spokenForm: 'PUHG' }],
+    pronunciations: [{ id: 'holmes', writtenForm: 'Holmes', spokenForm: 'HOHMZ' }],
     spans: [
       {
         itemId: 'i1',
         start: 0,
-        length: 3,
-        pronunciationId: 'pug',
+        length: 6,
+        pronunciationId: 'holmes',
         sentenceStart: 0,
       },
     ],
@@ -62,18 +62,18 @@ afterEach(() => marks.close());
 
 describe('PronunciationMarks', () => {
   it('reads the spans of the chapters in view, once per burst', async () => {
-    marks.follow('magician', ['c1']);
-    marks.follow('magician', ['c1', 'c2']);
+    marks.follow('the-adventures-of-sherlock-holmes', ['c1']);
+    marks.follow('the-adventures-of-sherlock-holmes', ['c1', 'c2']);
     await settle();
 
     const calls = api.calls('GET', MATCHES);
     expect(calls.map((c) => c.search)).toEqual(['?chapterIds=c1&chapterIds=c2']);
-    expect(marks.marks().byItem['i1']?.[0]?.pronunciationId).toBe('pug');
-    expect(marks.marks().entries['pug']?.spokenForm).toBe('PUHG');
+    expect(marks.marks().byItem['i1']?.[0]?.pronunciationId).toBe('holmes');
+    expect(marks.marks().entries['holmes']?.spokenForm).toBe('HOHMZ');
   });
 
   it('reads again on a Pronunciations receipt for its project, and not on others', async () => {
-    marks.follow('magician', ['c1']);
+    marks.follow('the-adventures-of-sherlock-holmes', ['c1']);
     await settle();
 
     live.emit('receipt', receipt('Structure'));
@@ -89,9 +89,9 @@ describe('PronunciationMarks', () => {
   });
 
   it('shows nothing and reads nothing without chapters in view', async () => {
-    marks.follow('magician', ['c1']);
+    marks.follow('the-adventures-of-sherlock-holmes', ['c1']);
     await settle();
-    marks.follow('magician', []);
+    marks.follow('the-adventures-of-sherlock-holmes', []);
     await settle();
 
     expect(api.calls('GET', MATCHES)).toHaveLength(1);
@@ -99,7 +99,7 @@ describe('PronunciationMarks', () => {
   });
 
   it('keeps the marks it has when a read fails, and stops listening once closed', async () => {
-    marks.follow('magician', ['c1']);
+    marks.follow('the-adventures-of-sherlock-holmes', ['c1']);
     await settle();
     api.on('GET', MATCHES, () => problem(503, 'down'));
     live.emit('receipt', receipt('Pronunciations'));

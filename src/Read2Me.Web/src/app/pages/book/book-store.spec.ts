@@ -12,7 +12,7 @@ import type { ProjectStore } from '../project/project-store';
 import { BookStore, RECEIPT_BATCH_MS, WINDOW_CAP } from './book-store';
 import type { TreeNode } from './book-tree';
 
-const BASE = '/api/projects/dune';
+const BASE = '/api/projects/dracula';
 
 const DETAIL = {
   narrator: { characterId: 'n', displayName: 'Narrator', isLinked: false },
@@ -21,7 +21,7 @@ const DETAIL = {
 const OVERVIEW: BookOverviewDto = {
   hasContent: true,
   volumes: [{ id: 'v1', title: null }],
-  characters: [{ id: 'h', name: 'Hardin', aliases: [] }],
+  characters: [{ id: 'h', name: 'Elizabeth', aliases: [] }],
   totalParts: 2,
   totalChapters: 3,
   revision: 5,
@@ -56,7 +56,7 @@ function receipt(
   isOwn = false,
 ): Receipt {
   return {
-    folder: 'dune',
+    folder: 'dracula',
     mutationName: 'X',
     mutationId: 'm',
     revision,
@@ -159,18 +159,18 @@ describe('BookStore', () => {
   }
 
   it('opens: overview, reviews, and the single volume collapses to its parts', async () => {
-    await store.open('dune');
+    await store.open('dracula');
     expect(calls('/book')).toBe(1);
     expect(calls('/audio/reviews')).toBe(1);
     expect(store.tree().map((n) => `${n.level}:${n.title}`)).toEqual(['part:One', 'part:Two']);
-    expect(store.speakers().names).toEqual({ h: 'Hardin' });
+    expect(store.speakers().names).toEqual({ h: 'Elizabeth' });
   });
 
   it('openFirstChapter while the volume is still loading waits for that read instead of re-asking', async () => {
     let answer!: (parts: unknown) => void;
     const held = new Promise((r) => (answer = r));
     api.on('GET', `${BASE}/nodes/volume/v1/children`, () => held);
-    const opened = store.open('dune');
+    const opened = store.open('dracula');
     await settle();
     // The volume read is in flight; a concurrent first-chapter request must share it.
     const first = store.openFirstChapter();
@@ -183,7 +183,7 @@ describe('BookStore', () => {
   });
 
   it('a children read that leaves the node unloaded ends the search instead of looping', async () => {
-    await store.open('dune');
+    await store.open('dracula');
     const first = store.openFirstChapter();
     // Closing mid-read: the store forgets the folder, the read is discarded, and the search ends.
     store.close();
@@ -192,7 +192,7 @@ describe('BookStore', () => {
   });
 
   it('openFirstChapter loads structure down to the first chapter and asks the reader to scroll', async () => {
-    await store.open('dune');
+    await store.open('dracula');
     await store.openFirstChapter();
     expect(store.window()).toEqual(['c1']);
     expect(store.chapters()).toEqual([
@@ -202,7 +202,7 @@ describe('BookStore', () => {
   });
 
   it('loadNext crosses a part boundary, loading the next part on demand', async () => {
-    await store.open('dune');
+    await store.open('dracula');
     await store.openFirstChapter();
 
     await store.loadNext();
@@ -219,7 +219,7 @@ describe('BookStore', () => {
   });
 
   it('atEnd is false while a later part is unread', async () => {
-    await store.open('dune');
+    await store.open('dracula');
     await store.openFirstChapter();
     await store.loadNext();
     // c2 ends p1, but p2 has not been read: there may be more.
@@ -231,7 +231,7 @@ describe('BookStore', () => {
     api.on('GET', `${BASE}/nodes/part/p1/children`, chapterList(ids));
     for (const id of ids)
       api.on('GET', `${BASE}/nodes/chapter/${id}/children`, paragraphs(`${id}-p`));
-    await store.open('dune');
+    await store.open('dracula');
     await expand('p1');
     await store.openFirstChapter();
     for (let i = 1; i <= WINDOW_CAP; i++) await store.loadNext(false);
@@ -248,7 +248,7 @@ describe('BookStore', () => {
     api.on('GET', `${BASE}/nodes/part/p1/children`, chapterList(ids));
     for (const id of ids)
       api.on('GET', `${BASE}/nodes/chapter/${id}/children`, paragraphs(`${id}-p`));
-    await store.open('dune');
+    await store.open('dracula');
     await store.openFirstChapter();
 
     let max = store.window().length;
@@ -288,7 +288,7 @@ describe('BookStore', () => {
       for (const id of ids)
         api.on('GET', `${BASE}/nodes/chapter/${id}/children`, paragraphs(`${id}-p`));
     }
-    await store.open('dune');
+    await store.open('dracula');
     await store.openFirstChapter();
     expect(calls('/nodes/volume/v2/children')).toBe(0);
 
@@ -302,7 +302,7 @@ describe('BookStore', () => {
     api.on('GET', `${BASE}/nodes/chapter/c1/voices`, {
       'a-i': { voiceName: 'Deep', narratedBy: null },
     });
-    await store.open('dune');
+    await store.open('dracula');
     await store.openFirstChapter();
     store.setMode('audio');
     await settle();
@@ -311,7 +311,7 @@ describe('BookStore', () => {
 
   describe('receipts', () => {
     it('expectOwnReceipt settles true on this tab’s receipt, false on timeout, cancel or close', async () => {
-      await store.open('dune');
+      await store.open('dracula');
 
       const own = store.expectOwnReceipt(1000);
       const foreign = store.expectOwnReceipt(1000);
@@ -333,7 +333,7 @@ describe('BookStore', () => {
     });
 
     it('a speaker change on a loaded paragraph reloads that chapter, batched, with no toast', async () => {
-      await store.open('dune');
+      await store.open('dracula');
       await store.openFirstChapter();
       api.on('GET', `${BASE}/nodes/chapter/c1/children`, paragraphs('a', 'b', 'z'));
 
@@ -348,7 +348,7 @@ describe('BookStore', () => {
     });
 
     it('a foreign split reloads the chapter and the tree and toasts once', async () => {
-      await store.open('dune');
+      await store.open('dracula');
       await expand('p1');
       await store.openFirstChapter();
       api.on('GET', `${BASE}/nodes/chapter/c1/children`, paragraphs('a', 'a2'));
@@ -365,7 +365,7 @@ describe('BookStore', () => {
     });
 
     it('while viewing a History step, a foreign split rereads (at the step) without the toast', async () => {
-      await store.open('dune');
+      await store.open('dracula');
       await expand('p1');
       await store.openFirstChapter();
       readOnly.set('Viewing a past step');
@@ -378,7 +378,7 @@ describe('BookStore', () => {
     });
 
     it('an own split does not toast', async () => {
-      await store.open('dune');
+      await store.open('dracula');
       await expand('p1');
       await store.openFirstChapter();
       live.receiptStream.emit(receipt(6, 'Structure', { paragraphIds: ['a'] }, true));
@@ -387,7 +387,7 @@ describe('BookStore', () => {
     });
 
     it('a revision gap reloads overview, reviews and the visible chapter', async () => {
-      await store.open('dune');
+      await store.open('dracula');
       await expand('p1');
       await store.openFirstChapter();
       api.on('GET', `${BASE}/audio/reviews`, { 'a-i': { state: 'NeedsReview' } });
@@ -402,10 +402,12 @@ describe('BookStore', () => {
     });
 
     it('a resync ahead of the last revision is treated as a gap', async () => {
-      await store.open('dune');
+      await store.open('dracula');
       await expand('p1');
       await store.openFirstChapter();
-      live.resyncStream.emit({ projects: { DUNE: { revision: 12 } } } as unknown as LiveSnapshot);
+      live.resyncStream.emit({
+        projects: { DRACULA: { revision: 12 } },
+      } as unknown as LiveSnapshot);
       await settle(RECEIPT_BATCH_MS + 20);
       expect(calls('/book')).toBe(2);
       expect(calls('/audio/reviews')).toBe(2);
@@ -413,9 +415,9 @@ describe('BookStore', () => {
     });
 
     it('a resync at the revision /book read against reads nothing again', async () => {
-      await store.open('dune');
+      await store.open('dracula');
       await store.openFirstChapter();
-      live.resyncStream.emit({ projects: { dune: { revision: 5 } } } as unknown as LiveSnapshot);
+      live.resyncStream.emit({ projects: { dracula: { revision: 5 } } } as unknown as LiveSnapshot);
       await settle(RECEIPT_BATCH_MS + 20);
       expect(calls('/book')).toBe(1);
       expect(calls('/audio/reviews')).toBe(1);
@@ -428,13 +430,13 @@ describe('BookStore', () => {
 
       beforeEach(async () => {
         api.on('GET', `${BASE}/book`, () => new Promise((r) => (answer = r)));
-        opened = store.open('dune');
+        opened = store.open('dracula');
         await settle();
       });
 
       async function snapshotThenBook(snapshot: number, book: number) {
         live.resyncStream.emit({
-          projects: { dune: { revision: snapshot } },
+          projects: { dracula: { revision: snapshot } },
         } as unknown as LiveSnapshot);
         answer({ ...OVERVIEW, revision: book });
         await opened;
@@ -473,16 +475,16 @@ describe('BookStore', () => {
 
     it('a failed opening read takes its baseline from Refresh, so a later snapshot ahead still reloads', async () => {
       api.on('GET', `${BASE}/book`, () => problem(500, 'db locked'));
-      await store.open('dune');
+      await store.open('dracula');
       expect(store.stale()).toBeTruthy();
-      live.resyncStream.emit({ projects: { dune: { revision: 5 } } } as unknown as LiveSnapshot);
+      live.resyncStream.emit({ projects: { dracula: { revision: 5 } } } as unknown as LiveSnapshot);
 
       api.on('GET', `${BASE}/book`, OVERVIEW);
       await store.refresh();
       await settle(RECEIPT_BATCH_MS + 20);
       expect(calls('/book')).toBe(2);
 
-      live.resyncStream.emit({ projects: { dune: { revision: 6 } } } as unknown as LiveSnapshot);
+      live.resyncStream.emit({ projects: { dracula: { revision: 6 } } } as unknown as LiveSnapshot);
       await settle(RECEIPT_BATCH_MS + 20);
       expect(calls('/book')).toBe(3);
     });
@@ -490,7 +492,7 @@ describe('BookStore', () => {
     it('an open superseded by another open does not take the current chapter or the scroll', async () => {
       let answer!: (body: unknown) => void;
       api.on('GET', `${BASE}/nodes/chapter/c1/children`, () => new Promise((r) => (answer = r)));
-      await store.open('dune');
+      await store.open('dracula');
       await expand('p1');
       const slow = store.openChapter('c1');
       await settle();
@@ -503,7 +505,7 @@ describe('BookStore', () => {
     });
 
     it('a failed reload marks the view stale; Refresh retries and clears it', async () => {
-      await store.open('dune');
+      await store.open('dracula');
       await expand('p1');
       await store.openFirstChapter();
       api.on('GET', `${BASE}/nodes/chapter/c1/children`, () => problem(500, 'db locked'));
@@ -520,7 +522,7 @@ describe('BookStore', () => {
 
   describe('review fixes', () => {
     it('remembers expanded tree nodes and forgets collapsed ones', async () => {
-      await store.open('dune');
+      await store.open('dracula');
       await expand('p1');
       expect([...store.expanded()]).toEqual(['p1']);
       store.setExpanded({ ...partNode('p1'), loaded: true }, false);
@@ -529,14 +531,14 @@ describe('BookStore', () => {
 
     it('a failed expand marks the view stale', async () => {
       api.on('GET', `${BASE}/nodes/part/p2/children`, () => problem(500, 'locked'));
-      await store.open('dune');
+      await store.open('dracula');
       await expand('p2');
       expect(store.stale()).toBeTruthy();
     });
 
     it('revision 0 from /book is a real baseline, so revision 2 is a gap', async () => {
       api.on('GET', `${BASE}/book`, { ...OVERVIEW, revision: 0 });
-      await store.open('dune');
+      await store.open('dracula');
       await expand('p1');
       await store.openFirstChapter();
 
@@ -548,7 +550,7 @@ describe('BookStore', () => {
     it('before /book answers there is no baseline, so the first receipt is not a gap', async () => {
       let answer!: (body: unknown) => void;
       api.on('GET', `${BASE}/book`, () => new Promise((r) => (answer = r)));
-      const opened = store.open('dune');
+      const opened = store.open('dracula');
       await settle();
       live.receiptStream.emit(receipt(40, 'VoiceRules'));
       answer(OVERVIEW);
@@ -558,7 +560,7 @@ describe('BookStore', () => {
     });
 
     async function windowOfTwo() {
-      await store.open('dune');
+      await store.open('dracula');
       await store.openFirstChapter();
       await store.loadNext();
       expect(store.window()).toEqual(['c1', 'c2']);
@@ -586,7 +588,7 @@ describe('BookStore', () => {
     });
 
     it('after a structural reload, a chapter in a later part stays open while earlier parts are unread', async () => {
-      await store.open('dune');
+      await store.open('dracula');
       await expand('p2');
       await store.openChapter('c3');
       const before = calls('/nodes/part/p1/children');
@@ -617,7 +619,7 @@ describe('BookStore', () => {
       );
 
     it('a chapter outside the loaded window is opened and scrolled to', async () => {
-      await store.open('dune');
+      await store.open('dracula');
       await store.openFirstChapter();
       api.on('GET', `${BASE}/nodes/chapter/c3/children`, paragraphs('new'));
 
@@ -630,7 +632,7 @@ describe('BookStore', () => {
     });
 
     it('a loaded chapter off the visible one is read again in place, without scrolling', async () => {
-      await store.open('dune');
+      await store.open('dracula');
       await store.openFirstChapter();
       await store.loadNext();
       const scroll = store.scrollRequest();
@@ -645,7 +647,7 @@ describe('BookStore', () => {
     });
 
     it("another view's receipt does not reveal it", async () => {
-      await store.open('dune');
+      await store.open('dracula');
       await store.openFirstChapter();
       const before = calls('/nodes/chapter/c3/children');
 
@@ -657,7 +659,7 @@ describe('BookStore', () => {
     });
 
     it('a created item is reread in place, not revealed', async () => {
-      await store.open('dune');
+      await store.open('dracula');
       await store.openFirstChapter();
       const scroll = store.scrollRequest();
       const before = calls('/nodes/chapter/c1/children');

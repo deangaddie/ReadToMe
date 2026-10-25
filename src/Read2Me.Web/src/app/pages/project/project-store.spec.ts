@@ -39,11 +39,11 @@ function summary(overrides: Partial<NodeStatusSummary> = {}): NodeStatusSummary 
 }
 
 const DETAIL: ProjectDetailDto = {
-  folderName: 'dune',
-  title: 'Dune',
-  bookTitle: 'Dune',
-  author: 'Frank Herbert',
-  filename: 'dune.epub',
+  folderName: 'dracula',
+  title: 'Dracula',
+  bookTitle: 'Dracula',
+  author: 'Bram Stoker',
+  filename: 'dracula.epub',
   fileType: 'Epub',
   coverImage: null,
   narratorOnlyMode: false,
@@ -104,7 +104,7 @@ class FakeLive {
 
 function receipt(revision: number, facets: string): Receipt {
   const message: ReceiptMessage = {
-    folder: 'dune',
+    folder: 'dracula',
     mutationName: 'X',
     mutationId: 'm',
     revision,
@@ -122,11 +122,11 @@ function receipt(revision: number, facets: string): Receipt {
   return { ...message, isOwn: false };
 }
 
-const DETAIL_URL = '/api/projects/dune';
-const STATUS_URL = '/api/projects/dune/status';
-const OUTPUTS_URL = '/api/projects/dune/assembly/outputs';
+const DETAIL_URL = '/api/projects/dracula';
+const STATUS_URL = '/api/projects/dracula/status';
+const OUTPUTS_URL = '/api/projects/dracula/assembly/outputs';
 const FULL_BUILD = {
-  fileName: 'dune.m4b',
+  fileName: 'dracula.m4b',
   sizeBytes: 1,
   createdAt: '2026-09-19T10:00:00Z',
   isPartial: false,
@@ -154,7 +154,7 @@ describe('ProjectStore', () => {
     api.on('GET', DETAIL_URL, DETAIL);
     api.on('GET', STATUS_URL, status);
     api.on('GET', OUTPUTS_URL, outputs);
-    await store.open('dune');
+    await store.open('dracula');
     await settle();
   }
 
@@ -163,20 +163,20 @@ describe('ProjectStore', () => {
   it('loads detail + status, joins the project group and names the breadcrumb', async () => {
     await open();
 
-    expect(live.joined).toEqual(['dune']);
-    expect(store.detail()?.title).toBe('Dune');
+    expect(live.joined).toEqual(['dracula']);
+    expect(store.detail()?.title).toBe('Dracula');
     expect(store.status()?.revision).toBe(5);
     expect(store.revision()).toBe(5);
     expect(store.nodes()['v1']?.attributionRemaining).toBe(2);
     expect(store.folderAudioRemaining()).toBe(2);
-    expect(use(ProjectTitles).titles()['dune']).toBe('Dune');
+    expect(use(ProjectTitles).titles()['dracula']).toBe('Dracula');
   });
 
   it('applies nodeStatus deltas: changed nodes replaced, null removes, folder remaining taken', async () => {
     await open();
 
     live.nodeStatus.emit({
-      folder: 'DUNE',
+      folder: 'DRACULA',
       nodes: {
         v1: summary({ attributionRemaining: 0, attributionQueued: 3 }),
         c1: null,
@@ -202,13 +202,13 @@ describe('ProjectStore', () => {
     await open();
 
     live.itemStatus.emit({
-      folder: 'dune',
+      folder: 'dracula',
       paragraphs: { p1: { status: 'Queued' } },
       items: { i1: { status: 'Queued' }, i2: { status: 'Processing' }, i3: { audioVersion: 2 } },
     });
     expect(store.audioInFlight()).toBe(2);
 
-    live.itemStatus.emit({ folder: 'dune', paragraphs: { p1: null }, items: { i1: null } });
+    live.itemStatus.emit({ folder: 'dracula', paragraphs: { p1: null }, items: { i1: null } });
     expect(store.audioInFlight()).toBe(1);
     expect(store.paragraphs()['p1']).toBeUndefined();
   });
@@ -275,11 +275,15 @@ describe('ProjectStore', () => {
   it('a resync whose project revision is ahead refetches status', async () => {
     await open();
     api.on('GET', STATUS_URL, statusDto({ revision: 8 }));
-    live.resyncedEmitter.emit({ projects: { dune: { revision: 8 } } } as unknown as LiveSnapshot);
+    live.resyncedEmitter.emit({
+      projects: { dracula: { revision: 8 } },
+    } as unknown as LiveSnapshot);
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', STATUS_URL)).toHaveLength(2);
 
-    live.resyncedEmitter.emit({ projects: { dune: { revision: 8 } } } as unknown as LiveSnapshot);
+    live.resyncedEmitter.emit({
+      projects: { dracula: { revision: 8 } },
+    } as unknown as LiveSnapshot);
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', STATUS_URL)).toHaveLength(2);
   });
@@ -289,10 +293,10 @@ describe('ProjectStore', () => {
       let answer!: (body: unknown) => void;
       api.on('GET', DETAIL_URL, DETAIL);
       api.on('GET', STATUS_URL, () => new Promise((r) => (answer = r)));
-      const opened = store.open('dune');
+      const opened = store.open('dracula');
       await settle();
       live.resyncedEmitter.emit({
-        projects: { dune: { revision: snapshot } },
+        projects: { dracula: { revision: snapshot } },
       } as unknown as LiveSnapshot);
       answer(statusDto());
       await opened;
@@ -314,8 +318,8 @@ describe('ProjectStore', () => {
 
   it('seeds item status from the live snapshot once the group is joined', async () => {
     live.projects.set({
-      Dune: {
-        folder: 'Dune',
+      Dracula: {
+        folder: 'Dracula',
         revision: 5,
         nodes: {},
         folderAudioRemaining: 0,
@@ -333,7 +337,7 @@ describe('ProjectStore', () => {
     it('is read-only with the viewing reason, and not on the current project', async () => {
       await open();
       expect(store.readOnly()).toBeNull();
-      use(StepView).view('dune', 's8');
+      use(StepView).view('dracula', 's8');
       expect(store.readOnly()).toBe(VIEWING_READ_ONLY);
       use(StepView).view('emma', 's8');
       expect(store.readOnly()).toBeNull();
@@ -341,15 +345,15 @@ describe('ProjectStore', () => {
 
     it('drops status deltas while viewing, and applies them again after Back to current', async () => {
       await open();
-      use(StepView).view('dune', 's8');
+      use(StepView).view('dracula', 's8');
 
       live.nodeStatus.emit({
-        folder: 'dune',
+        folder: 'dracula',
         nodes: { v1: null },
         folderAudioRemaining: 0,
       });
       live.itemStatus.emit({
-        folder: 'dune',
+        folder: 'dracula',
         paragraphs: {},
         items: { i1: { status: 'Queued' } },
       });
@@ -357,14 +361,14 @@ describe('ProjectStore', () => {
       expect(store.folderAudioRemaining()).toBe(2);
       expect(store.audioInFlight()).toBe(0);
 
-      use(StepView).clear('dune');
+      use(StepView).clear('dracula');
       live.nodeStatus.emit({
-        folder: 'dune',
+        folder: 'dracula',
         nodes: { v1: null },
         folderAudioRemaining: 0,
       });
       live.itemStatus.emit({
-        folder: 'dune',
+        folder: 'dracula',
         paragraphs: {},
         items: { i1: { status: 'Queued' } },
       });
@@ -375,10 +379,10 @@ describe('ProjectStore', () => {
 
     it('back to current, the reload takes the item status the live snapshot moved to meanwhile', async () => {
       await open();
-      use(StepView).view('dune', 's8');
+      use(StepView).view('dracula', 's8');
       live.projects.set({
-        dune: {
-          folder: 'dune',
+        dracula: {
+          folder: 'dracula',
           revision: 6,
           nodes: {},
           folderAudioRemaining: 0,
@@ -387,7 +391,7 @@ describe('ProjectStore', () => {
         },
       });
 
-      use(StepView).clear('dune');
+      use(StepView).clear('dracula');
       await store.reload();
       expect(store.audioInFlight()).toBe(1);
     });
@@ -396,8 +400,8 @@ describe('ProjectStore', () => {
   it('close leaves the group and stops listening', async () => {
     await open();
     store.close();
-    expect(live.left).toEqual(['dune']);
-    live.nodeStatus.emit({ folder: 'dune', nodes: { v1: null }, folderAudioRemaining: 0 });
+    expect(live.left).toEqual(['dracula']);
+    live.nodeStatus.emit({ folder: 'dracula', nodes: { v1: null }, folderAudioRemaining: 0 });
     expect(store.nodes()['v1']).toBeDefined();
   });
 
@@ -432,7 +436,7 @@ describe('ProjectStore', () => {
       await settle();
       expect(api.calls('GET', OUTPUTS_URL)).toHaveLength(1);
 
-      live.assemblyMessages.emit({ kind: 'completed', folder: 'DUNE' });
+      live.assemblyMessages.emit({ kind: 'completed', folder: 'DRACULA' });
       await settle();
       expect(api.calls('GET', OUTPUTS_URL)).toHaveLength(2);
       expect(exportStep()?.state).toBe('done');
@@ -440,7 +444,7 @@ describe('ProjectStore', () => {
 
     it('follows the hub’s assembly and voice-batch running flags', async () => {
       await open();
-      live.assembly.set({ ...IDLE_ASSEMBLY, isRunning: true, folder: 'dune' });
+      live.assembly.set({ ...IDLE_ASSEMBLY, isRunning: true, folder: 'dracula' });
       live.voiceBatch.set({ ...IDLE_VOICE_BATCH, isRunning: true });
       expect(exportStep()?.chip.label).toBe('Assembling…');
       expect(store.pipeline()?.find((s) => s.id === 'voices')?.state).toBe('running');
@@ -468,7 +472,7 @@ describe('ProjectStore', () => {
   it('surfaces a load failure as an error', async () => {
     api.on('GET', DETAIL_URL, () => problem(404, 'gone'));
     api.on('GET', STATUS_URL, () => problem(404, 'gone'));
-    await store.open('dune');
+    await store.open('dracula');
     expect(store.error()).toBeTruthy();
     expect(store.detail()).toBeNull();
   });

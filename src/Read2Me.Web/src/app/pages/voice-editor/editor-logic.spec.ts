@@ -221,10 +221,12 @@ describe('stageFor', () => {
 
 describe('originalAudioUrl', () => {
   it('plays the stored original once edited, else the live WAV', () => {
-    expect(originalAudioUrl('dune', voice())).toBe('/workspace/dune/voices/alice/v1-main.wav');
-    expect(originalAudioUrl('dune', voice({ isEdited: true }))).toBe(
-      '/api/projects/dune/voices/v1/original.wav',
+    expect(originalAudioUrl('dracula', voice())).toBe(
+      '/workspace/dracula/voices/alice/v1-main.wav',
     );
-    expect(originalAudioUrl('dune', voice({ audioFileName: null }))).toBeNull();
+    expect(originalAudioUrl('dracula', voice({ isEdited: true }))).toBe(
+      '/api/projects/dracula/voices/v1/original.wav',
+    );
+    expect(originalAudioUrl('dracula', voice({ audioFileName: null }))).toBeNull();
   });
 });

@@ -9,8 +9,8 @@ import type { DiscoveryDialog } from './discovery-dialog';
 import { openDiscoveryDialog } from './discovery-dialog';
 import './discovery-dialog';
 
-const DISCOVER = '/api/projects/dune/characters/discover';
-const APPLY = '/api/projects/dune/characters/discover/apply';
+const DISCOVER = '/api/projects/dracula/characters/discover';
+const APPLY = '/api/projects/dracula/characters/discover/apply';
 
 const OUTCOME: DiscoveryOutcomeDto = {
   status: 'Ok',
@@ -53,7 +53,7 @@ beforeEach(() => {
 afterEach(() => document.body.replaceChildren());
 
 async function open(roster = ROSTER) {
-  const result = openDiscoveryDialog({ folder: 'dune', roster });
+  const result = openDiscoveryDialog({ folder: 'dracula', roster });
   await settle();
   const dialog = document.querySelector<DiscoveryDialog>('r2m-discovery-dialog')!;
   await dialog.rendered();

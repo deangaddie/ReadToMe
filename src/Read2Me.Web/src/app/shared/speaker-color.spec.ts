@@ -26,8 +26,8 @@ describe('speakerHue', () => {
 
 describe('speakerColor', () => {
   it('uses fixed saturation and lightness per scheme, varying only the hue', () => {
-    const light = speakerColor('hardin', 'light');
-    const dark = speakerColor('hardin', 'dark');
+    const light = speakerColor('elizabeth', 'light');
+    const dark = speakerColor('elizabeth', 'dark');
     expect(light.hue).toBe(dark.hue);
     expect(light.foreground).toBe(`hsl(${light.hue} 55% 36%)`);
     expect(light.background).toBe(`hsl(${light.hue} 55% 93%)`);

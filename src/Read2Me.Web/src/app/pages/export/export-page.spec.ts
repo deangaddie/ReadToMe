@@ -18,18 +18,18 @@ import { installNavigation, settle } from '../../../testing/fake-navigation';
 import { type ExportPage, formatOutputDate } from './export-page';
 import '../project/project-shell';
 
-const BASE = '/api/projects/dune';
+const BASE = '/api/projects/dracula';
 const START_URL = `${BASE}/assembly`;
 const OUTPUTS_URL = `${BASE}/assembly/outputs`;
 const CANCEL_URL = '/api/assembly/cancel';
 const SETTINGS_URL = '/api/settings/audio-processing';
 
 const DETAIL: ProjectDetailDto = {
-  folderName: 'dune',
-  title: 'Dune',
-  bookTitle: 'Dune',
-  author: 'Frank Herbert',
-  filename: 'dune.epub',
+  folderName: 'dracula',
+  title: 'Dracula',
+  bookTitle: 'Dracula',
+  author: 'Bram Stoker',
+  filename: 'dracula.epub',
   fileType: 'Epub',
   coverImage: null,
   narratorOnlyMode: false,
@@ -54,13 +54,13 @@ const STATUS: ProjectStatusDto = {
 
 const OUTPUTS: AssemblyOutputDto[] = [
   {
-    fileName: 'Dune_partial_20260919.m4b',
+    fileName: 'Dracula_partial_20260919.m4b',
     sizeBytes: 1536,
     createdAt: '2026-09-19T10:00:00+00:00',
     isPartial: true,
   },
   {
-    fileName: 'Dune.m4b',
+    fileName: 'Dracula.m4b',
     sizeBytes: 2048,
     createdAt: '2026-09-01T10:00:00+00:00',
     isPartial: false,
@@ -118,7 +118,7 @@ async function render(outputs: AssemblyOutputDto[] | Response = OUTPUTS) {
   api.on('GET', BASE, DETAIL).on('GET', `${BASE}/status`, STATUS);
   api.on('GET', OUTPUTS_URL, outputs);
   api.on('GET', SETTINGS_URL, { ffmpegPath: 'D:\\ffmpeg\\ffmpeg.exe' });
-  installNavigation('projects/dune/export');
+  installNavigation('projects/dracula/export');
   const router = new Router();
   override(Router, router);
   router.start(ROUTES, async () => true);
@@ -182,13 +182,13 @@ describe('r2m-export-page', () => {
     expect(text(rows[0]!)).toContain('Partial');
     expect(text(rows[1]!)).not.toContain('Partial');
     expect(rows[1]!.querySelector('a[data-action="download-output"]')!.getAttribute('href')).toBe(
-      '/api/projects/dune/assembly/outputs/Dune.m4b',
+      '/api/projects/dracula/assembly/outputs/Dracula.m4b',
     );
     expect(page.querySelector('[data-card="progress"]')).toBeNull();
   });
 
   it('viewing a History step, Assemble and Delete are off with the reason; downloads stay (ticket 32)', async () => {
-    use(StepView).view('dune', 's8');
+    use(StepView).view('dracula', 's8');
     const page = await render();
     const reason = (el: Element | null) =>
       el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
@@ -255,7 +255,7 @@ describe('r2m-export-page', () => {
 
   it('deletes an output after a confirm and reloads the list', async () => {
     const page = await render();
-    api.on('DELETE', `${OUTPUTS_URL}/Dune.m4b`, undefined);
+    api.on('DELETE', `${OUTPUTS_URL}/Dracula.m4b`, undefined);
     api.on('GET', OUTPUTS_URL, [OUTPUTS[0]]);
 
     page.querySelectorAll<HTMLButtonElement>('[data-action="delete-output"]')[1]!.click();
@@ -263,7 +263,7 @@ describe('r2m-export-page', () => {
     await page.rendered();
 
     expect(confirms[0]!.title).toBe('Delete this audiobook?');
-    expect(api.calls('DELETE', `${OUTPUTS_URL}/Dune.m4b`)).toHaveLength(1);
+    expect(api.calls('DELETE', `${OUTPUTS_URL}/Dracula.m4b`)).toHaveLength(1);
     expect(page.querySelectorAll('[data-output]').length).toBe(1);
   });
 
@@ -271,11 +271,11 @@ describe('r2m-export-page', () => {
     api.on('POST', CANCEL_URL, undefined);
     const page = await render([]);
 
-    const running = { isRunning: true, folder: 'dune' };
+    const running = { isRunning: true, folder: 'dracula' };
     await pushAssembly(
       page,
       { ...running, currentPhase: 'Gather' },
-      { kind: 'phaseStarted', phase: 'Gather', folder: 'dune' },
+      { kind: 'phaseStarted', phase: 'Gather', folder: 'dracula' },
     );
     expect(states(page)).toEqual(['active', 'pending', 'pending', 'pending', 'pending']);
     expect(page.querySelector('[data-phase="Gather"]')!.getAttribute('aria-current')).toBe('step');
@@ -285,12 +285,12 @@ describe('r2m-export-page', () => {
     await pushAssembly(
       page,
       { ...running, currentPhase: 'Encode' },
-      { kind: 'phaseStarted', phase: 'Encode', folder: 'dune' },
+      { kind: 'phaseStarted', phase: 'Encode', folder: 'dracula' },
     );
     await pushAssembly(
       page,
       { ...running, currentPhase: 'Encode', encodePercent: 50 },
-      { kind: 'progress', fraction: 0.5, folder: 'dune' },
+      { kind: 'progress', fraction: 0.5, folder: 'dracula' },
     );
     expect(states(page)).toEqual(['done', 'done', 'done', 'active', 'pending']);
     expect(text(page.querySelector('[data-role="encode-percent"]'))).toBe('50%');
@@ -301,8 +301,8 @@ describe('r2m-export-page', () => {
 
     await pushAssembly(
       page,
-      { folder: 'dune', currentPhase: 'Encode' },
-      { kind: 'cancelled', folder: 'dune' },
+      { folder: 'dracula', currentPhase: 'Encode' },
+      { kind: 'cancelled', folder: 'dracula' },
     );
     expect(states(page)).toEqual(['done', 'done', 'done', 'cancelled', 'pending']);
     expect(text(page.querySelector('[data-role="outcome"]'))).toBe('Cancelled');
@@ -314,19 +314,19 @@ describe('r2m-export-page', () => {
     const page = await render([]);
     await pushAssembly(
       page,
-      { isRunning: true, folder: 'dune', currentPhase: 'Finalize' },
-      { kind: 'phaseStarted', phase: 'Finalize', folder: 'dune' },
+      { isRunning: true, folder: 'dracula', currentPhase: 'Finalize' },
+      { kind: 'phaseStarted', phase: 'Finalize', folder: 'dracula' },
     );
     api.on('GET', OUTPUTS_URL, [OUTPUTS[1]]);
 
     await pushAssembly(
       page,
-      { folder: 'dune', outputFileName: 'Dune.m4b' },
-      { kind: 'completed', folder: 'dune', outputFileName: 'Dune.m4b' },
+      { folder: 'dracula', outputFileName: 'Dracula.m4b' },
+      { kind: 'completed', folder: 'dracula', outputFileName: 'Dracula.m4b' },
     );
 
     expect(states(page)).toEqual(Array(5).fill('done'));
-    expect(text(page.querySelector('[data-role="outcome"]'))).toBe('Finished: Dune.m4b');
+    expect(text(page.querySelector('[data-role="outcome"]'))).toBe('Finished: Dracula.m4b');
     expect(page.querySelectorAll('[data-output]').length).toBe(1);
   });
 
@@ -335,13 +335,13 @@ describe('r2m-export-page', () => {
     const stderr = 'ffmpeg version 7.1\nError opening input';
     await pushAssembly(
       page,
-      { isRunning: true, folder: 'dune', currentPhase: 'Encode' },
-      { kind: 'phaseStarted', phase: 'Encode', folder: 'dune' },
+      { isRunning: true, folder: 'dracula', currentPhase: 'Encode' },
+      { kind: 'phaseStarted', phase: 'Encode', folder: 'dracula' },
     );
     await pushAssembly(
       page,
-      { folder: 'dune', currentPhase: 'Encode', lastError: stderr },
-      { kind: 'failed', reason: stderr, folder: 'dune' },
+      { folder: 'dracula', currentPhase: 'Encode', lastError: stderr },
+      { kind: 'failed', reason: stderr, folder: 'dracula' },
     );
 
     expect(states(page)).toEqual(['done', 'done', 'done', 'failed', 'pending']);
@@ -350,10 +350,10 @@ describe('r2m-export-page', () => {
   });
 
   it('after a reload reads how the last run ended off the hub snapshot', async () => {
-    live.assembly.set({ ...IDLE_ASSEMBLY, folder: 'dune', outputFileName: 'Dune.m4b' });
+    live.assembly.set({ ...IDLE_ASSEMBLY, folder: 'dracula', outputFileName: 'Dracula.m4b' });
     const page = await render();
 
-    expect(text(page.querySelector('[data-role="outcome"]'))).toBe('Finished: Dune.m4b');
+    expect(text(page.querySelector('[data-role="outcome"]'))).toBe('Finished: Dracula.m4b');
     expect(states(page)).toEqual(Array(5).fill('done'));
   });
 
@@ -361,21 +361,25 @@ describe('r2m-export-page', () => {
     live.assembly.set({
       ...IDLE_ASSEMBLY,
       isRunning: true,
-      folder: 'foundation',
+      folder: 'pride-and-prejudice',
       currentPhase: 'Encode',
     });
     const page = await render();
 
     expect(button(page, 'assemble').disabled).toBe(true);
     expect(text(page.querySelector('[data-card="readiness"] .r2m-status-chip'))).toContain(
-      'Another project is being assembled: foundation',
+      'Another project is being assembled: pride-and-prejudice',
     );
     expect(page.querySelector('[data-card="progress"]')).toBeNull();
 
     await pushAssembly(
       page,
-      { folder: 'foundation', outputFileName: 'Foundation.m4b' },
-      { kind: 'completed', folder: 'foundation', outputFileName: 'Foundation.m4b' },
+      { folder: 'pride-and-prejudice', outputFileName: 'Pride and Prejudice.m4b' },
+      {
+        kind: 'completed',
+        folder: 'pride-and-prejudice',
+        outputFileName: 'Pride and Prejudice.m4b',
+      },
     );
     expect(page.querySelector('[data-card="progress"]')).toBeNull();
     expect(button(page, 'assemble').disabled).toBe(false);

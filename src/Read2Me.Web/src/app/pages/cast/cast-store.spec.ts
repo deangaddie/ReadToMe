@@ -21,12 +21,12 @@ class FakeLive {
   }
 }
 
-const SUMMARY = '/api/projects/dune/characters/summary';
-const LINES = '/api/projects/dune/characters/alice/lines';
-const VOICES = '/api/projects/dune/characters/alice/voices';
-const RULES = '/api/projects/dune/characters/alice/voice-rules';
-const PREVIEW = '/api/projects/dune/characters/alice/voice-rules/preview';
-const COMMANDS = '/api/projects/dune/commands';
+const SUMMARY = '/api/projects/dracula/characters/summary';
+const LINES = '/api/projects/dracula/characters/alice/lines';
+const VOICES = '/api/projects/dracula/characters/alice/voices';
+const RULES = '/api/projects/dracula/characters/alice/voice-rules';
+const PREVIEW = '/api/projects/dracula/characters/alice/voice-rules/preview';
+const COMMANDS = '/api/projects/dracula/commands';
 
 function voiceList(voices: Partial<VoiceDto>[]): CharacterVoicesDto {
   return {
@@ -65,7 +65,7 @@ function row(name: string, lineCount = 0): CharacterSummaryDto {
 
 function receipt(facets: string): Receipt {
   const message: ReceiptMessage = {
-    folder: 'dune',
+    folder: 'dracula',
     mutationName: 'X',
     mutationId: 'm',
     revision: 1,
@@ -107,7 +107,7 @@ async function open(rows = [row('Narrator'), row('Alice', 2)]) {
   api.on('GET', VOICES, voiceList([]));
   api.on('GET', RULES, []);
   api.on('GET', PREVIEW, []);
-  await store.open('dune');
+  await store.open('dracula');
 }
 
 describe('CastStore', () => {
@@ -120,7 +120,7 @@ describe('CastStore', () => {
 
   it('a failed load keeps the error', async () => {
     api.on('GET', SUMMARY, () => problem(500, 'boom'));
-    await store.open('dune');
+    await store.open('dracula');
     expect(store.error()).toBe('boom');
     expect(store.loading()).toBe(false);
   });
@@ -145,7 +145,7 @@ describe('CastStore', () => {
   it('an unknown selection is null, not an error', async () => {
     await open();
     for (const read of ['lines', 'voices', 'voice-rules', 'voice-rules/preview']) {
-      api.on('GET', `/api/projects/dune/characters/ghost/${read}`, []);
+      api.on('GET', `/api/projects/dracula/characters/ghost/${read}`, []);
     }
     await store.select('ghost');
     expect(store.selectedId()).toBe('ghost');

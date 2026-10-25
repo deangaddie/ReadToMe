@@ -11,13 +11,13 @@ import { AUDIO_RUNNING } from './pronunciation-logic';
 import type { PronunciationEditor } from './pronunciation-editor';
 import './pronunciation-editor';
 
-const BASE = '/api/projects/magician/pronunciations';
+const BASE = '/api/projects/the-adventures-of-sherlock-holmes/pronunciations';
 const IMPACT = `${BASE}/impact`;
 
-const KULGAN: PronunciationDto = {
+const WATSON: PronunciationDto = {
   id: 'k1',
-  writtenForm: 'Kulgan',
-  spokenForm: 'KULL-gun',
+  writtenForm: 'Watson',
+  spokenForm: 'WAT-sun',
   matchCount: 14,
   itemCount: 9,
   withAudioCount: 3,
@@ -83,7 +83,7 @@ async function mount(
   setup: (e: PronunciationEditor) => void = () => undefined,
 ): Promise<PronunciationEditor> {
   editor = document.createElement('r2m-pronunciation-editor') as PronunciationEditor;
-  editor.folder = 'magician';
+  editor.folder = 'the-adventures-of-sherlock-holmes';
   editor.entry = entry;
   setup(editor);
   editor.addEventListener('editor-close', () => closes++);
@@ -131,9 +131,9 @@ describe('a new pronunciation', () => {
     expect(save().disabled).toBe(true);
     expect(save().textContent).toContain('Add');
 
-    await type('written', 'Kul');
-    await type('written', 'Kulgan');
-    await type('spoken', 'KULL-gun');
+    await type('written', 'Wat');
+    await type('written', 'Watson');
+    await type('spoken', 'WAT-sun');
     expect(save().disabled).toBe(false);
     expect(api.calls('POST', IMPACT)).toHaveLength(0);
 
@@ -141,8 +141,8 @@ describe('a new pronunciation', () => {
     expect(api.calls('POST', IMPACT).map((c) => c.body)).toEqual([
       {
         id: null,
-        writtenForm: 'Kulgan',
-        spokenForm: 'KULL-gun',
+        writtenForm: 'Watson',
+        spokenForm: 'WAT-sun',
         delete: false,
       },
     ]);
@@ -155,14 +155,14 @@ describe('a new pronunciation', () => {
     let discard = 12;
     api.on('POST', IMPACT, () => impact({ audioDiscardCount: discard }));
     await mount(null);
-    await type('written', 'Kulgan');
+    await type('written', 'Watson');
     await settleImpact();
     expect(q('.r2m-advice')!.textContent?.trim()).toBe(
       "Saving discards the audio of 12 items; it can't be brought back.",
     );
 
     discard = 0;
-    await type('spoken', 'KULL-gun');
+    await type('spoken', 'WAT-sun');
     await settleImpact();
     expect(q('.r2m-advice')).toBeNull();
   });
@@ -172,16 +172,16 @@ describe('a new pronunciation', () => {
       'POST',
       IMPACT,
       impact({
-        duplicateOf: { id: 'k1', writtenForm: 'Kulgan', spokenForm: 'x' },
+        duplicateOf: { id: 'k1', writtenForm: 'Watson', spokenForm: 'x' },
       }),
     );
     await mount(null);
-    await type('written', 'kulgan');
-    await type('spoken', 'KULL-gun');
+    await type('written', 'watson');
+    await type('spoken', 'WAT-sun');
     await settleImpact();
-    expect(q('[data-role=duplicate]')!.textContent).toContain('“Kulgan” is already in the list.');
+    expect(q('[data-role=duplicate]')!.textContent).toContain('“Watson” is already in the list.');
     expect(save().disabled).toBe(true);
-    expect(reasonOf('save')).toBe('“Kulgan” is already in the list.');
+    expect(reasonOf('save')).toBe('“Watson” is already in the list.');
   });
 
   it('notes the entries it overlaps', async () => {
@@ -192,7 +192,7 @@ describe('a new pronunciation', () => {
         overlaps: [
           {
             id: 'm',
-            writtenForm: 'Minas Tirith',
+            writtenForm: 'Van Helsing',
             spokenForm: 'x',
             draftWins: false,
           },
@@ -200,10 +200,10 @@ describe('a new pronunciation', () => {
       }),
     );
     await mount(null);
-    await type('written', 'Tirith');
+    await type('written', 'Helsing');
     await settleImpact();
     expect(q('[data-role=overlap]')!.textContent).toContain(
-      'Inside “Minas Tirith”, that longer entry wins.',
+      'Inside “Van Helsing”, that longer entry wins.',
     );
   });
 
@@ -225,7 +225,7 @@ describe('a new pronunciation', () => {
         ),
     );
     await mount(null);
-    await type('written', 'Kulgan-');
+    await type('written', 'Watson-');
     await type('spoken', 'x');
     await settleImpact();
     expect(q('[data-role=invalid]')!.textContent).toContain(
@@ -237,36 +237,38 @@ describe('a new pronunciation', () => {
   it('adds it, toasts what needs generating with Show in Book, and closes', async () => {
     api.on('POST', IMPACT, impact());
     api.on('POST', BASE, {
-      ...KULGAN,
+      ...WATSON,
       audioDiscardCount: 0,
       needsAudioCount: 12,
     });
     await mount(null);
-    await type('written', ' Kulgan ');
-    await type('spoken', 'KULL-gun');
+    await type('written', ' Watson ');
+    await type('spoken', 'WAT-sun');
     await click('save');
 
     expect(api.calls('POST', BASE).map((c) => c.body)).toEqual([
-      { writtenForm: ' Kulgan ', spokenForm: 'KULL-gun' },
+      { writtenForm: ' Watson ', spokenForm: 'WAT-sun' },
     ]);
     expect(toasts).toHaveLength(1);
     expect(toasts[0]!.message).toBe('Saved. 12 items need generating.');
     expect(toasts[0]!.actions!.map((a) => a.label)).toEqual(['Show in Book']);
     toasts[0]!.actions![0]!.run();
-    expect(navigated).toEqual([{ path: 'projects/magician/book', query: { mode: 'audio' } }]);
+    expect(navigated).toEqual([
+      { path: 'projects/the-adventures-of-sherlock-holmes/book', query: { mode: 'audio' } },
+    ]);
     expect(closes).toBe(1);
   });
 
   it('says just Saved when nothing needs generating', async () => {
     api.on('POST', IMPACT, impact());
     api.on('POST', BASE, {
-      ...KULGAN,
+      ...WATSON,
       audioDiscardCount: 0,
       needsAudioCount: 0,
     });
     await mount(null);
-    await type('written', 'Kulgan');
-    await type('spoken', 'KULL-gun');
+    await type('written', 'Watson');
+    await type('spoken', 'WAT-sun');
     await click('save');
     expect(toasts).toEqual([{ message: 'Saved.' }]);
   });
@@ -290,8 +292,8 @@ describe('a new pronunciation', () => {
         ),
     );
     await mount(null);
-    await type('written', 'Kulgan');
-    await type('spoken', 'KULL-gun');
+    await type('written', 'Watson');
+    await type('spoken', 'WAT-sun');
     await click('save');
     expect(toasts).toEqual([
       {
@@ -299,7 +301,7 @@ describe('a new pronunciation', () => {
       },
     ]);
     expect(closes).toBe(0);
-    expect(q<HTMLInputElement>('[data-field=written]')!.value).toBe('Kulgan');
+    expect(q<HTMLInputElement>('[data-field=written]')!.value).toBe('Watson');
   });
 
   it('has no Delete', async () => {
@@ -311,36 +313,36 @@ describe('a new pronunciation', () => {
 describe('an existing pronunciation', () => {
   it('opens with its forms and reach, Save off until something changes', async () => {
     api.on('POST', IMPACT, impact());
-    await mount(KULGAN);
-    expect(q<HTMLInputElement>('[data-field=written]')!.value).toBe('Kulgan');
-    expect(q<HTMLInputElement>('[data-field=spoken]')!.value).toBe('KULL-gun');
+    await mount(WATSON);
+    expect(q<HTMLInputElement>('[data-field=written]')!.value).toBe('Watson');
+    expect(q<HTMLInputElement>('[data-field=spoken]')!.value).toBe('WAT-sun');
     expect(q('[data-role=count]')!.textContent?.trim()).toBe(
       '14 matches in 9 items · 3 have audio',
     );
     expect(save().disabled).toBe(true);
     expect(save().textContent).toContain('Save');
 
-    await type('spoken', 'KULL-gn');
+    await type('spoken', 'WAT-sn');
     expect(save().disabled).toBe(false);
-    await type('spoken', 'KULL-gun');
+    await type('spoken', 'WAT-sun');
     expect(save().disabled).toBe(true);
   });
 
   it('edits it with a PUT', async () => {
     api.on('POST', IMPACT, impact({ audioDiscardCount: 3 }));
     api.on('PUT', `${BASE}/k1`, {
-      ...KULGAN,
-      spokenForm: 'KULL-gn',
+      ...WATSON,
+      spokenForm: 'WAT-sn',
       audioDiscardCount: 3,
       needsAudioCount: 3,
     });
-    await mount(KULGAN);
-    await type('spoken', 'KULL-gn');
+    await mount(WATSON);
+    await type('spoken', 'WAT-sn');
     await settleImpact();
     expect(api.calls('POST', IMPACT).at(-1)!.body).toEqual({
       id: 'k1',
-      writtenForm: 'Kulgan',
-      spokenForm: 'KULL-gn',
+      writtenForm: 'Watson',
+      spokenForm: 'WAT-sn',
       delete: false,
     });
     expect(q('.r2m-advice')!.textContent?.trim()).toBe(
@@ -348,15 +350,15 @@ describe('an existing pronunciation', () => {
     );
     await click('save');
     expect(api.calls('PUT', `${BASE}/k1`).map((c) => c.body)).toEqual([
-      { writtenForm: 'Kulgan', spokenForm: 'KULL-gn' },
+      { writtenForm: 'Watson', spokenForm: 'WAT-sn' },
     ]);
     expect(toasts[0]!.message).toBe('Saved. 3 items need generating.');
     expect(closes).toBe(1);
   });
 
   it('Cancel discards the draft without a request', async () => {
-    await mount(KULGAN);
-    await type('spoken', 'KULL-gn');
+    await mount(WATSON);
+    await type('spoken', 'WAT-sn');
     await click('cancel');
     expect(closes).toBe(1);
     expect(api.calls('PUT', `${BASE}/k1`)).toHaveLength(0);
@@ -364,37 +366,37 @@ describe('an existing pronunciation', () => {
 
   it('a new entry resets the draft', async () => {
     api.on('POST', IMPACT, impact());
-    await mount(KULGAN);
-    await type('spoken', 'KULL-gn');
+    await mount(WATSON);
+    await type('spoken', 'WAT-sn');
     editor.entry = {
-      ...KULGAN,
+      ...WATSON,
       id: 'p1',
-      writtenForm: 'Pug',
-      spokenForm: 'pug',
+      writtenForm: 'Holmes',
+      spokenForm: 'holmes',
     };
     await editor.rendered();
-    expect(q<HTMLInputElement>('[data-field=written]')!.value).toBe('Pug');
-    expect(q<HTMLInputElement>('[data-field=spoken]')!.value).toBe('pug');
+    expect(q<HTMLInputElement>('[data-field=written]')!.value).toBe('Holmes');
+    expect(q<HTMLInputElement>('[data-field=spoken]')!.value).toBe('holmes');
     expect(editor.dirty()).toBe(false);
   });
 
   it('keeps the draft when the same entry is refetched', async () => {
     api.on('POST', IMPACT, impact());
-    await mount(KULGAN);
-    await type('spoken', 'KULL-gn');
-    editor.entry = { ...KULGAN, withAudioCount: 0 };
+    await mount(WATSON);
+    await type('spoken', 'WAT-sn');
+    editor.entry = { ...WATSON, withAudioCount: 0 };
     await editor.rendered();
-    expect(q<HTMLInputElement>('[data-field=spoken]')!.value).toBe('KULL-gn');
+    expect(q<HTMLInputElement>('[data-field=spoken]')!.value).toBe('WAT-sn');
     expect(editor.dirty()).toBe(true);
   });
 
   it('asks the impact again when the same entry is refetched with an unchanged draft', async () => {
     let withAudio = 3;
     api.on('POST', IMPACT, () => impact({ withAudioCount: withAudio }));
-    await mount(KULGAN);
+    await mount(WATSON);
     await settleImpact();
     withAudio = 0;
-    editor.entry = { ...KULGAN, withAudioCount: 0 };
+    editor.entry = { ...WATSON, withAudioCount: 0 };
     await settleImpact();
     expect(q('[data-role=count]')!.textContent?.trim()).toBe(
       '14 matches in 9 items · 0 have audio',
@@ -410,7 +412,7 @@ describe('an existing pronunciation', () => {
         audioDiscardCount: 12,
         needsAudioCount: 40,
       });
-      await mount(KULGAN);
+      await mount(WATSON);
       await click('delete');
       await timers.advance(0);
       await editor.rendered();
@@ -420,8 +422,8 @@ describe('an existing pronunciation', () => {
       );
       expect(confirms).toEqual([
         {
-          title: 'Delete “Kulgan”?',
-          message: 'Kulgan goes back to how the provider reads it. 12 items lose their audio.',
+          title: 'Delete “Watson”?',
+          message: 'Watson goes back to how the provider reads it. 12 items lose their audio.',
           confirmLabel: 'Delete',
           destructive: true,
         },
@@ -434,10 +436,10 @@ describe('an existing pronunciation', () => {
     it('sends nothing when the confirm is declined', async () => {
       api.on('POST', IMPACT, impact());
       confirmAnswer = false;
-      await mount(KULGAN);
+      await mount(WATSON);
       await click('delete');
       await timers.advance(0);
-      expect(confirms[0]!.message).toBe('Kulgan goes back to how the provider reads it.');
+      expect(confirms[0]!.message).toBe('Watson goes back to how the provider reads it.');
       expect(api.calls('DELETE', `${BASE}/k1`)).toHaveLength(0);
       expect(closes).toBe(0);
     });
@@ -447,8 +449,8 @@ describe('an existing pronunciation', () => {
 describe('disabled with a reason', () => {
   it('turns Save and Delete off while audio generation runs for the project', async () => {
     api.on('POST', IMPACT, impact());
-    await mount(KULGAN, (e) => (e.audioInFlight = 2));
-    await type('spoken', 'KULL-gn');
+    await mount(WATSON, (e) => (e.audioInFlight = 2));
+    await type('spoken', 'WAT-sn');
     expect(save().disabled).toBe(true);
     expect(reasonOf('save')).toBe(AUDIO_RUNNING);
     expect(q<HTMLButtonElement>('[data-action=delete]')!.disabled).toBe(true);
@@ -456,7 +458,7 @@ describe('disabled with a reason', () => {
   });
 
   it('turns the inputs, Save and Delete off while a step is viewed, and asks no impact', async () => {
-    await mount(KULGAN, (e) => (e.readOnly = VIEWING_READ_ONLY));
+    await mount(WATSON, (e) => (e.readOnly = VIEWING_READ_ONLY));
     expect(q<HTMLInputElement>('[data-field=written]')!.disabled).toBe(true);
     expect(q<HTMLInputElement>('[data-field=spoken]')!.disabled).toBe(true);
     expect(q('[data-field=written]')!.closest('.r2m-blockable')!.getAttribute('data-tooltip')).toBe(
@@ -480,30 +482,30 @@ describe('the editor in the Book view panel', () => {
     chapterTitle: 'ONE',
     speaker: 'Narrator',
     hasAudio: false,
-    sentence: 'So Kulgan said.',
+    sentence: 'So Watson said.',
     sentenceStart,
     matchStart,
     matchLength: 6,
-    spokenSentence: 'So KULL-gun said.',
+    spokenSentence: 'So WAT-sun said.',
     spokenMatchStart: 3,
-    spokenMatchLength: 8,
+    spokenMatchLength: 7,
   });
 
   it('opens a new entry pre-filled from a selection, ready to Add', async () => {
     api.on('POST', IMPACT, impact());
-    await mount(null, (e) => (e.prefill = { writtenForm: 'Kulgan', spokenForm: 'Kulgan' }));
-    expect(q<HTMLInputElement>('[data-field=written]')!.value).toBe('Kulgan');
-    expect(q<HTMLInputElement>('[data-field=spoken]')!.value).toBe('Kulgan');
+    await mount(null, (e) => (e.prefill = { writtenForm: 'Watson', spokenForm: 'Watson' }));
+    expect(q<HTMLInputElement>('[data-field=written]')!.value).toBe('Watson');
+    expect(q<HTMLInputElement>('[data-field=spoken]')!.value).toBe('Watson');
     expect(save().disabled).toBe(false);
     await settleImpact();
     expect(api.calls('POST', IMPACT)[0]!.body).toMatchObject({
-      writtenForm: 'Kulgan',
+      writtenForm: 'Watson',
     });
   });
 
   it('tries out the sentence it was opened from in place of the sample cards', async () => {
     api.on('POST', IMPACT, impact({ matches: [match('i1', 0, 3), match('i2', 20, 3)] }));
-    await mount(KULGAN, (e) => (e.origin = { itemId: 'i2', offset: 23 }));
+    await mount(WATSON, (e) => (e.origin = { itemId: 'i2', offset: 23 }));
     await settleImpact();
     expect(q('r2m-pronunciation-try')).toBeNull();
     const sentence = q<HTMLElement & { match: { itemId: string } }>('r2m-pronunciation-sentence')!;
@@ -512,7 +514,7 @@ describe('the editor in the Book view panel', () => {
 
   it('says so when the draft no longer matches in the sentence it was opened from', async () => {
     api.on('POST', IMPACT, impact({ matches: [match('i1', 0, 3)] }));
-    await mount(KULGAN, (e) => (e.origin = { itemId: 'i2', offset: 23 }));
+    await mount(WATSON, (e) => (e.origin = { itemId: 'i2', offset: 23 }));
     await settleImpact();
     expect(q('r2m-pronunciation-sentence')).toBeNull();
     expect(q('[data-role=no-sentence]')).not.toBeNull();
@@ -520,7 +522,7 @@ describe('the editor in the Book view panel', () => {
 
   it('shows Try it on the Pronunciations page, where it was opened from no place', async () => {
     api.on('POST', IMPACT, impact({ matches: [match('i1', 0, 3)] }));
-    await mount(KULGAN);
+    await mount(WATSON);
     await settleImpact();
     expect(q('r2m-pronunciation-try')).not.toBeNull();
     expect(q('r2m-pronunciation-sentence')).toBeNull();

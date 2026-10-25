@@ -38,7 +38,7 @@ function target(overrides: Partial<NodeMenuTarget> = {}): NodeMenuTarget {
   return {
     kind: 'chapter',
     id: 'c1',
-    text: 'The Encyclopedists',
+    text: 'Jonathan Harker’s Journal',
     isFirst: false,
     isLast: false,
     ...overrides,
@@ -64,7 +64,7 @@ describe('mergeChange', () => {
   it('Previous folds this node into the one before it; neutral', () => {
     expect(mergeChange(target(), 'Previous')).toEqual({
       action: 'Merge with previous',
-      scope: 'Folds “The Encyclopedists” into the previous chapter.',
+      scope: 'Folds “Jonathan Harker’s Journal” into the previous chapter.',
       cost: 'Splitting it back needs the exact point.',
       destructive: false,
     });

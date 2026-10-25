@@ -6,7 +6,7 @@ import type { SpeakerChip } from './speaker-chip';
 import type { SpeakerRosterEntry } from './speaker-menu';
 
 const ROSTER: SpeakerRosterEntry[] = [
-  { id: 'c-hardin', name: 'Hardin' },
+  { id: 'c-elizabeth', name: 'Elizabeth' },
   { id: 'c-narr', name: 'Narrator', isNarrator: true },
 ];
 
@@ -40,17 +40,19 @@ const label = (chip: Element) => chip.querySelector('.r2m-speaker-chip__name')?.
 
 describe('r2m-speaker-chip', () => {
   it('shows the name with a dot in the character hue', async () => {
-    const chip = await mount({ name: 'Hardin', characterId: 'c-hardin' });
-    expect(label(chip)).toBe('Hardin');
+    const chip = await mount({ name: 'Elizabeth', characterId: 'c-elizabeth' });
+    expect(label(chip)).toBe('Elizabeth');
     expect(chip.classList.contains('r2m-speaker-chip')).toBe(true);
     expect(chip.classList.contains('r2m-speaker-chip--named')).toBe(true);
     expect(chip.querySelector('.r2m-speaker-chip__dot')).not.toBeNull();
-    expect(chip.style.getPropertyValue('--r2m-speaker-hue')).toBe(String(speakerHue('c-hardin')));
+    expect(chip.style.getPropertyValue('--r2m-speaker-hue')).toBe(
+      String(speakerHue('c-elizabeth')),
+    );
   });
 
   it('falls back to the name for the hue when there is no character id', async () => {
-    const chip = await mount({ name: 'Hardin' });
-    expect(chip.style.getPropertyValue('--r2m-speaker-hue')).toBe(String(speakerHue('Hardin')));
+    const chip = await mount({ name: 'Elizabeth' });
+    expect(chip.style.getPropertyValue('--r2m-speaker-hue')).toBe(String(speakerHue('Elizabeth')));
   });
 
   it.each([
@@ -66,33 +68,33 @@ describe('r2m-speaker-chip', () => {
   });
 
   it('a state keeps a given name over its default label', async () => {
-    const chip = await mount({ state: 'narration', name: 'The Encyclopedist' });
-    expect(label(chip)).toBe('The Encyclopedist');
+    const chip = await mount({ state: 'narration', name: 'The Count' });
+    expect(label(chip)).toBe('The Count');
   });
 
   it('marks a linked narrator', async () => {
-    const chip = await mount({ state: 'narrator-linked', name: 'Hardin' });
+    const chip = await mount({ state: 'narrator-linked', name: 'Elizabeth' });
     expect(chip.querySelector('.r2m-speaker-chip__link')?.getAttribute('aria-label')).toBe(
       'Linked narrator',
     );
   });
 
   it('follows the compact input', async () => {
-    const chip = await mount({ name: 'Hardin', compact: true });
+    const chip = await mount({ name: 'Elizabeth', compact: true });
     expect(chip.classList.contains('r2m-speaker-chip--compact')).toBe(true);
     chip.compact = false;
     expect(chip.classList.contains('r2m-speaker-chip--compact')).toBe(false);
   });
 
   it('without a roster it is plain text, not a button', async () => {
-    const chip = await mount({ name: 'Hardin' });
+    const chip = await mount({ name: 'Elizabeth' });
     expect(chip.querySelector('button')).toBeNull();
     expect(chip.querySelector('[popover]')).toBeNull();
     expect(chip.classList.contains('r2m-speaker-chip--interactive')).toBe(false);
   });
 
   it('with a roster it is a button that targets its menu popover', async () => {
-    const chip = await mount({ name: 'Hardin', roster: ROSTER });
+    const chip = await mount({ name: 'Elizabeth', roster: ROSTER });
     const button = chip.querySelector('button.r2m-speaker-chip__body')!;
     const popover = chip.querySelector('.r2m-speaker-chip__menu')!;
     expect(button.getAttribute('popovertarget')).toBe(popover.id);
@@ -107,12 +109,12 @@ describe('r2m-speaker-chip', () => {
   });
 
   it('renders the menu only while open, so each open starts fresh', async () => {
-    const chip = await mount({ name: 'Hardin', characterId: 'c-hardin', roster: ROSTER });
+    const chip = await mount({ name: 'Elizabeth', characterId: 'c-elizabeth', roster: ROSTER });
     expect(chip.querySelector('r2m-speaker-menu')).toBeNull();
     await open(chip);
     const menu = chip.querySelector('r2m-speaker-menu')!;
     expect(menu.roster).toBe(ROSTER);
-    expect(menu.selectedId).toBe('c-hardin');
+    expect(menu.selectedId).toBe('c-elizabeth');
 
     chip
       .querySelector('.r2m-speaker-chip__menu')!
@@ -127,7 +129,7 @@ describe('r2m-speaker-chip', () => {
     window.matchMedia = ((query: string) =>
       ({ matches: query === '(pointer: fine)' && fine }) as MediaQueryList) as typeof matchMedia;
     try {
-      const chip = await mount({ name: 'Hardin', roster: ROSTER });
+      const chip = await mount({ name: 'Elizabeth', roster: ROSTER });
       await open(chip);
       const menu = chip.querySelector('r2m-speaker-menu')!;
       await menu.rendered();
@@ -150,7 +152,7 @@ describe('r2m-speaker-chip', () => {
   });
 
   it("re-exposes the menu's pick, clear and create events and closes the menu", async () => {
-    const chip = await mount({ name: 'Hardin', roster: ROSTER });
+    const chip = await mount({ name: 'Elizabeth', roster: ROSTER });
     const seen: string[] = [];
     for (const type of ['pick', 'clear', 'create']) {
       chip.addEventListener(type, (e) => seen.push(`${type}:${(e as CustomEvent).detail ?? ''}`));
@@ -162,7 +164,7 @@ describe('r2m-speaker-chip', () => {
     const actions = menu.querySelectorAll<HTMLButtonElement>('.r2m-speaker-menu__action');
     actions[0]!.click();
     actions[1]!.click();
-    expect(seen).toEqual(['pick:c-hardin', 'clear:', 'create:']);
+    expect(seen).toEqual(['pick:c-elizabeth', 'clear:', 'create:']);
     expect(hidden).toBe(3);
   });
 });

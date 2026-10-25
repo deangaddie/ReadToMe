@@ -6,15 +6,15 @@ const started = (id = 'i1', attempt = 1): AudioGenEvent => ({
   kind: 'itemStarted',
   id,
   attempt,
-  character: 'Hardin',
-  text: 'The Encyclopedia comes first.',
+  character: 'Elizabeth',
+  text: 'The Netherfield comes first.',
 });
 
 describe('foldAudioCards', () => {
   it('opens a card on itemStarted with Generate active and the rest pending', () => {
     const [card] = foldAudioCards([started()]);
     expect(card?.key).toBe('i1#1');
-    expect(card?.character).toBe('Hardin');
+    expect(card?.character).toBe('Elizabeth');
     expect(card?.phases.map((p) => `${p.id}:${p.state}`)).toEqual([
       'generate:active',
       'normalize:pending',
@@ -54,7 +54,7 @@ describe('foldAudioCards', () => {
         applied: false,
         reason: 'disabled',
       },
-      { kind: 'transcribed', id: 'i1', attempt: 1, transcript: 'the encyclopedia comes first' },
+      { kind: 'transcribed', id: 'i1', attempt: 1, transcript: 'the netherfield comes first' },
       { kind: 'verified', id: 'i1', attempt: 1, ok: true, wer: 0.05, rescued: false },
     ]);
     expect(card?.phases.map((p) => p.state)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok']);
@@ -62,7 +62,7 @@ describe('foldAudioCards', () => {
       'silence-trim: applied',
       'denoise: skipped — disabled',
     ]);
-    expect(card?.phases[3]?.lines).toEqual(['the encyclopedia comes first']);
+    expect(card?.phases[3]?.lines).toEqual(['the netherfield comes first']);
     expect(card?.phases[4]?.lines).toEqual(['WER 5.0%']);
     expect(card?.failed).toBe(false);
   });

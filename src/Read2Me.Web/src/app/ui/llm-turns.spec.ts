@@ -13,20 +13,20 @@ const start = (preview: string, configName = 'gemma-26b'): LlmStreamEvent => ({
 describe('foldLlmTurns', () => {
   it('opens a turn on requestStarted and appends deltas to it', () => {
     const rows = foldLlmTurns([
-      start('Hardin leaned back'),
+      start('Elizabeth leaned back'),
       { kind: 'thinkingDelta', text: 'Who ' },
       { kind: 'thinkingDelta', text: 'speaks?' },
       { kind: 'contentDelta', text: '{"speaker":' },
-      { kind: 'contentDelta', text: '"Hardin"}' },
+      { kind: 'contentDelta', text: '"Elizabeth"}' },
     ]);
     expect(rows.length).toBe(1);
     const turn = rows[0] as LlmTurn;
     expect(turn.kind).toBe('turn');
     expect(turn.state).toBe('open');
-    expect(turn.paragraphPreview).toBe('Hardin leaned back');
-    expect(turn.prompt).toBe('PROMPT Hardin leaned back');
+    expect(turn.paragraphPreview).toBe('Elizabeth leaned back');
+    expect(turn.prompt).toBe('PROMPT Elizabeth leaned back');
     expect(turn.thinking).toBe('Who speaks?');
-    expect(turn.response).toBe('{"speaker":"Hardin"}');
+    expect(turn.response).toBe('{"speaker":"Elizabeth"}');
   });
 
   it('closes turns with completed stats, failure reason or abort', () => {

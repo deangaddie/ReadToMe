@@ -21,39 +21,39 @@ import './shell';
 const CASES: { path: string; context: string[]; crumbs: string[]; title: string }[] = [
   { path: 'projects', context: [], crumbs: ['Projects'], title: 'Projects' },
   {
-    path: 'projects/foundation',
+    path: 'projects/pride-and-prejudice',
     context: ['Overview', 'Book', 'Cast', 'Pronunciations', 'Export'],
-    crumbs: ['Projects', 'foundation'],
+    crumbs: ['Projects', 'pride-and-prejudice'],
     title: '',
   },
   {
-    path: 'projects/foundation/book',
+    path: 'projects/pride-and-prejudice/book',
     context: ['Overview', 'Book', 'Cast', 'Pronunciations', 'Export'],
-    crumbs: ['Projects', 'foundation', 'Book'],
+    crumbs: ['Projects', 'pride-and-prejudice', 'Book'],
     title: 'Book',
   },
   {
-    path: 'projects/foundation/cast',
+    path: 'projects/pride-and-prejudice/cast',
     context: ['Overview', 'Book', 'Cast', 'Pronunciations', 'Export'],
-    crumbs: ['Projects', 'foundation', 'Cast'],
+    crumbs: ['Projects', 'pride-and-prejudice', 'Cast'],
     title: 'Cast',
   },
   {
-    path: 'projects/foundation/cast/abc',
+    path: 'projects/pride-and-prejudice/cast/abc',
     context: ['Overview', 'Book', 'Cast', 'Pronunciations', 'Export'],
-    crumbs: ['Projects', 'foundation', 'Cast'],
+    crumbs: ['Projects', 'pride-and-prejudice', 'Cast'],
     title: 'Cast',
   },
   {
-    path: 'projects/foundation/voices/v1/editor',
+    path: 'projects/pride-and-prejudice/voices/v1/editor',
     context: ['Overview', 'Book', 'Cast', 'Pronunciations', 'Export'],
-    crumbs: ['Projects', 'foundation', 'Voice editor'],
+    crumbs: ['Projects', 'pride-and-prejudice', 'Voice editor'],
     title: 'Voice editor',
   },
   {
-    path: 'projects/foundation/export',
+    path: 'projects/pride-and-prejudice/export',
     context: ['Overview', 'Book', 'Cast', 'Pronunciations', 'Export'],
-    crumbs: ['Projects', 'foundation', 'Export'],
+    crumbs: ['Projects', 'pride-and-prejudice', 'Export'],
     title: 'Export',
   },
   ...[
@@ -149,16 +149,18 @@ describe('app-root', () => {
   });
 
   it('names the project crumb by its loaded title, keeping the folder link', async () => {
-    const { shell } = await mount('projects/dune/cast');
-    use(ProjectTitles).set('dune', 'Dune Messiah');
+    const { shell } = await mount('projects/dracula/cast');
+    use(ProjectTitles).set('dracula', "Dracula's Guest");
     await settle();
-    expect(texts(shell, '.shell__crumb')).toEqual(['Projects', 'Dune Messiah', 'Cast']);
-    expect(shell.querySelectorAll('a.shell__crumb')[1]?.getAttribute('href')).toBe('projects/dune');
-    expect(document.title).toBe('Read2Me · Projects · Dune Messiah · Cast');
+    expect(texts(shell, '.shell__crumb')).toEqual(['Projects', "Dracula's Guest", 'Cast']);
+    expect(shell.querySelectorAll('a.shell__crumb')[1]?.getAttribute('href')).toBe(
+      'projects/dracula',
+    );
+    expect(document.title).toBe("Read2Me · Projects · Dracula's Guest · Cast");
   });
 
   it('marks the active nav item and offers the global group', async () => {
-    const { shell } = await mount('projects/foundation/book');
+    const { shell } = await mount('projects/pride-and-prejudice/book');
     const active = shell.querySelectorAll('.shell__nav-item--active');
     expect(texts(shell, '.shell__nav-item--active .shell__nav-label')).toEqual(['Book']);
     expect(active[0]?.getAttribute('aria-current')).toBe('page');
@@ -183,12 +185,12 @@ describe('app-root', () => {
 
   it('frames the routed page in the main outlet and opens the project on a project route', async () => {
     // Every project child is ported now; the export page stands in for them here.
-    const { shell } = await mount('projects/foundation/export');
+    const { shell } = await mount('projects/pride-and-prejudice/export');
     expect(shell.querySelector('main r2m-outlet')?.firstElementChild?.localName).toBe(
       'r2m-project-shell',
     );
     expect(shell.querySelector('r2m-project-shell r2m-export-page')).not.toBeNull();
-    expect(live.joined).toEqual(['foundation']);
+    expect(live.joined).toEqual(['pride-and-prejudice']);
   });
 
   it('remembers the rail state across instances via localStorage', async () => {
@@ -321,7 +323,7 @@ describe('next-step pill', () => {
     ],
   };
 
-  async function mountWith(path: string, next: NextStep, folder = 'foundation') {
+  async function mountWith(path: string, next: NextStep, folder = 'pride-and-prejudice') {
     const mounted = await mount(path);
     use(ProjectGuide).publish(folder, next, runner);
     await settle();
@@ -331,7 +333,7 @@ describe('next-step pill', () => {
   const pill = (shell: Element) => shell.querySelector('.shell__next');
 
   it('sits after the spacer, then the History button, then the live dot on a project page', async () => {
-    const { shell } = await mountWith('projects/foundation/book', ACT);
+    const { shell } = await mountWith('projects/pride-and-prejudice/book', ACT);
     const bar = Array.from(shell.querySelector('.shell__appbar')?.children ?? []).map((el) =>
       el.classList.contains('shell__history-toggle') ? 'shell__history-toggle' : el.classList[0],
     );
@@ -343,18 +345,18 @@ describe('next-step pill', () => {
   it.each([
     {
       why: 'on the Overview',
-      path: 'projects/foundation',
-      folder: 'foundation',
+      path: 'projects/pride-and-prejudice',
+      folder: 'pride-and-prejudice',
     },
     {
       why: 'for another project',
-      path: 'projects/foundation/book',
-      folder: 'dune',
+      path: 'projects/pride-and-prejudice/book',
+      folder: 'dracula',
     },
     {
       why: 'off the project routes',
       path: 'settings/llm',
-      folder: 'foundation',
+      folder: 'pride-and-prejudice',
     },
   ])('is hidden $why', async (c) => {
     const { shell } = await mountWith(c.path, ACT, c.folder);
@@ -362,7 +364,7 @@ describe('next-step pill', () => {
   });
 
   it('runs the primary action, offers the pills, and opens the Overview from its icon', async () => {
-    const { shell } = await mountWith('projects/foundation/cast', ACT);
+    const { shell } = await mountWith('projects/pride-and-prejudice/cast', ACT);
     const main = shell.querySelector<HTMLElement>('.shell__next-main');
     expect(main?.textContent?.trim()).toBe('Next: Titles · Add titles…');
     expect(main?.getAttribute('data-tooltip')).toBe(ACT.kind === 'act' ? ACT.tooltip : null);
@@ -381,7 +383,7 @@ describe('next-step pill', () => {
   });
 
   it('a stale step has the warn tint, still runs its action and offers Reconfirm', async () => {
-    const { shell } = await mountWith('projects/foundation/book', {
+    const { shell } = await mountWith('projects/pride-and-prejudice/book', {
       kind: 'stale',
       step: 'structure',
       label: 'Structure changed since you confirmed',
@@ -397,7 +399,7 @@ describe('next-step pill', () => {
   });
 
   it('a running or blocked step shows step · chip and its pills; the click opens the Overview with the reason as tooltip', async () => {
-    const { shell } = await mountWith('projects/foundation/book', {
+    const { shell } = await mountWith('projects/pride-and-prejudice/book', {
       kind: 'waiting',
       step: 'speakers',
       label: 'Speakers · Review not confirmed',
@@ -414,7 +416,7 @@ describe('next-step pill', () => {
   });
 
   it('reads “All steps done” beside the Overview icon', async () => {
-    const { shell } = await mountWith('projects/foundation/export', {
+    const { shell } = await mountWith('projects/pride-and-prejudice/export', {
       kind: 'allDone',
       label: 'All steps done',
       tint: 'ok',
@@ -425,7 +427,7 @@ describe('next-step pill', () => {
   });
 
   it('disables its buttons while a step command runs', async () => {
-    const { shell } = await mountWith('projects/foundation/book', ACT);
+    const { shell } = await mountWith('projects/pride-and-prejudice/book', ACT);
     (runner.busy as ReturnType<typeof signal<string | null>>).set('titles:confirm');
     await settle();
     expect(shell.querySelector<HTMLButtonElement>('.shell__next-main')?.disabled).toBe(true);
@@ -439,7 +441,7 @@ describe('History sheet', () => {
 
   beforeEach(() => {
     new FakeApi()
-      .on('GET', '/api/projects/foundation/history', {
+      .on('GET', '/api/projects/pride-and-prejudice/history', {
         steps: [
           {
             stepId: 's1',
@@ -466,13 +468,13 @@ describe('History sheet', () => {
   });
 
   it('has an app-bar button on a project page only', async () => {
-    expect(toggle((await mount('projects/foundation/cast')).shell)).not.toBeNull();
+    expect(toggle((await mount('projects/pride-and-prejudice/cast')).shell)).not.toBeNull();
     document.body.replaceChildren();
     expect(toggle((await mount('projects')).shell)).toBeNull();
   });
 
   it('opens beside the page with the advice line and the steps, and closes again', async () => {
-    const { shell } = await mount('projects/foundation/book');
+    const { shell } = await mount('projects/pride-and-prejudice/book');
     toggle(shell)?.click();
     await settle();
     await tick();
@@ -491,11 +493,11 @@ describe('History sheet', () => {
   });
 
   it('stays open from one page of the project to the next', async () => {
-    const { shell, router } = await mount('projects/foundation/book');
+    const { shell, router } = await mount('projects/pride-and-prejudice/book');
     toggle(shell)?.click();
     await settle();
 
-    router.navigate('projects/foundation/cast');
+    router.navigate('projects/pride-and-prejudice/cast');
     await settle();
     await tick();
     await settle();
@@ -528,7 +530,7 @@ describe('viewing a History step', () => {
   beforeEach(() => {
     toasts = [];
     override(ToastService, { info: (m: string) => toasts.push(m) } as unknown as ToastService);
-    api = new FakeApi().on('GET', '/api/projects/foundation/history', {
+    api = new FakeApi().on('GET', '/api/projects/pride-and-prejudice/history', {
       steps: [row(2, 'Assign speaker', null), row(1, 'Split chapter', 'Chapter 3 at paragraph 41')],
       headStepId: 's2',
       busy: null,
@@ -537,10 +539,10 @@ describe('viewing a History step', () => {
     api.install();
   });
 
-  async function openSheet(path = 'projects/foundation/book') {
+  async function openSheet(path = 'projects/pride-and-prejudice/book') {
     const mounted = await mount(path);
     use(ProjectGuide).publish(
-      'foundation',
+      'pride-and-prejudice',
       { kind: 'allDone', label: 'All done', tint: 'done' } as unknown as NextStep,
       { busy: signal(null) } as unknown as StepRunner,
     );
@@ -595,7 +597,7 @@ describe('viewing a History step', () => {
     const { shell } = await openSheet();
     live.emit('history', {
       kind: 'busyChanged',
-      folder: 'foundation',
+      folder: 'pride-and-prejudice',
       reason: 'Attribution: 128 paragraphs left',
     });
     await settle();
@@ -614,7 +616,11 @@ describe('viewing a History step', () => {
     stepButton(shell, 's1')?.click();
     await settle();
 
-    live.emit('history', { kind: 'busyChanged', folder: 'foundation', reason: 'Voice batch' });
+    live.emit('history', {
+      kind: 'busyChanged',
+      folder: 'pride-and-prejudice',
+      reason: 'Voice batch',
+    });
     await settle();
 
     expect(shell.querySelector('.shell__viewing')).toBeNull();
@@ -622,11 +628,11 @@ describe('viewing a History step', () => {
   });
 
   it('states what a Restore costs before the click, then restores with no confirm', async () => {
-    api.on('GET', '/api/projects/foundation/history/s1', {
+    api.on('GET', '/api/projects/pride-and-prejudice/history/s1', {
       ...row(1, 'Split chapter', null),
       restorePreview: { audioDiscardCount: 60 },
     });
-    api.on('POST', '/api/projects/foundation/history/s1/restore', {
+    api.on('POST', '/api/projects/pride-and-prejudice/history/s1/restore', {
       step: { ...row(3, "Restore to 'Split chapter' (14:02)", null), restoredFromStepId: 's1' },
       audioDiscardCount: 60,
     });
@@ -646,7 +652,9 @@ describe('viewing a History step', () => {
     await tick();
     await settle();
 
-    expect(api.calls('POST', '/api/projects/foundation/history/s1/restore')).toHaveLength(1);
+    expect(api.calls('POST', '/api/projects/pride-and-prejudice/history/s1/restore')).toHaveLength(
+      1,
+    );
     expect(shell.querySelector('.shell__viewing')).toBeNull();
     expect(main(shell)?.inert).toBe(false);
     expect(toasts.at(-1)).toContain('Restored to #1 Split chapter');

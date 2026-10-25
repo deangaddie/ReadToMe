@@ -7,45 +7,50 @@ describe('applyAssembly', () => {
     const state = applyAssembly(previous, {
       kind: 'phaseStarted',
       phase: 'Gather',
-      folder: 'dune',
+      folder: 'dracula',
     });
 
     expect(state).toMatchObject({
       isRunning: true,
       currentPhase: 'Gather',
-      folder: 'dune',
+      folder: 'dracula',
       outputFileName: null,
     });
   });
 
   it('keeps the output file name a completed run announces', () => {
-    const running = { ...IDLE_ASSEMBLY, isRunning: true, currentPhase: 'Finalize', folder: 'dune' };
+    const running = {
+      ...IDLE_ASSEMBLY,
+      isRunning: true,
+      currentPhase: 'Finalize',
+      folder: 'dracula',
+    };
 
     const state = applyAssembly(running, {
       kind: 'completed',
-      folder: 'dune',
-      outputFileName: 'Dune.m4b',
+      folder: 'dracula',
+      outputFileName: 'Dracula.m4b',
     });
 
     expect(state).toMatchObject({
       isRunning: false,
       currentPhase: null,
       encodePercent: 100,
-      folder: 'dune',
-      outputFileName: 'Dune.m4b',
+      folder: 'dracula',
+      outputFileName: 'Dracula.m4b',
     });
   });
 
   it('keeps the known folder when a message does not name one', () => {
-    const running = { ...IDLE_ASSEMBLY, isRunning: true, folder: 'dune' };
+    const running = { ...IDLE_ASSEMBLY, isRunning: true, folder: 'dracula' };
 
     expect(applyAssembly(running, { kind: 'progress', fraction: 0.5 })).toMatchObject({
-      folder: 'dune',
+      folder: 'dracula',
       encodePercent: 50,
     });
     expect(applyAssembly(running, { kind: 'cancelled' })).toMatchObject({
       isRunning: false,
-      folder: 'dune',
+      folder: 'dracula',
       outputFileName: null,
     });
   });

@@ -10,13 +10,13 @@ describe('ProjectGuide', () => {
   it('holds the folder’s next step once the project shell publishes it', () => {
     const guide = new ProjectGuide();
     expect(guide.current()).toBeNull();
-    guide.publish('dune', DONE, runner);
-    expect(guide.current()).toEqual({ folder: 'dune', next: DONE, runner });
+    guide.publish('dracula', DONE, runner);
+    expect(guide.current()).toEqual({ folder: 'dracula', next: DONE, runner });
   });
 
   it('a newer publish replaces the last one, whatever its folder', () => {
     const guide = new ProjectGuide();
-    guide.publish('dune', DONE, runner);
+    guide.publish('dracula', DONE, runner);
     const next = {
       kind: 'waiting',
       step: 'speakers',
@@ -33,7 +33,7 @@ describe('ProjectGuide', () => {
   it('clearing a folder forgets it, but not a project published since', () => {
     const guide = new ProjectGuide();
     guide.publish('emma', DONE, runner);
-    guide.clear('dune');
+    guide.clear('dracula');
     expect(guide.current()?.folder).toBe('emma');
     guide.clear('emma');
     expect(guide.current()).toBeNull();

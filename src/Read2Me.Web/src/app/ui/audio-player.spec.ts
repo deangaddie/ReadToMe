@@ -28,8 +28,8 @@ afterEach(() => {
 
 async function mount(props: Partial<AudioPlayer> = {}) {
   const player = Object.assign(document.createElement('r2m-audio-player'), {
-    src: '/workspace/foundation/item-1.wav',
-    label: 'Hardin',
+    src: '/workspace/pride-and-prejudice/item-1.wav',
+    label: 'Elizabeth',
     ...props,
   });
   document.body.append(player);
@@ -53,9 +53,9 @@ describe('r2m-audio-player', () => {
 
   it('shows the label, an unknown duration until metadata loads, then m:ss / m:ss', async () => {
     const { player, audio } = await mount();
-    expect(text(player, '.r2m-audio-player__label')).toBe('Hardin');
+    expect(text(player, '.r2m-audio-player__label')).toBe('Elizabeth');
     expect(text(player, '.r2m-audio-player__time')).toBe('0:00 / –:––');
-    expect(audio.getAttribute('src')).toBe('/workspace/foundation/item-1.wav');
+    expect(audio.getAttribute('src')).toBe('/workspace/pride-and-prejudice/item-1.wav');
 
     setDuration(audio, 125);
     await player.rendered();
@@ -93,7 +93,7 @@ describe('r2m-audio-player', () => {
     const { player, audio } = await mount();
     player.cacheKey = 7;
     await player.rendered();
-    expect(audio.getAttribute('src')).toBe('/workspace/foundation/item-1.wav?v=7');
+    expect(audio.getAttribute('src')).toBe('/workspace/pride-and-prejudice/item-1.wav?v=7');
   });
 
   it('shows the error state when the source cannot play', async () => {
@@ -107,7 +107,9 @@ describe('r2m-audio-player', () => {
   });
 
   it('A/B toggle swaps the source and restores position and play state', async () => {
-    const { player, audio } = await mount({ srcB: '/workspace/foundation/item-1.source.wav' });
+    const { player, audio } = await mount({
+      srcB: '/workspace/pride-and-prejudice/item-1.source.wav',
+    });
     const sides: AbSide[] = [];
     player.addEventListener('ab', (e) => sides.push((e as CustomEvent<AbSide>).detail));
     setDuration(audio, 100);
@@ -122,7 +124,7 @@ describe('r2m-audio-player', () => {
     await player.rendered();
 
     expect(sides).toEqual(['b']);
-    expect(audio.getAttribute('src')).toBe('/workspace/foundation/item-1.source.wav');
+    expect(audio.getAttribute('src')).toBe('/workspace/pride-and-prejudice/item-1.source.wav');
     expect(buttons[1]!.getAttribute('aria-pressed')).toBe('true');
 
     setDuration(audio, 100);

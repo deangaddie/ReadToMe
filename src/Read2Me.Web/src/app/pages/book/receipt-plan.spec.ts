@@ -7,7 +7,7 @@ function receipt(
 ): Receipt {
   const { revision = 6, isOwn = false, ...effects } = overrides;
   return {
-    folder: 'dune',
+    folder: 'dracula',
     mutationName: 'X',
     mutationId: 'm',
     revision,

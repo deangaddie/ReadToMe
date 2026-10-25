@@ -202,12 +202,12 @@ describe('batch hub events', () => {
 
 describe('voice audio url', () => {
   it('is null without audio and cache-busted with the version otherwise', () => {
-    expect(voiceAudioUrl('dune', voice(), {})).toBeNull();
-    expect(voiceAudioUrl('dune', voice({ audioFileName: 'voices/a/v1.wav' }), {})).toBe(
-      '/workspace/dune/voices/a/v1.wav?v=0',
+    expect(voiceAudioUrl('dracula', voice(), {})).toBeNull();
+    expect(voiceAudioUrl('dracula', voice({ audioFileName: 'voices/a/v1.wav' }), {})).toBe(
+      '/workspace/dracula/voices/a/v1.wav?v=0',
     );
-    expect(voiceAudioUrl('dune', voice({ audioFileName: 'voices/a/v1.wav' }), { v1: 2 })).toBe(
-      '/workspace/dune/voices/a/v1.wav?v=2',
+    expect(voiceAudioUrl('dracula', voice({ audioFileName: 'voices/a/v1.wav' }), { v1: 2 })).toBe(
+      '/workspace/dracula/voices/a/v1.wav?v=2',
     );
   });
 });

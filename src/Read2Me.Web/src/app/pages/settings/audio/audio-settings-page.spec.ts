@@ -16,11 +16,11 @@ const FULL = `${BASE}/full`;
 
 const SAMPLE: RecentAudioSample = {
   itemId: 'item-1',
-  folder: 'foundation',
-  text: 'The Encyclopedia Galactica is a marvel of the age.',
-  characterName: 'Hardin',
-  voiceName: 'Hardin Voice',
-  projectTitle: 'Foundation',
+  folder: 'pride-and-prejudice',
+  text: 'It is a truth universally acknowledged.',
+  characterName: 'Elizabeth',
+  voiceName: 'Elizabeth Voice',
+  projectTitle: 'Pride and Prejudice',
 };
 
 function full(overrides: Partial<AudioProcessingFull> = {}): AudioProcessingFull {
@@ -337,7 +337,7 @@ describe('r2m-audio-settings-page', () => {
     await flush(page);
     expect(picks).toBe(1);
     expect(preview.querySelector('[data-role="sample"]')?.textContent).toContain(
-      'Hardin · Hardin Voice · Foundation',
+      'Elizabeth · Elizabeth Voice · Pride and Prejudice',
     );
     expect(pick.textContent?.trim()).toBe('Change sample');
     expect(renderButton.disabled).toBe(false);
@@ -345,7 +345,7 @@ describe('r2m-audio-settings-page', () => {
     await type(page, 'trim-threshold', '-40');
     const response: StepPreviewResponse = {
       previewId: 'p1',
-      originalUrl: '/preview-source/foundation/item-1',
+      originalUrl: '/preview-source/pride-and-prejudice/item-1',
       processedUrl: '/audio-preview/p1',
       removedMs: 312.4,
       reason: null,
@@ -356,11 +356,11 @@ describe('r2m-audio-settings-page', () => {
     await flush(page);
 
     expect(api.calls('POST', `${BASE}/steps/silence-trim/preview`)[0]?.body).toEqual({
-      sample: { folder: 'foundation', itemId: 'item-1' },
+      sample: { folder: 'pride-and-prejudice', itemId: 'item-1' },
       settings: { thresholdDb: -40, padMs: 50, minOutputMs: 200 },
     });
     const audio = preview.querySelector('audio')!;
-    expect(audio.getAttribute('src')).toBe('/preview-source/foundation/item-1?v=p1');
+    expect(audio.getAttribute('src')).toBe('/preview-source/pride-and-prejudice/item-1?v=p1');
     const ab = preview.querySelectorAll('.r2m-audio-player__ab-btn');
     expect(Array.from(ab).map((b) => b.textContent?.trim())).toEqual(['Original', 'Trimmed']);
     expect(preview.querySelector('[data-role="removed"]')?.textContent).toContain('Removed 312 ms');
@@ -387,7 +387,7 @@ describe('r2m-audio-settings-page', () => {
     preview.querySelector<HTMLButtonElement>('[data-action="render-preview"]')!.click();
     await flush(page);
     expect(api.calls('POST', `${BASE}/steps/consonant-soften/preview`)[0]?.body).toEqual({
-      sample: { folder: 'foundation', itemId: 'item-1' },
+      sample: { folder: 'pride-and-prejudice', itemId: 'item-1' },
       settings: { engine: 'adyneq', preset: 'strong' },
     });
     expect(preview.querySelector('[data-role="reason"]')?.textContent).toContain('ffmpeg exited 1');

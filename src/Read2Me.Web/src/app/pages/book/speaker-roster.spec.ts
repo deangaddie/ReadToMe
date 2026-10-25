@@ -5,9 +5,9 @@ import { buildRoster } from './speaker-roster';
 const NARRATOR_ID = '00000000-0000-0000-0000-000000000001';
 
 const CHARACTERS: CharacterDto[] = [
-  { id: 'h', name: 'Hardin', aliases: [{ id: 'a1', name: 'Salvor' }] },
+  { id: 'h', name: 'Elizabeth', aliases: [{ id: 'a1', name: 'Lizzy' }] },
   { id: NARRATOR_ID, name: 'Narrator', aliases: [] },
-  { id: 'p', name: 'Pirenne', aliases: [] },
+  { id: 'p', name: 'Bingley', aliases: [] },
 ];
 
 describe('buildRoster', () => {
@@ -19,19 +19,19 @@ describe('buildRoster', () => {
     });
     expect(roster).toEqual([
       { id: NARRATOR_ID, name: 'Narrator', isNarrator: true },
-      { id: 'h', name: 'Hardin', aliases: ['Salvor'] },
-      { id: 'p', name: 'Pirenne', aliases: [] },
+      { id: 'h', name: 'Elizabeth', aliases: ['Lizzy'] },
+      { id: 'p', name: 'Bingley', aliases: [] },
     ]);
   });
 
   it('a linked narrator is labelled with the character and listed once', () => {
     const roster = buildRoster(CHARACTERS, {
       characterId: 'h',
-      displayName: 'Hardin',
+      displayName: 'Elizabeth',
       isLinked: true,
     });
-    expect(roster.map((e) => e.name)).toEqual(['Narrator (Hardin)', 'Narrator', 'Pirenne']);
-    expect(roster[0]).toEqual({ id: 'h', name: 'Narrator (Hardin)', isNarrator: true });
+    expect(roster.map((e) => e.name)).toEqual(['Narrator (Elizabeth)', 'Narrator', 'Bingley']);
+    expect(roster[0]).toEqual({ id: 'h', name: 'Narrator (Elizabeth)', isNarrator: true });
     expect(new Set(roster.map((e) => e.id)).size).toBe(roster.length);
   });
 

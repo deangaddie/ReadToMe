@@ -11,17 +11,17 @@ import type { PronunciationCard } from './pronunciation-card';
 import { indexSpans, markedText } from './pronunciation-marks';
 import './pronunciation-card';
 
-const TRY = '/api/projects/magician/pronunciations/try';
+const TRY = '/api/projects/the-adventures-of-sherlock-holmes/pronunciations/try';
 
 const marks = indexSpans({
-  pronunciations: [{ id: 'pug', writtenForm: 'Pug', spokenForm: 'PUHG' }],
+  pronunciations: [{ id: 'holmes', writtenForm: 'Holmes', spokenForm: 'HOHMZ' }],
   spans: [
     {
       itemId: 'i1',
-      start: 9,
-      length: 3,
-      pronunciationId: 'pug',
-      sentenceStart: 9,
+      start: 12,
+      length: 6,
+      pronunciationId: 'holmes',
+      sentenceStart: 12,
     },
   ],
 });
@@ -48,9 +48,9 @@ beforeEach(async () => {
   } as unknown as ToastService);
 
   host = document.createElement('div');
-  render(markedText('i1', 'Pug ran. Pug fell.', marks.byItem['i1']), host);
+  render(markedText('i1', 'Holmes ran. Holmes fell.', marks.byItem['i1']), host);
   card = document.createElement('r2m-pronunciation-card') as PronunciationCard;
-  card.folder = 'magician';
+  card.folder = 'the-adventures-of-sherlock-holmes';
   card.marks = marks;
   card.readOnly = null;
   host.append(card);
@@ -83,8 +83,8 @@ describe('the Pronunciation hover card', () => {
     await focusMark();
 
     expect(card.open()?.itemId).toBe('i1');
-    expect(card.querySelector('[data-testid=pron-card-forms]')!.textContent).toContain('Pug');
-    expect(card.querySelector('[data-testid=pron-card-forms]')!.textContent).toContain('PUHG');
+    expect(card.querySelector('[data-testid=pron-card-forms]')!.textContent).toContain('Holmes');
+    expect(card.querySelector('[data-testid=pron-card-forms]')!.textContent).toContain('HOHMZ');
     expect(mark().style.getPropertyValue('anchor-name')).toBe('--r2m-pron-card');
   });
 
@@ -97,7 +97,7 @@ describe('the Pronunciation hover card', () => {
     expect(api.calls('POST', TRY).map((c) => c.body)).toEqual([
       {
         itemId: 'i1',
-        sentenceStart: 9,
+        sentenceStart: 12,
         draft: null,
         asWritten: false,
         voice: 'item',
@@ -131,7 +131,7 @@ describe('the Pronunciation hover card', () => {
 
     card.querySelector<HTMLButtonElement>('[data-action=edit-pronunciation]')!.click();
 
-    expect(asked).toEqual([{ pronunciationId: 'pug', place: { itemId: 'i1', offset: 9 } }]);
+    expect(asked).toEqual([{ pronunciationId: 'holmes', place: { itemId: 'i1', offset: 12 } }]);
     expect(navigations).toEqual([]);
     expect(card.open()).toBeNull();
   });

@@ -29,28 +29,28 @@ const PARAGRAPH: ParagraphDto = {
   id: 'p1',
   isPauseParagraph: false,
   items: [
-    item('n', { itemType: 'Narration', characterId: NARRATOR_ID, text: 'Hardin leaned back.' }),
+    item('n', { itemType: 'Narration', characterId: NARRATOR_ID, text: 'Elizabeth leaned back.' }),
     item('d', {
       characterId: 'h',
-      text: '"The Encyclopedia comes first."',
+      text: '"The Netherfield comes first."',
       audioFileName: 'audio/d.wav',
       voiceInstructions: 'dry',
     }),
-    item('u', { text: '"Then face Anacreon."' }),
+    item('u', { text: '"Then face Wickham."' }),
   ],
 };
 
 const ROSTER = [
   { id: NARRATOR_ID, name: 'Narrator', isNarrator: true },
-  { id: 'h', name: 'Hardin' },
+  { id: 'h', name: 'Elizabeth' },
 ];
 
 function ctx(overrides: Partial<RowContext> = {}): RowContext {
   return {
-    folder: 'dune',
+    folder: 'dracula',
     mode: 'read',
     speakers: {
-      names: { h: 'Hardin' },
+      names: { h: 'Elizabeth' },
       narrator: { characterId: NARRATOR_ID, displayName: 'Narrator', isLinked: false },
     },
     paragraphStatus: {},
@@ -134,11 +134,11 @@ describe('paragraphRow', () => {
       expect(el.classList.contains('r2m-paragraph')).toBe(true);
       expect(el.dataset['paragraphId']).toBe('p1');
       expect(text(el.querySelector('.r2m-paragraph__prose'))).toBe(
-        'Hardin leaned back. "The Encyclopedia comes first." "Then face Anacreon."',
+        'Elizabeth leaned back. "The Netherfield comes first." "Then face Wickham."',
       );
       const chips = el.querySelectorAll('r2m-speaker-chip');
       expect(chips.length).toBe(1);
-      expect(text(chips[0]!)).toBe('Hardin +?');
+      expect(text(chips[0]!)).toBe('Elizabeth +?');
       expect(el.querySelectorAll('.r2m-item').length).toBe(0);
     });
 
@@ -146,16 +146,16 @@ describe('paragraphRow', () => {
       const el = await mount(
         ctx({
           marks: {
-            d: [{ start: 5, length: 12, pronunciationId: 'e', sentenceStart: 0 }],
+            d: [{ start: 5, length: 11, pronunciationId: 'e', sentenceStart: 0 }],
           },
         }),
       );
       const prose = el.querySelector('.r2m-paragraph__prose')!;
       expect(text(prose)).toBe(
-        'Hardin leaned back. "The Encyclopedia comes first." "Then face Anacreon."',
+        'Elizabeth leaned back. "The Netherfield comes first." "Then face Wickham."',
       );
       expect([...prose.querySelectorAll('.r2m-pron-mark')].map((m) => m.textContent)).toEqual([
-        'Encyclopedia',
+        'Netherfield',
       ]);
     });
 
@@ -242,7 +242,7 @@ describe('paragraphRow', () => {
       const rows = await openChipMenu(el.querySelector('r2m-speaker-chip')!);
       expect(rows.map((r) => text(r.querySelector('.r2m-speaker-menu__name')))).toEqual([
         'Narrator',
-        'Hardin',
+        'Elizabeth',
       ]);
       rows[1]!.click();
       expect(assigner.assign).toHaveBeenCalledWith({ kind: 'paragraph', paragraphId: 'p1' }, 'h');
@@ -332,7 +332,7 @@ describe('paragraphRow', () => {
       const rows = Array.from(el.querySelectorAll('.r2m-item'));
       expect(rows.map((r) => text(r.querySelector('.r2m-speaker-chip__name')))).toEqual([
         'Narration',
-        'Hardin',
+        'Elizabeth',
         'Unknown',
       ]);
       expect(rows.map((r) => r.classList.contains('r2m-item--unknown'))).toEqual([
@@ -360,7 +360,7 @@ describe('paragraphRow', () => {
       selectable: false,
       voices: {
         n: { voiceName: 'Deep', narratedBy: null },
-        d: { voiceName: 'Hardin Voice', narratedBy: null },
+        d: { voiceName: 'Elizabeth Voice', narratedBy: null },
         u: { voiceName: null, narratedBy: null },
       },
       itemStatus: { d: { audioVersion: 3 }, u: { status: 'Processing' } },
@@ -383,7 +383,7 @@ describe('paragraphRow', () => {
       const rows = Array.from(el.querySelectorAll('.r2m-item'));
       expect(rows.map((r) => text(r.querySelector('[data-testid=voice-line]')))).toEqual([
         'Voice: Deep',
-        'Voice: Hardin Voice',
+        'Voice: Elizabeth Voice',
         'Voice: —',
       ]);
       expect(text(rows[1]!.querySelector('.r2m-item__instructions'))).toBe('dry');
@@ -398,7 +398,7 @@ describe('paragraphRow', () => {
       expect(players.length).toBe(1);
       await players[0]!.rendered();
       expect(players[0]!.querySelector('audio')?.getAttribute('src')).toBe(
-        '/workspace/dune/audio/d.wav?v=3',
+        '/workspace/dracula/audio/d.wav?v=3',
       );
     });
 
@@ -433,7 +433,7 @@ describe('paragraphRow', () => {
       const read = await mount(ctx());
       expect(triggers(read).length).toBe(1);
       expect(triggers(read)[0]!.getAttribute('aria-label')).toBe(
-        'Actions for Hardin leaned back. "The Encyclopedia comes first." "Then face Anacreon."',
+        'Actions for Elizabeth leaned back. "The Netherfield comes first." "Then face Wickham."',
       );
       const speakers = await mount(ctx({ mode: 'speakers' }));
       expect(triggers(speakers).length).toBe(4);

@@ -66,18 +66,18 @@ describe('Router', () => {
   });
 
   it('fills a redirect with the matched params', () => {
-    const { router } = start('projects/dune');
-    expect(router.url().pathname).toBe('/app/projects/dune/book');
+    const { router } = start('projects/dracula');
+    expect(router.url().pathname).toBe('/app/projects/dracula/book');
   });
 
   it('sets the document title from the chain titles', () => {
-    start('projects/dune/book');
-    expect(document.title).toBe('Read2Me · dune · Book');
+    start('projects/dracula/book');
+    expect(document.title).toBe('Read2Me · dracula · Book');
   });
 
   it('keeps the document title current when a title function reads a signal', () => {
-    const name = signal('dune');
-    installNavigation('projects/dune/book');
+    const name = signal('dracula');
+    installNavigation('projects/dracula/book');
     const router = new Router();
     router.start(
       [
@@ -90,20 +90,20 @@ describe('Router', () => {
       ],
       async () => true,
     );
-    expect(document.title).toBe('Read2Me · dune · Book');
-    name.set('Dune Messiah');
-    expect(document.title).toBe('Read2Me · Dune Messiah · Book');
+    expect(document.title).toBe('Read2Me · dracula · Book');
+    name.set("Dracula's Guest");
+    expect(document.title).toBe("Read2Me · Dracula's Guest · Book");
   });
 
   it('navigate() takes an app-relative path and resolves it against the base', async () => {
     const { nav, router } = start('projects');
-    router.navigate('projects/dune/book');
+    router.navigate('projects/dracula/book');
     await settle();
     expect(nav.calls.at(-1)).toEqual({
-      url: 'http://localhost/app/projects/dune/book',
+      url: 'http://localhost/app/projects/dracula/book',
       history: 'push',
     });
-    expect(router.params()).toEqual({ folder: 'dune' });
+    expect(router.params()).toEqual({ folder: 'dracula' });
   });
 
   it('navigate() sets and deletes query params', async () => {
@@ -114,11 +114,11 @@ describe('Router', () => {
   });
 
   it('a query-only navigation keeps focus and scroll where they are; a page change lets the browser reset them', async () => {
-    const { nav, router } = start('projects/dune/book');
-    router.navigate('projects/dune/book', { replace: true, query: { chapter: 'c2' } });
+    const { nav, router } = start('projects/dracula/book');
+    router.navigate('projects/dracula/book', { replace: true, query: { chapter: 'c2' } });
     await settle();
     expect(nav.intercepts.at(-1)).toEqual({
-      url: 'http://localhost/app/projects/dune/book?chapter=c2',
+      url: 'http://localhost/app/projects/dracula/book?chapter=c2',
       focusReset: 'manual',
       scroll: 'manual',
     });
@@ -129,7 +129,7 @@ describe('Router', () => {
 
   it('follows a link click inside the base', async () => {
     const { nav, router } = start('projects');
-    nav.fire('projects/dune/book');
+    nav.fire('projects/dracula/book');
     await settle();
     expect(router.match()?.chain.at(-1)?.tag).toBe('x-book');
   });
@@ -138,7 +138,7 @@ describe('Router', () => {
     const { nav, router } = start('projects');
     nav.fire('/api/projects');
     nav.fire('/appx/projects');
-    nav.fire('/workspace/dune/cover.jpg');
+    nav.fire('/workspace/dracula/cover.jpg');
     expect(nav.passedThrough).toHaveLength(3);
     expect(router.url().pathname).toBe('/app/projects');
   });
@@ -153,14 +153,14 @@ describe('Router', () => {
   it('leaves hash changes and non-interceptable navigations alone', () => {
     const { nav } = start('projects');
     nav.fire('projects#top', { hashChange: true });
-    nav.fire('projects/dune/book', { canIntercept: false });
+    nav.fire('projects/dracula/book', { canIntercept: false });
     expect(nav.passedThrough).toHaveLength(2);
   });
 
   describe('unsaved-changes guard', () => {
     it('cancels the navigation and stays when the user declines', async () => {
       let asked = 0;
-      const { nav, router } = start('projects/dune/settings', async () => {
+      const { nav, router } = start('projects/dracula/settings', async () => {
         asked++;
         return false;
       });
@@ -169,11 +169,11 @@ describe('Router', () => {
       await settle();
       expect(event.defaultPrevented).toBe(true);
       expect(asked).toBe(1);
-      expect(router.url().pathname).toBe('/app/projects/dune/settings');
+      expect(router.url().pathname).toBe('/app/projects/dracula/settings');
     });
 
     it('repeats the navigation once the user confirms', async () => {
-      const { nav, router } = start('projects/dune/settings', async () => true);
+      const { nav, router } = start('projects/dracula/settings', async () => true);
       mountSettings(true);
       nav.fire('projects');
       await settle();
@@ -182,7 +182,7 @@ describe('Router', () => {
 
     it('repeats a back/forward through traverseTo', async () => {
       const { nav, router } = start('projects', async () => true);
-      router.navigate('projects/dune/settings');
+      router.navigate('projects/dracula/settings');
       await settle();
       mountSettings(true);
       const event = nav.fire('projects', { navigationType: 'traverse' });
@@ -193,7 +193,7 @@ describe('Router', () => {
 
     it('does not ask when the leaf has nothing unsaved', async () => {
       let asked = 0;
-      const { nav, router } = start('projects/dune/settings', async () => {
+      const { nav, router } = start('projects/dracula/settings', async () => {
         asked++;
         return false;
       });
@@ -205,7 +205,7 @@ describe('Router', () => {
     });
 
     it('holds the tab open on beforeunload only while the leaf has unsaved edits', () => {
-      start('projects/dune/settings');
+      start('projects/dracula/settings');
       const unload = () => {
         const event = new Event('beforeunload', { cancelable: true });
         dispatchEvent(event);
@@ -225,7 +225,7 @@ describe('Router', () => {
         return true;
       });
       for (const round of [1, 2]) {
-        router.navigate('projects/dune/settings');
+        router.navigate('projects/dracula/settings');
         await settle();
         mountSettings(true);
         nav.fire('projects');
@@ -237,12 +237,12 @@ describe('Router', () => {
 
     it('does not ask for a query-only change on the same page', async () => {
       let asked = 0;
-      const { nav } = start('projects/dune/settings', async () => {
+      const { nav } = start('projects/dracula/settings', async () => {
         asked++;
         return false;
       });
       mountSettings(true);
-      const event = nav.fire('projects/dune/settings?tab=llm');
+      const event = nav.fire('projects/dracula/settings?tab=llm');
       await settle();
       expect(asked).toBe(0);
       expect(event.defaultPrevented).toBe(false);

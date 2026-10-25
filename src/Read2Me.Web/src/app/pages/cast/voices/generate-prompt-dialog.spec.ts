@@ -10,8 +10,8 @@ import type { GeneratePromptDialog } from './generate-prompt-dialog';
 import { openGeneratePromptDialog } from './generate-prompt-dialog';
 import './generate-prompt-dialog';
 
-const RENDER = '/api/projects/dune/characters/alice/design-prompt/render';
-const GENERATE = '/api/projects/dune/characters/alice/design-prompt/generate';
+const RENDER = '/api/projects/dracula/characters/alice/design-prompt/render';
+const GENERATE = '/api/projects/dracula/characters/alice/design-prompt/generate';
 
 class FakeFeed {
   acquired = 0;
@@ -50,7 +50,7 @@ afterEach(() => document.body.replaceChildren());
 
 async function open() {
   const result = openGeneratePromptDialog({
-    folder: 'dune',
+    folder: 'dracula',
     characterId: 'alice',
     characterName: 'Alice',
   });

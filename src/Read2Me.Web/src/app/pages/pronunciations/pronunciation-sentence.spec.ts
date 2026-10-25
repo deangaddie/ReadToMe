@@ -10,7 +10,7 @@ import { FakeApi } from '../../../testing/fake-api';
 import type { PronunciationSentence } from './pronunciation-sentence';
 import './pronunciation-sentence';
 
-const TRY = '/api/projects/magician/pronunciations/try';
+const TRY = '/api/projects/the-adventures-of-sherlock-holmes/pronunciations/try';
 
 const MATCH: PronunciationMatchInBook = {
   itemId: 'i7',
@@ -18,13 +18,13 @@ const MATCH: PronunciationMatchInBook = {
   chapterTitle: 'ONE - Storm',
   speaker: 'Narrator',
   hasAudio: false,
-  sentence: 'So Kulgan said.',
+  sentence: 'So Watson said.',
   sentenceStart: 12,
   matchStart: 3,
   matchLength: 6,
-  spokenSentence: 'So KULL-gun said.',
+  spokenSentence: 'So WAT-sun said.',
   spokenMatchStart: 3,
-  spokenMatchLength: 8,
+  spokenMatchLength: 7,
 };
 
 let api: FakeApi;
@@ -48,12 +48,12 @@ afterEach(() => el?.remove());
 
 async function mount(readOnly: string | null = null) {
   el = document.createElement('r2m-pronunciation-sentence') as PronunciationSentence;
-  el.folder = 'magician';
+  el.folder = 'the-adventures-of-sherlock-holmes';
   el.match = MATCH;
   el.draft = {
     id: null,
-    writtenForm: 'Kulgan',
-    spokenForm: 'KULL-gun',
+    writtenForm: 'Watson',
+    spokenForm: 'WAT-sun',
     delete: false,
   };
   el.readOnly = readOnly;
@@ -73,8 +73,8 @@ const button = (action: string) =>
 describe('the try-out of the sentence the editor was opened from', () => {
   it('shows the sentence as TTS will say it, the spoken form marked', async () => {
     await mount();
-    expect(el.querySelector('.pron-sentence__text')!.textContent!.trim()).toBe('So KULL-gun said.');
-    expect(el.querySelector('mark')!.textContent).toBe('KULL-gun');
+    expect(el.querySelector('.pron-sentence__text')!.textContent!.trim()).toBe('So WAT-sun said.');
+    expect(el.querySelector('mark')!.textContent).toBe('WAT-sun');
   });
 
   it('plays that sentence with the draft in the item’s own voice, or as written', async () => {
@@ -89,8 +89,8 @@ describe('the try-out of the sentence the editor was opened from', () => {
         sentenceStart: 12,
         draft: {
           id: null,
-          writtenForm: 'Kulgan',
-          spokenForm: 'KULL-gun',
+          writtenForm: 'Watson',
+          spokenForm: 'WAT-sun',
           delete: false,
         },
         asWritten: false,
@@ -101,8 +101,8 @@ describe('the try-out of the sentence the editor was opened from', () => {
         sentenceStart: 12,
         draft: {
           id: null,
-          writtenForm: 'Kulgan',
-          spokenForm: 'KULL-gun',
+          writtenForm: 'Watson',
+          spokenForm: 'WAT-sun',
           delete: false,
         },
         asWritten: true,

@@ -4,9 +4,9 @@ import type { ProjectSummary } from '@app/api';
 import { placeholderGradient, projectCard, projectInitials } from './project-card';
 
 const base: ProjectSummary = {
-  folderName: 'foundation',
-  title: 'Foundation',
-  author: 'Isaac Asimov',
+  folderName: 'pride-and-prejudice',
+  title: 'Pride and Prejudice',
+  author: 'Jane Austen',
   coverImage: null,
   audioItemTotal: 0,
   audioItemDone: 0,
@@ -30,11 +30,13 @@ function mount(project: ProjectSummary = base) {
 describe('projectCard()', () => {
   it('shows placeholder initials and "Not read in yet" when there is no cover or audio', () => {
     const { el } = mount();
-    expect(el.querySelector('.r2m-project-card')?.getAttribute('data-folder')).toBe('foundation');
+    expect(el.querySelector('.r2m-project-card')?.getAttribute('data-folder')).toBe(
+      'pride-and-prejudice',
+    );
     expect(el.querySelector('.r2m-project-card__image')).toBeNull();
-    expect(el.querySelector('.r2m-project-card__initials')?.textContent).toBe('F');
+    expect(el.querySelector('.r2m-project-card__initials')?.textContent).toBe('PA');
     expect(el.querySelector('.r2m-project-card__unread')?.textContent).toBe('Not read in yet');
-    expect(el.textContent).toContain('Isaac Asimov');
+    expect(el.textContent).toContain('Jane Austen');
   });
 
   it('shows the workspace cover and the audio progress bar', () => {
@@ -46,7 +48,7 @@ describe('projectCard()', () => {
       audioPercent: 25,
     });
     const img = el.querySelector<HTMLImageElement>('.r2m-project-card__image')!;
-    expect(img.getAttribute('src')).toBe('/workspace/foundation/cover.png');
+    expect(img.getAttribute('src')).toBe('/workspace/pride-and-prejudice/cover.png');
     const bar = el.querySelector('.r2m-project-card__progress')!;
     expect(bar.getAttribute('aria-valuenow')).toBe('25');
     expect(el.querySelector<HTMLElement>('.r2m-project-card__fill')!.style.width).toBe('25%');
@@ -62,15 +64,15 @@ describe('projectCard()', () => {
     const more = el.querySelector<HTMLButtonElement>('.r2m-project-card__more')!;
     const menu = el.querySelector<HTMLElement>('[role=menu]')!;
     expect(more.getAttribute('popovertarget')).toBe(menu.id);
-    expect(more.getAttribute('aria-label')).toBe('Actions for Foundation');
+    expect(more.getAttribute('aria-label')).toBe('Actions for Pride and Prejudice');
     menu.querySelector<HTMLButtonElement>('.r2m-project-card__delete')!.click();
     expect(counts.deleted).toBe(1);
   });
 
   it('derives initials and a stable gradient', () => {
     expect(projectInitials('the left hand of darkness')).toBe('TL');
-    expect(projectInitials('  Dune ')).toBe('D');
-    expect(projectInitials('Magician (shelf test)')).toBe('MS');
+    expect(projectInitials('  Dracula ')).toBe('D');
+    expect(projectInitials('Emma (shelf test)')).toBe('ES');
     expect(projectInitials('1984')).toBe('1');
     expect(placeholderGradient('abc')).toBe(placeholderGradient('abc'));
     expect(placeholderGradient('abc')).not.toBe(placeholderGradient('abd'));
