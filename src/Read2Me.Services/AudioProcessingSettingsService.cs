@@ -89,10 +89,14 @@ namespace Read2Me.Services
                 settings?.AudioMaxAttempts ?? DefaultAudioMaxAttempts);
         }
 
+        /// <summary>The stored form of an ffmpeg path: trimmed, with blank/whitespace as null (rely on PATH).</summary>
+        public static string? NormalizeFfmpegPath(string? ffmpegPath) =>
+            string.IsNullOrWhiteSpace(ffmpegPath) ? null : ffmpegPath.Trim();
+
         /// <summary>Saves the ffmpeg path. Blank/whitespace is stored as null (rely on PATH).</summary>
         public async Task SetFfmpegPathAsync(string? ffmpegPath)
         {
-            var normalized = string.IsNullOrWhiteSpace(ffmpegPath) ? null : ffmpegPath.Trim();
+            var normalized = NormalizeFfmpegPath(ffmpegPath);
             await using var db = await _dbFactory.CreateDbContextAsync();
             await MutateSettingsAsync(db, s => s.FfmpegPath = normalized);
             await db.SaveChangesAsync();

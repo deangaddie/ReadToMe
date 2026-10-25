@@ -23,7 +23,8 @@ trying things out: leave it alone. `tools/browse/workspace/` is git-ignored and 
 `app.db`; delete it to start clean. Its books come with the
 tools: Project Gutenberg epubs in `tools/browse/books/`, imported with `bookProject('dracula')`
 (or a text project from `throwawayProject`). Never use a book that is not from Project Gutenberg.
-A fresh `app.db` has no ffmpeg path, so set it (Settings → Audio processing) before anything
+A fresh `app.db` takes its ffmpeg path from `Ffmpeg:Path` in `appsettings.Local.json` (or
+`Ffmpeg__Path`). Without one it has none, so set it (Settings → Audio processing) before anything
 that needs ffmpeg.
 
 Start each detached with its output redirected to a file. A `dotnet run` piped through

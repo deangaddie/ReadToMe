@@ -53,6 +53,44 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
+        public async Task SeedAsync_NewDatabaseWithFfmpegPath_StoresTheTrimmedPath()
+        {
+            await using var db = await OpenDbAsync();
+
+            await DefaultServiceConfigSeeder.SeedAsync(db, @"  D:\tools\ffmpeg\bin\ffmpeg.exe ");
+
+            Assert.Equal(@"D:\tools\ffmpeg\bin\ffmpeg.exe", (await db.Settings.SingleAsync()).FfmpegPath);
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public async Task SeedAsync_NewDatabaseWithoutFfmpegPath_LeavesThePathNull(string? ffmpegPath)
+        {
+            await using var db = await OpenDbAsync();
+
+            await DefaultServiceConfigSeeder.SeedAsync(db, ffmpegPath);
+
+            Assert.Null((await db.Settings.SingleAsync()).FfmpegPath);
+        }
+
+        [Fact]
+        public async Task SeedAsync_ConfigsAlreadyPresent_StillStoresTheFfmpegPath()
+        {
+            await using var db = await OpenDbAsync();
+            db.TranscriptionServiceConfigs.Add(new TranscriptionServiceConfig
+            {
+                Name = "Mine", Type = TranscriptionServiceType.LocalWhisper, SettingsJson = "{}",
+            });
+            await db.SaveChangesAsync();
+
+            Assert.False(await DefaultServiceConfigSeeder.SeedAsync(db, @"D:\tools\ffmpeg.exe"));
+            Assert.Equal(@"D:\tools\ffmpeg.exe", (await db.Settings.SingleAsync()).FfmpegPath);
+            Assert.Empty(await db.LlmServerConfigs.ToListAsync());
+        }
+
+        [Fact]
         public async Task SeedAsync_AnyConfigAlreadyPresent_LeavesDatabaseAlone()
         {
             await using var db = await OpenDbAsync();
