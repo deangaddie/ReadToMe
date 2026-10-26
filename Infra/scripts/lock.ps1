@@ -21,13 +21,12 @@ $ErrorActionPreference = 'Stop'
 $UV        = '0.11.28'
 $InfraRoot = Split-Path -Parent $PSScriptRoot   # Infra/
 
-# Digest-pinned base per service — MUST match the FROM lines (spec §6.1).
-$Bases = @{
-  'minilm-l6'     = 'python:3.13-slim@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285'
-  'mpnet-base-v2' = 'python:3.13-slim@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285'
-}
-
-$base   = $Bases[$Service]
+# Digest-pinned base, read from the service's first FROM line (spec §6.1). A copy here went
+# stale twice: Dependabot and refresh-pins.ps1 rewrite the Dockerfiles only.
+$dockerfile = Join-Path $InfraRoot "Dockerfile.$Service"
+$from = Select-String -Path $dockerfile -Pattern '^FROM\s+(\S+@sha256:[0-9a-f]{64})' | Select-Object -First 1
+if (-not $from) { throw "No digest-pinned FROM line in $dockerfile" }
+$base   = $from.Matches[0].Groups[1].Value
 $svcDir = Join-Path $InfraRoot $Service
 if (-not (Test-Path (Join-Path $svcDir 'requirements.in'))) {
   throw "No requirements.in in $svcDir"
