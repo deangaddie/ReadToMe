@@ -95,7 +95,11 @@ User imports epub/text → LLM attributes dialog items to Characters → TTS syn
 
 ### Issue tracker
 
-Issues and specs (PRDs) live as local markdown under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
+Issues and specs (PRDs) live as GitHub issues on `deangaddie/ReadToMe` (public), driven with `gh`. `.scratch/completed/` and `.scratch/not-implemented/` remain as local-only history. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default roles, each label named as its role (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
