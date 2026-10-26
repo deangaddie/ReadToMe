@@ -50,9 +50,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 # python3 dropped from the runtime — nothing calls it (llama-server is a binary,
 # the entrypoint is bash); an unused interpreter only widens the RCE surface.
 # curl stays: the HEALTHCHECK uses it and the AI watchdog shells it.
+# libssl3t64 is named so it upgrades past the base image's copy: the newest CUDA runtime
+# digest still ships openssl 3.0.13-0ubuntu3.9 (CVE-2026-45447, CVE-2026-84782). Drop it
+# once refresh-pins.ps1 lands a runtime base with 3.0.13-0ubuntu3.16 or later.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    libgomp1 ca-certificates curl \
+    libgomp1 ca-certificates curl libssl3t64 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /build/build/bin/llama-server /usr/local/bin/llama-server
