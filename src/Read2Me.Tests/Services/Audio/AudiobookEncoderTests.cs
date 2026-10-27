@@ -383,7 +383,7 @@ namespace Read2Me.Tests.Services.Audio
             await encoder.EncodeAsync(
                 concatPath, metaPath, null, outputPath,
                 totalDuration,
-                new Progress<double>(v => progressValues.Add(v)),
+                new SyncProgress(progressValues),
                 ffmpeg);
 
             // File exists and is non-empty
@@ -437,6 +437,12 @@ namespace Read2Me.Tests.Services.Audio
             {
                 try { if (File.Exists(f)) File.Delete(f); } catch { }
             }
+        }
+
+        /// <summary>IProgress that records synchronously (Progress&lt;T&gt; posts its callbacks to the thread pool).</summary>
+        private sealed class SyncProgress(List<double> reports) : IProgress<double>
+        {
+            public void Report(double value) => reports.Add(value);
         }
     }
 }
