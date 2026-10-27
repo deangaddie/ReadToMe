@@ -25,7 +25,8 @@ $InfraRoot = Split-Path -Parent $PSScriptRoot   # Infra/
 $Images = @(
   @{ Ref = 'python:3.13-slim';                               Files = @('Dockerfile.minilm-l6','Dockerfile.mpnet-base-v2') },
   @{ Ref = 'nvidia/cuda:13.3.0-devel-ubuntu24.04';           Files = @('Dockerfile.llama'); InFile = 'nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION}' },
-  @{ Ref = 'nvidia/cuda:13.3.0-runtime-ubuntu24.04';         Files = @('Dockerfile.llama'); InFile = 'nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION}' }
+  @{ Ref = 'nvidia/cuda:13.3.0-runtime-ubuntu24.04';         Files = @('Dockerfile.llama'); InFile = 'nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION}' },
+  @{ Ref = 'ubuntu:24.04';                                   Files = @('Dockerfile.whisper') }
 )
 
 foreach ($img in $Images) {

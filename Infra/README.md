@@ -264,7 +264,7 @@ Port `8080`.
 
 `read2me-audiocpp` runs [audio.cpp](https://github.com/0xShug0/audio.cpp), a C++/ggml runtime, and serves every paragraph-TTS and voice-design model the app uses (ADR 0010). Port `8004` on the host, `8080` in the container.
 
-The upstream image `ghcr.io/0xshug0/audio.cpp:full-cuda12` runs unchanged — no Dockerfile of our own — pinned by its amd64 digest on the `image:` line in `docker-compose.yml`. `scripts/refresh-pins.ps1` covers only the python and CUDA Dockerfile bases (not this image, nor Whisper's ubuntu base), so bump this pin by hand: resolve the tag (`docker buildx imagetools inspect ghcr.io/0xshug0/audio.cpp:full-cuda12`), rewrite the digest, and check each model still generates.
+The upstream image `ghcr.io/0xshug0/audio.cpp:full-cuda12` runs unchanged — no Dockerfile of our own — pinned by its amd64 digest on the `image:` line in `docker-compose.yml`. `scripts/refresh-pins.ps1` covers the python, CUDA and ubuntu Dockerfile bases but not this image, so bump this pin by hand: resolve the tag (`docker buildx imagetools inspect ghcr.io/0xshug0/audio.cpp:full-cuda12`), rewrite the digest, and check each model still generates.
 
 ### Models — `audiocpp/server.json`
 
