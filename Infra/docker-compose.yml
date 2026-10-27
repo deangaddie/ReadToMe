@@ -49,7 +49,7 @@ services:
   # Models in audiocpp/server.json (lazy-loaded, one resident): breeze-q8, breeze-design, voxcpm2, chatterbox, qwen3-base, qwen3-design.
   audiocpp:
     <<: [*hardened, *gpu]
-    image: ghcr.io/0xshug0/audio.cpp:full-cuda12@sha256:5969cc86637cad1e893c6c22120edda9d37fbe1f0f266702dbe7fe7b721ed125
+    image: ghcr.io/0xshug0/audio.cpp:full-cuda12@sha256:05a2e7de7ac4b4730012beba471c684966f80b17da6d0ba7e8417caa8eceed39
     container_name: read2me-audiocpp
     restart: unless-stopped
     networks: [audiocpp]
