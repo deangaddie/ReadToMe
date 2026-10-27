@@ -26,7 +26,8 @@ Infra/
 ├── audiocpp/
 │   └── server.json             # audio.cpp model entries (every TTS model)
 ├── minilm-l6/, mpnet-base-v2/  # Similarity servers (app.py + locked requirements)
-├── scripts/                    # lock.ps1 (requirements locks), refresh-pins.ps1 (base-image digests)
+├── scan-accepted.yaml          # Accepted scan findings (see Security sweep)
+├── scripts/                    # lock.ps1 (requirements locks), refresh-pins.ps1 (base-image digests), scan-images.ps1 (image scan)
 ├── ContainerHealth/            # Standalone service dashboard (see its README)
 ├── models/                     # GGUF files unless GGUF_MODELS_DIR is set, Whisper model + its sha256 manifest
 ├── cache/                      # Similarity model caches, filled by warm-up (git-ignored)
@@ -156,6 +157,34 @@ in the warm-up file and in `minilm-l6/app.py` / `mpnet-base-v2/app.py` (which
 load with `local_files_only`), so a bump edits both and rebuilds the image.
 Whisper's pin is `models/whisper-models.sha256`, which the warm-up reads. Do not merge this file with `docker-compose.yml`; the hardened stack's
 DNS policy must be absent while a model is being downloaded.
+
+## Security sweep
+
+A sweep runs by hand at every pin refresh. `scripts/refresh-pins.ps1` ends by pointing here. `check.ps1` never runs it: the scan needs built images, network access for the vulnerability DB, and minutes per image.
+
+1. **Move the pins.** Run `scripts/refresh-pins.ps1` and move the audio.cpp digest by hand (see [audio.cpp](#audiocpp-tts)). Relock with `scripts/lock.ps1 <service>` for each similarity service whose base moved, then rebuild with `docker compose up -d --build`.
+2. **Scan.** Run `pwsh scripts/scan-images.ps1 -Compare ../.artifacts/scans/<last sweep date>`.
+   - It scans every image in `docker compose config --images`, skipping (with a warning) any that is neither built nor pulled. It never builds.
+   - Each image is `docker save`d to a tar, and a pinned Trivy scans the tar mounted read-only, so no Docker socket goes into a container.
+   - The table is grouped by image, then source package. It has three sections: **fix available**, **no fix upstream**, and **accepted**.
+   - It exits 1 only when a CRITICAL/HIGH finding has a fix and isn't accepted, or an image failed to scan.
+   - Trivy's JSON goes to `.artifacts/scans/<yyyy-MM-dd>/<image>.json` (git-ignored). `-Compare` prints what's new and what's fixed against an earlier run.
+   - `-Image <repository>` scans one image, `-Severity` widens past CRITICAL,HIGH, and `-All` ignores the accept list.
+3. **Triage** each finding as **fix** (a digest, SHA, apt or lock bump), **accept**, or **escalate** (a tag or major bump, done by hand on its own branch). An accepted finding goes in `scan-accepted.yaml`, Trivy's `.trivyignore.yaml` format:
+   - `id`, plus `purls` that scope it. Without a version (`pkg:deb/debian/libmount1`) an entry matches that distro's package in any version. With one (`pkg:deb/ubuntu/openssl@3.0.13-0ubuntu3.9`) it matches only that build, so it stops matching once the image moves on. Use that for an image we can't rebuild, like audio.cpp.
+   - `statement` holds the reason and the review condition. Add `expired_at` when the review is a date.
+   - Delete the entry when its condition is met. Accepted findings still print, so each one gets looked at again every sweep.
+4. **No compilers.** `docker run --rm --entrypoint sh <image> -c "command -v gcc g++ cc make git"` prints nothing for the llama, whisper and similarity images.
+5. **Check every AI path** on the rebuilt containers: health checks, an LLM request, a TTS generation per model, and a Whisper transcription. For similarity, compare the fixed pair below.
+
+   ```bash
+   curl -s localhost:8200/similarity -H "Content-Type: application/json" \
+     -d '{"text1":"It was the best of times, it was the worst of times.","text2":"It was the best of times, it was the worst of times"}'
+   ```
+
+   Expect `0.9907906651496887` from MiniLM (8200) and `0.9855428338050842` from MPNet (8201). A different score with an unchanged model revision means the lock or base changed the maths.
+
+**Cross-check (optional):** Docker Scout reads different advisory sources. It needs `docker login`. Run `docker scout cves --only-severity critical,high local://<image>`. Scout counts one row per source package and CVE, and Trivy one per binary package, so Scout's counts come out lower for the same issues.
 
 ## llama.cpp
 

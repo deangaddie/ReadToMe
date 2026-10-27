@@ -1,0 +1,73 @@
+# Accepted findings for scripts/scan-images.ps1, in Trivy's .trivyignore.yaml format.
+# Accepted findings still print, in their own section; -All ignores this file.
+#
+# Each entry: the id, purls that scope it (no version = that distro's package in any
+# version; a version = only that build), and a statement holding the reason and the review
+# condition. Delete an entry once its condition is met. Triage history: Infra/README.md,
+# Security sweep.
+
+# Debian 13 binary packages in the python:3.13-slim base (minilm-l6, mpnet-base-v2).
+x-util-linux: &util-linux
+  - pkg:deb/debian/bsdutils
+  - pkg:deb/debian/libblkid1
+  - pkg:deb/debian/liblastlog2-2
+  - pkg:deb/debian/libmount1
+  - pkg:deb/debian/libsmartcols1
+  - pkg:deb/debian/libuuid1
+  - pkg:deb/debian/login
+  - pkg:deb/debian/mount
+  - pkg:deb/debian/util-linux
+x-ncurses: &ncurses
+  - pkg:deb/debian/libncursesw6
+  - pkg:deb/debian/libtinfo6
+  - pkg:deb/debian/ncurses-base
+  - pkg:deb/debian/ncurses-bin
+x-systemd: &systemd
+  - pkg:deb/debian/libsystemd0
+  - pkg:deb/debian/libudev1
+
+vulnerabilities:
+  # Similarity images: Debian has no fix. These are login, mount, terminal and init paths
+  # that a single-process FastAPI container never runs.
+  - id: CVE-2026-76642
+    purls: *util-linux
+    statement: &debian-no-fix >-
+      Debian 13 has no fix; the similarity containers never run login, mount, terminal or
+      init code. Review at each python:3.13-slim digest move; delete once Debian ships a fix.
+  - id: CVE-2026-78408
+    purls: *util-linux
+    statement: *debian-no-fix
+  - id: CVE-2026-78409
+    purls: *util-linux
+    statement: *debian-no-fix
+  - id: CVE-2026-78410
+    purls: *util-linux
+    statement: *debian-no-fix
+  - id: CVE-2025-69720
+    purls: *ncurses
+    statement: *debian-no-fix
+  - id: CVE-2026-16742
+    purls: *systemd
+    statement: *debian-no-fix
+  - id: CVE-2026-54369
+    purls:
+      - pkg:deb/debian/libacl1
+    statement: *debian-no-fix
+  - id: CVE-2026-9538
+    purls:
+      - pkg:deb/debian/perl-base
+    statement: *debian-no-fix
+
+  # audio.cpp: a third-party image, so only its digest can move. Versioned purls, so the
+  # entries stop matching once the image ships a newer openssl.
+  - id: CVE-2026-45447
+    purls: &audiocpp-openssl
+      - pkg:deb/ubuntu/openssl@3.0.13-0ubuntu3.9
+      - pkg:deb/ubuntu/libssl3t64@3.0.13-0ubuntu3.9
+    statement: &audiocpp-unreachable >-
+      Unreachable in audio.cpp: audiocpp_server and its libraries don't link libssl or
+      libcrypto (only curl for the localhost health check, and python, do), and the highs need
+      PKCS#7/S-MIME verification or DTLS. Review at each audio.cpp pin move.
+  - id: CVE-2026-84782
+    purls: *audiocpp-openssl
+    statement: *audiocpp-unreachable
