@@ -3,8 +3,6 @@ uvicorn[standard]
 sentence-transformers
 # torch: exact CPU build by direct hashed URL so PyPI stays the ONLY index.
 torch @ https://download.pytorch.org/whl/cpu/torch-2.13.0%2Bcpu-cp313-cp313-manylinux_2_28_x86_64.whl
-# Security floors (Dependabot alerts, 2026-10-25). uv keeps an existing lock's pins, so a
-# transitive fix only lands through a floor here; it also stops a from-scratch relock going below.
-certifi>=2026.10.19   # GHSA-6q48-6c7w-9gw2: emSign roots with compromised intermediate keys
-filelock>=4.2.1       # GHSA-v4x8-3wr5-3wq8, GHSA-567q-5qvw-pf92, GHSA-9vhv-jxww-xfm5
-setuptools>=84.1.0    # GHSA-xmj3-9gf7-h52w: Windows path escape via namespace_packages.txt
+# No security floors (#55): a transitive fix lands with lock.ps1 -UpgradePackage (see its header).
+# Kept identical to the other similarity service's by hand: lock.ps1 mounts only the service
+# folder, so a shared constraints file wouldn't be visible to uv.

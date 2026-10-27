@@ -18,7 +18,7 @@
 # Not covered, on purpose:
 # - pip (Infra/*/requirements.txt): Infra/scripts/lock.ps1 compiles each lock inside the
 #   digest-pinned base image and proves it installs there; Dependabot can't. Alerts, once
-#   on, still read those locks.
+#   on, still read those locks: fix one with lock.ps1 <service> -UpgradePackage <name>.
 # - docker-compose (the audio.cpp image digest in Infra/docker-compose.yml): bumped by hand,
 #   checking each TTS model still generates (Infra/README.md, audio.cpp section).
 # - github-actions (.github/workflows): Actions are off.
