@@ -126,7 +126,7 @@ public static class ServiceRegistrationExtensions
         services.AddKeyedScoped<ISemanticSimilarityClient, SemanticSimilarityClient>(Read2Me.AppData.Entities.SemanticSimilarityServiceType.MiniLmL6);
         services.AddKeyedScoped<ISemanticSimilarityClient, SemanticSimilarityClient>(Read2Me.AppData.Entities.SemanticSimilarityServiceType.MpnetBaseV2);
         services.AddScoped<ParagraphTtsSettingsService>();
-        services.AddScoped<IFfmpegProber, FfmpegProber>();
+        services.AddSingleton<IFfmpegProber, FfmpegProber>(); // stateless; the Setup check runner (a singleton) uses it
         services.AddScoped<AudioProcessingSettingsService>();
         services.AddSingleton<IWerComparer, WerComparer>();
         services.AddSingleton<Read2Me.Services.Audio.AudioReviewService>();
@@ -290,6 +290,7 @@ public static class ServiceRegistrationExtensions
             sp.GetRequiredService<IConfiguration>(),
             sp.GetRequiredService<IHostEnvironment>().ContentRootPath,
             sp.GetRequiredService<IDbContextFactory<Read2MeDbContext>>(),
+            sp.GetRequiredService<IFfmpegProber>(),
             sp.GetRequiredService<IProcessRunner>(),
             sp.GetRequiredService<WorkspaceStart>()));
         services.AddHostedService<SetupCheckAtStart>();

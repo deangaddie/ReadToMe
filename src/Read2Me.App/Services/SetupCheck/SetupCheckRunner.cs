@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Read2Me.App.Configuration;
 using Read2Me.AppData;
-using Read2Me.Services.Audio.Assembly;
+using Read2Me.Services.Audio;
 using Read2Me.Services.Health;
 
 namespace Read2Me.App.Services.SetupCheck
@@ -23,6 +23,7 @@ namespace Read2Me.App.Services.SetupCheck
         IConfiguration configuration,
         string contentRoot,
         IDbContextFactory<Read2MeDbContext> dbFactory,
+        IFfmpegProber ffmpegProber,
         IProcessRunner processes,
         WorkspaceStart workspaceStart,
         TimeProvider? clock = null) : ISetupCheckRunner
@@ -140,18 +141,12 @@ namespace Read2Me.App.Services.SetupCheck
         /// <summary>Both tools must answer; found is ffmpeg's banner, or which one failed and why.</summary>
         private async Task<(bool Ok, string Found)> ProbeFfmpegAsync(string? ffmpegPath, CancellationToken ct)
         {
-            var ffmpegExe = ffmpegPath ?? "ffmpeg";
-            var ffmpeg = await VersionAsync(ffmpegExe, "-version", ct);
-            if (!ffmpeg.Ok)
-                return (false, $"ffmpeg: {Failure(ffmpeg, ffmpegExe)}");
-            var ffprobeExe = AudiobookEncoder.ResolveFfprobe(ffmpegPath);
-            var ffprobe = await VersionAsync(ffprobeExe, "-version", ct);
-            return ffprobe.Ok ? (true, ffmpeg.Banner) : (false, $"ffprobe: {Failure(ffprobe, ffprobeExe)}");
+            var ffmpeg = await ffmpegProber.ProbeAsync(ffmpegPath, ct);
+            if (!ffmpeg.Success)
+                return (false, $"ffmpeg: {ffmpeg.Message}");
+            var ffprobe = await ffmpegProber.ProbeFfprobeAsync(ffmpegPath, ct);
+            return ffprobe.Success ? (true, ffmpeg.Message) : (false, $"ffprobe: {ffprobe.Message}");
         }
-
-        /// <summary>A tool that didn't start is named by where it was looked for, not by the OS error.</summary>
-        private static string Failure(VersionRun run, string exe) =>
-            run.Launched ? run.Banner : Path.IsPathRooted(exe) ? $"not found at {exe}" : "not on PATH";
 
         // ── docker CLI ───────────────────────────────────────────────────────
 

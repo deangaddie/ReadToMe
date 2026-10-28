@@ -88,14 +88,6 @@
   .setup-check__fix-copy .r2m-icon {
     font-size: 14px;
   }
-  .setup-check__sr {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
   /* Phone width: the table scrolls inside itself rather than widening the page. */
   @media (max-width: 700px) {
     .setup-check__table {

@@ -11,9 +11,8 @@ namespace Read2Me.Services.Audio.Assembly
     /// CliWrap-based implementation of <see cref="IAudiobookEncoder"/>.
     ///
     /// Duration probing uses ffprobe (resolved as a sibling of the ffmpeg exe, or "ffprobe" on
-    /// PATH when ffmpegPath is null/blank). This avoids overloading the existing
-    /// <c>FfmpegProber</c> / <c>IFfmpegProber</c> which only runs a health-check
-    /// (<c>ffmpeg -version</c>) and returns no durations.
+    /// PATH when ffmpegPath is null/blank, by <see cref="FfmpegProber.ResolveFfprobe"/>).
+    /// <c>IFfmpegProber</c> only runs <c>-version</c> and returns no durations.
     ///
     /// Silence files are cached per distinct ms in a <see cref="ConcurrentDictionary"/> for the
     /// lifetime of one encoder instance (≈ one assembly run).
@@ -31,7 +30,7 @@ namespace Read2Me.Services.Audio.Assembly
 
         public async Task<TimeSpan> GetDurationAsync(string wavPath, string? ffmpegPath, CancellationToken ct = default)
         {
-            var ffprobe = ResolveFfprobe(ffmpegPath);
+            var ffprobe = FfmpegProber.ResolveFfprobe(ffmpegPath);
             var stderr = new StringBuilder();
             var stdout = new StringBuilder();
 
@@ -222,24 +221,6 @@ namespace Read2Me.Services.Audio.Assembly
 
         private static string ResolveExe(string? ffmpegPath) =>
             string.IsNullOrWhiteSpace(ffmpegPath) ? "ffmpeg" : ffmpegPath.Trim();
-
-        /// <summary>
-        /// Resolves ffprobe path. When ffmpegPath is set, replaces the filename with "ffprobe"
-        /// (same directory). Falls back to "ffprobe" on PATH otherwise.
-        /// </summary>
-        public static string ResolveFfprobe(string? ffmpegPath)
-        {
-            if (string.IsNullOrWhiteSpace(ffmpegPath))
-                return "ffprobe";
-
-            var trimmed = ffmpegPath.Trim();
-            var dir = Path.GetDirectoryName(trimmed);
-            if (string.IsNullOrEmpty(dir))
-                return "ffprobe";
-
-            var ext = Path.GetExtension(trimmed);
-            return Path.Combine(dir, $"ffprobe{ext}");
-        }
 
         // ── Helpers ──────────────────────────────────────────────────────────
 

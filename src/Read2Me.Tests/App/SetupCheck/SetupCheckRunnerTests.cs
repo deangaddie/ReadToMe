@@ -51,10 +51,11 @@ namespace Read2Me.Tests.App.SetupCheck
             }
         }
 
-        private SetupCheckRunner Runner(WorkspaceStart? start = null) => new(
+        private SetupCheckRunner Runner(WorkspaceStart? start = null, IFfmpegProber? prober = null) => new(
             new ConfigurationBuilder().AddInMemoryCollection(_config).Build(),
             ContentRoot,
             Factory,
+            prober ?? new FfmpegProber(NullLogger<FfmpegProber>.Instance),
             _processes,
             start ?? new WorkspaceStart());
 
@@ -263,6 +264,26 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.Contains("appsettings", row.Fix.Text);
             Assert.Equal(ffmpeg, row.Fix.Copy);
             Assert.Equal("settings/audio", row.Fix.Link?.Path);
+        }
+
+        /// <summary>ffmpeg answers but the ffprobe beside it doesn't.</summary>
+        private sealed class NoFfprobe : IFfmpegProber
+        {
+            public Task<FfmpegProbeResult> ProbeAsync(string? ffmpegPath, CancellationToken ct = default) =>
+                Task.FromResult(new FfmpegProbeResult(true, "ffmpeg version 7.1"));
+
+            public Task<FfmpegProbeResult> ProbeFfprobeAsync(string? ffmpegPath, CancellationToken ct = default) =>
+                Task.FromResult(new FfmpegProbeResult(false, @"not found at D:\ffmpeg\bin\ffprobe.exe"));
+        }
+
+        [Fact]
+        public async Task Ffmpeg_without_ffprobe_beside_it_fails_naming_ffprobe()
+        {
+            var row = (await Runner(prober: new NoFfprobe()).RunQuickCheckAsync(CancellationToken.None))
+                .Rows.Single(r => r.Id == SetupCheckIds.Ffmpeg);
+
+            Assert.Equal(SetupCheckResult.Failed, row.Result);
+            Assert.Equal(@"ffprobe: not found at D:\ffmpeg\bin\ffprobe.exe", row.Found);
         }
 
         [Fact]

@@ -93,7 +93,7 @@ export const routes: RouteDef[] = [
     path: 'settings',
     title: 'Settings',
     children: [
-      { path: '', redirectTo: 'settings/llm' },
+      { path: '', redirectTo: 'settings/setup-check' },
       {
         path: 'setup-check',
         title: 'Setup check',

@@ -6,4 +6,7 @@ public sealed class FakeFfmpegProber : IFfmpegProber
 {
     public Task<FfmpegProbeResult> ProbeAsync(string? ffmpegPath, CancellationToken ct = default)
         => Task.FromResult(new FfmpegProbeResult(true, "fake ffmpeg"));
+
+    public Task<FfmpegProbeResult> ProbeFfprobeAsync(string? ffmpegPath, CancellationToken ct = default)
+        => Task.FromResult(new FfmpegProbeResult(true, "fake ffprobe"));
 }

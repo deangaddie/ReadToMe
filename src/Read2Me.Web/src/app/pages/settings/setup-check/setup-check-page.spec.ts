@@ -108,6 +108,10 @@ describe('r2m-setup-check-page', () => {
   it('shows one row per check under its group, with expected, found and result', async () => {
     const page = await mount();
 
+    // Re-run arrives with the Full check (#81); until then the table has no empty column for it.
+    expect(
+      Array.from(page.querySelectorAll('thead th')).map((th) => th.textContent?.trim()),
+    ).toEqual(['Check', 'Result', 'Expected', 'Found', 'Fix']);
     expect(page.querySelector('.setup-check__group')?.textContent?.trim()).toBe(
       'Workspace and tools',
     );
