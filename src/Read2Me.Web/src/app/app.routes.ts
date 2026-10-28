@@ -94,6 +94,13 @@ export const routes: RouteDef[] = [
     title: 'Settings',
     children: [
       { path: '', redirectTo: 'settings/llm' },
+      // PROTOTYPE — Setup check variant A.
+      {
+        path: 'setup-check',
+        title: 'Setup check',
+        tag: 'r2m-proto-setup-check-page',
+        load: () => import('@app/prototype/setup-check/proto-views'),
+      },
       {
         path: 'llm',
         title: 'LLM',
@@ -132,6 +139,13 @@ export const routes: RouteDef[] = [
         load: () => import('@app/pages/settings/themes/themes-page'),
       },
     ],
+  },
+  // PROTOTYPE — Setup check variant C.
+  {
+    path: 'setup',
+    title: 'Setup',
+    tag: 'r2m-proto-setup-check-page',
+    load: () => import('@app/prototype/setup-check/proto-views'),
   },
   {
     path: '*',

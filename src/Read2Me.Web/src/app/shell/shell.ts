@@ -20,6 +20,10 @@ import '@app/activity/activity-bar';
 import '@app/activity/activity-drawer';
 import '@app/history/history-sheet';
 import shellCss from './shell.css' with { type: 'text' };
+// PROTOTYPE — Setup check variants (throwaway branch).
+import * as proto from '@app/prototype/setup-check/proto-views';
+import * as protoStore from '@app/prototype/setup-check/proto-store';
+import '@app/prototype/setup-check/proto-switcher';
 
 adoptStyles(shellCss);
 
@@ -171,7 +175,7 @@ export class AppShell extends R2mElement {
 
         <span class="shell__spacer"></span>
 
-        ${this.nextStepPill()} ${this.historyButton()}
+        ${this.nextStepPill()} ${this.historyButton()} ${proto.appBarA()}
 
         <span
           class="shell__conn shell__conn--${connection}"
@@ -206,7 +210,7 @@ export class AppShell extends R2mElement {
         >
       </header>
 
-      ${this.viewingBanner()}
+      ${this.viewingBanner()} ${proto.bannerA()}
 
       <div class="shell__body">
         ${
@@ -229,12 +233,13 @@ export class AppShell extends R2mElement {
             }
             <span class="shell__nav-spacer"></span>
             <ul class="shell__nav-group shell__nav-group--global">
+              ${protoStore.variant() === 'C' ? html`<span style="position: relative; display: block">${this.navItem({ label: 'Setup', icon: 'health_and_safety', link: 'setup' }, expanded)}${protoStore.failedCount() ? html`<span class="pc-rail-badge">${protoStore.failedCount()}</span>` : nothing}</span>` : nothing}
               ${GLOBAL_NAV_ITEMS.map((item) => this.navItem(item, expanded))}
             </ul>
           </nav>
         </aside>
         <main class="shell__main ${viewing ? 'shell__main--viewing' : ''}">
-          <r2m-outlet></r2m-outlet>
+          ${protoStore.noWorkspace() ? html`<r2m-proto-setup-check-page></r2m-proto-setup-check-page>` : html`<r2m-outlet></r2m-outlet>`}
         </main>
         ${
           this.history() && this.historySheet.open()
@@ -255,7 +260,10 @@ export class AppShell extends R2mElement {
 
       <footer class="shell__activity" aria-label="Background activity">
         <r2m-activity-bar .narrow=${narrow}></r2m-activity-bar>
+        ${proto.pillD()}
       </footer>
+      ${proto.drawerD()}
+      <r2m-proto-switcher></r2m-proto-switcher>
     `;
   }
 

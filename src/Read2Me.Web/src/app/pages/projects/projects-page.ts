@@ -13,6 +13,8 @@ import { ToastService } from '@app/ui/toast';
 import { openNewProjectDialog } from './new-project-dialog';
 import { ProjectsStore } from './projects-store';
 import projectsCss from './projects-page.css' with { type: 'text' };
+// PROTOTYPE — Setup check variant B.
+import { panelB } from '@app/prototype/setup-check/proto-views';
 
 adoptStyles(projectsCss);
 
@@ -54,6 +56,7 @@ export class ProjectsPage extends R2mElement {
         <p class="r2m-page-header__subtitle">Every audiobook in the workspace.</p>
         <span class="projects__actions">${newButton}</span>
       </header>
+      ${panelB()}
 
       ${
         error
