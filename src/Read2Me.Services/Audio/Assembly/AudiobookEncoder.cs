@@ -227,7 +227,7 @@ namespace Read2Me.Services.Audio.Assembly
         /// Resolves ffprobe path. When ffmpegPath is set, replaces the filename with "ffprobe"
         /// (same directory). Falls back to "ffprobe" on PATH otherwise.
         /// </summary>
-        private static string ResolveFfprobe(string? ffmpegPath)
+        public static string ResolveFfprobe(string? ffmpegPath)
         {
             if (string.IsNullOrWhiteSpace(ffmpegPath))
                 return "ffprobe";

@@ -95,6 +95,12 @@ export const routes: RouteDef[] = [
     children: [
       { path: '', redirectTo: 'settings/llm' },
       {
+        path: 'setup-check',
+        title: 'Setup check',
+        tag: 'r2m-setup-check-page',
+        load: () => import('@app/pages/settings/setup-check/setup-check-page'),
+      },
+      {
         path: 'llm',
         title: 'LLM',
         tag: 'r2m-llm-settings-page',

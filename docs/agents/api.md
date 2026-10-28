@@ -110,6 +110,25 @@ stops the conflicts, then starts what is missing one at a time; progress reaches
 starting | ready | failed`) then `{ kind: done, run, ok, reason? }`. Call `plan` before an AI step and `run`
 only when the user agreed — cancelling must start nothing.
 
+### Setup check
+
+Before starting work, check the install: `GET /api/setup-check` answers the last report,
+`POST /api/setup-check/quick` runs the Quick check and answers the new one. The Quick check also runs
+once as the host starts (until it ends, `rows` is empty and `quickCheckedAt` null); it only reads and
+never starts, stops or switches anything.
+
+```bash
+curl -s -X POST http://localhost:5000/api/setup-check/quick
+# → { rows: [{ id, group, name, tier, result, expected, found, note, fix: { text, link: { path, label }?, copy? } }],
+#     quickCheckedAt, fullCheckedAt }
+```
+
+`id` is `workspace`, `ffmpeg` or `docker`; `group` `workspaceAndTools | aiConfigs | dockerServices`;
+`tier` `quick | full`; `result` `passed | failed | notConfirmed | notRun | notUsed` (`checking` while a run
+is on the row). A `note` never changes the result (the ffmpeg row notes an appsettings `Ffmpeg:Path` that
+differs from the Settings value the app uses). `fix.link.path` is the web app's Settings page that owns
+the value (`settings/audio`); `fix.copy` is a command or file path for things outside the app.
+
 ## 1. Create a project and import the book
 
 ```bash

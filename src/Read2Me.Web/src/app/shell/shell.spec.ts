@@ -69,6 +69,7 @@ const CASES: { path: string; context: string[]; crumbs: string[]; title: string 
   ].map((page) => ({
     path: `settings/${page}`,
     context: [
+      'Setup check',
       'LLM',
       'Prompts',
       'Paragraph TTS',

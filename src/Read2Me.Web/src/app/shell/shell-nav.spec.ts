@@ -26,9 +26,10 @@ describe('shell-nav', () => {
     expect(items[0]?.link).toBe('projects/my%20book');
   });
 
-  it('lists the settings pages for a settings route', () => {
+  it('lists the settings pages for a settings route, the Setup check first', () => {
     const items = contextNavItems({ section: 'settings', title: 'LLM' });
     expect(items.map((i) => i.link.split('/').at(-1))).toEqual([
+      'setup-check',
       'llm',
       'prompts',
       'tts',

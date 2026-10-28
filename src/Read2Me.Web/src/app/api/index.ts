@@ -22,6 +22,7 @@ export * from './discovery-api';
 export * from './history-api';
 export * from './pronunciations-api';
 export * from './settings-api';
+export * from './setup-check-api';
 export * from './prompts-api';
 export * from './voice-editor-api';
 export * from './workspace-url';

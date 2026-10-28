@@ -1,0 +1,106 @@
+/* The Setup check page: the summary line, then one table grouped by area. */
+@scope (r2m-setup-check-page) to (.r2m-status-chip > *, .r2m-empty-state > *) {
+  :scope {
+    display: block;
+  }
+  .setup-check__summary,
+  .setup-check__muted {
+    color: var(--r2m-text-muted);
+  }
+  .setup-check__summary {
+    font-size: var(--r2m-text-sm);
+  }
+  .setup-check__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--r2m-text-sm);
+    margin-top: var(--r2m-space-3);
+  }
+  .setup-check__table th,
+  .setup-check__table td {
+    text-align: left;
+    padding: var(--r2m-space-2);
+    border-bottom: 1px solid var(--r2m-outline);
+    vertical-align: top;
+    overflow-wrap: anywhere;
+  }
+  .setup-check__table thead th {
+    color: var(--r2m-text-muted);
+    font-weight: 500;
+  }
+  .setup-check__group th {
+    background: var(--r2m-surface-low);
+    font-weight: 600;
+  }
+  .setup-check__name {
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .setup-check__row--failed {
+    background: var(--r2m-status-error-soft);
+  }
+  .setup-check__row .r2m-status-chip {
+    white-space: nowrap;
+  }
+  .setup-check__note {
+    display: flex;
+    gap: var(--r2m-space-1);
+    align-items: flex-start;
+    margin-top: 2px;
+    color: var(--r2m-status-info);
+  }
+  .setup-check__note .r2m-icon {
+    font-size: 16px;
+  }
+  .setup-check__fix {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--r2m-space-1) var(--r2m-space-2);
+  }
+  .setup-check__fix-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    color: var(--r2m-accent);
+  }
+  .setup-check__fix-link .r2m-icon {
+    font-size: 16px;
+  }
+  .setup-check__fix-copy {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--r2m-space-1);
+    max-width: 100%;
+    padding: 1px 6px;
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-sm);
+    background: var(--r2m-surface-container);
+    color: var(--r2m-text);
+    cursor: pointer;
+  }
+  .setup-check__fix-copy code {
+    font-family: var(--r2m-font-mono);
+    font-size: var(--r2m-text-xs);
+    overflow-wrap: anywhere;
+    text-align: left;
+  }
+  .setup-check__fix-copy .r2m-icon {
+    font-size: 14px;
+  }
+  .setup-check__sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  /* Phone width: the table scrolls inside itself rather than widening the page. */
+  @media (max-width: 700px) {
+    .setup-check__table {
+      display: block;
+      overflow-x: auto;
+    }
+  }
+}

@@ -8,6 +8,8 @@ using Read2Me.App.Audio;
 using Read2Me.App.Characters;
 using Read2Me.App.Queueing;
 using Read2Me.App.Services.Preflight;
+using Read2Me.App.Services.SetupCheck;
+using Microsoft.Extensions.Hosting;
 using Read2Me.Services.Queueing;
 using Read2Me.Core.Configuration;
 using Read2Me.Core.IO;
@@ -278,6 +280,20 @@ public static class ServiceRegistrationExtensions
             sp.GetRequiredService<IQueueSource<Read2Me.Services.Audio.QueuedAudioItem>>());
 
         return WatchdogGateMap.ForServices(registry.All, paragraphGate, audioGate);
+    }
+
+    /// <summary>The Setup check runner (it shares the watchdog's process runner) and its start-up Quick check.</summary>
+    public static IServiceCollection AddSetupCheck(this IServiceCollection services)
+    {
+        services.AddSingleton<WorkspaceStart>();
+        services.AddSingleton<ISetupCheckRunner>(sp => new SetupCheckRunner(
+            sp.GetRequiredService<IConfiguration>(),
+            sp.GetRequiredService<IHostEnvironment>().ContentRootPath,
+            sp.GetRequiredService<IDbContextFactory<Read2MeDbContext>>(),
+            sp.GetRequiredService<IProcessRunner>(),
+            sp.GetRequiredService<WorkspaceStart>()));
+        services.AddHostedService<SetupCheckAtStart>();
+        return services;
     }
 
     public static IServiceCollection AddAppState(this IServiceCollection services)

@@ -1371,3 +1371,53 @@ export interface PronunciationSpanReport {
   pronunciations: PronunciationRef[];
   spans: PronunciationSpan[];
 }
+
+// ---- Setup check (`SetupCheckEndpoints.cs`) ---------------------------------------------------------
+
+/** `SetupCheckGroup`: the area a check sits under in the report's one table. */
+export type SetupCheckGroup = 'workspaceAndTools' | 'aiConfigs' | 'dockerServices';
+
+/** `SetupCheckTier`: the Quick check reads; the Full check sends real requests. */
+export type SetupCheckTier = 'quick' | 'full';
+
+/** `SetupCheckResult`: a check's one result; `checking` is transient, while a run is on the row. */
+export type SetupCheckResult =
+  | 'passed'
+  | 'failed'
+  | 'notConfirmed'
+  | 'notRun'
+  | 'notUsed'
+  | 'checking';
+
+/** The in-app Settings section that owns the value: an app-relative path and its label. */
+export interface SetupSettingsLink {
+  path: string;
+  label: string;
+}
+
+/** One sentence, plus a Settings link and/or a command or file path to copy. */
+export interface SetupFixHint {
+  text: string;
+  link: SetupSettingsLink | null;
+  copy: string | null;
+}
+
+/** One check: what the app expected and what it found. A note never changes the result. */
+export interface SetupCheckRow {
+  id: string;
+  group: SetupCheckGroup;
+  name: string;
+  tier: SetupCheckTier;
+  result: SetupCheckResult;
+  expected: string;
+  found: string;
+  note: string | null;
+  fix: SetupFixHint;
+}
+
+/** `GET /api/setup-check`: the rows in table order and when each tier last ran (null: not yet). */
+export interface SetupCheckReport {
+  rows: SetupCheckRow[];
+  quickCheckedAt: string | null;
+  fullCheckedAt: string | null;
+}

@@ -6367,6 +6367,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/setup-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Setup check report: one row per check (id, group, name, tier, result, expected, found, note?, fix { text, link?, copy? }) and the times of the last Quick and Full check. Empty rows until the start-up Quick check ends. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SetupCheckReport"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup-check/quick": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run the Quick check (Workspace, ffmpeg, docker CLI) and answer the new report. Reads only: it never starts, stops or switches anything. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SetupCheckReport"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6788,6 +6860,39 @@ export interface components {
         SetPronunciationRequest: {
             writtenForm: null | string;
             spokenForm: null | string;
+        };
+        /** @enum {unknown} */
+        SetupCheckGroup: "workspaceAndTools" | "aiConfigs" | "dockerServices";
+        SetupCheckReport: {
+            rows: components["schemas"]["SetupCheckRow"][];
+            /** Format: date-time */
+            quickCheckedAt: null | string;
+            /** Format: date-time */
+            fullCheckedAt: null | string;
+        };
+        /** @enum {unknown} */
+        SetupCheckResult: "passed" | "failed" | "notConfirmed" | "notRun" | "notUsed" | "checking";
+        SetupCheckRow: {
+            id: string;
+            group: components["schemas"]["SetupCheckGroup"];
+            name: string;
+            tier: components["schemas"]["SetupCheckTier"];
+            result: components["schemas"]["SetupCheckResult"];
+            expected: string;
+            found: string;
+            note: null | string;
+            fix: components["schemas"]["SetupFixHint"];
+        };
+        /** @enum {unknown} */
+        SetupCheckTier: "quick" | "full";
+        SetupFixHint: {
+            text: string;
+            link?: null | components["schemas"]["SetupSettingsLink"];
+            copy?: null | string;
+        };
+        SetupSettingsLink: {
+            path: string;
+            label: string;
         };
         SimilarityTestRequest: {
             text1?: null | string;

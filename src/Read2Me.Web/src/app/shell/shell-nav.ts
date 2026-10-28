@@ -26,6 +26,7 @@ export function contextNavItems(ctx: ShellContext): NavItem[] {
     }
     case 'settings':
       return [
+        { label: 'Setup check', icon: 'health_and_safety', link: 'settings/setup-check' },
         { label: 'LLM', icon: 'psychology', link: 'settings/llm' },
         { label: 'Prompts', icon: 'description', link: 'settings/prompts' },
         { label: 'Paragraph TTS', icon: 'record_voice_over', link: 'settings/tts' },
