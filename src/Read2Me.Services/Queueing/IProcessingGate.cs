@@ -41,6 +41,7 @@ public static class GateOwners
     /// <summary>
     /// The AI service watchdog's hold for one service (recovery, give-up and deliberate shutdowns). Each
     /// service holds its own, so one service's recovery leaves another's hold on a shared gate in place.
+    /// The name is lower-cased because service names match case-insensitively (see <c>WatchdogGateMap</c>).
     /// </summary>
-    public static string WatchdogFor(string service) => $"watchdog:{service}";
+    public static string WatchdogFor(string service) => $"watchdog:{service.ToLowerInvariant()}";
 }

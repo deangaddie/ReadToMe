@@ -261,6 +261,17 @@ namespace Read2Me.Tests.App.Queueing
         }
 
         [Fact]
+        public void Gate_WatchdogOwner_IgnoresServiceNameCase()
+        {
+            var gate = new ProcessingGate<int>();
+            gate.Close(GateOwners.WatchdogFor("whisper"), "Recovering whisper: timeout");
+
+            gate.Open(GateOwners.WatchdogFor("Whisper"));
+
+            Assert.True(gate.IsOpen);
+        }
+
+        [Fact]
         public void Gate_ReplaceReason_ForOwnerNotHolding_ClosesUnderThatOwner()
         {
             var gate = new ProcessingGate<int>();
