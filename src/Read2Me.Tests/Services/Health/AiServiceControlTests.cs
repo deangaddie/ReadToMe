@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Read2Me.Services.Events;
 using Read2Me.Services.Health;
+using Read2Me.Services.Queueing;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Health;
@@ -374,6 +376,45 @@ public class AiServiceControlTests
         Assert.Contains("stop", h.OrderLog);
         Assert.False(h.Gate.IsOpen);
         Assert.Equal("llama was shut down", h.Gate.CloseReason);
+    }
+
+    [Fact]
+    public async Task Shutdown_OnSharedGate_HoldsOnlyThatService_ManualStartReleasesOnlyIt()
+    {
+        var audioCpp = new DockerAiService("audiocpp", "read2me-audiocpp", "http://localhost:8004", "/health");
+        var whisper = new DockerAiService("whisper", "read2me-whisper", "http://localhost:9000", "/");
+        var log = new List<string>();
+        var controller = new FakeController(log);
+        var probe = new FakeProbe(log);
+        var channel = Channel.CreateUnbounded<int>();
+        channel.Writer.TryWrite(1); // pending work, so a shutdown closes the gate
+        var gate = new ProcessingGate<int>();
+        IWatchdogGate adapter = new ProcessingGateAdapter<int>(gate, new ChannelSource(channel.Reader));
+        var map = new WatchdogGateMap(new Dictionary<string, IReadOnlyList<IWatchdogGate>>(StringComparer.OrdinalIgnoreCase)
+        {
+            [audioCpp.Name] = [adapter],
+            [whisper.Name] = [adapter],
+        });
+        var monitor = new AiServiceHealthMonitor(
+            controller, probe, map, Options.Create(new AiWatchdogOptions()),
+            new EventBroadcaster<WatchdogEvent>(), NullLogger<AiServiceHealthMonitor>.Instance);
+        var control = new AiServiceControl(
+            new DockerAiServiceRegistry(), controller, probe, map, monitor, NullLogger<AiServiceControl>.Instance);
+
+        await control.ShutdownAsync(whisper, CancellationToken.None);
+        await control.ShutdownAsync(audioCpp, CancellationToken.None);
+        Assert.Equal("whisper was shut down; audiocpp was shut down", gate.CloseReason);
+
+        var started = await control.StartAsync(audioCpp, CancellationToken.None);
+
+        Assert.True(started.Succeeded);
+        Assert.False(gate.IsOpen);
+        Assert.Equal("whisper was shut down", gate.CloseReason);
+    }
+
+    private sealed class ChannelSource(ChannelReader<int> reader) : IQueueSource<int>
+    {
+        public ChannelReader<int> Reader => reader;
     }
 
     [Fact]
