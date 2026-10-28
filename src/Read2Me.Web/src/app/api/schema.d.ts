@@ -6412,7 +6412,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Run the Quick check (Workspace, ffmpeg, docker CLI) and answer the new report. Reads only: it never starts, stops or switches anything. */
+        /** Run the Quick check (Workspace, ffmpeg, docker CLI) and answer the new report. It never starts, stops or switches anything; it creates the Workspace folder when missing. */
         post: {
             parameters: {
                 query?: never;

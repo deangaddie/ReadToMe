@@ -1,12 +1,13 @@
 namespace Read2Me.App.Services.SetupCheck
 {
     /// <summary>
-    /// What happened to the Workspace folder as the host started: start-up creates a missing
-    /// folder before the first Quick check runs, so the Workspace check reads the fact from here.
+    /// Whether the app created the Workspace folder: start-up creates a missing folder before the
+    /// first Quick check runs (and the Workspace check creates one removed since), so the check
+    /// reads the fact from here.
     /// </summary>
     public sealed class WorkspaceStart
     {
-        /// <summary>The folder didn't exist and this start created it.</summary>
+        /// <summary>The folder didn't exist and the app created it.</summary>
         public bool CreatedFolder { get; private set; }
 
         /// <summary>Creates the folder when it is missing, remembering that it did.</summary>

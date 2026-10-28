@@ -22,7 +22,7 @@ namespace Read2Me.App.Api
             group.MapPost("/quick", async (ISetupCheckRunner runner, CancellationToken ct) =>
                     Results.Ok(await runner.RunQuickCheckAsync(ct)))
                 .Produces<SetupCheckReport>()
-                .WithSummary("Run the Quick check (Workspace, ffmpeg, docker CLI) and answer the new report. Reads only: it never starts, stops or switches anything.");
+                .WithSummary("Run the Quick check (Workspace, ffmpeg, docker CLI) and answer the new report. It never starts, stops or switches anything; it creates the Workspace folder when missing.");
         }
     }
 }

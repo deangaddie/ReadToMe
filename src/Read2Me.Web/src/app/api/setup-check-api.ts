@@ -10,7 +10,7 @@ export class SetupCheckApi {
     return this.api.get<SetupCheckReport>('/api/setup-check');
   }
 
-  /** Runs the Quick check (it only reads) and answers the new report. */
+  /** Runs the Quick check (it never starts, stops or switches anything) and answers the new report. */
   runQuick(): Promise<SetupCheckReport> {
     return this.api.post<SetupCheckReport>('/api/setup-check/quick');
   }

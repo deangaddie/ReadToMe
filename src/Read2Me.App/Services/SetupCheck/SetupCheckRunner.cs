@@ -71,22 +71,19 @@ namespace Read2Me.App.Services.SetupCheck
                 SetupCheckIds.Workspace, SetupCheckGroup.WorkspaceAndTools, "Workspace", SetupCheckTier.Quick, result,
                 $"An absolute, writable folder ({WorkspaceKey})", found, note, fix);
 
-            var path = configuration[WorkspaceKey]?.Trim();
-            if (string.IsNullOrEmpty(path))
+            // Untrimmed: the host binds and uses the value as written, so the check judges that same path.
+            var path = configuration[WorkspaceKey];
+            if (string.IsNullOrWhiteSpace(path))
                 return Row(SetupCheckResult.Failed, $"{WorkspaceKey} isn't set");
             if (!Path.IsPathFullyQualified(path))
                 return Row(SetupCheckResult.Failed, $"{path} is a relative path");
             if (File.Exists(path))
                 return Row(SetupCheckResult.Failed, $"{path} is a file");
 
-            var created = workspaceStart.CreatedFolder;
             try
             {
-                if (!Directory.Exists(path))
-                {
-                    Directory.CreateDirectory(path);
-                    created = true;
-                }
+                // A folder removed since start is created again, as start-up would have.
+                workspaceStart.EnsureFolder(path);
             }
             catch (Exception ex)
             {
@@ -104,7 +101,7 @@ namespace Read2Me.App.Services.SetupCheck
                 return Row(SetupCheckResult.Failed, $"{path} isn't writable: {ex.Message}");
             }
 
-            return Row(SetupCheckResult.Passed, path, created ? CreatedNote : null);
+            return Row(SetupCheckResult.Passed, path, workspaceStart.CreatedFolder ? CreatedNote : null);
         }
 
         // ── ffmpeg ───────────────────────────────────────────────────────────
