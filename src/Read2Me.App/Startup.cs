@@ -37,6 +37,7 @@ namespace Read2Me.App
             services.AddAudioQueueServices();
             services.AddCharacterServices();
             services.AddAiWatchdogServices(Configuration);
+            services.AddSetupCheck();
             services.AddAppState();
             services.AddAppDatabase();
 

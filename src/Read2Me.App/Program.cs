@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Read2Me.App.Configuration;
+using Read2Me.App.Services.SetupCheck;
 using Read2Me.Core.Configuration;
 using Read2Me.AppData;
 using Read2Me.Services;
@@ -45,7 +46,7 @@ namespace Read2Me.App
         {
             using var scope = host.Services.CreateScope();
             var workspace = scope.ServiceProvider.GetRequiredService<IOptions<WorkspaceOptions>>().Value;
-            Directory.CreateDirectory(workspace.FolderPath);
+            scope.ServiceProvider.GetRequiredService<WorkspaceStart>().EnsureFolder(workspace.FolderPath);
             var db = scope.ServiceProvider.GetRequiredService<Read2MeDbContext>();
             var isNewDatabase = !db.Database.GetAppliedMigrations().Any();
             db.Database.Migrate();

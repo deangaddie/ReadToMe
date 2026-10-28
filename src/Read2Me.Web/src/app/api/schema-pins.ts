@@ -44,6 +44,7 @@ import type {
   SetActiveRequest,
   SetCheckpointRequest,
   SetPronunciationRequest,
+  SetupCheckReport,
   SimilarityTestRequest,
   SplitRuleRequest,
   StepPreviewRequest,
@@ -110,6 +111,7 @@ export type SchemaPins = [
   Pin<PronunciationImpactDto, Schema['PronunciationImpactReport']>,
   Pin<TryPronunciationRequest, Schema['TryPronunciationRequest']>,
   Pin<PronunciationSpanReport, Schema['PronunciationSpanReport']>,
+  Pin<SetupCheckReport, Schema['SetupCheckReport']>,
   // Inline in the document (the handler reads it by hand), so pinned to its operation.
   Pin<
     GenerateVoiceAudioRequest,
