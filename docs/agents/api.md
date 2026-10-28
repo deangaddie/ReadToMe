@@ -114,8 +114,8 @@ only when the user agreed — cancelling must start nothing.
 
 Before starting work, check the install: `GET /api/setup-check` answers the last report,
 `POST /api/setup-check/quick` runs the Quick check and answers the new one. The Quick check also runs
-once as the host starts (until it ends, `rows` is empty and `quickCheckedAt` null); it only reads and
-never starts, stops or switches anything.
+once as the host starts (until it ends, `rows` is empty and `quickCheckedAt` null). It never starts,
+stops or switches anything; the one thing it writes is the Workspace folder, created when missing.
 
 ```bash
 curl -s -X POST http://localhost:5000/api/setup-check/quick
