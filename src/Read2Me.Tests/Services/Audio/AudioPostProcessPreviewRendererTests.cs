@@ -43,6 +43,9 @@ namespace Read2Me.Tests.Services.Audio
         {
             public Task<FfmpegProbeResult> ProbeAsync(string? ffmpegPath, CancellationToken ct = default) =>
                 Task.FromResult(new FfmpegProbeResult(true, "ok"));
+
+            public Task<FfmpegProbeResult> ProbeFfprobeAsync(string? ffmpegPath, CancellationToken ct = default) =>
+                Task.FromResult(new FfmpegProbeResult(true, "ok"));
         }
 
         private AudioProcessingSettingsService NewSettings() =>

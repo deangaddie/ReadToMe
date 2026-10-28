@@ -68,14 +68,13 @@ export class SetupCheckPage extends R2mElement {
           <th scope="col">Expected</th>
           <th scope="col">Found</th>
           <th scope="col">Fix</th>
-          <th scope="col"><span class="setup-check__sr">Re-run</span></th>
         </tr>
       </thead>
       ${groupedRows(rows).map(
         (g) =>
           html`<tbody>
             <tr class="setup-check__group">
-              <th colspan="6" scope="colgroup">${g.label}</th>
+              <th colspan="5" scope="colgroup">${g.label}</th>
             </tr>
             ${g.rows.map((row) => this.row(row))}
           </tbody>`,
@@ -109,7 +108,6 @@ export class SetupCheckPage extends R2mElement {
             : html`<span class="setup-check__muted">—</span>`
         }
       </td>
-      <td></td>
     </tr>`;
   }
 

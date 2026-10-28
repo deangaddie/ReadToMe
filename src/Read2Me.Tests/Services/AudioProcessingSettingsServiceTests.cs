@@ -19,6 +19,9 @@ namespace Read2Me.Tests.Services
                 LastPath = ffmpegPath;
                 return Task.FromResult(Result);
             }
+
+            public Task<FfmpegProbeResult> ProbeFfprobeAsync(string? ffmpegPath, CancellationToken ct = default) =>
+                Task.FromResult(Result);
         }
 
         private AudioProcessingSettingsService NewService(IFfmpegProber? prober = null) =>
