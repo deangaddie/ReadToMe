@@ -124,7 +124,7 @@ namespace Read2Me.Tests.App.Queueing
             var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
 
             var gate = new ProcessingGate<int>();
-            gate.Close("paused");
+            gate.Close(GateOwners.Watchdog, "paused");
 
             var worker = new QueueWorker<int>(
                 source, gate, scopeFactory, NullLogger<QueueWorker<int>>.Instance);
@@ -139,7 +139,7 @@ namespace Read2Me.Tests.App.Queueing
             Assert.Empty(processed);
 
             // Open: worker resumes and processes the queued item.
-            gate.Open();
+            gate.Open(GateOwners.Watchdog);
             var completed = await Task.WhenAny(tcs.Task, Task.Delay(5000));
 
             cts.Cancel();
@@ -162,7 +162,7 @@ namespace Read2Me.Tests.App.Queueing
         public async Task Gate_Close_BlocksWait_ExposesReason()
         {
             var gate = new ProcessingGate<int>();
-            gate.Close("recovering");
+            gate.Close(GateOwners.Watchdog, "recovering");
 
             Assert.False(gate.IsOpen);
             Assert.Equal("recovering", gate.CloseReason);
@@ -176,10 +176,10 @@ namespace Read2Me.Tests.App.Queueing
         public async Task Gate_Open_ReleasesPendingWait_AndSubsequentWaitImmediate()
         {
             var gate = new ProcessingGate<int>();
-            gate.Close("x");
+            gate.Close(GateOwners.Watchdog, "x");
             var pending = gate.WaitAsync(CancellationToken.None);
 
-            gate.Open();
+            gate.Open(GateOwners.Watchdog);
 
             await pending.WaitAsync(TimeSpan.FromSeconds(5)); // released
             Assert.True(gate.IsOpen);
@@ -191,19 +191,63 @@ namespace Read2Me.Tests.App.Queueing
         public async Task Gate_CloseTwiceThenOpenOnce_IsOpen()
         {
             var gate = new ProcessingGate<int>();
-            gate.Close("first");
-            gate.Close("second"); // idempotent, no counting
-            gate.Open();
+            gate.Close(GateOwners.Watchdog, "first");
+            gate.Close(GateOwners.Watchdog, "second"); // idempotent, no counting
+            gate.Open(GateOwners.Watchdog);
 
             Assert.True(gate.IsOpen);
             await gate.WaitAsync(CancellationToken.None);
         }
 
         [Fact]
+        public void Gate_ClosedByTwoOwners_ReasonNamesBoth_InCloseOrder()
+        {
+            var gate = new ProcessingGate<int>();
+            gate.Close("setup-check", "Setup check running");
+            gate.Close(GateOwners.Watchdog, "Recovering llama: timeout");
+
+            Assert.Equal("Setup check running; Recovering llama: timeout", gate.CloseReason);
+        }
+
+        [Fact]
+        public void Gate_OwnerOpensWithoutHolding_LeavesOtherOwnersHold()
+        {
+            var gate = new ProcessingGate<int>();
+            gate.Close("setup-check", "Setup check running");
+
+            gate.Open(GateOwners.Watchdog);
+
+            Assert.False(gate.IsOpen);
+            Assert.Equal("Setup check running", gate.CloseReason);
+        }
+
+        [Fact]
+        public async Task Gate_ClosedByTwoOwners_StaysClosedUntilBothOpen()
+        {
+            var gate = new ProcessingGate<int>();
+            gate.Close(GateOwners.Watchdog, "Recovering llama: timeout");
+            gate.Close("setup-check", "Setup check running");
+            var pending = gate.WaitAsync(CancellationToken.None);
+
+            gate.Open(GateOwners.Watchdog);
+
+            Assert.False(gate.IsOpen);
+            Assert.Equal("Setup check running", gate.CloseReason);
+            var raced = await Task.WhenAny(pending, Task.Delay(200));
+            Assert.NotEqual(pending, raced); // still blocked
+
+            gate.Open("setup-check");
+
+            await pending.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(gate.IsOpen);
+            Assert.Null(gate.CloseReason);
+        }
+
+        [Fact]
         public async Task Gate_WaitAsync_HonoursCancellationWhileClosed()
         {
             var gate = new ProcessingGate<int>();
-            gate.Close("paused");
+            gate.Close(GateOwners.Watchdog, "paused");
             using var cts = new CancellationTokenSource();
 
             var wait = gate.WaitAsync(cts.Token);

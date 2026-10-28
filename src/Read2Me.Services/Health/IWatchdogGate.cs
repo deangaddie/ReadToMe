@@ -20,11 +20,15 @@ public interface IWatchdogGate
     bool HasPendingWork { get; }
 }
 
-/// <summary>Adapts a typed <see cref="IProcessingGate{TItem}"/> to the non-generic <see cref="IWatchdogGate"/>.</summary>
+/// <summary>
+/// Adapts a typed <see cref="IProcessingGate{TItem}"/> to the non-generic <see cref="IWatchdogGate"/>.
+/// Closes and opens only the <see cref="GateOwners.Watchdog"/> hold, so another owner's close survives
+/// the watchdog reopening the gate. <see cref="IsOpen"/> and <see cref="CloseReason"/> report every owner's holds.
+/// </summary>
 public sealed class ProcessingGateAdapter<TItem>(IProcessingGate<TItem> gate, IQueueSource<TItem> source) : IWatchdogGate
 {
-    public void Close(string reason) => gate.Close(reason);
-    public void Open() => gate.Open();
+    public void Close(string reason) => gate.Close(GateOwners.Watchdog, reason);
+    public void Open() => gate.Open(GateOwners.Watchdog);
     public bool IsOpen => gate.IsOpen;
     public string? CloseReason => gate.CloseReason;
     public bool HasPendingWork => source.Reader.CanCount && source.Reader.Count > 0;

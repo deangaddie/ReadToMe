@@ -202,8 +202,9 @@ public sealed class AiServiceHealthMonitor
         {
             lock (record.Sync) record.State = AiServiceState.Down;
             var downReason = $"{service.Name} is down: {lastError}";
-            // Gate is already closed with the "recovering" reason; Close is idempotent and won't
-            // overwrite it, so reopen-then-close to leave the give-up reason in place.
+            // The watchdog's hold already carries the "recovering" reason; Close is idempotent per owner
+            // and won't overwrite it, so reopen-then-close the watchdog hold to leave the give-up reason.
+            // Another owner's hold is untouched, so the gate stays closed throughout if one exists.
             foreach (var gate in gates)
             {
                 gate.Open();
