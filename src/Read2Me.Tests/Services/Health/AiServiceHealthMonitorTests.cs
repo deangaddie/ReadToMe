@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Read2Me.Services.Events;
 using Read2Me.Services.Health;
+using Read2Me.Services.Queueing;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Health;
@@ -31,7 +33,7 @@ public class AiServiceHealthMonitorTests
         public int CloseCount { get; private set; }
         public int OpenCount { get; private set; }
 
-        public void Close(string reason)
+        public void Close(string service, string reason)
         {
             if (!IsOpen) return; // idempotent, like the real gate — reason not overwritten
             IsOpen = false;
@@ -40,12 +42,18 @@ public class AiServiceHealthMonitorTests
             _log.Add($"close:{_name}");
         }
 
-        public void Open()
+        public void Open(string service)
         {
             IsOpen = true;
             CloseReason = null;
             OpenCount++;
             _log.Add($"open:{_name}");
+        }
+
+        public void ReplaceReason(string service, string reason)
+        {
+            IsOpen = false;
+            CloseReason = reason;
         }
     }
 
@@ -359,6 +367,121 @@ public class AiServiceHealthMonitorTests
 
         Assert.Equal(AiServiceState.Healthy, h.Monitor.GetState(Llama));
         Assert.True(h.Gates["llama"].IsOpen);
+    }
+
+    // ---- Services sharing one real gate ----------------------------------
+
+    private static readonly DockerAiService AudioCpp = new("audiocpp", "read2me-audiocpp", "http://localhost:8004", "/health");
+    private static readonly DockerAiService Whisper = new("whisper", "read2me-whisper", "http://localhost:9000", "/");
+
+    private sealed class EmptySource : IQueueSource<int>
+    {
+        public ChannelReader<int> Reader { get; } =
+            Channel.CreateUnbounded<int>().Reader;
+    }
+
+    /// <summary>audio.cpp and whisper both map to one real audio gate, as in production.</summary>
+    private static (Harness Harness, ProcessingGate<int> Gate) CreateSharedGateHarness(
+        AiWatchdogOptions options)
+    {
+        var gate = new ProcessingGate<int>();
+        IWatchdogGate adapter = new ProcessingGateAdapter<int>(gate, new EmptySource());
+        var map = new WatchdogGateMap(new Dictionary<string, IReadOnlyList<IWatchdogGate>>(StringComparer.OrdinalIgnoreCase)
+        {
+            [AudioCpp.Name] = [adapter],
+            [Whisper.Name] = [adapter],
+        });
+
+        var controller = new FakeController();
+        var probe = new FakeProbe();
+        var broadcaster = new EventBroadcaster<WatchdogEvent>();
+        var events = new List<WatchdogEvent>();
+        broadcaster.Event += events.Add;
+        var monitor = new AiServiceHealthMonitor(
+            controller, probe, map, Options.Create(options), broadcaster,
+            NullLogger<AiServiceHealthMonitor>.Instance);
+
+        var harness = new Harness(broadcaster)
+        {
+            Monitor = monitor,
+            Controller = controller,
+            Probe = probe,
+            Events = events,
+            OrderLog = [],
+            Gates = new Dictionary<string, FakeGate>(),
+        };
+        return (harness, gate);
+    }
+
+    [Fact]
+    public async Task SharedGate_OneServiceRecovers_WhileAnotherIsDown_GateStaysClosedWithDownReason()
+    {
+        var (h, gate) = CreateSharedGateHarness(new AiWatchdogOptions { ConsecutiveFailuresToTrip = 1, MaxRecoveryAttempts = 1 });
+        h.Probe.WarmupImpl = s => Task.FromResult(s.Name != Whisper.Name);
+        await h.AwaitRecovery(() => h.Monitor.ReportFailure(Whisper, "boom"));
+        Assert.Equal(AiServiceState.Down, h.Monitor.GetState(Whisper));
+
+        await h.AwaitRecovery(() => h.Monitor.ReportFailure(AudioCpp, "boom"));
+
+        Assert.Equal(AiServiceState.Healthy, h.Monitor.GetState(AudioCpp));
+        Assert.False(gate.IsOpen);
+        Assert.Equal("whisper is down: warm-up failed", gate.CloseReason);
+    }
+
+    [Fact]
+    public async Task SharedGate_ReasonNamesEveryHeldDownService()
+    {
+        var (h, gate) = CreateSharedGateHarness(new AiWatchdogOptions { ConsecutiveFailuresToTrip = 1, MaxRecoveryAttempts = 1 });
+        h.Probe.WarmupImpl = _ => Task.FromResult(false);
+
+        await h.AwaitRecovery(() => h.Monitor.ReportFailure(Whisper, "boom"));
+        await h.AwaitRecovery(() => h.Monitor.ReportFailure(AudioCpp, "boom"));
+
+        Assert.Equal("whisper is down: warm-up failed; audiocpp is down: warm-up failed", gate.CloseReason);
+    }
+
+    [Fact]
+    public async Task SharedGate_Reset_ReleasesOnlyThatServicesHold()
+    {
+        var (h, gate) = CreateSharedGateHarness(new AiWatchdogOptions { ConsecutiveFailuresToTrip = 1, MaxRecoveryAttempts = 1 });
+        h.Probe.WarmupImpl = _ => Task.FromResult(false);
+        await h.AwaitRecovery(() => h.Monitor.ReportFailure(Whisper, "boom"));
+        await h.AwaitRecovery(() => h.Monitor.ReportFailure(AudioCpp, "boom"));
+
+        h.Monitor.Reset(AudioCpp);
+
+        Assert.False(gate.IsOpen);
+        Assert.Equal("whisper is down: warm-up failed", gate.CloseReason);
+
+        h.Monitor.Reset(Whisper);
+
+        Assert.True(gate.IsOpen);
+    }
+
+    [Fact]
+    public async Task GiveUp_SwapsRecoveringReasonForDownReason_WithoutOpeningTheGate()
+    {
+        var (h, gate) = CreateSharedGateHarness(new AiWatchdogOptions { ConsecutiveFailuresToTrip = 1, MaxRecoveryAttempts = 1 });
+        var warmupEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        h.Probe.WarmupImpl = async _ =>
+        {
+            warmupEntered.TrySetResult();
+            await release.Task;
+            return false;
+        };
+
+        var recovery = h.AwaitRecovery(() => h.Monitor.ReportFailure(AudioCpp, "boom"));
+        await warmupEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("Recovering audiocpp: boom", gate.CloseReason);
+        var waiter = gate.WaitAsync(CancellationToken.None); // a parked worker
+
+        release.SetResult();
+        await recovery;
+
+        Assert.Equal(AiServiceState.Down, h.Monitor.GetState(AudioCpp));
+        Assert.Equal("audiocpp is down: warm-up failed", gate.CloseReason);
+        Assert.False(waiter.IsCompleted); // the gate never opened, so the waiter was never released
     }
 
     [Fact]

@@ -27,7 +27,7 @@ public class AiServiceControlTests
         public int CloseCount { get; private set; }
         public int OpenCount { get; private set; }
 
-        public void Close(string reason)
+        public void Close(string service, string reason)
         {
             if (!IsOpen) return;
             IsOpen = false;
@@ -36,12 +36,18 @@ public class AiServiceControlTests
             _log.Add("close");
         }
 
-        public void Open()
+        public void Open(string service)
         {
             IsOpen = true;
             CloseReason = null;
             OpenCount++;
             _log.Add("open");
+        }
+
+        public void ReplaceReason(string service, string reason)
+        {
+            IsOpen = false;
+            CloseReason = reason;
         }
     }
 
@@ -270,7 +276,7 @@ public class AiServiceControlTests
     public async Task Start_RunsSequence_ThenReadyAndResets()
     {
         var h = CreateHarness();
-        h.Gate.Close("was closed"); // simulate a gate held from a prior Down
+        h.Gate.Close(Llama.Name, "was closed"); // simulate a gate held from a prior Down
 
         var result = await h.Control.StartAsync(Llama, CancellationToken.None);
 

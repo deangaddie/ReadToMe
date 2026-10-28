@@ -9,7 +9,8 @@ namespace Read2Me.Services.Queueing;
 /// <see cref="IProcessingGate{TItem}"/> backed by a swapped <see cref="TaskCompletionSource"/>
 /// (async manual-reset event, same hand-rolled style as the rest of the queueing code).
 /// A null <c>_gate</c> means open; a pending TCS means closed, held by one or more owners in
-/// <c>_holds</c>. Close is idempotent per owner; the last owner's Open releases all waiters.
+/// <c>_holds</c>. Close is idempotent per owner; ReplaceReason swaps an owner's reason in place
+/// without releasing anyone; the last owner's Open releases all waiters.
 /// </summary>
 public sealed class ProcessingGate<TItem> : IProcessingGate<TItem>
 {
@@ -46,9 +47,25 @@ public sealed class ProcessingGate<TItem> : IProcessingGate<TItem>
         lock (_lock)
         {
             if (_holds.Exists(h => h.Owner == owner)) return; // this owner already holds it — idempotent
-            _holds.Add((owner, reason));
-            _gate ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            AddHold(owner, reason);
         }
+    }
+
+    public void ReplaceReason(string owner, string reason)
+    {
+        lock (_lock)
+        {
+            var index = _holds.FindIndex(h => h.Owner == owner);
+            if (index >= 0) _holds[index] = (owner, reason); // keeps its place in close order
+            else AddHold(owner, reason);
+        }
+    }
+
+    // Caller holds _lock.
+    private void AddHold(string owner, string reason)
+    {
+        _holds.Add((owner, reason));
+        _gate ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
     public void Open(string owner)
