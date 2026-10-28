@@ -37,8 +37,9 @@ public class WatchdogGateMapTests
 
     private sealed class StubGate : IWatchdogGate
     {
-        public void Close(string reason) { }
-        public void Open() { }
+        public void Close(string service, string reason) { }
+        public void Open(string service) { }
+        public void ReplaceReason(string service, string reason) { }
         public bool IsOpen => true;
         public string? CloseReason => null;
         public bool HasPendingWork => false;

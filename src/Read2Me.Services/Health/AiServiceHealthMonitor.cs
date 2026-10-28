@@ -116,7 +116,7 @@ public sealed class AiServiceHealthMonitor
             record.State = AiServiceState.Healthy;
             record.Failures = 0;
         }
-        foreach (var gate in _gateMap.GatesFor(service.Name)) gate.Open();
+        foreach (var gate in _gateMap.GatesFor(service.Name)) gate.Open(service.Name);
     }
 
     /// <summary>
@@ -148,7 +148,7 @@ public sealed class AiServiceHealthMonitor
         var gates = _gateMap.GatesFor(service.Name);
 
         _broadcaster.Publish(new RecoveryStarted(service.Name, reason));
-        foreach (var gate in gates) gate.Close($"Recovering {service.Name}: {reason}");
+        foreach (var gate in gates) gate.Close(service.Name, $"Recovering {service.Name}: {reason}");
 
         string lastError = reason;
         bool recovered = false;
@@ -194,7 +194,7 @@ public sealed class AiServiceHealthMonitor
                 record.State = AiServiceState.Healthy;
                 record.Failures = 0;
             }
-            foreach (var gate in gates) gate.Open();
+            foreach (var gate in gates) gate.Open(service.Name);
             _broadcaster.Publish(new ServiceHealthy(service.Name));
             _log.LogInformation("Service {Service} recovered.", service.Name);
         }
@@ -202,14 +202,9 @@ public sealed class AiServiceHealthMonitor
         {
             lock (record.Sync) record.State = AiServiceState.Down;
             var downReason = $"{service.Name} is down: {lastError}";
-            // The watchdog's hold already carries the "recovering" reason; Close is idempotent per owner
-            // and won't overwrite it, so reopen-then-close the watchdog hold to leave the give-up reason.
-            // Another owner's hold is untouched, so the gate stays closed throughout if one exists.
-            foreach (var gate in gates)
-            {
-                gate.Open();
-                gate.Close(downReason);
-            }
+            // Swap this service's "recovering" reason in place: reopening then closing would leave a gap
+            // where a parked worker could pull an item and burn it against the dead service.
+            foreach (var gate in gates) gate.ReplaceReason(service.Name, downReason);
             _broadcaster.Publish(new ServiceDown(service.Name, lastError));
             _log.LogError("Service {Service} is down after {Attempts} recovery attempts: {Error}",
                 service.Name, _options.MaxRecoveryAttempts, lastError);

@@ -91,7 +91,7 @@ public sealed class AiServiceControl(
             foreach (var gate in gateMap.GatesFor(service.Name))
             {
                 if (gate.HasPendingWork)
-                    gate.Close($"{service.Name} was shut down");
+                    gate.Close(service.Name, $"{service.Name} was shut down");
             }
 
             // A deliberate stop is not a failure; don't leave a streak that trips recovery next report.
