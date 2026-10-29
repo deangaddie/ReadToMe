@@ -68,18 +68,6 @@ namespace Read2Me.App.Services.SetupCheck
             return rows;
         }
 
-        /// <summary>The managed services an active config or chain entry uses, by name: what a Full check drives.</summary>
-        public async Task<IReadOnlyList<string>> DrivenServicesAsync()
-        {
-            var configs = await ReadActiveConfigsAsync();
-            return
-            [
-                .. configs.All.Select(c => c.BaseUrl).OfType<string>()
-                    .Select(deps.Control.Resolve).OfType<DockerAiService>()
-                    .Select(s => s.Name).Distinct(StringComparer.OrdinalIgnoreCase),
-            ];
-        }
-
         /// <summary>The same rows, each Not run for one reason; nothing is read or probed.</summary>
         public IReadOnlyList<SetupCheckRow> NotRun(string found, SetupFixHint fix)
         {

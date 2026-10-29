@@ -36,7 +36,7 @@ namespace Read2Me.App.Api
             group.MapPost("/models", GetModelsAsync)
                 .WithSummary("Model ids the server behind a config offers. The body is an LLM config and need not be saved. 422 with the reason when the server cannot be asked.");
 
-            group.MapPost("/{id:int}/test", StartTestAsync)
+            group.MapPost("/{id:int}/test", StartTestAsync).RefusedWhileSetupCheckRuns()
                 .WithSummary("Send a free-text test prompt to one config (202). Tokens stream on /hubs/live group stream:llm, wrapped in runStarted/runEnded; llmTest { kind: done | failed | cancelled } goes to the connectionId in the body. 409 while a test is already running.");
             // One test runs at a time, so the id only addresses the route: whatever is running stops.
             group.MapPost("/{id:int}/test/cancel", (int id, LlmTestRunCoordinator runs) =>

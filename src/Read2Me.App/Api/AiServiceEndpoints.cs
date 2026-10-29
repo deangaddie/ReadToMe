@@ -36,14 +36,17 @@ namespace Read2Me.App.Api
 
             endpoints.MapPost("/api/ai-services/{name}/start", (string name, DockerAiServiceRegistry r, AiServiceOpCoordinator ops) =>
                     StartOp(name, AiServiceOpCoordinator.Start, r, ops))
+                .RefusedWhileSetupCheckRuns()
                 .WithSummary("docker start → health poll → warm-up, in the background (202). The outcome arrives as serviceStatus { name, status, op: start, ok, error? } on /hubs/live. 404 unknown service, 409 while it already has an op in flight.");
 
             endpoints.MapPost("/api/ai-services/{name}/restart", (string name, DockerAiServiceRegistry r, AiServiceOpCoordinator ops) =>
                     StartOp(name, AiServiceOpCoordinator.Restart, r, ops))
+                .RefusedWhileSetupCheckRuns()
                 .WithSummary("docker restart → health poll → warm-up, in the background (202); outcome as serviceStatus { op: restart }. 404 / 409 as start.");
 
             endpoints.MapPost("/api/ai-services/{name}/shutdown", (string name, DockerAiServiceRegistry r, AiServiceOpCoordinator ops) =>
                     StartOp(name, AiServiceOpCoordinator.Shutdown, r, ops))
+                .RefusedWhileSetupCheckRuns()
                 .WithSummary("docker stop in the background (202), pausing a queue that still has work for it; outcome as serviceStatus { op: shutdown }. 404 / 409 as start.");
         }
 

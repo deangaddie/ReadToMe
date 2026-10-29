@@ -80,9 +80,9 @@ export function fullCheckConfirm(report: SetupCheckReport | null): ConfirmOption
   return {
     title: 'Run the Full check?',
     message:
-      'It starts each service an active config uses, stopping running GPU containers so one model ' +
-      'loads at a time, and sends one real request to each model, then puts the services back as it ' +
-      'found them. Queues wait and new AI tasks are refused until it ends. ' +
+      // Says only what the steps do today; each new step adds its own sentence.
+      'It encodes a 1 s tone to .m4b with the ffmpeg audio generation uses. ' +
+      'Queues wait and new AI tasks are refused until it ends. ' +
       `It's likely to take ${estimateText(report?.fullCheckEstimateSeconds ?? 0)}.`,
     confirmLabel: 'Run Full check',
   };

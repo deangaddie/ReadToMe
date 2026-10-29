@@ -160,12 +160,15 @@ lane, label, cancelling }` says where the run is (`lane` `local | cpu | gpu`; nu
 `fullCheckEstimateSeconds` how long a run is likely to take. It answers 409 naming the work in flight
 while the Audio or Character queue holds items, or a voice batch, character discovery or audiobook
 assembly runs — stop that first. While it runs every queue waits with the reason "Setup check running",
-Preflight `plan` and `run` answer 409 with that title, and the watchdog leaves the services the active
-configs use alone. Each step marks its rows `checking`; progress and the final report reach every hub
+Preflight `plan` and `run` answer 409 with that title, as does every endpoint that drives an AI
+service directly (discovery, book-edit plan/propose, voice prompt and audio generation, voice batches,
+transcribe, pronunciation try-outs, the config tests, and AI service start/restart/shutdown), and the
+watchdog leaves alone the services the steps drive. Each step marks its rows `checking`; progress and the final report reach every hub
 client as `setupCheck { kind: progress | done, report }`. `POST /api/setup-check/full/cancel` → 202 (409
 when none runs) stops the run once its current step ends; the checks it hadn't reached read `notRun`,
 "Full check cancelled". Results stay in memory with `fullCheckedAt` until the app restarts, and a later
-Quick check keeps a Full verdict unless it now fails the row. Today the Full check has one step, `ffmpeg`
+Quick check keeps a Full pass unless it now fails the row; a Full failure the Quick check no longer
+finds is dropped until the next Full check. Today the Full check has one step, `ffmpeg`
 (a Full-tier row): a 1 s tone through adynamicequalizer and alimiter, encoded to AAC `.m4b` by the live ffmpeg.
 
 ## 1. Create a project and import the book

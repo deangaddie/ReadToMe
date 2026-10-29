@@ -108,7 +108,7 @@ namespace Read2Me.App.Api
                              "what a try-out names it by), matchStart and matchLength in that sentence, " +
                              "spokenSentence, the sentence with the drafted list applied, and spokenMatchStart and spokenMatchLength, where the match's " +
                              "spoken form (its case carried over) sits in spokenSentence. 400 invalid; 404 unknown id.");
-            endpoints.MapPost("/api/projects/{folder}/pronunciations/try", TryAsync)
+            endpoints.MapPost("/api/projects/{folder}/pronunciations/try", TryAsync).RefusedWhileSetupCheckRuns()
                 .RecordsNoStep("A try-out: it renders a sentence and stores nothing.")
                 .Produces(StatusCodes.Status200OK, contentType: "audio/wav")
                 .ProducesProblem(StatusCodes.Status400BadRequest)

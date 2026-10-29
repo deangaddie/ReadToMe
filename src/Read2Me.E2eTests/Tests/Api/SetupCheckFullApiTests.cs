@@ -1,17 +1,27 @@
 using System.Net;
+using System.Text;
 using System.Text.Json;
 using Read2Me.E2eTests.Infrastructure;
 
 namespace Read2Me.E2eTests.Tests.Api;
 
 /// <summary>
-/// The Full check over the agent API on the in-proc host: start, join, Preflight refused for the run,
+/// The Full check over the agent API on the in-proc host: start, join, Preflight and the direct AI endpoints refused for the run,
 /// cancel. The fake encode holds the run in its one step so the test can act mid-run. The runner's
 /// rules (refusal, gates, watchdog, progress) are SetupCheckFullCheckTests.
 /// </summary>
 public class SetupCheckFullApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
+
+    private static readonly string[] DirectAiRoutes =
+    [
+        "/api/projects/any/characters/discover",
+        "/api/projects/any/book-edits/plan",
+        "/api/projects/any/pronunciations/try",
+        "/api/settings/voice-design/1/test",
+        "/api/ai-services/llama/start",
+    ];
 
     private string Url(string rest = "") => $"{app.BaseUrl}/api/setup-check{rest}";
 
@@ -38,6 +48,13 @@ public class SetupCheckFullApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
             var plan = await Http.PostAsync($"{app.BaseUrl}/api/preflight/CharacterAttribution/plan", null);
             Assert.Equal(HttpStatusCode.Conflict, plan.StatusCode);
             Assert.Equal("Setup check running", (await ReadAsync(plan)).GetProperty("title").GetString());
+            // The endpoints that drive an AI service without Preflight refuse too.
+            foreach (var route in DirectAiRoutes)
+            {
+                var refused = await Http.PostAsync($"{app.BaseUrl}{route}", new StringContent("{}", Encoding.UTF8, "application/json"));
+                Assert.True(refused.StatusCode == HttpStatusCode.Conflict, $"{route} answered {(int)refused.StatusCode}");
+                Assert.Equal("Setup check running", (await ReadAsync(refused)).GetProperty("title").GetString());
+            }
 
             var cancelled = await Http.PostAsync(Url("/full/cancel"), null);
             Assert.Equal(HttpStatusCode.Accepted, cancelled.StatusCode);

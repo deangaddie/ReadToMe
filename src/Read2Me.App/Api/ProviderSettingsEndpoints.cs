@@ -62,12 +62,12 @@ namespace Read2Me.App.Api
             endpoints.MapPut("/api/settings/voice-design/sample-text", SetSampleTextAsync)
                 .WithSummary("Override the voice-design sample sentence. Null, blank or the default text clears the override. 400 over maxLength (300) characters.");
 
-            endpoints.MapPost("/api/settings/voice-design/{id:int}/test", TestVoiceDesignAsync)
+            endpoints.MapPost("/api/settings/voice-design/{id:int}/test", TestVoiceDesignAsync).RefusedWhileSetupCheckRuns()
                 .WithSummary("Design a voice from a prompt with one config, speaking the sample text; answers the audio as base64. 60 s timeout. 422 with the reason when the provider fails.");
-            endpoints.MapPost("/api/settings/transcription/{id:int}/test", TestTranscriptionAsync)
+            endpoints.MapPost("/api/settings/transcription/{id:int}/test", TestTranscriptionAsync).RefusedWhileSetupCheckRuns()
                 .DisableAntiforgery()
                 .WithSummary("Transcribe an uploaded audio file (multipart field 'file': wav, mp3 or aac, at most 50 MB) with one config. 422 with the reason when the provider fails.");
-            endpoints.MapPost("/api/settings/semantic-similarity/{id:int}/test", TestSimilarityAsync)
+            endpoints.MapPost("/api/settings/semantic-similarity/{id:int}/test", TestSimilarityAsync).RefusedWhileSetupCheckRuns()
                 .WithSummary("Score two texts with one config against its pass threshold. 422 with the reason when the provider fails.");
         }
 
