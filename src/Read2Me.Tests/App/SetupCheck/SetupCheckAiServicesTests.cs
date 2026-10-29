@@ -97,14 +97,18 @@ namespace Read2Me.Tests.App.SetupCheck
 
         // ── Builders ─────────────────────────────────────────────────────────
 
-        private SetupCheckRunner Runner() => new(
-            new ConfigurationBuilder().AddInMemoryCollection(_config).Build(),
-            @"C:\app",
-            Factory,
-            new AnsweringFfmpeg(),
-            _processes,
-            new WorkspaceStart(),
-            SetupCheckTestServices.Create(Factory, _services, _http, _watchdog));
+        private SetupCheckRunner Runner()
+        {
+            var configuration = new ConfigurationBuilder().AddInMemoryCollection(_config).Build();
+            return new(
+                configuration,
+                @"C:\app",
+                Factory,
+                new AnsweringFfmpeg(),
+                _processes,
+                new WorkspaceStart(configuration),
+                SetupCheckTestServices.Create(Factory, _services, _http, _watchdog));
+        }
 
         private async Task<SetupCheckReport> CheckAsync() => await Runner().RunQuickCheckAsync(CancellationToken.None);
 

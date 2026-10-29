@@ -6374,7 +6374,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The Setup check report: one row per check (id, group, name, tier, result, expected, found, note?, fix { text, link?, copy? }), the times of the last Quick and Full check, firstRun (this start created app.db) and startedAt (when this host started). Empty rows until the start-up Quick check ends. */
+        /** The Setup check report: one row per check (id, group, name, tier, result, expected, found, note?, fix { text, link?, copy? }), the times of the last Quick and Full check, firstRun (this start created app.db), startedAt (when this host started) and noWorkspace (this host started without a usable Workspace: every other API call answers 503 No Workspace until the app restarts). Empty rows until the start-up Quick check ends. */
         get: {
             parameters: {
                 query?: never;
@@ -6872,6 +6872,7 @@ export interface components {
             firstRun: boolean;
             /** Format: date-time */
             startedAt: string;
+            noWorkspace: boolean;
         };
         /** @enum {unknown} */
         SetupCheckResult: "passed" | "failed" | "notConfirmed" | "notRun" | "notUsed" | "checking";

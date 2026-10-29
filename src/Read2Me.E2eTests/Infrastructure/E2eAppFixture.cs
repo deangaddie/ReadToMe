@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Read2Me.App;
+using Read2Me.App.Configuration;
 using Read2Me.App.Services.SetupCheck;
 using Read2Me.AppData;
 using Read2Me.E2eTests.Infrastructure.FakeAi;
@@ -32,6 +33,16 @@ public sealed class E2eAppFixture : IAsyncLifetime
     public string BaseUrl { get; private set; } = "";
     public IServiceProvider Services => _host!.Services;
 
+    /// <summary>The host's command line, as <c>Program.Main</c> would pass it.</summary>
+    public string[] Args { get; init; } = [];
+
+    /// <summary>
+    /// Set: the host's content root, with appsettings.Local.json read from it as the app does, and
+    /// the Workspace left to the settings there and to <see cref="Args"/>. Null (the default): the
+    /// Workspace is <see cref="WorkspaceDir"/>, set in memory.
+    /// </summary>
+    public string? ContentRootDir { get; init; }
+
     private IHost? _host;
     private string? _appDbConnectionString;
 
@@ -45,8 +56,12 @@ public sealed class E2eAppFixture : IAsyncLifetime
         WebRootDir = Path.Combine(WorkspaceDir, "wwwroot");
         Directory.CreateDirectory(WebRootDir);
 
+        if (ContentRootDir is not null)
+            Directory.CreateDirectory(ContentRootDir);
+
         await StartHostAsync();
-        await WorkspaceSeeder.SeedServiceConfigsAsync(_host!.Services);
+        if (_appDbConnectionString is not null)
+            await WorkspaceSeeder.SeedServiceConfigsAsync(_host!.Services);
     }
 
     /// <summary>
@@ -64,10 +79,17 @@ public sealed class E2eAppFixture : IAsyncLifetime
         // Mirrors Program.CreateHostBuilder minus Serilog, plus test overrides.
         // IHostBuilder.ConfigureServices delegates run after Startup.ConfigureServices,
         // so these registrations win.
-        _host = Host.CreateDefaultBuilder()
-            .UseEnvironment(Environments.Development)
-            .ConfigureAppConfiguration(cfg => cfg.AddInMemoryCollection(
-                new Dictionary<string, string?> { ["Workspace:FolderPath"] = WorkspaceDir }))
+        var builder = Host.CreateDefaultBuilder(Args).UseEnvironment(Environments.Development);
+        if (ContentRootDir is not null)
+            builder.UseContentRoot(ContentRootDir);
+        _host = builder
+            .ConfigureAppConfiguration((context, cfg) =>
+            {
+                if (ContentRootDir is not null)
+                    LocalSettings.AddTo(cfg, context.HostingEnvironment);
+                else
+                    cfg.AddInMemoryCollection(new Dictionary<string, string?> { ["Workspace:FolderPath"] = WorkspaceDir });
+            })
             .ConfigureWebHostDefaults(web => web
                 .UseStartup<Startup>()
                 // Isolated physical web root so tests can stage (or withhold) the web bundle
@@ -87,12 +109,17 @@ public sealed class E2eAppFixture : IAsyncLifetime
             })
             .Build();
 
-        // The migration step Program.Main performs before Run(), which also notes a first run.
+        // The migration step Program.Main performs before Run(), which also notes a first run; with
+        // no usable Workspace the host starts without app.db, as the app does.
         using (var scope = _host.Services.CreateScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<Read2MeDbContext>();
-            scope.ServiceProvider.GetRequiredService<WorkspaceStart>().MigrateDatabase(db);
-            _appDbConnectionString = db.Database.GetConnectionString();
+            var workspaceStart = scope.ServiceProvider.GetRequiredService<WorkspaceStart>();
+            if (workspaceStart.Usable)
+            {
+                var db = scope.ServiceProvider.GetRequiredService<Read2MeDbContext>();
+                workspaceStart.MigrateDatabase(db);
+                _appDbConnectionString = db.Database.GetConnectionString();
+            }
         }
 
         await _host.StartAsync();

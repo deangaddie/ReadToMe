@@ -68,6 +68,29 @@ namespace Read2Me.App.Services.SetupCheck
             return rows;
         }
 
+        /// <summary>The same rows, each Not run for one reason; nothing is read or probed.</summary>
+        public IReadOnlyList<SetupCheckRow> NotRun(string found, SetupFixHint fix)
+        {
+            SetupCheckRow Config(string id, string name, string expected) =>
+                new(id, SetupCheckGroup.AiConfigs, name, SetupCheckTier.Quick, SetupCheckResult.NotRun,
+                    expected, found, null, fix, Managed: false);
+
+            var rows = new List<SetupCheckRow>
+            {
+                Config(SetupCheckIds.Llm, "LLM", ConfigExpected),
+                Config(SetupCheckIds.AttributionChain, "Attribution chain", ChainExpected),
+                Config(SetupCheckIds.ParagraphTts, "Paragraph TTS", ConfigExpected),
+                Config(SetupCheckIds.VoiceDesign, "Voice design", ConfigExpected),
+                Config(SetupCheckIds.Transcription, "Transcription", ConfigExpected),
+                Config(SetupCheckIds.Similarity, "Similarity", ConfigExpected),
+            };
+            rows.AddRange(deps.Registry.All.Select(service => new SetupCheckRow(
+                SetupCheckIds.Container(service.Name), SetupCheckGroup.DockerServices, service.ContainerName,
+                SetupCheckTier.Quick, SetupCheckResult.NotRun,
+                $"{service.ContainerName} running and answering at {service.BaseUrl}", found, null, fix, Managed: true)));
+            return rows;
+        }
+
         private async Task<ActiveConfigs> ReadActiveConfigsAsync()
         {
             await using var scope = deps.Scopes.CreateAsyncScope();

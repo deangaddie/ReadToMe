@@ -1422,7 +1422,8 @@ export interface SetupCheckRow {
 /**
  * `GET /api/setup-check`: the rows in table order and when each tier last ran (null: not yet).
  * `firstRun`: this host start created app.db. `startedAt`: when this host started, which keys the
- * start banner's dismissal.
+ * start banner's dismissal. `noWorkspace`: this host started without a usable Workspace, so every
+ * other API call answers 503 "No Workspace" and every route shows the Setup check until a restart.
  */
 export interface SetupCheckReport {
   rows: SetupCheckRow[];
@@ -1430,4 +1431,5 @@ export interface SetupCheckReport {
   fullCheckedAt: string | null;
   firstRun: boolean;
   startedAt: string;
+  noWorkspace: boolean;
 }

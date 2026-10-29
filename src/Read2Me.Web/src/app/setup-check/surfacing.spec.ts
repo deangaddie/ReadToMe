@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { SetupCheckReport, SetupCheckResult, SetupCheckRow } from '@app/api';
-import { bannerVisible, landingPath, shieldView } from './surfacing';
+import { bannerVisible, landingPath, noWorkspace, shieldView } from './surfacing';
 
 const STARTED = '2026-10-29T09:00:00Z';
 const RESTARTED = '2026-10-29T11:30:00Z';
@@ -27,6 +27,7 @@ const report = (
   fullCheckedAt: null,
   firstRun: false,
   startedAt: STARTED,
+  noWorkspace: false,
   ...over,
 });
 
@@ -46,6 +47,18 @@ describe('bannerVisible', () => {
 
   it('comes back on the next start, even if the failure is the same', () => {
     expect(bannerVisible(report(['failed'], { startedAt: RESTARTED }), STARTED)).toBe(true);
+  });
+
+  it('never shows in no-Workspace mode, where the Setup check page is the message', () => {
+    expect(bannerVisible(report(['failed', 'notRun'], { noWorkspace: true }), null)).toBe(false);
+  });
+});
+
+describe('noWorkspace', () => {
+  it('follows the report, and is off before it has loaded', () => {
+    expect(noWorkspace(report(['failed'], { noWorkspace: true }))).toBe(true);
+    expect(noWorkspace(report(['failed']))).toBe(false);
+    expect(noWorkspace(null)).toBe(false);
   });
 });
 

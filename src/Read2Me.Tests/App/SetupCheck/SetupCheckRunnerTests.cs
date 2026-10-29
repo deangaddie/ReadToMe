@@ -51,14 +51,23 @@ namespace Read2Me.Tests.App.SetupCheck
             }
         }
 
-        private SetupCheckRunner Runner(WorkspaceStart? start = null, IFfmpegProber? prober = null) => new(
-            new ConfigurationBuilder().AddInMemoryCollection(_config).Build(),
-            ContentRoot,
-            Factory,
-            prober ?? new FfmpegProber(NullLogger<FfmpegProber>.Instance),
-            _processes,
-            start ?? new WorkspaceStart(),
-            SetupCheckTestServices.Create(Factory));
+        private IConfigurationRoot Configuration() => new ConfigurationBuilder().AddInMemoryCollection(_config).Build();
+
+        /// <summary>A runner on <paramref name="configuration"/> (default: the in-memory settings), whose start is judged from it.</summary>
+        private SetupCheckRunner Runner(
+            WorkspaceStart? start = null, IFfmpegProber? prober = null, IConfiguration? configuration = null,
+            string contentRoot = ContentRoot)
+        {
+            configuration ??= Configuration();
+            return new(
+                configuration,
+                contentRoot,
+                Factory,
+                prober ?? new FfmpegProber(NullLogger<FfmpegProber>.Instance),
+                _processes,
+                start ?? new WorkspaceStart(configuration),
+                SetupCheckTestServices.Create(Factory));
+        }
 
         private async Task<SetupCheckRow> RowAsync(string id, WorkspaceStart? start = null) =>
             (await Runner(start).RunQuickCheckAsync(CancellationToken.None)).Rows.Single(r => r.Id == id);
@@ -121,8 +130,8 @@ namespace Read2Me.Tests.App.SetupCheck
         public async Task A_workspace_this_start_created_passes_with_a_note()
         {
             Directory.Delete(_workspace);
-            var start = new WorkspaceStart();
-            start.EnsureFolder(_workspace);
+            var start = new WorkspaceStart(Configuration());
+            Assert.True(start.Usable);
 
             var row = await RowAsync(SetupCheckIds.Workspace, start);
 
@@ -133,9 +142,11 @@ namespace Read2Me.Tests.App.SetupCheck
         [Fact]
         public async Task A_workspace_folder_gone_since_start_is_created_again_with_the_note()
         {
+            var start = new WorkspaceStart(Configuration());
+            Assert.True(start.Usable);
             Directory.Delete(_workspace);
 
-            var row = await RowAsync(SetupCheckIds.Workspace);
+            var row = await RowAsync(SetupCheckIds.Workspace, start);
 
             Assert.Equal(SetupCheckResult.Passed, row.Result);
             Assert.True(Directory.Exists(_workspace));
@@ -183,6 +194,141 @@ namespace Read2Me.Tests.App.SetupCheck
 
             Assert.Equal(SetupCheckResult.Failed, row.Result);
             Assert.Equal($"{file} is a file", row.Found);
+        }
+
+        [Fact]
+        public async Task A_workspace_that_cant_be_created_fails()
+        {
+            var file = Path.Combine(_workspace, "app.txt");
+            await File.WriteAllTextAsync(file, "not a folder");
+            var beneathFile = Path.Combine(file, "ws");
+            _config["Workspace:FolderPath"] = beneathFile;
+
+            var row = await RowAsync(SetupCheckIds.Workspace);
+
+            Assert.Equal(SetupCheckResult.Failed, row.Result);
+            Assert.StartsWith($"{beneathFile} can't be created:", row.Found);
+        }
+
+        [Fact]
+        public async Task An_unwritable_workspace_fails()
+        {
+            using var folder = new Read2Me.TestUtils.UnwritableFolder(Path.Combine(_workspace, "locked"));
+            _config["Workspace:FolderPath"] = folder.Path;
+
+            var row = await RowAsync(SetupCheckIds.Workspace);
+
+            Assert.Equal(SetupCheckResult.Failed, row.Result);
+            Assert.StartsWith($"{folder.Path} isn't writable:", row.Found);
+        }
+
+        // ── No-Workspace mode ────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Without_a_usable_workspace_at_start_every_other_row_is_not_run_needing_it()
+        {
+            var usable = await Runner().RunQuickCheckAsync(CancellationToken.None);
+            Assert.False(usable.NoWorkspace);
+            _config["Workspace:FolderPath"] = "ws";
+
+            var report = await Runner().RunQuickCheckAsync(CancellationToken.None);
+
+            Assert.True(report.NoWorkspace);
+            Assert.Equal(usable.Rows.Select(r => r.Id), report.Rows.Select(r => r.Id));
+            Assert.Equal(usable.Rows.Select(r => r.Group), report.Rows.Select(r => r.Group));
+            var workspace = report.Rows[0];
+            Assert.Equal(SetupCheckResult.Failed, workspace.Result);
+            Assert.Equal("ws is a relative path", workspace.Found);
+            Assert.All(report.Rows.Skip(1), r =>
+            {
+                Assert.Equal(SetupCheckResult.NotRun, r.Result);
+                Assert.Equal("needs the Workspace", r.Found);
+                Assert.Contains("restart the app", r.Fix.Text);
+            });
+            Assert.NotNull(report.QuickCheckedAt);
+        }
+
+        [Fact]
+        public async Task No_workspace_mode_lasts_until_restart_even_when_the_setting_is_fixed()
+        {
+            var configuration = Configuration();
+            _config["Workspace:FolderPath"] = "";
+            var start = new WorkspaceStart(Configuration());
+            var runner = Runner(start, configuration: configuration);
+
+            var report = await runner.RunQuickCheckAsync(CancellationToken.None);
+
+            Assert.True(report.NoWorkspace);
+            Assert.Equal("Workspace:FolderPath isn't set", report.Rows[0].Found);
+        }
+
+        // ── The Workspace fix hint names the winning source ──────────────────
+
+        [Fact]
+        public async Task The_workspace_fix_names_the_command_line_when_it_sets_the_folder()
+        {
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(_config)
+                .AddCommandLine(["--Workspace:FolderPath=ws"])
+                .Build();
+
+            var fix = (await Runner(configuration: configuration).RunQuickCheckAsync(CancellationToken.None)).Rows[0].Fix;
+
+            Assert.Contains("comes from the command line (--Workspace:FolderPath)", fix.Text);
+            Assert.Contains(Path.Combine(ContentRoot, "appsettings.Local.json"), fix.Text);
+            Assert.Contains("restart the app", fix.Text);
+        }
+
+        [Fact]
+        public async Task The_workspace_fix_names_the_environment_variable_when_it_sets_the_folder()
+        {
+            var prefix = $"R2M_TEST_{Guid.NewGuid():N}_";
+            Environment.SetEnvironmentVariable($"{prefix}Workspace__FolderPath", "ws");
+            try
+            {
+                var configuration = new ConfigurationBuilder()
+                    .AddInMemoryCollection(_config)
+                    .AddEnvironmentVariables(prefix)
+                    .Build();
+
+                var fix = (await Runner(configuration: configuration).RunQuickCheckAsync(CancellationToken.None)).Rows[0].Fix;
+
+                Assert.Contains("comes from the environment variable Workspace__FolderPath", fix.Text);
+                Assert.Contains("restart the app", fix.Text);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable($"{prefix}Workspace__FolderPath", null);
+            }
+        }
+
+        [Fact]
+        public async Task The_workspace_fix_names_a_base_settings_file_that_sets_the_folder()
+        {
+            var root = Path.Combine(_workspace, "app");
+            Directory.CreateDirectory(root);
+            await File.WriteAllTextAsync(Path.Combine(root, "appsettings.json"), """{"Workspace":{"FolderPath":"ws"}}""");
+            var configuration = new ConfigurationBuilder().SetBasePath(root).AddJsonFile("appsettings.json").Build();
+
+            var fix = (await Runner(configuration: configuration, contentRoot: root).RunQuickCheckAsync(CancellationToken.None)).Rows[0].Fix;
+
+            Assert.Contains("comes from appsettings.json", fix.Text);
+            Assert.Contains("copy it from appsettings.Local.example.json", fix.Text);
+        }
+
+        [Fact]
+        public async Task The_workspace_fix_points_at_an_existing_local_settings_file_without_the_copy_step()
+        {
+            var root = Path.Combine(_workspace, "app");
+            Directory.CreateDirectory(root);
+            var local = Path.Combine(root, "appsettings.Local.json");
+            await File.WriteAllTextAsync(local, """{"Workspace":{"FolderPath":""}}""");
+            var configuration = new ConfigurationBuilder().SetBasePath(root).AddJsonFile("appsettings.Local.json").Build();
+
+            var fix = (await Runner(configuration: configuration, contentRoot: root).RunQuickCheckAsync(CancellationToken.None)).Rows[0].Fix;
+
+            Assert.Equal($"Set Workspace:FolderPath to an absolute, writable folder in {local}, then restart the app.", fix.Text);
+            Assert.Equal(local, fix.Copy);
         }
 
         // ── ffmpeg ───────────────────────────────────────────────────────────

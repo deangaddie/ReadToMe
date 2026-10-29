@@ -43,10 +43,11 @@ public static class ServiceRegistrationExtensions
 {
     public static IServiceCollection AddProjectServices(this IServiceCollection services, IConfiguration configuration)
     {
+        // Not validated: an unusable Workspace starts the host in no-Workspace mode (WorkspaceStart),
+        // where the Setup check says what to fix.
         services.AddOptions<WorkspaceOptions>()
-            .Bind(configuration.GetSection(WorkspaceOptions.SectionName))
-            .Validate(o => !string.IsNullOrWhiteSpace(o.FolderPath),
-                $"Workspace:FolderPath is not set. Copy appsettings.Local.example.json to {LocalSettings.FileName} beside the App's other settings files and set the Workspace folder there.");
+            .Bind(configuration.GetSection(WorkspaceOptions.SectionName));
+        services.AddSingleton<WorkspaceStart>();
         services.AddSingleton<IFileSystem, FileSystemService>();
         services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
         services.AddScoped<ProjectDbSession>();
@@ -112,7 +113,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IQueueProcessor<Read2Me.Services.Audio.QueuedAudioItem>>(
             sp => sp.GetRequiredService<IAudioQueueProcessor>());
         services.AddSingleton<IProcessingGate<Read2Me.Services.Audio.QueuedAudioItem>, ProcessingGate<Read2Me.Services.Audio.QueuedAudioItem>>();
-        services.AddHostedService<QueueWorker<Read2Me.Services.Audio.QueuedAudioItem>>();
+        services.AddWorkspaceHostedService<QueueWorker<Read2Me.Services.Audio.QueuedAudioItem>>();
         return services;
     }
 
@@ -207,7 +208,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IQueueProcessor<QueuedParagraph>>(
             sp => sp.GetRequiredService<ICharacterQueueProcessor>());
         services.AddSingleton<IProcessingGate<QueuedParagraph>, ProcessingGate<QueuedParagraph>>();
-        services.AddHostedService<QueueWorker<QueuedParagraph>>();
+        services.AddWorkspaceHostedService<QueueWorker<QueuedParagraph>>();
         services.AddScoped<AttributionRequestBuilder>();
         services.AddScoped<CharacterAttributionService>();
         services.AddScoped<ChapterAttributionStep>();
@@ -222,7 +223,7 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<VoiceBatchRunner>();
         // History's Background runs follow the Character Queue and the voice batch.
         services.AddSingleton<BackgroundRunTracker>();
-        services.AddHostedService(sp => sp.GetRequiredService<BackgroundRunTracker>());
+        services.AddWorkspaceHostedService(sp => sp.GetRequiredService<BackgroundRunTracker>());
         // Reads the queues, the voice batch and the Assembly, all singletons registered in this file.
         services.AddSingleton<ProjectBusyAnswer>();
         services.AddSingleton<IProjectBusyAnswer>(sp => sp.GetRequiredService<ProjectBusyAnswer>());
@@ -285,7 +286,6 @@ public static class ServiceRegistrationExtensions
     /// <summary>The Setup check runner (it shares the watchdog's process runner) and its start-up Quick check.</summary>
     public static IServiceCollection AddSetupCheck(this IServiceCollection services)
     {
-        services.AddSingleton<WorkspaceStart>();
         services.AddSingleton<ISetupCheckRunner>(sp => new SetupCheckRunner(
             sp.GetRequiredService<IConfiguration>(),
             sp.GetRequiredService<IHostEnvironment>().ContentRootPath,
@@ -314,9 +314,19 @@ public static class ServiceRegistrationExtensions
     {
         services.AddDbContextFactory<Read2MeDbContext>((sp, options) =>
         {
-            var workspace = sp.GetRequiredService<IOptions<WorkspaceOptions>>().Value;
-            var dbPath = Path.Combine(workspace.FolderPath, "app.db");
-            options.UseSqlite($"Data Source={dbPath}");
+            var workspace = sp.GetRequiredService<WorkspaceStart>();
+            if (workspace.Usable)
+            {
+                options.UseSqlite($"Data Source={Path.Combine(workspace.FolderPath, "app.db")}");
+                return;
+            }
+            // No-Workspace mode: the factory is still built (the Setup check runner takes it), but
+            // nothing may create an app.db beside the process, so any open fails instead.
+            options.UseSqlite(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+            {
+                DataSource = Path.Combine(Path.GetTempPath(), $"read2me-no-workspace-{Guid.NewGuid():N}", "app.db"),
+                Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly,
+            }.ToString());
         });
         return services;
     }

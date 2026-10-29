@@ -15,6 +15,7 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
     fullCheckedAt: null,
     firstRun: false,
     startedAt: '2026-10-28T14:00:00Z',
+    noWorkspace: false,
     rows: [
       {
         id: 'workspace',

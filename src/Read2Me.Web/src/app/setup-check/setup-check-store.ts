@@ -2,7 +2,7 @@ import { type SetupCheckReport, SetupCheckApi, toApiError } from '@app/api';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import { ToastService } from '@app/ui/toast';
-import { bannerVisible, failedCount, shieldView } from './surfacing';
+import { bannerVisible, failedCount, noWorkspace, shieldView } from './surfacing';
 
 const DISMISSED_KEY = 'r2m.setupCheck.bannerDismissedStart';
 /**
@@ -39,6 +39,8 @@ export class SetupCheckStore {
   readonly failedCount = computed(() => failedCount(this._report()));
   /** The app-bar shield's state. */
   readonly shield = computed(() => shieldView(this._report()));
+  /** The host started without a usable Workspace: every route shows the Setup check. */
+  readonly noWorkspace = computed(() => noWorkspace(this._report()));
 
   /**
    * What the app does as it starts: reads the report, so the first-run flag is known before the

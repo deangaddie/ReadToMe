@@ -8,14 +8,23 @@ export const SETUP_CHECK_PATH = 'settings/setup-check';
 export const failedCount = (report: SetupCheckReport | null): number =>
   report?.rows.filter((r) => r.result === 'failed').length ?? 0;
 
+/** The host started without a usable Workspace: every route shows the Setup check until a restart. */
+export const noWorkspace = (report: SetupCheckReport | null): boolean =>
+  report?.noWorkspace === true;
+
 /**
  * The start banner shows while something fails, unless it was dismissed on this host start:
  * `dismissedStart` is the `startedAt` of the start it was dismissed on, so a restart shows it again.
+ * Never in no-Workspace mode, where the Setup check page is the message.
  */
 export const bannerVisible = (
   report: SetupCheckReport | null,
   dismissedStart: string | null,
-): boolean => report !== null && failedCount(report) > 0 && report.startedAt !== dismissedStart;
+): boolean =>
+  report !== null &&
+  !report.noWorkspace &&
+  failedCount(report) > 0 &&
+  report.startedAt !== dismissedStart;
 
 /** "Setup check: 2 failed", the shield's label and the banner's lead. */
 export const failedLabel = (failed: number): string => `Setup check: ${failed} failed`;

@@ -1,4 +1,7 @@
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Read2Me.App.Configuration;
 using Read2Me.E2eTests.Infrastructure;
 
 namespace Read2Me.E2eTests.Tests.Api;
@@ -24,6 +27,9 @@ public class SetupCheckApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
         var atStart = await ReportAfterStartAsync();
         Assert.Equal(AllIds, Ids(atStart));
         Assert.Equal(JsonValueKind.Null, atStart.GetProperty("fullCheckedAt").ValueKind);
+        Assert.False(atStart.GetProperty("noWorkspace").GetBoolean());
+        // With a Workspace, the hosted services that touch app.db run.
+        Assert.All(app.Services.GetServices<IHostedService>().OfType<WorkspaceHostedService>(), s => Assert.NotNull(s.Running));
 
         var workspace = atStart.GetProperty("rows")[0];
         Assert.Equal("workspaceAndTools", workspace.GetProperty("group").GetString());
