@@ -193,7 +193,7 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.All(report.Rows.Skip(3).Take(6), r => Assert.Equal(SetupCheckGroup.AiConfigs, r.Group));
             Assert.All(report.Rows.Skip(9), r => Assert.Equal(SetupCheckGroup.DockerServices, r.Group));
             // ffmpeg is the one Full-tier row: the Full check encodes with it.
-            Assert.All(report.Rows, r => Assert.Equal(r.Id == SetupCheckIds.Ffmpeg ? SetupCheckTier.Full : SetupCheckTier.Quick, r.Tier));
+            Assert.All(report.Rows, r => Assert.Equal(r.Id is SetupCheckIds.Ffmpeg or SetupCheckIds.Transcription or SetupCheckIds.Similarity ? SetupCheckTier.Full : SetupCheckTier.Quick, r.Tier));
         }
 
         // ── AI configs ───────────────────────────────────────────────────────

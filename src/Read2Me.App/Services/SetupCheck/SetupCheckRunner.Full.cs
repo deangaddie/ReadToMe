@@ -45,44 +45,75 @@ namespace Read2Me.App.Services.SetupCheck
             get { lock (_lock) return _run is not null; }
         }
 
-        /// <summary>The steps, in run order: local first, then CPU services, then GPU services one at a time.</summary>
-        private IReadOnlyList<FullStep> Plan() =>
-        [
-            new(SetupCheckLane.Local, "Encoding a 1 s tone to .m4b", [SetupCheckIds.Ffmpeg], [], 3, FullFfmpegAsync),
-        ];
-
-        public FullCheckStart StartFullCheck()
+        /// <summary>
+        /// The steps, in run order: local first, then CPU services (whisper, then similarity), then GPU
+        /// services one at a time. A check with no active config gets no step: its row stays Not used.
+        /// </summary>
+        private IReadOnlyList<FullStep> Plan(FullContext context)
         {
-            FullRun run;
-            IReadOnlyList<FullStep> steps;
-            SetupCheckReport started;
-            lock (_lock)
+            var steps = new List<FullStep>
             {
-                if (_run is { } going)
-                    return new FullCheckStart(Report, Joined: true, Refusal: null, going.Finished.Task);
-
-                var refusal = workspaceStart.Usable
-                    ? full.Work.Refusal()
-                    : "The Full check needs the Workspace: fix the Workspace row, then restart the app.";
-                if (refusal is not null)
-                    return new FullCheckStart(Report, Joined: false, refusal, Task.FromResult(Report));
-
-                run = _run = new FullRun();
-                steps = Plan();
-                full.Busy.Set(true);
-                full.CharacterGate.Close(GateOwners.SetupCheck, SetupCheckBusy.Reason);
-                full.AudioGate.Close(GateOwners.SetupCheck, SetupCheckBusy.Reason);
-                _report = _report with
-                {
-                    FullRun = new SetupFullRun(1, steps.Count, steps[0].Lane, steps[0].Label, Cancelling: false),
-                };
-                started = Report;
-                Publish("progress");
-            }
-
-            _ = Task.Run(() => RunFullAsync(run, steps));
-            return new FullCheckStart(started, Joined: false, Refusal: null, run.Finished.Task);
+                new(SetupCheckLane.Local, "Encoding a 1 s tone to .m4b", [SetupCheckIds.Ffmpeg], [], 3, FullFfmpegAsync),
+            };
+            steps.AddRange(CpuSteps(context));
+            return steps;
         }
+
+        /// <summary>Serializes starts, so the configs one reads are the ones its run uses.</summary>
+        private readonly SemaphoreSlim _starting = new(1, 1);
+
+        public async Task<FullCheckStart> StartFullCheckAsync()
+        {
+            await _starting.WaitAsync();
+            try
+            {
+                lock (_lock)
+                {
+                    if (_run is { } going)
+                        return new FullCheckStart(Report, Joined: true, Refusal: null, going.Finished.Task);
+                    if (FullRefusal() is { } refusal)
+                        return new FullCheckStart(Report, Joined: false, refusal, Task.FromResult(Report));
+                }
+
+                var context = await ReadFullContextAsync();
+
+                FullRun run;
+                IReadOnlyList<FullStep> steps;
+                SetupCheckReport started;
+                lock (_lock)
+                {
+                    // Work may have arrived while the configs were read.
+                    if (FullRefusal() is { } refusal)
+                        return new FullCheckStart(Report, Joined: false, refusal, Task.FromResult(Report));
+
+                    context.Before = _report.Rows.ToDictionary(r => r.Id, StringComparer.Ordinal);
+                    run = _run = new FullRun();
+                    steps = Plan(context);
+                    full.Busy.Set(true);
+                    full.CharacterGate.Close(GateOwners.SetupCheck, SetupCheckBusy.Reason);
+                    full.AudioGate.Close(GateOwners.SetupCheck, SetupCheckBusy.Reason);
+                    _report = _report with
+                    {
+                        FullRun = new SetupFullRun(1, steps.Count, steps[0].Lane, steps[0].Label, Cancelling: false),
+                        PutBack = null,
+                    };
+                    started = Report;
+                    Publish("progress");
+                }
+
+                _ = Task.Run(() => RunFullAsync(run, steps, context));
+                return new FullCheckStart(started, Joined: false, Refusal: null, run.Finished.Task);
+            }
+            finally
+            {
+                _starting.Release();
+            }
+        }
+
+        // Caller holds _lock.
+        private string? FullRefusal() => workspaceStart.Usable
+            ? full.Work.Refusal()
+            : "The Full check needs the Workspace: fix the Workspace row, then restart the app.";
 
         public SetupCheckReport? CancelFullCheck()
         {
@@ -98,50 +129,24 @@ namespace Read2Me.App.Services.SetupCheck
             }
         }
 
-        private async Task RunFullAsync(FullRun run, IReadOnlyList<FullStep> steps)
+        private async Task RunFullAsync(FullRun run, IReadOnlyList<FullStep> steps, FullContext context)
         {
             var next = 0;
+            string? putBack = null;
             try
             {
-                // Held for the whole run: a service one step stops for another must not trip the watchdog.
+                // Held for the whole run, putting back included: a service one step stops for another
+                // must not trip the watchdog.
                 using var hold = full.Watchdog.HoldOff(
                     [.. steps.SelectMany(s => s.Services).Distinct(StringComparer.OrdinalIgnoreCase)]);
-                for (; next < steps.Count && !run.Cancel.IsCancellationRequested; next++)
+                try
                 {
-                    var step = steps[next];
-                    lock (_lock)
-                    {
-                        // A cancel that lands after the loop's check still shows; the step still runs.
-                        _report = _report with
-                        {
-                            FullRun = new SetupFullRun(
-                                next + 1, steps.Count, step.Lane, step.Label, run.Cancel.IsCancellationRequested),
-                        };
-                        SetRows(step.RowIds, row => row with { Result = SetupCheckResult.Checking });
-                        Publish("progress");
-                    }
-
-                    IReadOnlyList<SetupCheckRow> rows;
-                    try
-                    {
-                        rows = await step.RunAsync();
-                    }
-                    catch (Exception ex)
-                    {
-                        // Each step stands alone: a throw fails its own rows and the run goes on.
-                        lock (_lock)
-                            rows = [.. step.RowIds.Select(RowOrNull).OfType<SetupCheckRow>()
-                                .Select(row => row with { Result = SetupCheckResult.Failed, Found = ex.Message, Tier = SetupCheckTier.Full })];
-                    }
-
-                    lock (_lock)
-                    {
-                        foreach (var row in rows)
-                        {
-                            _fullVerdicts[row.Id] = row;
-                            SetRows([row.Id], _ => row);
-                        }
-                    }
+                    for (; next < steps.Count && !run.Cancel.IsCancellationRequested; next++)
+                        await RunStepAsync(steps[next], next + 1, steps.Count, run.Cancel.Token);
+                }
+                finally
+                {
+                    putBack = await PutBackAsync(context);
                 }
             }
             finally
@@ -150,7 +155,7 @@ namespace Read2Me.App.Services.SetupCheck
                 {
                     foreach (var step in steps.Skip(next))
                         SetRows(step.RowIds, row => row with { Result = SetupCheckResult.NotRun, Found = Cancelled, Note = null });
-                    _report = _report with { FullRun = null, FullCheckedAt = _clock.GetUtcNow() };
+                    _report = _report with { FullRun = null, FullCheckedAt = _clock.GetUtcNow(), PutBack = putBack };
                     _run = null;
                     full.CharacterGate.Open(GateOwners.SetupCheck);
                     full.AudioGate.Open(GateOwners.SetupCheck);
@@ -159,6 +164,43 @@ namespace Read2Me.App.Services.SetupCheck
                     run.Finished.TrySetResult(Report);
                 }
                 run.Cancel.Dispose();
+            }
+        }
+
+        /// <summary>One step: its rows read Checking, then its verdicts replace them.</summary>
+        private async Task RunStepAsync(FullStep step, int number, int total, CancellationToken cancel)
+        {
+            lock (_lock)
+            {
+                // A cancel that lands after the loop's check still shows; the step still runs.
+                _report = _report with
+                {
+                    FullRun = new SetupFullRun(number, total, step.Lane, step.Label, cancel.IsCancellationRequested),
+                };
+                SetRows(step.RowIds, row => row with { Result = SetupCheckResult.Checking });
+                Publish("progress");
+            }
+
+            IReadOnlyList<SetupCheckRow> rows;
+            try
+            {
+                rows = await step.RunAsync();
+            }
+            catch (Exception ex)
+            {
+                // Each step stands alone: a throw fails its own rows and the run goes on.
+                lock (_lock)
+                    rows = [.. step.RowIds.Select(RowOrNull).OfType<SetupCheckRow>()
+                        .Select(row => row with { Result = SetupCheckResult.Failed, Found = ex.Message, Tier = SetupCheckTier.Full })];
+            }
+
+            lock (_lock)
+            {
+                foreach (var row in rows)
+                {
+                    _fullVerdicts[row.Id] = row;
+                    SetRows([row.Id], _ => row);
+                }
             }
         }
 

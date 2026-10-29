@@ -38,6 +38,7 @@ const report = (
   noWorkspace: false,
   fullRun: null,
   fullCheckEstimateSeconds: 3,
+  putBack: null,
   ...over,
 });
 
@@ -160,6 +161,9 @@ describe('the Full check confirm', () => {
     expect(options.confirmLabel).toBe('Run Full check');
     expect(options.message).toContain(
       'encodes a 1 s tone to .m4b with the ffmpeg audio generation uses',
+    );
+    expect(options.message).toContain(
+      'starts the transcription and similarity containers an active config uses, one at a time, to transcribe and score a sample clip, then puts each back as it found it.',
     );
     expect(options.message).toContain('Queues wait and new AI tasks are refused until it ends.');
     expect(options.message).toEndWith("It's likely to take about 4 minutes.");

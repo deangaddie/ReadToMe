@@ -19,6 +19,7 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
     noWorkspace: false,
     fullRun: null,
     fullCheckEstimateSeconds: 3,
+    putBack: null,
     rows: [
       {
         id: 'workspace',
@@ -229,9 +230,16 @@ describe('r2m-setup-check-page', () => {
     expect(page.querySelector('[data-action=cancel-full]')).not.toBeNull();
     expect(page.querySelector<HTMLButtonElement>('[data-action=run-quick]')?.disabled).toBe(true);
 
-    live.emit('setupCheck', { kind: 'done', report: report(AT_START, 'passed') });
+    expect(page.querySelector('[data-role=put-back]')).toBeNull();
+
+    const done = report(AT_START, 'passed');
+    done.putBack = 'Put back: read2me-whisper stopped again.';
+    live.emit('setupCheck', { kind: 'done', report: done });
     await flush(page);
 
+    expect(page.querySelector('[data-role=put-back]')?.textContent?.trim()).toBe(
+      'Put back: read2me-whisper stopped again.',
+    );
     expect(page.querySelector('[data-role=full-run]')).toBeNull();
     expect(page.querySelector('[data-action=run-full]')).not.toBeNull();
     expect(page.querySelector<HTMLButtonElement>('[data-action=run-quick]')?.disabled).toBe(false);

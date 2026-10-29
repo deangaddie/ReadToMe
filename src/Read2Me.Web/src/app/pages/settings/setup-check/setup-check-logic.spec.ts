@@ -32,6 +32,7 @@ const report = (
   noWorkspace: false,
   fullRun: null,
   fullCheckEstimateSeconds: 3,
+  putBack: null,
 });
 
 /** A fixed formatter, so the line doesn't depend on the machine's time zone. */

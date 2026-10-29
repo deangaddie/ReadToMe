@@ -21,7 +21,8 @@ const NO_WORKSPACE =
  * `/settings/setup-check`: one report on whether the install is sound. Opening the page shows the
  * host's last report and runs a fresh Quick check; Run Quick check runs another. Run Full check,
  * after a confirm, starts the one Full check per host (or joins it); while it runs a busy strip
- * follows its progress, Cancel replaces Run Full check and Run Quick check is disabled. One table, grouped
+ * follows its progress, Cancel replaces Run Full check and Run Quick check is disabled; after it, a
+ * line says what it put back. One table, grouped
  * by area, with what each check expected, what it found and where to fix it.
  */
 export class SetupCheckPage extends R2mElement {
@@ -81,6 +82,11 @@ export class SetupCheckPage extends R2mElement {
         report
           ? html`<p class="setup-check__summary" data-role="summary">${summaryLine(report)}</p>
               ${run ? this.strip(run) : nothing}
+              ${
+                !run && report.putBack
+                  ? html`<p class="setup-check__summary" data-role="put-back">${report.putBack}</p>`
+                  : nothing
+              }
               ${report.noWorkspace ? callout({ kind: 'warn', text: NO_WORKSPACE }) : nothing}
               ${this.table(report.rows)}`
           : error

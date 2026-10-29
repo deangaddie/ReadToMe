@@ -18,6 +18,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The Setup check's Gutenberg sample clip (provenance in its README.md). -->
+    <EmbeddedResource Include="Services\SetupCheck\SampleClip\sample-clip.wav" LogicalName="Read2Me.SetupCheck.sample-clip.wav" />
+    <EmbeddedResource Include="Services\SetupCheck\SampleClip\sample-clip.txt" LogicalName="Read2Me.SetupCheck.sample-clip.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Read2Me.Core\Read2Me.Core.csproj" />
     <ProjectReference Include="..\Read2Me.Services\Read2Me.Services.csproj" />
     <ProjectReference Include="..\Read2Me.AppData\Read2Me.AppData.csproj" />

@@ -64,7 +64,7 @@ public class SetupCheckSurfacingTests(E2eAppFixture app, PlaywrightFixture pw) :
             await App.FfmpegEncode.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
             await Expect(shield).ToHaveClassAsync(new Regex("shell__setup-shield--busy"));
-            await Expect(shield).ToHaveAttributeAsync("aria-label", "Full check 1/1");
+            await Expect(shield).ToHaveAttributeAsync("aria-label", "Full check 1/3");
             await Expect(shield.Locator(".r2m-spinner")).ToBeVisibleAsync();
         }
         finally
