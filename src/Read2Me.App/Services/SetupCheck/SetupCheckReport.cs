@@ -89,7 +89,8 @@ namespace Read2Me.App.Services.SetupCheck
     /// <see cref="NoWorkspace"/>: this host started without a usable Workspace; every other API call
     /// is refused and the web app shows only the Setup check until the app restarts.
     /// <see cref="FullRun"/>: the Full check going on, null when none is. <see cref="FullCheckEstimateSeconds"/>:
-    /// how long a Full check is likely to take, for its confirm.
+    /// how long a Full check is likely to take, for its confirm. <see cref="PutBack"/>: after a Full
+    /// check, what it did with the containers it drove ("Put back: read2me-whisper stopped again.").
     /// </summary>
     public sealed record SetupCheckReport(
         IReadOnlyList<SetupCheckRow> Rows,
@@ -99,7 +100,8 @@ namespace Read2Me.App.Services.SetupCheck
         DateTimeOffset StartedAt,
         bool NoWorkspace,
         SetupFullRun? FullRun = null,
-        int FullCheckEstimateSeconds = 0)
+        int FullCheckEstimateSeconds = 0,
+        string? PutBack = null)
     {
         /// <summary>No rows yet; the runner stamps the start's flags and time on as it answers.</summary>
         public static readonly SetupCheckReport Empty = new([], null, null, false, default, false);

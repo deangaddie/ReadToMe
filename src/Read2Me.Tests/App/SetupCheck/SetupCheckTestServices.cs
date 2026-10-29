@@ -1,11 +1,15 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Read2Me.App.Services.SetupCheck;
 using Read2Me.AppData;
+using Read2Me.AppData.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Audio.SemanticSimilarity;
+using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Health;
 using Read2Me.Services.Queueing;
@@ -16,7 +20,8 @@ namespace Read2Me.Tests.App.SetupCheck
 {
     /// <summary>
     /// The runner's <see cref="SetupCheckServices"/> over the test database: the real settings
-    /// services in a scope, the service-control fake, and the given HTTP factory.
+    /// services and the transcription and similarity clients in a scope, the service-control fake,
+    /// and the given HTTP factory.
     /// </summary>
     internal static class SetupCheckTestServices
     {
@@ -26,7 +31,16 @@ namespace Read2Me.Tests.App.SetupCheck
             IHttpClientFactory? http = null,
             AiWatchdogOptions? watchdog = null)
         {
+            http ??= new SingleHandlerHttpClientFactory(new FakeAudioCppHandler());
             var scopes = new ServiceCollection()
+                .AddSingleton(http)
+                .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
+                .AddSingleton<IAiServiceReporter>(new FakeAiServiceReporter())
+                .AddScoped<ITranscriptionClientResolver, TranscriptionClientResolver>()
+                .AddKeyedScoped<ITranscriptionClient, WhisperTranscriptionClient>(TranscriptionServiceType.LocalWhisper)
+                .AddScoped<ISemanticSimilarityClientResolver, SemanticSimilarityClientResolver>()
+                .AddKeyedScoped<ISemanticSimilarityClient, SemanticSimilarityClient>(SemanticSimilarityServiceType.MiniLmL6)
+                .AddKeyedScoped<ISemanticSimilarityClient, SemanticSimilarityClient>(SemanticSimilarityServiceType.MpnetBaseV2)
                 .AddScoped(_ => new LlmSettingsService(db, NullLogger<LlmSettingsService>.Instance))
                 .AddScoped(_ => new ParagraphTtsSettingsService(db, NullLogger<ParagraphTtsSettingsService>.Instance))
                 .AddScoped(_ => new VoiceDesignSettingsService(db, NullLogger<VoiceDesignSettingsService>.Instance))
@@ -38,7 +52,7 @@ namespace Read2Me.Tests.App.SetupCheck
                 scopes,
                 control ?? new FakeAiServiceControl(),
                 new DockerAiServiceRegistry(),
-                http ?? new SingleHandlerHttpClientFactory(new FakeAudioCppHandler()),
+                http,
                 Options.Create(watchdog ?? new AiWatchdogOptions()));
         }
 

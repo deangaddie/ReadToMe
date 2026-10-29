@@ -1440,7 +1440,8 @@ export interface SetupCheckRow {
  * start banner's dismissal. `noWorkspace`: this host started without a usable Workspace, so every
  * other API call answers 503 "No Workspace" and every route shows the Setup check until a restart.
  * `fullRun`: the Full check going on, null when none is. `fullCheckEstimateSeconds`: how long a Full
- * check is likely to take, for its confirm.
+ * check is likely to take, for its confirm. `putBack`: after a Full check, what it did with the
+ * containers it drove ("Put back: read2me-whisper stopped again."); null before one.
  */
 export interface SetupCheckReport {
   rows: SetupCheckRow[];
@@ -1451,4 +1452,5 @@ export interface SetupCheckReport {
   noWorkspace: boolean;
   fullRun: SetupFullRun | null;
   fullCheckEstimateSeconds: number;
+  putBack: string | null;
 }

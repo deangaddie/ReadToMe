@@ -21,8 +21,8 @@ namespace Read2Me.App.Services.SetupCheck
         private static readonly SetupSettingsLink LlmSettings = new("settings/llm", "Settings → LLM");
         private static readonly SetupSettingsLink TtsSettings = new("settings/tts", "Settings → Paragraph TTS");
         private static readonly SetupSettingsLink VoiceDesignSettings = new("settings/voice-design", "Settings → Voice design");
-        private static readonly SetupSettingsLink TranscriptionSettings = new("settings/transcription", "Settings → Transcription");
-        private static readonly SetupSettingsLink SimilaritySettings = new("settings/similarity", "Settings → Similarity");
+        internal static readonly SetupSettingsLink TranscriptionSettings = new("settings/transcription", "Settings → Transcription");
+        internal static readonly SetupSettingsLink SimilaritySettings = new("settings/similarity", "Settings → Similarity");
 
         /// <summary>How an unmanaged URL is probed for reachability.</summary>
         private enum Reach
@@ -60,8 +60,9 @@ namespace Read2Me.App.Services.SetupCheck
                 await ChainRowAsync(configs.Chain, ct),
                 await ConfigRowAsync(SetupCheckIds.ParagraphTts, "Paragraph TTS", ConfigExpected, TtsSettings, Single(configs.ParagraphTts), required: true, Reach.ModelList, Describe, ct),
                 await ConfigRowAsync(SetupCheckIds.VoiceDesign, "Voice design", ConfigExpected, VoiceDesignSettings, Single(configs.VoiceDesign), required: true, Reach.ModelList, Describe, ct),
-                await ConfigRowAsync(SetupCheckIds.Transcription, "Transcription", ConfigExpected, TranscriptionSettings, Single(configs.Transcription), required: false, Reach.AnyAnswer, Describe, ct),
-                await ConfigRowAsync(SetupCheckIds.Similarity, "Similarity", ConfigExpected, SimilaritySettings, Single(configs.Similarity), required: false, Reach.AnyAnswer, Describe, ct),
+                // Full-tier rows: the Quick check judges the config, the Full check the sample clip.
+                await ConfigRowAsync(SetupCheckIds.Transcription, "Transcription", ConfigExpected, TranscriptionSettings, Single(configs.Transcription), required: false, Reach.AnyAnswer, Describe, ct) with { Tier = SetupCheckTier.Full },
+                await ConfigRowAsync(SetupCheckIds.Similarity, "Similarity", ConfigExpected, SimilaritySettings, Single(configs.Similarity), required: false, Reach.AnyAnswer, Describe, ct) with { Tier = SetupCheckTier.Full },
             };
             foreach (var service in deps.Registry.All)
                 rows.Add(await ContainerRowAsync(service, configs, dockerOnPath, ct));
@@ -229,7 +230,6 @@ namespace Read2Me.App.Services.SetupCheck
             var expected = $"{service.ContainerName} running and answering at {service.BaseUrl}"
                 + (models.Count > 0 ? $"; GET /v1/models lists {string.Join(", ", models)}" : "");
             var note = deps.Watchdog.Value.Enabled ? null : WatchdogOff;
-            var compose = $"docker compose up -d {service.Name}";
             SetupCheckRow Row(SetupCheckResult result, string found, SetupFixHint fix) =>
                 new(SetupCheckIds.Container(service.Name), SetupCheckGroup.DockerServices, service.ContainerName,
                     SetupCheckTier.Quick, result, expected, found, note, fix, Managed: true);
@@ -244,13 +244,9 @@ namespace Read2Me.App.Services.SetupCheck
             switch (await deps.Control.GetStatusAsync(service, ct))
             {
                 case AiServiceStatus.NotFound:
-                    return Row(SetupCheckResult.Failed, $"No {service.ContainerName} container",
-                        new SetupFixHint($"Create it: run {compose} from Infra/.", Copy: compose));
+                    return Row(SetupCheckResult.Failed, $"No {service.ContainerName} container", CreateFix(service));
                 case AiServiceStatus.Down:
-                    return Row(SetupCheckResult.Failed, "Down: the watchdog gave up restarting it",
-                        new SetupFixHint(
-                            $"Read why with docker logs -f {service.ContainerName}, then run {compose} from Infra/.",
-                            Copy: $"docker logs -f {service.ContainerName}"));
+                    return Row(SetupCheckResult.Failed, "Down: the watchdog gave up restarting it", RestartFix(service));
                 case AiServiceStatus.Starting:
                     // Running, health not 2xx. No answer at all means nothing listens where the app
                     // expects it; an HTTP error (llama's 503 while it loads a model) means not ready yet.
@@ -299,6 +295,19 @@ namespace Read2Me.App.Services.SetupCheck
                 ? Row(SetupCheckResult.Failed, $"{service.Name} doesn't list {string.Join(", ", missing)}", modelFix)
                 : Row(SetupCheckResult.Passed, $"Running; lists {string.Join(", ", models)}", modelFix);
         }
+
+        /// <summary>A container that doesn't exist: create it with compose.</summary>
+        internal static SetupFixHint CreateFix(DockerAiService service) => new(
+            $"Create it: run docker compose up -d {service.Name} from Infra/.", Copy: $"docker compose up -d {service.Name}");
+
+        /// <summary>A container that gave up or won't start: read why, then bring it up with compose.</summary>
+        internal static SetupFixHint RestartFix(DockerAiService service) => new(
+            $"Read why with docker logs -f {service.ContainerName}, then run docker compose up -d {service.Name} from Infra/.",
+            Copy: $"docker logs -f {service.ContainerName}");
+
+        /// <summary>A running container that didn't answer a request: read why.</summary>
+        internal static SetupFixHint LogsFix(DockerAiService service) => new(
+            $"Read why with docker logs -f {service.ContainerName}.", Copy: $"docker logs -f {service.ContainerName}");
 
         /// <summary>Where a model name the server doesn't list is fixed: its model file, or the config.</summary>
         private static SetupFixHint ModelListFix(string serviceName) => serviceName switch

@@ -21,7 +21,7 @@ namespace Read2Me.App.Services.SetupCheck
         /// nothing, while the Audio or Character queue holds items or a voice batch, discovery or
         /// assembly runs.
         /// </summary>
-        FullCheckStart StartFullCheck();
+        Task<FullCheckStart> StartFullCheckAsync();
 
         /// <summary>
         /// Asks the run going to stop once its current step ends; the remaining checks read Not run.

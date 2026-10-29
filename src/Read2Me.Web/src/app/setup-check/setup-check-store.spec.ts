@@ -40,6 +40,7 @@ function report(
     noWorkspace: false,
     fullRun: null,
     fullCheckEstimateSeconds: 3,
+    putBack: null,
     ...over,
   };
 }

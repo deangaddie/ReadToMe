@@ -168,8 +168,20 @@ client as `setupCheck { kind: progress | done, report }`. `POST /api/setup-check
 when none runs) stops the run once its current step ends; the checks it hadn't reached read `notRun`,
 "Full check cancelled". Results stay in memory with `fullCheckedAt` until the app restarts, and a later
 Quick check keeps a Full pass unless it now fails the row; a Full failure the Quick check no longer
-finds is dropped until the next Full check. Today the Full check has one step, `ffmpeg`
-(a Full-tier row): a 1 s tone through adynamicequalizer and alimiter, encoded to AAC `.m4b` by the live ffmpeg.
+finds is dropped until the next Full check. Its steps, in order (a check with no active config gets
+none and stays `notUsed`):
+
+- `ffmpeg`: a 1 s tone through adynamicequalizer and alimiter, encoded to AAC `.m4b` by the live ffmpeg.
+- `transcription` (lane `cpu`): whisper transcribes the bundled sample clip (a Project Gutenberg
+  sentence, `src/Read2Me.App/Services/SetupCheck/SampleClip/`) to non-empty text.
+- `similarity` (lane `cpu`): the transcript scored against the clip's known text; it fails below the
+  config's own `PassThreshold`. With no transcript, the clip's text is scored against itself (a note says so).
+
+A managed container a step uses is started when stopped, and its Docker services row gets the step's
+verdict. Afterwards (finished, failed or cancelled) each goes back as it was found, running or stopped,
+except one whose check failed, which is left as it is for its logs; the report's `putBack` says what
+happened ("Put back: read2me-whisper stopped again."). A URL the app doesn't manage is sent the same
+request but never started, stopped or put back.
 
 ## 1. Create a project and import the book
 

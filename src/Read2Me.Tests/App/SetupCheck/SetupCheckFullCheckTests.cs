@@ -144,7 +144,7 @@ namespace Read2Me.Tests.App.SetupCheck
             var runner = Runner();
             await runner.RunQuickCheckAsync(CancellationToken.None);
 
-            var start = runner.StartFullCheck();
+            var start = await runner.StartFullCheckAsync();
 
             Assert.Equal($"The Full check can't start while other work is running: {says}.", start.Refusal);
             Assert.False(start.Joined);
@@ -165,7 +165,7 @@ namespace Read2Me.Tests.App.SetupCheck
             _assembly = true;
             var runner = Runner();
 
-            var start = runner.StartFullCheck();
+            var start = await runner.StartFullCheckAsync();
 
             Assert.Equal(
                 "The Full check can't start while other work is running: the Audio queue holds 1 item — cancel it in Activity → Jobs; audiobook assembly is running — cancel it in Activity → Jobs.",
@@ -184,7 +184,7 @@ namespace Read2Me.Tests.App.SetupCheck
             var runner = Runner();
             await runner.RunQuickCheckAsync(CancellationToken.None);
 
-            var start = runner.StartFullCheck();
+            var start = await runner.StartFullCheckAsync();
             await _encode.Entered.Task.WaitAsync(Wait);
 
             Assert.Null(start.Refusal);
@@ -209,7 +209,7 @@ namespace Read2Me.Tests.App.SetupCheck
         {
             var runner = Runner();
             await runner.RunQuickCheckAsync(CancellationToken.None);
-            var start = runner.StartFullCheck();
+            var start = await runner.StartFullCheckAsync();
             await _encode.Entered.Task.WaitAsync(Wait);
 
             var during = await runner.RunQuickCheckAsync(CancellationToken.None);
@@ -226,7 +226,7 @@ namespace Read2Me.Tests.App.SetupCheck
             var runner = Runner();
             await runner.RunQuickCheckAsync(CancellationToken.None);
 
-            var start = runner.StartFullCheck();
+            var start = await runner.StartFullCheckAsync();
             await _encode.Entered.Task.WaitAsync(Wait);
             _encode.Release.SetResult(new FfmpegProbeResult(true, "Encoded a 1 s tone to a 9,000-byte .m4b"));
             var final = await start.Finished.WaitAsync(Wait);
@@ -255,12 +255,12 @@ namespace Read2Me.Tests.App.SetupCheck
         {
             var runner = Runner();
             await runner.RunQuickCheckAsync(CancellationToken.None);
-            var first = runner.StartFullCheck();
+            var first = await runner.StartFullCheckAsync();
             await _encode.Entered.Task.WaitAsync(Wait);
             // Work arriving after the start doesn't refuse a request that joins.
             _audioItems = 2;
 
-            var second = runner.StartFullCheck();
+            var second = await runner.StartFullCheckAsync();
 
             Assert.True(second.Joined);
             Assert.Null(second.Refusal);
@@ -276,7 +276,7 @@ namespace Read2Me.Tests.App.SetupCheck
         {
             var runner = Runner();
             await runner.RunQuickCheckAsync(CancellationToken.None);
-            var start = runner.StartFullCheck();
+            var start = await runner.StartFullCheckAsync();
             await _encode.Entered.Task.WaitAsync(Wait);
 
             var cancelling = runner.CancelFullCheck();
@@ -297,7 +297,7 @@ namespace Read2Me.Tests.App.SetupCheck
             // Cancelled as the run takes its first hold, before its first step.
             _watchdog.OnHoldOff = () => runner.CancelFullCheck();
 
-            var final = await runner.StartFullCheck().Finished.WaitAsync(Wait);
+            var final = await (await runner.StartFullCheckAsync()).Finished.WaitAsync(Wait);
 
             var ffmpeg = Row(final, SetupCheckIds.Ffmpeg);
             Assert.Equal(SetupCheckResult.NotRun, ffmpeg.Result);
@@ -320,7 +320,7 @@ namespace Read2Me.Tests.App.SetupCheck
         {
             var runner = Runner();
             await runner.RunQuickCheckAsync(CancellationToken.None);
-            var start = runner.StartFullCheck();
+            var start = await runner.StartFullCheckAsync();
             _encode.Release.SetResult(new FfmpegProbeResult(true, "Encoded a 1 s tone"));
             var final = await start.Finished.WaitAsync(Wait);
 
@@ -337,7 +337,7 @@ namespace Read2Me.Tests.App.SetupCheck
         {
             var runner = Runner();
             var quick = Row(await runner.RunQuickCheckAsync(CancellationToken.None), SetupCheckIds.Ffmpeg);
-            var start = runner.StartFullCheck();
+            var start = await runner.StartFullCheckAsync();
             _encode.Release.SetResult(new FfmpegProbeResult(false, "No such filter: 'adynamicequalizer'"));
             await start.Finished.WaitAsync(Wait);
 
@@ -365,7 +365,7 @@ namespace Read2Me.Tests.App.SetupCheck
             var runner = Runner(new FfmpegEncodeCheck(NullLogger<FfmpegEncodeCheck>.Instance));
             await runner.RunQuickCheckAsync(CancellationToken.None);
 
-            var final = await runner.StartFullCheck().Finished.WaitAsync(Wait);
+            var final = await (await runner.StartFullCheckAsync()).Finished.WaitAsync(Wait);
 
             var ffmpeg = Row(final, SetupCheckIds.Ffmpeg);
             Assert.Equal(SetupCheckResult.Passed, ffmpeg.Result);
@@ -381,7 +381,7 @@ namespace Read2Me.Tests.App.SetupCheck
             var runner = Runner(new FfmpegEncodeCheck(NullLogger<FfmpegEncodeCheck>.Instance));
             await runner.RunQuickCheckAsync(CancellationToken.None);
 
-            var final = await runner.StartFullCheck().Finished.WaitAsync(Wait);
+            var final = await (await runner.StartFullCheckAsync()).Finished.WaitAsync(Wait);
 
             var row = Row(final, SetupCheckIds.Ffmpeg);
             Assert.Equal(SetupCheckResult.Failed, row.Result);
@@ -397,7 +397,7 @@ namespace Read2Me.Tests.App.SetupCheck
             var runner = Runner(new FfmpegEncodeCheck(NullLogger<FfmpegEncodeCheck>.Instance));
             await runner.RunQuickCheckAsync(CancellationToken.None);
 
-            var final = await runner.StartFullCheck().Finished.WaitAsync(Wait);
+            var final = await (await runner.StartFullCheckAsync()).Finished.WaitAsync(Wait);
 
             var ffmpeg = Row(final, SetupCheckIds.Ffmpeg);
             Assert.Equal(SetupCheckResult.Failed, ffmpeg.Result);

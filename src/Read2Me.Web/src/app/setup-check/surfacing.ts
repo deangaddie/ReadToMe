@@ -81,7 +81,9 @@ export function fullCheckConfirm(report: SetupCheckReport | null): ConfirmOption
     title: 'Run the Full check?',
     message:
       // Says only what the steps do today; each new step adds its own sentence.
-      'It encodes a 1 s tone to .m4b with the ffmpeg audio generation uses. ' +
+      'It encodes a 1 s tone to .m4b with the ffmpeg audio generation uses, then ' +
+      'starts the transcription and similarity containers an active config uses, one at a time, ' +
+      'to transcribe and score a sample clip, then puts each back as it found it. ' +
       'Queues wait and new AI tasks are refused until it ends. ' +
       `It's likely to take ${estimateText(report?.fullCheckEstimateSeconds ?? 0)}.`,
     confirmLabel: 'Run Full check',

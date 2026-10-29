@@ -7,7 +7,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 
 /// <summary>
 /// The Full check over the agent API on the in-proc host: start, join, Preflight and the direct AI endpoints refused for the run,
-/// cancel. The fake encode holds the run in its one step so the test can act mid-run. The runner's
+/// cancel. The fake encode holds the run in its first step, the ffmpeg encode, so the test can act mid-run. The runner's
 /// rules (refusal, gates, watchdog, progress) are SetupCheckFullCheckTests.
 /// </summary>
 public class SetupCheckFullApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
@@ -41,7 +41,8 @@ public class SetupCheckFullApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
 
             var joined = await Http.PostAsync(Url("/full"), null);
             Assert.Equal(HttpStatusCode.Accepted, joined.StatusCode);
-            Assert.Equal(1, (await ReadAsync(joined)).GetProperty("fullRun").GetProperty("total").GetInt32());
+            // The seeded transcription and similarity configs each add a CPU step.
+            Assert.Equal(3, (await ReadAsync(joined)).GetProperty("fullRun").GetProperty("total").GetInt32());
 
             // Cancelled once the run is in its step, which then finishes.
             await app.FfmpegEncode.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
@@ -70,6 +71,10 @@ public class SetupCheckFullApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
         Assert.Equal("passed", ffmpeg.GetProperty("result").GetString());
         Assert.Equal("full", ffmpeg.GetProperty("tier").GetString());
         Assert.Equal(JsonValueKind.String, final.GetProperty("fullCheckedAt").ValueKind);
+        // Cancelled during the ffmpeg step: the CPU checks never ran, so no container was driven.
+        var transcription = final.GetProperty("rows").EnumerateArray().Single(r => r.GetProperty("id").GetString() == "transcription");
+        Assert.Equal("notRun", transcription.GetProperty("result").GetString());
+        Assert.Equal("Nothing to put back: the Full check drove no containers.", final.GetProperty("putBack").GetString());
 
         var afterwards = await Http.PostAsync($"{app.BaseUrl}/api/preflight/CharacterAttribution/plan", null);
         Assert.Equal(HttpStatusCode.OK, afterwards.StatusCode);

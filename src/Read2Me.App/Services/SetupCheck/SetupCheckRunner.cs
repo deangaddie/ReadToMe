@@ -79,6 +79,7 @@ namespace Read2Me.App.Services.SetupCheck
                     docker.Row,
                 };
                 rows.AddRange(await new AiServicesCheck(aiServices).RunAsync(docker.OnPath, ct));
+                var estimate = Plan(await ReadFullContextAsync()).Sum(s => s.EstimateSeconds);
                 lock (_lock)
                 {
                     if (_run is null)
@@ -86,7 +87,7 @@ namespace Read2Me.App.Services.SetupCheck
                         {
                             Rows = WithFullVerdicts(rows),
                             QuickCheckedAt = _clock.GetUtcNow(),
-                            FullCheckEstimateSeconds = Plan().Sum(s => s.EstimateSeconds),
+                            FullCheckEstimateSeconds = estimate,
                         };
                 }
                 return Report;
