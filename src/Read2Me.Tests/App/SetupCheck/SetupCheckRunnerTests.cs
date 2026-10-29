@@ -57,7 +57,8 @@ namespace Read2Me.Tests.App.SetupCheck
             Factory,
             prober ?? new FfmpegProber(NullLogger<FfmpegProber>.Instance),
             _processes,
-            start ?? new WorkspaceStart());
+            start ?? new WorkspaceStart(),
+            SetupCheckTestServices.Create(Factory));
 
         private async Task<SetupCheckRow> RowAsync(string id, WorkspaceStart? start = null) =>
             (await Runner(start).RunQuickCheckAsync(CancellationToken.None)).Rows.Single(r => r.Id == id);
@@ -97,7 +98,7 @@ namespace Read2Me.Tests.App.SetupCheck
 
             var report = await runner.RunQuickCheckAsync(CancellationToken.None);
 
-            Assert.Equal([SetupCheckIds.Workspace, SetupCheckIds.Ffmpeg, SetupCheckIds.Docker], report.Rows.Select(r => r.Id));
+            Assert.Equal([SetupCheckIds.Workspace, SetupCheckIds.Ffmpeg, SetupCheckIds.Docker], report.Rows.Take(3).Select(r => r.Id));
             Assert.All(report.Rows, r => Assert.Equal(SetupCheckTier.Quick, r.Tier));
             Assert.NotNull(report.QuickCheckedAt);
             Assert.Null(report.FullCheckedAt);

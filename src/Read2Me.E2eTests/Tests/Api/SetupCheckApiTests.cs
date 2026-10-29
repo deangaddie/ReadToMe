@@ -11,11 +11,18 @@ public class SetupCheckApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
 {
     private static readonly HttpClient Http = new();
 
+    private static readonly string[] AllIds =
+    [
+        "workspace", "ffmpeg", "docker",
+        "llm", "attribution-chain", "paragraph-tts", "voice-design", "transcription", "similarity",
+        "container-llama", "container-audiocpp", "container-whisper", "container-minilm-l6", "container-mpnet-base-v2",
+    ];
+
     [Fact]
     public async Task The_start_up_quick_check_fills_the_report_and_a_requested_one_replaces_it()
     {
         var atStart = await ReportAfterStartAsync();
-        Assert.Equal(["workspace", "ffmpeg", "docker"], Ids(atStart));
+        Assert.Equal(AllIds, Ids(atStart));
         Assert.Equal(JsonValueKind.Null, atStart.GetProperty("fullCheckedAt").ValueKind);
 
         var workspace = atStart.GetProperty("rows")[0];
@@ -26,7 +33,7 @@ public class SetupCheckApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
         Assert.False(string.IsNullOrEmpty(workspace.GetProperty("fix").GetProperty("text").GetString()));
 
         var ran = await ReadAsync(await Http.PostAsync($"{app.BaseUrl}/api/setup-check/quick", null));
-        Assert.Equal(["workspace", "ffmpeg", "docker"], Ids(ran));
+        Assert.Equal(AllIds, Ids(ran));
         Assert.True(QuickCheckedAt(ran) > QuickCheckedAt(atStart));
 
         var read = await ReadAsync(await Http.GetAsync($"{app.BaseUrl}/api/setup-check"));

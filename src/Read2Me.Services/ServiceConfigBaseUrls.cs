@@ -52,7 +52,7 @@ namespace Read2Me.Services
         // making pre-flight treat the endpoint as unmanaged (no GPU-swap dialog).
         private static readonly JsonSerializerOptions ParseOptions = new(JsonSerializerDefaults.Web);
 
-        private static T? Parse<T>(string json) where T : class
+        internal static T? Parse<T>(string json) where T : class
         {
             try
             {
