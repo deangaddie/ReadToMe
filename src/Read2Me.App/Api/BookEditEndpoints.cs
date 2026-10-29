@@ -47,16 +47,16 @@ namespace Read2Me.App.Api
 
         public static void MapBookEditEndpoints(this IEndpointRouteBuilder endpoints)
         {
-            endpoints.MapPost("/api/projects/{folder}/book-edits/plan", PlanAsync)
+            endpoints.MapPost("/api/projects/{folder}/book-edits/plan", PlanAsync).RefusedWhileSetupCheckRuns()
                 .RecordsNoStep("Plans an Edit with AI; nothing commits until it is applied.")
                 .WithSummary("Turn a plain-language instruction into an edit plan: one LLM call, then the plan's scope is resolved against the book. Answers status Ok with an opaque program id (valid 2 h after its last use), a summary, the matched item count and, for Llm transforms, the LLM request count; NoLlmConfigured / Unsupported / ServiceUnavailable / Failed / NoTargets carry a reason instead. thinking=true lets the model think first. 409 \"Project is restoring\" while a Restore runs, or when one began after the plan was asked for (its targets would predate it).");
-            endpoints.MapPost("/api/projects/{folder}/book-edits/{program}/propose", ProposeAsync)
+            endpoints.MapPost("/api/projects/{folder}/book-edits/{program}/propose", ProposeAsync).RefusedWhileSetupCheckRuns()
                 .RecordsNoStep("Proposes an Edit with AI; nothing commits until it is applied.")
                 .WithSummary("Start computing a proposed new value per matched item (202). Progress and the finished rows arrive on /hubs/live as bookEdit { kind: progress | done | failed } on the connectionId in the body; GET the session to read them back. Deterministic transforms finish at once; Llm ones send one request per 8 items. 409 while a run is already in flight.");
             endpoints.MapGet("/api/projects/{folder}/book-edits/{program}", GetRun)
                 .ReadsLive("an Edit with AI run is a live proposal, not Project state.")
                 .WithSummary("The session's proposal run: status Idle | Running | Completed | Cancelled | Failed, progress and the rows landed so far (a cancelled run keeps the rows it computed).");
-            endpoints.MapPost("/api/projects/{folder}/book-edits/{program}/propose-one", ProposeOneAsync)
+            endpoints.MapPost("/api/projects/{folder}/book-edits/{program}/propose-one", ProposeOneAsync).RefusedWhileSetupCheckRuns()
                 .RecordsNoStep("Proposes an Edit with AI; nothing commits until it is applied.")
                 .WithSummary("Ask the AI again for one matched item, optionally steered by a hint; answers the new row. Llm plans only — a deterministic plan answers a Failed row.");
             endpoints.MapPost("/api/projects/{folder}/book-edits/{program}/cancel", Cancel)

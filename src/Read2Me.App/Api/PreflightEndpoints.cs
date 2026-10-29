@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.App.Live;
 using Read2Me.App.Services.Preflight;
-using Read2Me.App.Services.SetupCheck;
 
 namespace Read2Me.App.Api
 {
@@ -36,7 +35,7 @@ namespace Read2Me.App.Api
 
         public static void MapPreflightEndpoints(this IEndpointRouteBuilder endpoints)
         {
-            var group = endpoints.MapGroup("/api/preflight");
+            var group = endpoints.MapGroup("/api/preflight").RefusedWhileSetupCheckRuns();
 
             group.MapPost("/{taskKind}/plan", PlanAsync)
                 .WithSummary("What must happen before the task may run: { ready, toStart: [{ name, status }], conflicts: [{ name, reason }] }. ready = nothing to do. 409 \"Setup check running\" while the Setup check's Full check runs. 400 for an unknown task kind (CharacterAttribution, AudioGeneration, VoicePromptGeneration, CharacterDiscovery, VoiceDesignAudio, Transcription, BookEdit).");
@@ -46,25 +45,20 @@ namespace Read2Me.App.Api
         }
 
         private static async Task<IResult> PlanAsync(
-            string taskKind, IAiPreflightPlanner planner, SetupCheckBusy setupCheck, CancellationToken ct)
+            string taskKind, IAiPreflightPlanner planner, CancellationToken ct)
         {
             if (!TryParse(taskKind, out var task))
                 return UnknownTask(taskKind);
-            if (setupCheck.Running)
-                return SetupCheckRunning();
 
             var plan = await planner.BuildPlanAsync(task, ct);
             return Results.Ok(ToDto(plan));
         }
 
         private static async Task<IResult> RunAsync(
-            string taskKind, PreflightRunRequest? request, IAiPreflightPlanner planner, PreflightRunCoordinator runs,
-            SetupCheckBusy setupCheck, CancellationToken ct)
+            string taskKind, PreflightRunRequest? request, IAiPreflightPlanner planner, PreflightRunCoordinator runs, CancellationToken ct)
         {
             if (!TryParse(taskKind, out var task))
                 return UnknownTask(taskKind);
-            if (setupCheck.Running)
-                return SetupCheckRunning();
 
             // Re-planned here rather than trusting a plan the client read a moment ago: a container
             // may have moved since, and the run must stop and start what is true now.
@@ -75,12 +69,6 @@ namespace Read2Me.App.Api
 
         private static bool TryParse(string taskKind, out AiTaskKind task) =>
             Enum.TryParse(taskKind, ignoreCase: true, out task) && Enum.IsDefined(task);
-
-        /// <summary>The Full check is driving the AI services: no new AI task may start until it ends.</summary>
-        private static IResult SetupCheckRunning() =>
-            Results.Problem(
-                $"{SetupCheckBusy.Reason}: wait for it to finish, or cancel it in Settings → Setup check.",
-                statusCode: StatusCodes.Status409Conflict, title: SetupCheckBusy.Reason);
 
         private static IResult UnknownTask(string taskKind) =>
             Results.Problem(

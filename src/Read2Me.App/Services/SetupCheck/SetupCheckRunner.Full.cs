@@ -6,7 +6,7 @@ namespace Read2Me.App.Services.SetupCheck
     /// <summary>
     /// The Full check: one run per host, in the background, as a list of steps. While it runs every
     /// queue gate is closed and Preflight refuses new AI tasks (both with "Setup check running"),
-    /// and the watchdog holds off the services the active configs use. Each step marks its rows
+    /// and the watchdog holds off the services the steps drive. Each step marks its rows
     /// Checking, runs on its own (a throw fails only its rows) and replaces them; every change goes
     /// to every client as a <c>setupCheck</c> message. A cancel lets the current step finish; the
     /// steps after it read Not run. Results live in memory only.
@@ -28,13 +28,15 @@ namespace Read2Me.App.Services.SetupCheck
         }
 
         /// <summary>
-        /// One Full check step: where it runs, what the progress strip says, the rows it judges, a
-        /// rough duration for the confirm's estimate, and the work, which answers those rows.
+        /// One Full check step: where it runs, what the progress strip says, the rows it judges, the
+        /// managed services it drives (held off the watchdog for the run), a rough duration for the
+        /// confirm's estimate, and the work, which answers those rows.
         /// </summary>
         private sealed record FullStep(
             SetupCheckLane Lane,
             string Label,
             IReadOnlyList<string> RowIds,
+            IReadOnlyList<string> Services,
             int EstimateSeconds,
             Func<Task<IReadOnlyList<SetupCheckRow>>> RunAsync);
 
@@ -46,7 +48,7 @@ namespace Read2Me.App.Services.SetupCheck
         /// <summary>The steps, in run order: local first, then CPU services, then GPU services one at a time.</summary>
         private IReadOnlyList<FullStep> Plan() =>
         [
-            new(SetupCheckLane.Local, "Encoding a 1 s tone to .m4b", [SetupCheckIds.Ffmpeg], 3, FullFfmpegAsync),
+            new(SetupCheckLane.Local, "Encoding a 1 s tone to .m4b", [SetupCheckIds.Ffmpeg], [], 3, FullFfmpegAsync),
         ];
 
         public FullCheckStart StartFullCheck()
@@ -99,12 +101,11 @@ namespace Read2Me.App.Services.SetupCheck
         private async Task RunFullAsync(FullRun run, IReadOnlyList<FullStep> steps)
         {
             var next = 0;
-            // What the steps never reached read: cancelled, or why the run itself stopped.
-            var notReached = Cancelled;
             try
             {
-                var driven = await new AiServicesCheck(aiServices).DrivenServicesAsync();
-                using var hold = full.Watchdog.HoldOff(driven);
+                // Held for the whole run: a service one step stops for another must not trip the watchdog.
+                using var hold = full.Watchdog.HoldOff(
+                    [.. steps.SelectMany(s => s.Services).Distinct(StringComparer.OrdinalIgnoreCase)]);
                 for (; next < steps.Count && !run.Cancel.IsCancellationRequested; next++)
                 {
                     var step = steps[next];
@@ -143,17 +144,12 @@ namespace Read2Me.App.Services.SetupCheck
                     }
                 }
             }
-            catch (Exception ex)
-            {
-                // Reading what the run drives failed before any step: no step ran, and the rows say why.
-                notReached = $"Full check stopped: {ex.Message}";
-            }
             finally
             {
                 lock (_lock)
                 {
                     foreach (var step in steps.Skip(next))
-                        SetRows(step.RowIds, row => row with { Result = SetupCheckResult.NotRun, Found = notReached, Note = null });
+                        SetRows(step.RowIds, row => row with { Result = SetupCheckResult.NotRun, Found = Cancelled, Note = null });
                     _report = _report with { FullRun = null, FullCheckedAt = _clock.GetUtcNow() };
                     _run = null;
                     full.CharacterGate.Open(GateOwners.SetupCheck);
@@ -167,15 +163,28 @@ namespace Read2Me.App.Services.SetupCheck
         }
 
         /// <summary>
-        /// A Quick check's rows with the last Full check's verdicts laid over them: a Full verdict is the
-        /// stronger proof, so it stands unless the Quick check now fails the row.
+        /// A Quick check's rows with the last Full check's verdicts laid over them. A Full pass is the
+        /// stronger proof, so it stands unless the Quick check now fails the row. A Full failure the
+        /// Quick check no longer finds is dropped: the fix may have worked, and the next Full check proves it.
+        /// Caller holds _lock.
         /// </summary>
-        private IReadOnlyList<SetupCheckRow> WithFullVerdicts(IReadOnlyList<SetupCheckRow> rows) =>
-        [
-            .. rows.Select(row => row.Result != SetupCheckResult.Failed && _fullVerdicts.TryGetValue(row.Id, out var verdict)
-                ? verdict
-                : row),
-        ];
+        private IReadOnlyList<SetupCheckRow> WithFullVerdicts(IReadOnlyList<SetupCheckRow> rows)
+        {
+            var merged = new List<SetupCheckRow>(rows.Count);
+            foreach (var row in rows)
+            {
+                if (row.Result == SetupCheckResult.Failed || !_fullVerdicts.TryGetValue(row.Id, out var verdict))
+                    merged.Add(row);
+                else if (verdict.Result != SetupCheckResult.Failed)
+                    merged.Add(verdict);
+                else
+                {
+                    _fullVerdicts.Remove(row.Id);
+                    merged.Add(row);
+                }
+            }
+            return merged;
+        }
 
         // Caller holds _lock.
         private SetupCheckRow? RowOrNull(string id) => _report.Rows.FirstOrDefault(r => r.Id == id);

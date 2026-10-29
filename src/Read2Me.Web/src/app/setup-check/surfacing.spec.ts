@@ -158,7 +158,9 @@ describe('the Full check confirm', () => {
     const options = fullCheckConfirm(report(['passed'], { fullCheckEstimateSeconds: 200 }));
     expect(options.title).toBe('Run the Full check?');
     expect(options.confirmLabel).toBe('Run Full check');
-    expect(options.message).toContain('stopping running GPU containers');
+    expect(options.message).toContain(
+      'encodes a 1 s tone to .m4b with the ffmpeg audio generation uses',
+    );
     expect(options.message).toContain('Queues wait and new AI tasks are refused until it ends.');
     expect(options.message).toEndWith("It's likely to take about 4 minutes.");
   });

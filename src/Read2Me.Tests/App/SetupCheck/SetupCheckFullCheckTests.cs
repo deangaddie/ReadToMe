@@ -176,9 +176,9 @@ namespace Read2Me.Tests.App.SetupCheck
         // ── During the run ───────────────────────────────────────────────────
 
         [Fact]
-        public async Task During_the_run_every_queue_waits_Preflight_is_refused_and_the_watchdog_holds_off_the_services_in_use()
+        public async Task During_the_run_every_queue_waits_Preflight_is_refused_and_the_watchdog_holds_off_only_what_the_steps_drive()
         {
-            // An active LLM config on llama: the Full check drives what active configs use.
+            // An active LLM config on llama, which the ffmpeg step doesn't drive: the watchdog keeps watching it.
             await new LlmSettingsService(Factory, NullLogger<LlmSettingsService>.Instance)
                 .CreateConfigAsync(new LlmServerConfig { Name = "Qwen", BaseUrl = "http://localhost:8080", Model = "qwen-28b" });
             var runner = Runner();
@@ -193,7 +193,7 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.Equal("Setup check running", _characterGate.CloseReason);
             Assert.Equal("Setup check running", _audioGate.CloseReason);
             Assert.True(_busy.Running);
-            Assert.Equal(["llama"], _watchdog.Held);
+            Assert.Empty(Assert.Single(_watchdog.Holds));
 
             _encode.Release.SetResult(new FfmpegProbeResult(true, "Encoded a 1 s tone"));
             await start.Finished.WaitAsync(Wait);
@@ -316,20 +316,36 @@ namespace Read2Me.Tests.App.SetupCheck
         // ── Results ──────────────────────────────────────────────────────────
 
         [Fact]
-        public async Task A_later_Quick_check_keeps_the_Full_check_s_verdict_and_its_time()
+        public async Task A_later_Quick_check_keeps_a_passed_Full_verdict_and_its_time()
         {
             var runner = Runner();
             await runner.RunQuickCheckAsync(CancellationToken.None);
             var start = runner.StartFullCheck();
-            _encode.Release.SetResult(new FfmpegProbeResult(false, "No such filter: 'adynamicequalizer'"));
+            _encode.Release.SetResult(new FfmpegProbeResult(true, "Encoded a 1 s tone"));
             var final = await start.Finished.WaitAsync(Wait);
 
             var after = await runner.RunQuickCheckAsync(CancellationToken.None);
 
             var ffmpeg = Row(after, SetupCheckIds.Ffmpeg);
-            Assert.Equal(SetupCheckResult.Failed, ffmpeg.Result);
-            Assert.Equal("No such filter: 'adynamicequalizer'", ffmpeg.Found);
+            Assert.Equal(SetupCheckResult.Passed, ffmpeg.Result);
+            Assert.Equal("Encoded a 1 s tone", ffmpeg.Found);
             Assert.Equal(final.FullCheckedAt, after.FullCheckedAt);
+        }
+
+        [Fact]
+        public async Task A_Quick_check_that_no_longer_fails_the_row_drops_a_failed_Full_verdict()
+        {
+            var runner = Runner();
+            var quick = Row(await runner.RunQuickCheckAsync(CancellationToken.None), SetupCheckIds.Ffmpeg);
+            var start = runner.StartFullCheck();
+            _encode.Release.SetResult(new FfmpegProbeResult(false, "No such filter: 'adynamicequalizer'"));
+            await start.Finished.WaitAsync(Wait);
+
+            var after = Row(await runner.RunQuickCheckAsync(CancellationToken.None), SetupCheckIds.Ffmpeg);
+
+            Assert.NotEqual(SetupCheckResult.Failed, quick.Result);
+            Assert.Equal(quick.Result, after.Result);
+            Assert.Equal(quick.Found, after.Found);
         }
 
         [Fact]
