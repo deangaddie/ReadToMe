@@ -75,10 +75,13 @@ public class HistorySheetTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTes
         var main = Page.Locator(".shell__main");
         await Expect(main).Not.ToHaveAttributeAsync("inert", "");
         Assert.Contains("saturate", await main.EvaluateAsync<string>("el => getComputedStyle(el).filter"));
-        var appBar = (await Page.Locator(".shell__appbar").BoundingBoxAsync())!;
+        // Under the app bar, or under the Setup check's start banner when this machine's check fails.
+        var setupBanner = Page.Locator(".shell__setup-banner");
+        var above = (await (await setupBanner.IsVisibleAsync() ? setupBanner : Page.Locator(".shell__appbar"))
+            .BoundingBoxAsync())!;
         var shown = (await banner.BoundingBoxAsync())!;
         var body = (await Page.Locator(".shell__body").BoundingBoxAsync())!;
-        Assert.Equal(appBar.Y + appBar.Height, shown.Y, 1);
+        Assert.Equal(above.Y + above.Height, shown.Y, 1);
         Assert.Equal(shown.Y + shown.Height, body.Y, 1);
         Assert.Equal(1280, shown.Width, 1);
 

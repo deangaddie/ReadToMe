@@ -46,11 +46,10 @@ namespace Read2Me.App
         {
             using var scope = host.Services.CreateScope();
             var workspace = scope.ServiceProvider.GetRequiredService<IOptions<WorkspaceOptions>>().Value;
-            scope.ServiceProvider.GetRequiredService<WorkspaceStart>().EnsureFolder(workspace.FolderPath);
+            var workspaceStart = scope.ServiceProvider.GetRequiredService<WorkspaceStart>();
+            workspaceStart.EnsureFolder(workspace.FolderPath);
             var db = scope.ServiceProvider.GetRequiredService<Read2MeDbContext>();
-            var isNewDatabase = !db.Database.GetAppliedMigrations().Any();
-            db.Database.Migrate();
-            if (!isNewDatabase)
+            if (!workspaceStart.MigrateDatabase(db))
                 return;
             var ffmpegPath = AudioProcessingSettingsService.NormalizeFfmpegPath(
                 scope.ServiceProvider.GetRequiredService<IConfiguration>()["Ffmpeg:Path"]);

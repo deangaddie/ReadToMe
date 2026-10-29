@@ -16,7 +16,8 @@ export interface RouteDef {
   path: string;
   tag?: string;
   load?: () => Promise<unknown>;
-  redirectTo?: string;
+  /** A path, or a function that picks one each time the navigation happens. */
+  redirectTo?: string | (() => string);
   /** Breadcrumb / document title; a function gets the route params. */
   title?: string | ((params: Record<string, string>) => string);
   children?: RouteDef[];
@@ -138,7 +139,8 @@ export class Router {
 
   #apply(url: URL): void {
     const match = this.#resolve(url);
-    const redirect = match?.chain.at(-1)?.redirectTo;
+    const target = match?.chain.at(-1)?.redirectTo;
+    const redirect = typeof target === 'function' ? target() : target;
     if (redirect !== undefined) {
       this.navigate(fill(redirect, match?.params ?? {}), { replace: true });
       return;

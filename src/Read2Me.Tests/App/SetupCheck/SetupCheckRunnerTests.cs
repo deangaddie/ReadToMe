@@ -102,7 +102,7 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.All(report.Rows, r => Assert.Equal(SetupCheckTier.Quick, r.Tier));
             Assert.NotNull(report.QuickCheckedAt);
             Assert.Null(report.FullCheckedAt);
-            Assert.Same(report, runner.Report);
+            Assert.Equal(report, runner.Report);
         }
 
         // ── Workspace ────────────────────────────────────────────────────────

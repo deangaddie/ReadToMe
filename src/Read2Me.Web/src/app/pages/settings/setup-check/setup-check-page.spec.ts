@@ -13,6 +13,8 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
   return {
     quickCheckedAt,
     fullCheckedAt: null,
+    firstRun: false,
+    startedAt: '2026-10-28T14:00:00Z',
     rows: [
       {
         id: 'workspace',

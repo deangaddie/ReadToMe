@@ -60,12 +60,19 @@ namespace Read2Me.App.Services.SetupCheck
         SetupFixHint Fix,
         bool Managed);
 
-    /// <summary>The Setup check report: the rows in table order and when each tier last ran (null: not yet).</summary>
+    /// <summary>
+    /// The Setup check report: the rows in table order and when each tier last ran (null: not yet).
+    /// <see cref="FirstRun"/>: this start created app.db, so the web app opens on the Setup check.
+    /// <see cref="StartedAt"/>: when this host started; the start banner's dismissal lasts for it.
+    /// </summary>
     public sealed record SetupCheckReport(
         IReadOnlyList<SetupCheckRow> Rows,
         DateTimeOffset? QuickCheckedAt,
-        DateTimeOffset? FullCheckedAt)
+        DateTimeOffset? FullCheckedAt,
+        bool FirstRun,
+        DateTimeOffset StartedAt)
     {
-        public static readonly SetupCheckReport Empty = new([], null, null);
+        /// <summary>No rows yet; the runner stamps the first-run flag and start time on as it answers.</summary>
+        public static readonly SetupCheckReport Empty = new([], null, null, false, default);
     }
 }

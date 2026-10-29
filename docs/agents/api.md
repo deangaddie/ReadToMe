@@ -120,7 +120,7 @@ stops or switches anything; the one thing it writes is the Workspace folder, cre
 ```bash
 curl -s -X POST http://localhost:5000/api/setup-check/quick
 # → { rows: [{ id, group, name, tier, result, expected, found, note, fix: { text, link: { path, label }?, copy? }, managed }],
-#     quickCheckedAt, fullCheckedAt }
+#     quickCheckedAt, fullCheckedAt, firstRun, startedAt }
 ```
 
 `id` is `workspace`, `ffmpeg` or `docker` (Workspace and tools); `llm`, `attribution-chain`,
@@ -132,7 +132,9 @@ changes the result: an appsettings `Ffmpeg:Path` that differs from the Settings 
 similarity config ("audio is generated without an accuracy score"), a URL the app doesn't manage, or
 `AiWatchdog:Enabled = false` on the container rows. `fix.link.path` is the web app's Settings page that
 owns the value (`settings/audio`, `settings/llm`, …); `fix.copy` is a command or file path for things
-outside the app (`docker compose up -d llama`, `Infra/llama/config/models.ini`).
+outside the app (`docker compose up -d llama`, `Infra/llama/config/models.ini`). `firstRun` is true on
+the start that created `app.db` (the web app then lands on the Setup check); `startedAt` is when this
+host started.
 
 The AI configs rows judge each active config's base URL, and probe only a URL the app doesn't manage
 (`GET /v1/models` for LLM, TTS and voice-design configs; any HTTP answer for the others). `managed` is

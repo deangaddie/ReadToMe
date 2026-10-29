@@ -168,6 +168,48 @@
   .shell__viewing-back {
     background: var(--r2m-surface);
   }
+  /* ---- Setup check: start banner and app-bar shield ------------------------------------------ */
+  .shell__setup-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    flex: 0 0 auto;
+    gap: var(--r2m-space-2);
+    padding: var(--r2m-space-2) var(--r2m-space-4);
+    background: var(--r2m-status-error-soft);
+    color: var(--r2m-text);
+    border-bottom: 1px solid var(--r2m-status-error);
+
+    & > .r2m-icon {
+      color: var(--r2m-status-error);
+    }
+  }
+  .shell__setup-banner-text {
+    flex: 1 1 16em;
+  }
+  .shell__setup-shield {
+    position: relative;
+  }
+  .shell__setup-shield--ok {
+    color: var(--r2m-status-ok);
+  }
+  .shell__setup-shield--error {
+    color: var(--r2m-status-error);
+  }
+  .shell__setup-shield-count {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: var(--r2m-status-error);
+    color: var(--r2m-surface);
+    font-size: 11px;
+    line-height: 16px;
+    text-align: center;
+  }
   .shell__main--viewing {
     filter: saturate(0.4);
     opacity: 0.85;
