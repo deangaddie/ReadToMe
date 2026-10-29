@@ -112,7 +112,7 @@ namespace Read2Me.App.Services.SetupCheck
                 return new SetupCheckRow(
                     SetupCheckIds.AttributionChain, SetupCheckGroup.AiConfigs, "Attribution chain", SetupCheckTier.Quick,
                     SetupCheckResult.NotRun, ChainExpected, "Needs an active LLM config", null,
-                    new SetupFixHint($"no active config — choose one in {LlmSettings.Label}", LlmSettings));
+                    new SetupFixHint($"no active config — choose one in {LlmSettings.Label}", LlmSettings), Managed: false);
             return await ConfigRowAsync(SetupCheckIds.AttributionChain, "Attribution chain", ChainExpected, LlmSettings, chain,
                 required: true, Reach.ModelList, DescribeChain, ct);
         }
@@ -128,8 +128,10 @@ namespace Read2Me.App.Services.SetupCheck
             string id, string name, string expected, SetupSettingsLink settings, IReadOnlyList<UsedConfig> configs, bool required,
             Reach reach, Func<IReadOnlyList<UsedConfig>, string> describe, CancellationToken ct)
         {
+            // Managed once every config the step uses is on a URL the app manages.
+            var managed = false;
             SetupCheckRow Row(SetupCheckResult result, string found, string? note, SetupFixHint fix) =>
-                new(id, SetupCheckGroup.AiConfigs, name, SetupCheckTier.Quick, result, expected, found, note, fix);
+                new(id, SetupCheckGroup.AiConfigs, name, SetupCheckTier.Quick, result, expected, found, note, fix, managed);
 
             if (configs.Count == 0)
             {
@@ -145,6 +147,7 @@ namespace Read2Me.App.Services.SetupCheck
             var note = unmanaged.Count == 0 ? null
                 : unmanaged.Count == distinct.Count ? NotManaged
                 : $"{string.Join(", ", unmanaged.Select(c => c.Name))}: {NotManaged}";
+            managed = distinct.All(c => c.BaseUrl is not null && deps.Control.Resolve(c.BaseUrl) is not null);
 
             foreach (var config in distinct)
             {
@@ -206,7 +209,7 @@ namespace Read2Me.App.Services.SetupCheck
             var compose = $"docker compose up -d {service.Name}";
             SetupCheckRow Row(SetupCheckResult result, string found, SetupFixHint fix) =>
                 new(SetupCheckIds.Container(service.Name), SetupCheckGroup.DockerServices, service.ContainerName,
-                    SetupCheckTier.Quick, result, expected, found, note, fix);
+                    SetupCheckTier.Quick, result, expected, found, note, fix, Managed: true);
 
             if (!dockerOnPath)
                 return Row(SetupCheckResult.NotRun, "Needs the docker CLI",
@@ -226,11 +229,20 @@ namespace Read2Me.App.Services.SetupCheck
                             $"Read why with docker logs -f {service.ContainerName}, then run {compose} from Infra/.",
                             Copy: $"docker logs -f {service.ContainerName}"));
                 case AiServiceStatus.Starting:
-                    return Row(SetupCheckResult.Failed,
-                        $"Running, but {service.BaseUrl.TrimEnd('/')}{service.HealthPath} didn't answer",
-                        new SetupFixHint(
-                            $"The app expects {service.Name} at {service.BaseUrl}: check the port mapping for {service.Name} in Infra/docker-compose.yml.",
-                            Copy: "Infra/docker-compose.yml"));
+                    // Running, health not 2xx. No answer at all means nothing listens where the app
+                    // expects it; an HTTP error (llama's 503 while it loads a model) means not ready yet.
+                    var health = $"{service.BaseUrl.TrimEnd('/')}{service.HealthPath}";
+                    var status = await HealthStatusAsync(health, ct);
+                    if (status is null)
+                        return Row(SetupCheckResult.Failed, $"Running, but {health} didn't answer",
+                            new SetupFixHint(
+                                $"The app expects {service.Name} at {service.BaseUrl}: check the port mapping for {service.Name} in Infra/docker-compose.yml.",
+                                Copy: "Infra/docker-compose.yml"));
+                    if (status is < 200 or > 299)
+                        return Row(SetupCheckResult.NotConfirmed,
+                            $"{health} answers {status}: not ready yet (a model may still be loading)",
+                            new SetupFixHint("Wait for it to finish loading, then run the Quick check again."));
+                    break; // Ready since the status was read.
                 case AiServiceStatus.Stopped:
                     return Row(SetupCheckResult.NotConfirmed, "Stopped",
                         new SetupFixHint("The Quick check doesn't start containers: run the Full check to confirm it."));
@@ -296,6 +308,20 @@ namespace Read2Me.App.Services.SetupCheck
                         ids.Add(id.GetString()!);
             }
             return ids;
+        }
+
+        /// <summary>The HTTP status a health GET answers; null when nothing answered.</summary>
+        private async Task<int?> HealthStatusAsync(string url, CancellationToken ct)
+        {
+            try
+            {
+                using var response = await GetAsync(url, ct);
+                return (int)response.StatusCode;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                return null;
+            }
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────

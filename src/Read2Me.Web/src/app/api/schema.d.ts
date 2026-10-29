@@ -6882,6 +6882,7 @@ export interface components {
             found: string;
             note: null | string;
             fix: components["schemas"]["SetupFixHint"];
+            managed: boolean;
         };
         /** @enum {unknown} */
         SetupCheckTier: "quick" | "full";

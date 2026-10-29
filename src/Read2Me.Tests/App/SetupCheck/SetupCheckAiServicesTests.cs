@@ -450,6 +450,42 @@ namespace Read2Me.Tests.App.SetupCheck
         }
 
         [Fact]
+        public async Task A_running_container_answering_an_error_is_not_confirmed_as_still_loading()
+        {
+            await AddLlmAsync("Qwen", Llama, "qwen-28b");
+            _services.StatusByName["llama"] = AiServiceStatus.Starting;
+            _http.Answers[$"{Llama}/health"] = (HttpStatusCode.ServiceUnavailable, """{"error":"Loading model"}""");
+
+            var row = await RowAsync(Container("llama"));
+
+            Assert.Equal(SetupCheckResult.NotConfirmed, row.Result);
+            Assert.Equal($"{Llama}/health answers 503: not ready yet (a model may still be loading)", row.Found);
+        }
+
+        [Fact]
+        public async Task Container_rows_and_configs_on_managed_urls_are_managed_the_rest_are_not()
+        {
+            var local = await AddLlmAsync("Qwen", Llama, "qwen-28b");
+            var remote = await AddLlmAsync("Remote", "http://gpu-box:8080", "qwen-28b");
+            await SetChainAsync(local, remote);
+            await AddTtsAsync("http://tts-box:8004");
+            await AddVoiceDesignAsync(AudioCpp);
+            _http.Models("http://gpu-box:8080", "qwen-28b");
+            _http.Models("http://tts-box:8004", "breeze-q8");
+
+            var report = await CheckAsync();
+
+            bool Managed(string id) => report.Rows.Single(r => r.Id == id).Managed;
+            Assert.True(Managed(SetupCheckIds.Llm));
+            Assert.False(Managed(SetupCheckIds.AttributionChain));
+            Assert.False(Managed(SetupCheckIds.ParagraphTts));
+            Assert.True(Managed(SetupCheckIds.VoiceDesign));
+            Assert.False(Managed(SetupCheckIds.Transcription));
+            Assert.False(Managed(SetupCheckIds.Docker));
+            Assert.All(report.Rows.Where(r => r.Group == SetupCheckGroup.DockerServices), r => Assert.True(r.Managed));
+        }
+
+        [Fact]
         public async Task A_container_the_watchdog_is_restarting_is_not_confirmed()
         {
             await AddLlmAsync("Qwen", Llama, "qwen-28b");

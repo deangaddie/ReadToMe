@@ -16,6 +16,7 @@ const row = (
   found: 'f',
   note: null,
   fix: { text: 'Fix it.', link: null, copy: null },
+  managed: false,
 });
 
 const report = (

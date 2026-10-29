@@ -83,7 +83,7 @@ namespace Read2Me.App.Services.SetupCheck
 
             SetupCheckRow Row(SetupCheckResult result, string found, string? note = null) => new(
                 SetupCheckIds.Workspace, SetupCheckGroup.WorkspaceAndTools, "Workspace", SetupCheckTier.Quick, result,
-                $"An absolute, writable folder ({WorkspaceKey})", found, note, fix);
+                $"An absolute, writable folder ({WorkspaceKey})", found, note, fix, Managed: false);
 
             // Untrimmed: the host binds and uses the value as written, so the check judges that same path.
             var path = configuration[WorkspaceKey];
@@ -148,7 +148,7 @@ namespace Read2Me.App.Services.SetupCheck
             return new SetupCheckRow(
                 SetupCheckIds.Ffmpeg, SetupCheckGroup.WorkspaceAndTools, "ffmpeg", SetupCheckTier.Quick,
                 ok ? SetupCheckResult.Passed : SetupCheckResult.Failed,
-                $"ffmpeg -version and ffprobe -version from {shown}", found, note, fix);
+                $"ffmpeg -version and ffprobe -version from {shown}", found, note, fix, Managed: false);
         }
 
         /// <summary>Both tools must answer; found is ffmpeg's banner, or which one failed and why.</summary>
@@ -174,7 +174,7 @@ namespace Read2Me.App.Services.SetupCheck
                 run.Ok ? SetupCheckResult.Passed : SetupCheckResult.Failed,
                 "docker on PATH",
                 run.Launched ? run.Banner : "docker isn't on PATH",
-                null, fix), run.Launched);
+                null, fix, Managed: false), run.Launched);
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────
