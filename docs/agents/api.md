@@ -104,7 +104,7 @@ containers the current step needs.
 Preflight — the readiness gate every AI action passes: `POST /api/preflight/{taskKind}/plan` →
 `{ ready, toStart: [{ name, status }], conflicts: [{ name, reason }] }` (task kinds `CharacterAttribution`,
 `AudioGeneration`, `VoicePromptGeneration`, `CharacterDiscovery`, `VoiceDesignAudio`, `Transcription`,
-`BookEdit`; 400 otherwise). `POST /api/preflight/{taskKind}/run` `{ connectionId }` → 202 `{ run }` re-plans,
+`BookEdit`; 400 otherwise). Both answer 409 "Setup check running" while the Setup check's Full check runs. `POST /api/preflight/{taskKind}/run` `{ connectionId }` → 202 `{ run }` re-plans,
 stops the conflicts, then starts what is missing one at a time; progress reaches that connection as
 `preflight { kind: stage, run, name, stage, error? }` (`waitingToStop | stopping | stopped | waitingToStart |
 starting | ready | failed`) then `{ kind: done, run, ok, reason? }`. Call `plan` before an AI step and `run`
@@ -120,7 +120,7 @@ stops or switches anything; the one thing it writes is the Workspace folder, cre
 ```bash
 curl -s -X POST http://localhost:5000/api/setup-check/quick
 # → { rows: [{ id, group, name, tier, result, expected, found, note, fix: { text, link: { path, label }?, copy? }, managed }],
-#     quickCheckedAt, fullCheckedAt, firstRun, startedAt, noWorkspace }
+#     quickCheckedAt, fullCheckedAt, firstRun, startedAt, noWorkspace, fullRun, fullCheckEstimateSeconds }
 ```
 
 `id` is `workspace`, `ffmpeg` or `docker` (Workspace and tools); `llm`, `attribution-chain`,
@@ -153,6 +153,20 @@ NotFound, Down, or running with nothing answering its health URL is `failed`; on
 answers an HTTP error (llama's 503 while it loads a model) is `notConfirmed`; a container no active config uses is
 `notUsed`. A running llama must list every `Model` in the attribution chain and the active LLM config,
 and a running audiocpp every active TTS and voice-design `ModelId` (`GET /v1/models`; nothing is loaded).
+
+**Full check.** `POST /api/setup-check/full` starts the Full check in the background and answers 202
+with the report; a second request while one runs joins it (one run per host). `fullRun { step, total,
+lane, label, cancelling }` says where the run is (`lane` `local | cpu | gpu`; null when none runs) and
+`fullCheckEstimateSeconds` how long a run is likely to take. It answers 409 naming the work in flight
+while the Audio or Character queue holds items, or a voice batch, character discovery or audiobook
+assembly runs — stop that first. While it runs every queue waits with the reason "Setup check running",
+Preflight `plan` and `run` answer 409 with that title, and the watchdog leaves the services the active
+configs use alone. Each step marks its rows `checking`; progress and the final report reach every hub
+client as `setupCheck { kind: progress | done, report }`. `POST /api/setup-check/full/cancel` → 202 (409
+when none runs) stops the run once its current step ends; the checks it hadn't reached read `notRun`,
+"Full check cancelled". Results stay in memory with `fullCheckedAt` until the app restarts, and a later
+Quick check keeps a Full verdict unless it now fails the row. Today the Full check has one step, `ffmpeg`
+(a Full-tier row): a 1 s tone through adynamicequalizer and alimiter, encoded to AAC `.m4b` by the live ffmpeg.
 
 ## 1. Create a project and import the book
 
@@ -745,6 +759,7 @@ multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.A
 | server → client | `bookEdit` | one AI book-edit proposal run (`progress`, `done`, `failed`), sent only to the `connectionId` that started it; `done` carries every row it landed, and `cancelled` says whether a cancel cut it short |
 | server → client | `serviceStatus` | `{ name, status, op?, ok?, error? }` — a managed service's last observed `AiServiceStatus`, after every probe, lifecycle op (then `op` names it with its outcome) and watchdog transition; everyone |
 | server → client | `preflight` | one pre-flight run (`stage` with `name` + `stage` + `error?`, then `done` with `ok` + `reason?`), sent only to the `connectionId` that started it; every message carries the `run` id the 202 answered |
+| server → client | `setupCheck` | the Setup check's Full check: `progress` then `done`, each carrying the whole `report` (the current step's rows `checking`, `fullRun` where the run is; null on `done`); sent to every client |
 
 Invalid folders and unknown stream kinds fail the invocation with a `HubException`. Node status is
 only computed for folders `NodeStatusService` has seeded — call `GET /api/projects/{folder}/status`

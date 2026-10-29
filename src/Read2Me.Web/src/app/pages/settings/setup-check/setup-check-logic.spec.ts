@@ -30,6 +30,8 @@ const report = (
   firstRun: false,
   startedAt: '2026-10-28T14:00:00Z',
   noWorkspace: false,
+  fullRun: null,
+  fullCheckEstimateSeconds: 3,
 });
 
 /** A fixed formatter, so the line doesn't depend on the machine's time zone. */

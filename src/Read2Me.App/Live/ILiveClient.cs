@@ -42,4 +42,6 @@ public interface ILiveClient
     Task LlmTest(LlmTestMessage message);
     [HubMethodName("history")]
     Task History(HistoryMessage message);
+    [HubMethodName("setupCheck")]
+    Task SetupCheck(SetupCheckMessage message);
 }

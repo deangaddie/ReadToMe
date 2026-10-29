@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'bun:test';
 import type { SetupCheckReport, SetupCheckResult, SetupCheckRow } from '@app/api';
-import { bannerVisible, landingPath, noWorkspace, shieldView } from './surfacing';
+import {
+  bannerVisible,
+  estimateText,
+  fullCheckConfirm,
+  fullRunLabel,
+  landingPath,
+  noWorkspace,
+  shieldView,
+} from './surfacing';
 
 const STARTED = '2026-10-29T09:00:00Z';
 const RESTARTED = '2026-10-29T11:30:00Z';
@@ -28,6 +36,8 @@ const report = (
   firstRun: false,
   startedAt: STARTED,
   noWorkspace: false,
+  fullRun: null,
+  fullCheckEstimateSeconds: 3,
   ...over,
 });
 
@@ -84,6 +94,19 @@ describe('shieldView', () => {
     expect(shieldView(null)).toEqual(view);
     expect(shieldView(report([], { quickCheckedAt: null }))).toEqual(view);
   });
+
+  it('turns to a spinner with the step while a Full check runs, whatever failed', () => {
+    const running = report(['failed'], {
+      fullRun: {
+        step: 2,
+        total: 9,
+        lane: 'cpu',
+        label: 'Transcribing the sample clip',
+        cancelling: false,
+      },
+    });
+    expect(shieldView(running)).toEqual({ status: 'busy', failed: 0, label: 'Full check 2/9' });
+  });
 });
 
 describe('landingPath', () => {
@@ -94,5 +117,49 @@ describe('landingPath', () => {
   it('opens Projects on every later start, and when the report could not be read', () => {
     expect(landingPath(report(['failed']))).toBe('projects');
     expect(landingPath(null)).toBe('projects');
+  });
+});
+
+describe('fullRunLabel', () => {
+  it('reads step, lane and what the run is doing, and says when it is cancelling', () => {
+    const run = {
+      step: 4,
+      total: 9,
+      lane: 'cpu' as const,
+      label: 'Starting read2me-minilm-l6 and scoring',
+      cancelling: false,
+    };
+    expect(fullRunLabel(run)).toBe('Full check 4/9 · CPU · Starting read2me-minilm-l6 and scoring');
+    expect(
+      fullRunLabel({
+        ...run,
+        lane: 'local',
+        label: 'Encoding a 1 s tone to .m4b',
+        step: 1,
+        total: 1,
+      }),
+    ).toBe('Full check 1/1 · Local · Encoding a 1 s tone to .m4b');
+    expect(fullRunLabel({ ...run, lane: 'gpu', cancelling: true })).toBe(
+      'Full check 4/9 · GPU · Starting read2me-minilm-l6 and scoring · cancelling',
+    );
+  });
+});
+
+describe('the Full check confirm', () => {
+  it('rounds the estimate up to whole seconds, then whole minutes', () => {
+    expect(estimateText(1)).toBe('about 1 second');
+    expect(estimateText(3)).toBe('about 3 seconds');
+    expect(estimateText(59)).toBe('about 59 seconds');
+    expect(estimateText(61)).toBe('about 2 minutes');
+    expect(estimateText(60)).toBe('about 1 minute');
+  });
+
+  it('says what it disrupts and how long it is likely to take', () => {
+    const options = fullCheckConfirm(report(['passed'], { fullCheckEstimateSeconds: 200 }));
+    expect(options.title).toBe('Run the Full check?');
+    expect(options.confirmLabel).toBe('Run Full check');
+    expect(options.message).toContain('stopping running GPU containers');
+    expect(options.message).toContain('Queues wait and new AI tasks are refused until it ends.');
+    expect(options.message).toEndWith("It's likely to take about 4 minutes.");
   });
 });

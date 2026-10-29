@@ -262,6 +262,7 @@ describe('LiveService', () => {
         'receipt',
         'serviceStatus',
         'settingsChanged',
+        'setupCheck',
         'throughput',
         'voiceBatch',
         'watchdog',

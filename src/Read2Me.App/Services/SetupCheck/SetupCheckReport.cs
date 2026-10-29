@@ -32,6 +32,27 @@ namespace Read2Me.App.Services.SetupCheck
         Checking,
     }
 
+    /// <summary>Where a Full check step runs: on this machine, in a CPU container, or in the one GPU container that fits.</summary>
+    [JsonConverter(typeof(CamelCaseEnumConverter<SetupCheckLane>))]
+    public enum SetupCheckLane
+    {
+        Local,
+        Cpu,
+        Gpu,
+    }
+
+    /// <summary>
+    /// The Full check going on: step <see cref="Step"/> of <see cref="Total"/>, its lane and what it is
+    /// doing ("Encoding a 1 s tone to .m4b"). <see cref="Cancelling"/>: a cancel was asked for, so the
+    /// run stops once this step ends.
+    /// </summary>
+    public sealed record SetupFullRun(
+        int Step,
+        int Total,
+        [property: JsonConverter(typeof(CamelCaseEnumConverter<SetupCheckLane>))] SetupCheckLane Lane,
+        string Label,
+        bool Cancelling);
+
     /// <summary>The in-app Settings section that owns the value: an app-relative path and its label.</summary>
     public sealed record SetupSettingsLink(string Path, string Label);
 
@@ -46,14 +67,15 @@ namespace Read2Me.App.Services.SetupCheck
     /// result. Every row carries a fix hint; the page shows it only for rows that aren't Passed or Not used.
     /// <see cref="Managed"/>: the app can start and restart what the row checks — a docker AI service,
     /// or a config whose every URL is one. False for the Workspace and tools, and for a config on a
-    /// URL the app doesn't manage.
+    /// URL the app doesn't manage. The enum converters sit on the properties too: the live hub's
+    /// options would outrank the types' own.
     /// </summary>
     public sealed record SetupCheckRow(
         string Id,
-        SetupCheckGroup Group,
+        [property: JsonConverter(typeof(CamelCaseEnumConverter<SetupCheckGroup>))] SetupCheckGroup Group,
         string Name,
-        SetupCheckTier Tier,
-        SetupCheckResult Result,
+        [property: JsonConverter(typeof(CamelCaseEnumConverter<SetupCheckTier>))] SetupCheckTier Tier,
+        [property: JsonConverter(typeof(CamelCaseEnumConverter<SetupCheckResult>))] SetupCheckResult Result,
         string Expected,
         string Found,
         string? Note,
@@ -66,6 +88,8 @@ namespace Read2Me.App.Services.SetupCheck
     /// <see cref="StartedAt"/>: when this host started; the start banner's dismissal lasts for it.
     /// <see cref="NoWorkspace"/>: this host started without a usable Workspace; every other API call
     /// is refused and the web app shows only the Setup check until the app restarts.
+    /// <see cref="FullRun"/>: the Full check going on, null when none is. <see cref="FullCheckEstimateSeconds"/>:
+    /// how long a Full check is likely to take, for its confirm.
     /// </summary>
     public sealed record SetupCheckReport(
         IReadOnlyList<SetupCheckRow> Rows,
@@ -73,7 +97,9 @@ namespace Read2Me.App.Services.SetupCheck
         DateTimeOffset? FullCheckedAt,
         bool FirstRun,
         DateTimeOffset StartedAt,
-        bool NoWorkspace)
+        bool NoWorkspace,
+        SetupFullRun? FullRun = null,
+        int FullCheckEstimateSeconds = 0)
     {
         /// <summary>No rows yet; the runner stamps the start's flags and time on as it answers.</summary>
         public static readonly SetupCheckReport Empty = new([], null, null, false, default, false);

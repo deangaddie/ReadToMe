@@ -196,6 +196,9 @@
   .shell__setup-shield--error {
     color: var(--r2m-status-error);
   }
+  .shell__setup-shield--busy {
+    color: var(--r2m-status-busy);
+  }
   .shell__setup-shield-count {
     position: absolute;
     top: 2px;

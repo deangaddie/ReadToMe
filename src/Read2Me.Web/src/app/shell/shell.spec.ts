@@ -353,6 +353,37 @@ describe('Setup check surfacing', () => {
     expect(shield?.querySelector('.shell__setup-shield-count')).toBeNull();
   });
 
+  it('spins the shield with the step while a Full check runs, on any page', async () => {
+    await loadReport(1);
+    const { shell } = await mount('projects');
+    const report = use(SetupCheckStore).report();
+    live.emit('setupCheck', {
+      kind: 'progress',
+      report: {
+        ...report,
+        fullRun: {
+          step: 1,
+          total: 1,
+          lane: 'local',
+          label: 'Encoding a 1 s tone to .m4b',
+          cancelling: false,
+        },
+      },
+    });
+    await settle();
+
+    const shield = shell.querySelector('.shell__setup-shield');
+    expect(shield?.classList.contains('shell__setup-shield--busy')).toBe(true);
+    expect(shield?.getAttribute('aria-label')).toBe('Full check 1/1');
+    expect(shield?.querySelector('.r2m-spinner')).not.toBeNull();
+    expect(shield?.querySelector('.shell__setup-shield-count')).toBeNull();
+
+    live.emit('setupCheck', { kind: 'done', report: { ...report, fullRun: null } });
+    await settle();
+    expect(shield?.classList.contains('shell__setup-shield--error')).toBe(true);
+    expect(shell.querySelector('.shell__setup-shield .r2m-spinner')).toBeNull();
+  });
+
   it('keeps the banner dismissed across a reload of the same host start', async () => {
     await loadReport(1);
     const { shell } = await mount('projects');

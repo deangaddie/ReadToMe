@@ -27,9 +27,10 @@ namespace Read2Me.App.Services.SetupCheck
     /// <summary>
     /// The host's one <see cref="ISetupCheckRunner"/>. The Quick check covers the Workspace, ffmpeg,
     /// the docker CLI, the active AI configs and the docker AI services; one Quick check runs at a
-    /// time and each replaces the whole report.
+    /// time and each replaces the whole report but for the verdicts the last Full check left (see
+    /// <c>SetupCheckRunner.Full.cs</c>), which a Quick check overrides only by failing.
     /// </summary>
-    public sealed class SetupCheckRunner(
+    public sealed partial class SetupCheckRunner(
         IConfiguration configuration,
         string contentRoot,
         IDbContextFactory<Read2MeDbContext> dbFactory,
@@ -37,6 +38,7 @@ namespace Read2Me.App.Services.SetupCheck
         IProcessRunner processes,
         WorkspaceStart workspaceStart,
         SetupCheckServices aiServices,
+        FullCheckServices full,
         TimeProvider? clock = null) : ISetupCheckRunner
     {
         private static readonly TimeSpan ProcessTimeout = TimeSpan.FromSeconds(10);
@@ -56,12 +58,16 @@ namespace Read2Me.App.Services.SetupCheck
 
         public async Task<SetupCheckReport> RunQuickCheckAsync(CancellationToken ct)
         {
+            // The run owns the rows until it ends.
+            if (FullCheckRunning)
+                return Report;
             await _quick.WaitAsync(ct);
             try
             {
                 if (!workspaceStart.Usable)
                 {
-                    _report = NoWorkspaceReport();
+                    lock (_lock)
+                        _report = NoWorkspaceReport();
                     return Report;
                 }
 
@@ -73,7 +79,16 @@ namespace Read2Me.App.Services.SetupCheck
                     docker.Row,
                 };
                 rows.AddRange(await new AiServicesCheck(aiServices).RunAsync(docker.OnPath, ct));
-                _report = _report with { Rows = rows, QuickCheckedAt = _clock.GetUtcNow() };
+                lock (_lock)
+                {
+                    if (_run is null)
+                        _report = _report with
+                        {
+                            Rows = WithFullVerdicts(rows),
+                            QuickCheckedAt = _clock.GetUtcNow(),
+                            FullCheckEstimateSeconds = Plan().Sum(s => s.EstimateSeconds),
+                        };
+                }
                 return Report;
             }
             finally
@@ -161,26 +176,40 @@ namespace Read2Me.App.Services.SetupCheck
         /// </summary>
         private async Task<SetupCheckRow> CheckFfmpegAsync(CancellationToken ct)
         {
+            var paths = await ReadFfmpegPathsAsync(ct);
+            var (ok, found) = await ProbeFfmpegAsync(paths.Live, ct);
+            var fix = FfmpegFix;
+            if (!ok && paths.Note is not null && (await ProbeFfmpegAsync(paths.Seeded, ct)).Ok)
+                fix = new SetupFixHint("The appsettings path answers: use it as the ffmpeg path.", AudioProcessing, paths.Seeded);
+
+            // A Full-tier row: the Quick check judges -version, the Full check the encode.
+            return new SetupCheckRow(
+                SetupCheckIds.Ffmpeg, SetupCheckGroup.WorkspaceAndTools, "ffmpeg", SetupCheckTier.Full,
+                ok ? SetupCheckResult.Passed : SetupCheckResult.Failed,
+                $"ffmpeg -version and ffprobe -version from {paths.Shown}", found, paths.Note, fix, Managed: false);
+        }
+
+        private static readonly SetupFixHint FfmpegFix =
+            new("Set the ffmpeg path to an ffmpeg with ffprobe beside it.", AudioProcessing);
+
+        /// <summary>
+        /// <see cref="Live"/>: the Settings value (null: PATH). <see cref="Seeded"/>: config's
+        /// <c>Ffmpeg:Path</c>. <see cref="Note"/>: set when they differ.
+        /// </summary>
+        private sealed record FfmpegPaths(string? Live, string? Seeded, string Shown, string? Note);
+
+        private async Task<FfmpegPaths> ReadFfmpegPathsAsync(CancellationToken ct)
+        {
             string? live;
             await using (var db = await dbFactory.CreateDbContextAsync(ct))
                 live = Read2Me.Services.AudioProcessingSettingsService.NormalizeFfmpegPath(
                     (await db.Settings.SingleOrDefaultAsync(ct))?.FfmpegPath);
             var seeded = Read2Me.Services.AudioProcessingSettingsService.NormalizeFfmpegPath(configuration["Ffmpeg:Path"]);
             var shown = live ?? "PATH";
-
             var note = seeded is not null && !string.Equals(seeded, live, StringComparison.OrdinalIgnoreCase)
                 ? $"appsettings says {seeded}; the app uses {shown} — change it in {AudioProcessing.Label}"
                 : null;
-
-            var (ok, found) = await ProbeFfmpegAsync(live, ct);
-            var fix = new SetupFixHint("Set the ffmpeg path to an ffmpeg with ffprobe beside it.", AudioProcessing);
-            if (!ok && note is not null && (await ProbeFfmpegAsync(seeded, ct)).Ok)
-                fix = new SetupFixHint("The appsettings path answers: use it as the ffmpeg path.", AudioProcessing, seeded);
-
-            return new SetupCheckRow(
-                SetupCheckIds.Ffmpeg, SetupCheckGroup.WorkspaceAndTools, "ffmpeg", SetupCheckTier.Quick,
-                ok ? SetupCheckResult.Passed : SetupCheckResult.Failed,
-                $"ffmpeg -version and ffprobe -version from {shown}", found, note, fix, Managed: false);
+            return new FfmpegPaths(live, seeded, shown, note);
         }
 
         /// <summary>Both tools must answer; found is ffmpeg's banner, or which one failed and why.</summary>

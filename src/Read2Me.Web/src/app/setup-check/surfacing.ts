@@ -1,4 +1,5 @@
-import type { SetupCheckReport } from '@app/api';
+import type { SetupCheckLane, SetupCheckReport, SetupFullRun } from '@app/api';
+import type { ConfirmOptions } from '@app/ui/dialogs';
 import type { StatusKind } from '@app/ui/partials';
 
 /** Where the Setup check page lives, app-relative. */
@@ -29,12 +30,21 @@ export const bannerVisible = (
 /** "Setup check: 2 failed", the shield's label and the banner's lead. */
 export const failedLabel = (failed: number): string => `Setup check: ${failed} failed`;
 
-/** The app-bar shield: green when nothing failed, red with the count, neutral before any check. */
+/**
+ * The app-bar shield: a spinner with "Full check n/N" while a Full check runs, green when nothing
+ * failed, red with the count, neutral before any check.
+ */
 export function shieldView(report: SetupCheckReport | null): {
   status: StatusKind;
   failed: number;
   label: string;
 } {
+  if (report?.fullRun)
+    return {
+      status: 'busy',
+      failed: 0,
+      label: `Full check ${report.fullRun.step}/${report.fullRun.total}`,
+    };
   if (!report?.quickCheckedAt)
     return { status: 'neutral', failed: 0, label: 'Setup check not run yet' };
   const failed = failedCount(report);
@@ -46,3 +56,34 @@ export function shieldView(report: SetupCheckReport | null): {
 /** Where `/` lands: the Setup check on the start that created app.db, Projects otherwise. */
 export const landingPath = (report: SetupCheckReport | null): string =>
   report?.firstRun ? SETUP_CHECK_PATH : 'projects';
+
+const LANE_LABEL: Record<SetupCheckLane, string> = { local: 'Local', cpu: 'CPU', gpu: 'GPU' };
+
+/** The progress strip: "Full check 1/9 · CPU · Starting read2me-whisper", then "· cancelling" once asked. */
+export function fullRunLabel(run: SetupFullRun): string {
+  const label = `Full check ${run.step}/${run.total} · ${LANE_LABEL[run.lane]} · ${run.label}`;
+  return run.cancelling ? `${label} · cancelling` : label;
+}
+
+/** "about 40 seconds", "about 3 minutes": the confirm's estimate, rounded up to a whole unit. */
+export function estimateText(seconds: number): string {
+  if (seconds < 60) {
+    const s = Math.max(1, Math.ceil(seconds));
+    return `about ${s} ${s === 1 ? 'second' : 'seconds'}`;
+  }
+  const m = Math.ceil(seconds / 60);
+  return `about ${m} ${m === 1 ? 'minute' : 'minutes'}`;
+}
+
+/** The confirm before a Full check: what it disrupts, and how long it's likely to take. */
+export function fullCheckConfirm(report: SetupCheckReport | null): ConfirmOptions {
+  return {
+    title: 'Run the Full check?',
+    message:
+      'It starts each service an active config uses, stopping running GPU containers so one model ' +
+      'loads at a time, and sends one real request to each model, then puts the services back as it ' +
+      'found them. Queues wait and new AI tasks are refused until it ends. ' +
+      `It's likely to take ${estimateText(report?.fullCheckEstimateSeconds ?? 0)}.`,
+    confirmLabel: 'Run Full check',
+  };
+}

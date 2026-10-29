@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { type SetupCheckReport, SetupCheckApi } from '@app/api';
 import { override, resetServices } from '@app/core/services';
 import { ToastService } from '@app/ui/toast';
+import { FakeLive } from '../../../../testing/fake-live';
 import { settle } from '../../../../testing/fake-navigation';
 import type { SetupCheckPage } from './setup-check-page';
 import './setup-check-page';
@@ -16,6 +17,8 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
     firstRun: false,
     startedAt: '2026-10-28T14:00:00Z',
     noWorkspace: false,
+    fullRun: null,
+    fullCheckEstimateSeconds: 3,
     rows: [
       {
         id: 'workspace',
@@ -99,10 +102,12 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
 
 let calls: string[];
 let quickAnswer: SetupCheckReport;
+let live: FakeLive;
 
 beforeEach(() => {
   resetServices();
   calls = [];
+  live = new FakeLive().install();
   quickAnswer = report(AT_START);
   override(SetupCheckApi, {
     report: async () => {
@@ -195,5 +200,40 @@ describe('r2m-setup-check-page', () => {
     expect(after).toContain('4 passed · 1 not confirmed');
     expect(after).not.toBe(before);
     expect(rowOf(page, 'ffmpeg')?.getAttribute('data-result')).toBe('passed');
+  });
+
+  it('follows a Full check from the hub: strip, Checking chip, Cancel in place of Run Full check', async () => {
+    const page = await mount();
+    expect(page.querySelector('[data-action=run-full]')).not.toBeNull();
+    expect(page.querySelector('[data-role=full-run]')).toBeNull();
+
+    const running = report(AT_START);
+    running.fullRun = {
+      step: 1,
+      total: 1,
+      lane: 'local',
+      label: 'Encoding a 1 s tone to .m4b',
+      cancelling: false,
+    };
+    running.rows = running.rows.map((r) => (r.id === 'ffmpeg' ? { ...r, result: 'checking' } : r));
+    live.emit('setupCheck', { kind: 'progress', report: running });
+    await flush(page);
+
+    const strip = page.querySelector('[data-role=full-run]');
+    expect(strip?.textContent).toContain('Full check 1/1 · Local · Encoding a 1 s tone to .m4b');
+    expect(strip?.querySelector('progress')?.getAttribute('value')).toBe('1');
+    expect(rowOf(page, 'ffmpeg')?.querySelector('.r2m-status-chip')?.textContent).toContain(
+      'Checking…',
+    );
+    expect(page.querySelector('[data-action=run-full]')).toBeNull();
+    expect(page.querySelector('[data-action=cancel-full]')).not.toBeNull();
+    expect(page.querySelector<HTMLButtonElement>('[data-action=run-quick]')?.disabled).toBe(true);
+
+    live.emit('setupCheck', { kind: 'done', report: report(AT_START, 'passed') });
+    await flush(page);
+
+    expect(page.querySelector('[data-role=full-run]')).toBeNull();
+    expect(page.querySelector('[data-action=run-full]')).not.toBeNull();
+    expect(page.querySelector<HTMLButtonElement>('[data-action=run-quick]')?.disabled).toBe(false);
   });
 });

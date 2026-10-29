@@ -44,4 +44,7 @@ public static class GateOwners
     /// The name is lower-cased because service names match case-insensitively (see <c>WatchdogGateMap</c>).
     /// </summary>
     public static string WatchdogFor(string service) => $"watchdog:{service.ToLowerInvariant()}";
+
+    /// <summary>The Setup check's Full check, which holds every queue while it drives the AI services.</summary>
+    public const string SetupCheck = "setup-check";
 }

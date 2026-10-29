@@ -1,10 +1,11 @@
 import { html, nothing } from 'lit-html';
-import type { SetupCheckRow } from '@app/api';
+import type { SetupCheckRow, SetupFullRun } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { adoptStyles } from '@app/core/styles';
 import { SetupCheckStore } from '@app/setup-check/setup-check-store';
-import { callout, emptyState, icon, statusChip } from '@app/ui/partials';
+import { fullRunLabel } from '@app/setup-check/surfacing';
+import { callout, emptyState, icon, spinner, statusChip } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
 import { fixHint } from './fix-hint';
 import { RESULT_VIEW, groupedRows, showsFix, summaryLine } from './setup-check-logic';
@@ -18,7 +19,9 @@ const NO_WORKSPACE =
 
 /**
  * `/settings/setup-check`: one report on whether the install is sound. Opening the page shows the
- * host's last report and runs a fresh Quick check; Run Quick check runs another. One table, grouped
+ * host's last report and runs a fresh Quick check; Run Quick check runs another. Run Full check,
+ * after a confirm, starts the one Full check per host (or joins it); while it runs a busy strip
+ * follows its progress, Cancel replaces Run Full check and Run Quick check is disabled. One table, grouped
  * by area, with what each check expected, what it found and where to fix it.
  */
 export class SetupCheckPage extends R2mElement {
@@ -34,6 +37,7 @@ export class SetupCheckPage extends R2mElement {
     const report = this.store.report();
     const error = this.store.error();
     const checking = this.store.checking();
+    const run = this.store.fullRun();
     return html`
       <header class="r2m-page-header">
         <h1 class="r2m-page-header__title">Setup check</h1>
@@ -45,16 +49,38 @@ export class SetupCheckPage extends R2mElement {
             type="button"
             class="r2m-button r2m-button--stroked"
             data-action="run-quick"
-            ?disabled=${checking}
+            ?disabled=${checking || run !== null}
             @click=${() => void this.store.runQuick()}
           >
             ${icon('refresh')} Run Quick check
           </button>
+          ${
+            run
+              ? html`<button
+                  type="button"
+                  class="r2m-button r2m-button--stroked"
+                  data-action="cancel-full"
+                  ?disabled=${run.cancelling}
+                  @click=${() => void this.store.cancelFull()}
+                >
+                  ${icon('close')} Cancel
+                </button>`
+              : html`<button
+                  type="button"
+                  class="r2m-button r2m-button--filled"
+                  data-action="run-full"
+                  ?disabled=${checking || !report || report.noWorkspace}
+                  @click=${() => void this.store.runFull()}
+                >
+                  ${icon('play_arrow')} Run Full check
+                </button>`
+          }
         </span>
       </header>
       ${
         report
           ? html`<p class="setup-check__summary" data-role="summary">${summaryLine(report)}</p>
+              ${run ? this.strip(run) : nothing}
               ${report.noWorkspace ? callout({ kind: 'warn', text: NO_WORKSPACE }) : nothing}
               ${this.table(report.rows)}`
           : error
@@ -62,6 +88,15 @@ export class SetupCheckPage extends R2mElement {
             : html`<p class="setup-check__summary">Checking…</p>`
       }
     `;
+  }
+
+  /** The busy strip above the table while a Full check runs: where it is, and how far along. */
+  private strip(run: SetupFullRun) {
+    return html`<div class="setup-check__strip" data-role="full-run" role="status">
+      ${spinner(18)}
+      <span class="setup-check__strip-label">${fullRunLabel(run)}</span>
+      <progress max=${run.total} value=${run.step} aria-label="Full check progress"></progress>
+    </div>`;
   }
 
   private table(rows: SetupCheckRow[]) {

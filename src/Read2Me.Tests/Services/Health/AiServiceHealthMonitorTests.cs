@@ -192,6 +192,22 @@ public class AiServiceHealthMonitorTests
     }
 
     [Fact]
+    public async Task A_held_off_service_never_trips_and_trips_again_once_released()
+    {
+        var h = CreateHarness(new AiWatchdogOptions { ConsecutiveFailuresToTrip = 1 });
+
+        using (h.Monitor.HoldOff(["LLAMA"]))
+        {
+            h.Monitor.ReportFailure(Llama, "stopped by the Setup check", tripImmediately: true);
+            Assert.Equal(AiServiceState.Untracked, h.Monitor.GetState(Llama));
+        }
+        Assert.Empty(h.Controller.RestartedContainers);
+
+        await h.AwaitRecovery(() => h.Monitor.ReportFailure(Llama, "boom"));
+        Assert.Equal(["read2me-llama"], h.Controller.RestartedContainers);
+    }
+
+    [Fact]
     public void ReportSuccess_ResetsFailureCounter()
     {
         var h = CreateHarness(new AiWatchdogOptions { ConsecutiveFailuresToTrip = 2 });

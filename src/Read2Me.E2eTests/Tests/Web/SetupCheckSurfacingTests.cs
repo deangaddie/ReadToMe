@@ -1,4 +1,6 @@
+using System.Net;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Read2Me.E2eTests.Infrastructure;
 
 namespace Read2Me.E2eTests.Tests.Web;
@@ -43,6 +45,35 @@ public class SetupCheckSurfacingTests(E2eAppFixture app, PlaywrightFixture pw) :
         var countBox = (await count.BoundingBoxAsync())!;
         Assert.True(countBox.X >= shieldBox.X - 1 && countBox.X + countBox.Width <= shieldBox.X + shieldBox.Width + 1,
             "the count badge should sit on the shield");
+    }
+
+    [Fact]
+    public async Task The_shield_follows_a_Full_check_over_the_real_hub()
+    {
+        await FailedAfterQuickCheckAsync();
+        await GotoAppAsync("projects");
+        var shield = Page.Locator(".shell__appbar .shell__setup-shield");
+        await Expect(shield).ToBeVisibleAsync();
+
+        // Started from the agent API, as another tab would: only the hub tells this page.
+        App.FfmpegEncode.HoldNext();
+        try
+        {
+            var started = await Http.PostAsync($"{App.BaseUrl}/api/setup-check/full", null);
+            Assert.Equal(HttpStatusCode.Accepted, started.StatusCode);
+            await App.FfmpegEncode.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+
+            await Expect(shield).ToHaveClassAsync(new Regex("shell__setup-shield--busy"));
+            await Expect(shield).ToHaveAttributeAsync("aria-label", "Full check 1/1");
+            await Expect(shield.Locator(".r2m-spinner")).ToBeVisibleAsync();
+        }
+        finally
+        {
+            App.FfmpegEncode.Release();
+        }
+
+        await Expect(shield.Locator(".r2m-spinner")).ToHaveCountAsync(0);
+        await Expect(shield).Not.ToHaveClassAsync(new Regex("shell__setup-shield--busy"));
     }
 
     /// <summary>Runs the Quick check and counts what failed: docker may fail too on a machine without it.</summary>

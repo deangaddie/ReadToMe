@@ -61,5 +61,6 @@ public sealed class RecordingHubContext : IHubContext<LiveHub, ILiveClient>
         public Task BookEdit(BookEditMessage message) => Record("bookEdit", message);
         public Task History(HistoryMessage message) => Record("history", message);
         public Task LlmTest(LlmTestMessage message) => Record("llmTest", message);
+        public Task SetupCheck(SetupCheckMessage message) => Record("setupCheck", message);
     }
 }
