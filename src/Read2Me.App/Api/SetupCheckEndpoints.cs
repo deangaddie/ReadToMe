@@ -17,7 +17,7 @@ namespace Read2Me.App.Api
 
             group.MapGet("", (ISetupCheckRunner runner) => Results.Ok(runner.Report))
                 .Produces<SetupCheckReport>()
-                .WithSummary("The Setup check report: one row per check (id, group, name, tier, result, expected, found, note?, fix { text, link?, copy? }), the times of the last Quick and Full check, firstRun (this start created app.db) and startedAt (when this host started). Empty rows until the start-up Quick check ends.");
+                .WithSummary("The Setup check report: one row per check (id, group, name, tier, result, expected, found, note?, fix { text, link?, copy? }), the times of the last Quick and Full check, firstRun (this start created app.db), startedAt (when this host started) and noWorkspace (this host started without a usable Workspace: every other API call answers 503 No Workspace until the app restarts). Empty rows until the start-up Quick check ends.");
 
             group.MapPost("/quick", async (ISetupCheckRunner runner, CancellationToken ct) =>
                     Results.Ok(await runner.RunQuickCheckAsync(ct)))

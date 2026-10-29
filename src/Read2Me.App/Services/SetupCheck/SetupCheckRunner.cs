@@ -46,14 +46,25 @@ namespace Read2Me.App.Services.SetupCheck
         private readonly DateTimeOffset _startedAt = (clock ?? TimeProvider.System).GetUtcNow();
         private volatile SetupCheckReport _report = SetupCheckReport.Empty;
 
-        /// <summary>The first-run flag and the start time are this start's, read as the report is.</summary>
-        public SetupCheckReport Report => _report with { FirstRun = workspaceStart.CreatedDatabase, StartedAt = _startedAt };
+        /// <summary>The first-run and no-Workspace flags and the start time are this start's, read as the report is.</summary>
+        public SetupCheckReport Report => _report with
+        {
+            FirstRun = workspaceStart.CreatedDatabase,
+            StartedAt = _startedAt,
+            NoWorkspace = !workspaceStart.Usable,
+        };
 
         public async Task<SetupCheckReport> RunQuickCheckAsync(CancellationToken ct)
         {
             await _quick.WaitAsync(ct);
             try
             {
+                if (!workspaceStart.Usable)
+                {
+                    _report = NoWorkspaceReport();
+                    return Report;
+                }
+
                 var docker = await CheckDockerAsync(ct);
                 var rows = new List<SetupCheckRow>
                 {
@@ -73,52 +84,71 @@ namespace Read2Me.App.Services.SetupCheck
 
         // ── Workspace ────────────────────────────────────────────────────────
 
-        private const string WorkspaceKey = "Workspace:FolderPath";
         private const string CreatedNote = "The folder didn't exist, so the app created it.";
+        private const string NeedsWorkspace = "needs the Workspace";
 
-        private SetupCheckRow CheckWorkspace()
+        /// <summary>The environment variable that sets the key: the key with each <c>:</c> as <c>__</c>.</summary>
+        private static readonly string EnvVar = WorkspaceStart.Key.Replace(":", "__");
+
+        /// <summary>
+        /// With no usable Workspace at start, the Workspace row is the start's verdict and every
+        /// other row is Not run: nothing reads app.db, and only a restart leaves the mode.
+        /// </summary>
+        private SetupCheckReport NoWorkspaceReport()
         {
-            var localSettings = Path.Combine(contentRoot, LocalSettings.FileName);
-            var fix = new SetupFixHint(
-                $"Set {WorkspaceKey} to an absolute folder in {LocalSettings.FileName} (copy it from appsettings.Local.example.json if it doesn't exist), then restart the app.",
-                Copy: localSettings);
-
-            SetupCheckRow Row(SetupCheckResult result, string found, string? note = null) => new(
-                SetupCheckIds.Workspace, SetupCheckGroup.WorkspaceAndTools, "Workspace", SetupCheckTier.Quick, result,
-                $"An absolute, writable folder ({WorkspaceKey})", found, note, fix, Managed: false);
-
-            // Untrimmed: the host binds and uses the value as written, so the check judges that same path.
-            var path = configuration[WorkspaceKey];
-            if (string.IsNullOrWhiteSpace(path))
-                return Row(SetupCheckResult.Failed, $"{WorkspaceKey} isn't set");
-            if (!Path.IsPathFullyQualified(path))
-                return Row(SetupCheckResult.Failed, $"{path} is a relative path");
-            if (File.Exists(path))
-                return Row(SetupCheckResult.Failed, $"{path} is a file");
-
-            try
+            var fix = new SetupFixHint("Fix the Workspace row first, then restart the app.");
+            var rows = new List<SetupCheckRow>
             {
-                // A folder removed since start is created again, as start-up would have.
-                workspaceStart.EnsureFolder(path);
-            }
-            catch (Exception ex)
-            {
-                return Row(SetupCheckResult.Failed, $"{path} can't be created: {ex.Message}");
-            }
-
-            try
-            {
-                var probe = Path.Combine(path, $".setup-check-{Guid.NewGuid():N}");
-                File.WriteAllText(probe, "");
-                File.Delete(probe);
-            }
-            catch (Exception ex)
-            {
-                return Row(SetupCheckResult.Failed, $"{path} isn't writable: {ex.Message}");
-            }
-
-            return Row(SetupCheckResult.Passed, path, workspaceStart.CreatedFolder ? CreatedNote : null);
+                WorkspaceRow(workspaceStart.AtStart),
+                new(SetupCheckIds.Ffmpeg, SetupCheckGroup.WorkspaceAndTools, "ffmpeg", SetupCheckTier.Quick,
+                    SetupCheckResult.NotRun, "ffmpeg -version and ffprobe -version", NeedsWorkspace, null, fix, Managed: false),
+                new(SetupCheckIds.Docker, SetupCheckGroup.WorkspaceAndTools, "docker CLI", SetupCheckTier.Quick,
+                    SetupCheckResult.NotRun, "docker on PATH", NeedsWorkspace, null, fix, Managed: false),
+            };
+            rows.AddRange(new AiServicesCheck(aiServices).NotRun(NeedsWorkspace, fix));
+            return _report with { Rows = rows, QuickCheckedAt = _clock.GetUtcNow() };
         }
+
+        /// <summary>A folder removed since start is created again, as start-up would have.</summary>
+        private SetupCheckRow CheckWorkspace() => WorkspaceRow(workspaceStart.Judge(configuration[WorkspaceStart.Key]));
+
+        private SetupCheckRow WorkspaceRow(WorkspaceVerdict verdict) => new(
+            SetupCheckIds.Workspace, SetupCheckGroup.WorkspaceAndTools, "Workspace", SetupCheckTier.Quick,
+            verdict.Usable ? SetupCheckResult.Passed : SetupCheckResult.Failed,
+            $"An absolute, writable folder ({WorkspaceStart.Key})", verdict.Found,
+            verdict.Usable && workspaceStart.CreatedFolder ? CreatedNote : null,
+            WorkspaceFix(), Managed: false);
+
+        /// <summary>
+        /// Names the key, the absolute path of appsettings.Local.json and the source whose value
+        /// takes effect, so the user doesn't edit a file an environment variable or the command line overrides.
+        /// </summary>
+        private SetupFixHint WorkspaceFix()
+        {
+            var localPath = Path.Combine(contentRoot, LocalSettings.FileName);
+            var local = File.Exists(localPath)
+                ? $"in {localPath}"
+                : $"in {localPath} (it doesn't exist yet: copy it from appsettings.Local.example.json beside it)";
+            var source = ConfigSources.Winning(configuration, WorkspaceStart.Key);
+            var text = source switch
+            {
+                { Kind: ConfigSourceKind.EnvironmentVariable } =>
+                    $"{WorkspaceStart.Key} comes from the environment variable {EnvVar}, which overrides {LocalSettings.FileName}: set it to an absolute, writable folder, or remove it and set the key {local}, then restart the app.",
+                { Kind: ConfigSourceKind.CommandLine } =>
+                    $"{WorkspaceStart.Key} comes from the command line (--{WorkspaceStart.Key}), which overrides {LocalSettings.FileName}: pass an absolute, writable folder, or drop it and set the key {local}, then restart the app.",
+                // A blank in a settings file (appsettings.json ships one) is a placeholder, not a choice.
+                { Value: var value } when string.IsNullOrWhiteSpace(value) =>
+                    $"Set {WorkspaceStart.Key} to an absolute, writable folder {local}, then restart the app.",
+                { Kind: ConfigSourceKind.Other, Origin: var provider } =>
+                    $"{WorkspaceStart.Key} comes from {provider}, which overrides {LocalSettings.FileName}: change it there, then restart the app.",
+                { Kind: ConfigSourceKind.File, Origin: var file }
+                    when !string.Equals(file, LocalSettings.FileName, StringComparison.OrdinalIgnoreCase) =>
+                    $"{WorkspaceStart.Key} comes from {file}: set it to an absolute, writable folder {local}, which overrides it, then restart the app.",
+                _ => $"Set {WorkspaceStart.Key} to an absolute, writable folder {local}, then restart the app.",
+            };
+            return new SetupFixHint(text, Copy: localPath);
+        }
+
 
         // ── ffmpeg ───────────────────────────────────────────────────────────
 

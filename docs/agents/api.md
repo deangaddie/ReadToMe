@@ -120,7 +120,7 @@ stops or switches anything; the one thing it writes is the Workspace folder, cre
 ```bash
 curl -s -X POST http://localhost:5000/api/setup-check/quick
 # → { rows: [{ id, group, name, tier, result, expected, found, note, fix: { text, link: { path, label }?, copy? }, managed }],
-#     quickCheckedAt, fullCheckedAt, firstRun, startedAt }
+#     quickCheckedAt, fullCheckedAt, firstRun, startedAt, noWorkspace }
 ```
 
 `id` is `workspace`, `ffmpeg` or `docker` (Workspace and tools); `llm`, `attribution-chain`,
@@ -135,6 +135,15 @@ owns the value (`settings/audio`, `settings/llm`, …); `fix.copy` is a command 
 outside the app (`docker compose up -d llama`, `Infra/llama/config/models.ini`). `firstRun` is true on
 the start that created `app.db` (the web app then lands on the Setup check); `startedAt` is when this
 host started.
+
+**No Workspace.** When `Workspace:FolderPath` is empty, relative, a file, or a folder that can't be created
+or written, the host still starts, without `app.db`: no migrations, no queue workers or History tracker, and
+`noWorkspace` is true. Every other `/api/...` call (and `/workspace/...`, `/audio-preview/...`,
+`/preview-source/...`) answers `503` with the problem title `No Workspace`. The `workspace` row fails with a
+fix hint naming `Workspace:FolderPath`, the absolute path of `appsettings.Local.json` and the source that
+takes effect (that file, another settings file, the `Workspace__FolderPath` environment variable or the
+command line); every other row is `notRun`, "needs the Workspace". Only fixing the setting and restarting
+the app leaves the mode.
 
 The AI configs rows judge each active config's base URL, and probe only a URL the app doesn't manage
 (`GET /v1/models` for LLM, TTS and voice-design configs; any HTTP answer for the others). `managed` is

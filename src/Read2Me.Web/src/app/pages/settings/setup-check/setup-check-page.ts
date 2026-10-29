@@ -4,13 +4,17 @@ import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { adoptStyles } from '@app/core/styles';
 import { SetupCheckStore } from '@app/setup-check/setup-check-store';
-import { emptyState, icon, statusChip } from '@app/ui/partials';
+import { callout, emptyState, icon, statusChip } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
 import { fixHint } from './fix-hint';
 import { RESULT_VIEW, groupedRows, showsFix, summaryLine } from './setup-check-logic';
 import css from './setup-check-page.css' with { type: 'text' };
 
 adoptStyles(css);
+
+/** The callout above the table in no-Workspace mode, where this page stands in for every route. */
+const NO_WORKSPACE =
+  'The app started without a usable Workspace, so nothing else is available. Fix the Workspace row below, then restart the app.';
 
 /**
  * `/settings/setup-check`: one report on whether the install is sound. Opening the page shows the
@@ -51,6 +55,7 @@ export class SetupCheckPage extends R2mElement {
       ${
         report
           ? html`<p class="setup-check__summary" data-role="summary">${summaryLine(report)}</p>
+              ${report.noWorkspace ? callout({ kind: 'warn', text: NO_WORKSPACE }) : nothing}
               ${this.table(report.rows)}`
           : error
             ? emptyState({ icon: 'cloud_off', headline: 'Setup check unavailable', hint: error })

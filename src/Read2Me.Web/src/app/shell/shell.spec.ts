@@ -300,7 +300,7 @@ describe('Setup check surfacing', () => {
   const STARTED = '2026-10-29T09:00:00Z';
 
   /** The host's report as `main.ts` loads it before the router starts. */
-  async function loadReport(failed: number, firstRun = false) {
+  async function loadReport(failed: number, firstRun = false, noWorkspace = false) {
     const rows = Array.from({ length: failed + 1 }, (_, i) => ({
       id: `check-${i}`,
       group: 'workspaceAndTools',
@@ -319,6 +319,7 @@ describe('Setup check surfacing', () => {
       fullCheckedAt: null,
       firstRun,
       startedAt: STARTED,
+      noWorkspace,
     };
     // The Setup check page, where the first run lands, runs a Quick check as it opens.
     new FakeApi()
@@ -379,6 +380,24 @@ describe('Setup check surfacing', () => {
     await loadReport(0);
     expect((await mount('')).router.path()).toBe('projects');
   });
+
+  it.each(['projects', 'projects/pride-and-prejudice/book', 'settings/llm', 'no/such/page'])(
+    'renders the Setup check for %s in no-Workspace mode, with no start banner',
+    async (path) => {
+      await loadReport(1, false, true);
+      const { shell } = await mount(path);
+      for (let i = 0; i < 50 && !shell.querySelector('[data-role="summary"]'); i++) await settle();
+
+      const main = shell.querySelector('.shell__main');
+      expect(main?.querySelector('r2m-outlet')).toBeNull();
+      expect(main?.querySelector('r2m-setup-check-page h1')?.textContent).toBe('Setup check');
+      expect(main?.querySelector('.r2m-callout--warn')?.textContent).toContain(
+        'without a usable Workspace',
+      );
+      expect(texts(shell, '.shell__crumb')).toEqual(['Setup check']);
+      expect(shell.querySelector('.shell__setup-banner')).toBeNull();
+    },
+  );
 });
 
 describe('next-step pill', () => {

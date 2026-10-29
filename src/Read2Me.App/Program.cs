@@ -6,10 +6,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 using Read2Me.App.Configuration;
 using Read2Me.App.Services.SetupCheck;
-using Read2Me.Core.Configuration;
 using Read2Me.AppData;
 using Read2Me.Services;
 using Serilog;
@@ -45,9 +43,15 @@ namespace Read2Me.App
         private static void ApplyMigrations(IHost host)
         {
             using var scope = host.Services.CreateScope();
-            var workspace = scope.ServiceProvider.GetRequiredService<IOptions<WorkspaceOptions>>().Value;
+            // Judging the Workspace creates a missing folder. With none usable the host still starts,
+            // without app.db, and the Setup check says what to fix.
             var workspaceStart = scope.ServiceProvider.GetRequiredService<WorkspaceStart>();
-            workspaceStart.EnsureFolder(workspace.FolderPath);
+            if (!workspaceStart.Usable)
+            {
+                Log.Warning("No usable Workspace ({Found}): the app starts without one; open the Setup check to fix it",
+                    workspaceStart.AtStart.Found);
+                return;
+            }
             var db = scope.ServiceProvider.GetRequiredService<Read2MeDbContext>();
             if (!workspaceStart.MigrateDatabase(db))
                 return;

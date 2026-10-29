@@ -42,7 +42,8 @@ interface Crumb {
 /**
  * Application shell (design §5): app bar with breadcrumbs from the matched route chain, the Setup
  * check shield, the live connection dot and the theme quick menu, with the Setup check's start
- * banner under it (both read {@link SetupCheckStore}); the nav rail with the context group for "here" and the
+ * banner under it (both read {@link SetupCheckStore}; without a Workspace the main area shows the
+ * Setup check page for every route instead of the outlet); the nav rail with the context group for "here" and the
  * global group; the main outlet; the activity bar below and the activity drawer beside the content
  * (both read {@link ActivityStore}); on a project's pages, the History button and the History sheet
  * docked beside the content (both read {@link HistorySheetState}). While the project is viewed at a
@@ -95,6 +96,7 @@ export class AppShell extends R2mElement {
    * parent's path, so its title names the page (tab title, placeholder) but adds no crumb.
    */
   private readonly crumbs = computed<Crumb[]>(() => {
+    if (this.setupCheck.noWorkspace()) return [{ title: 'Setup check', href: SETUP_CHECK_PATH }];
     const match = this.router.match();
     if (!match) return [];
     const segments: string[] = [];
@@ -119,6 +121,11 @@ export class AppShell extends R2mElement {
       query.addEventListener('change', onChange);
       this.onDisconnect(() => query.removeEventListener('change', onChange));
     }
+    // No-Workspace mode renders the Setup check page in place of the outlet, so its chunk loads here.
+    this.effect(() => {
+      if (this.setupCheck.noWorkspace())
+        void import('@app/pages/settings/setup-check/setup-check-page');
+    });
   }
 
   private readonly toggleRail = (): void => {
@@ -238,7 +245,12 @@ export class AppShell extends R2mElement {
           </nav>
         </aside>
         <main class="shell__main ${viewing ? 'shell__main--viewing' : ''}">
-          <r2m-outlet></r2m-outlet>
+          ${
+            // Without a Workspace every route shows the Setup check, which says what to fix.
+            this.setupCheck.noWorkspace()
+              ? html`<r2m-setup-check-page></r2m-setup-check-page>`
+              : html`<r2m-outlet></r2m-outlet>`
+          }
         </main>
         ${
           this.history() && this.historySheet.open()

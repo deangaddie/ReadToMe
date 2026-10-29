@@ -8,11 +8,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 using Read2Me.App.Api;
 using Read2Me.App.Configuration;
 using Read2Me.App.Live;
-using Read2Me.Core.Configuration;
+using Read2Me.App.Services.SetupCheck;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Events;
@@ -48,7 +47,7 @@ namespace Read2Me.App
             services.AddProblemDetails();
         }
 
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env, IOptions<WorkspaceOptions> workspaceOptions)
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env, WorkspaceStart workspaceStart)
         {
             if (env.IsDevelopment())
             {
@@ -73,22 +72,10 @@ namespace Read2Me.App
                 OnPrepareResponse = ApplySpaBundleCaching
             });
 
-            var workspacePath = workspaceOptions.Value.FolderPath;
-            Directory.CreateDirectory(workspacePath);
-            // Ahead of the mount: with ?at=<stepId>, a state file is served as it was at that step.
-            app.UseStateFilesAtStep("/workspace");
-            app.UseStaticFiles(new StaticFileOptions
-            {
-                FileProvider = new PhysicalFileProvider(workspacePath),
-                RequestPath = "/workspace",
-                // Voice/audio files are overwritten in place (same name across
-                // regenerations). Tell clients never to reuse a cached copy so a
-                // regenerated voice plays the new audio without a server restart.
-                OnPrepareResponse = ctx =>
-                {
-                    ctx.Context.Response.Headers.CacheControl = "no-cache, must-revalidate";
-                }
-            });
+            if (workspaceStart.Usable)
+                UseWorkspaceFiles(app, workspaceStart.FolderPath);
+            else
+                app.UseNoWorkspaceGuard(workspaceStart.AtStart);
 
             // Journals must attach to their broadcasters before any queue events flow, so a
             // stream view expanded mid-request can replay the in-progress turn.
@@ -134,6 +121,25 @@ namespace Read2Me.App
         // app prefix carrying a hash is immutable; everything else there (index.html, favicon,
         // licences) must be revalidated.
         private static readonly Regex HashedAssetName = new(@"-[A-Za-z0-9]{8}\.[a-z0-9]+$", RegexOptions.Compiled);
+
+        /// <summary>The Workspace's files at <c>/workspace</c>.</summary>
+        private static void UseWorkspaceFiles(IApplicationBuilder app, string workspacePath)
+        {
+            // Ahead of the mount: with ?at=<stepId>, a state file is served as it was at that step.
+            app.UseStateFilesAtStep("/workspace");
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(workspacePath),
+                RequestPath = "/workspace",
+                // Voice/audio files are overwritten in place (same name across
+                // regenerations). Tell clients never to reuse a cached copy so a
+                // regenerated voice plays the new audio without a server restart.
+                OnPrepareResponse = ctx =>
+                {
+                    ctx.Context.Response.Headers.CacheControl = "no-cache, must-revalidate";
+                }
+            });
+        }
 
         private static void ApplySpaBundleCaching(StaticFileResponseContext ctx)
         {
