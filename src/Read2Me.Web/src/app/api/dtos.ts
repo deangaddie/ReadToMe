@@ -1389,6 +1389,21 @@ export type SetupCheckResult =
   | 'notUsed'
   | 'checking';
 
+/** `SetupCheckLane`: where a Full check step runs — on this machine, in a CPU container, or on the GPU. */
+export type SetupCheckLane = 'local' | 'cpu' | 'gpu';
+
+/**
+ * The Full check going on: step `step` of `total`, its lane and what it is doing. `cancelling`: a
+ * cancel was asked for, so the run stops once this step ends.
+ */
+export interface SetupFullRun {
+  step: number;
+  total: number;
+  lane: SetupCheckLane;
+  label: string;
+  cancelling: boolean;
+}
+
 /** The in-app Settings section that owns the value: an app-relative path and its label. */
 export interface SetupSettingsLink {
   path: string;
@@ -1424,6 +1439,8 @@ export interface SetupCheckRow {
  * `firstRun`: this host start created app.db. `startedAt`: when this host started, which keys the
  * start banner's dismissal. `noWorkspace`: this host started without a usable Workspace, so every
  * other API call answers 503 "No Workspace" and every route shows the Setup check until a restart.
+ * `fullRun`: the Full check going on, null when none is. `fullCheckEstimateSeconds`: how long a Full
+ * check is likely to take, for its confirm.
  */
 export interface SetupCheckReport {
   rows: SetupCheckRow[];
@@ -1432,4 +1449,6 @@ export interface SetupCheckReport {
   firstRun: boolean;
   startedAt: string;
   noWorkspace: boolean;
+  fullRun: SetupFullRun | null;
+  fullCheckEstimateSeconds: number;
 }

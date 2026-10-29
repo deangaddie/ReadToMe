@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -14,7 +15,7 @@ namespace Read2Me.Services.Health;
 /// (the GPU holds a single resident model), guarded by <see cref="AcquireExclusiveAsync"/>, which is
 /// also the lock manual lifecycle operations (issue007) take.
 /// </summary>
-public sealed class AiServiceHealthMonitor
+public sealed class AiServiceHealthMonitor : IWatchdogHoldOff
 {
     private readonly IContainerController _controller;
     private readonly IAiServiceProbe _probe;
@@ -25,6 +26,7 @@ public sealed class AiServiceHealthMonitor
 
     private readonly ConcurrentDictionary<string, ServiceRecord> _records = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _single = new(1, 1);
+    private readonly ConcurrentDictionary<string, int> _heldOff = new(StringComparer.OrdinalIgnoreCase);
 
     public AiServiceHealthMonitor(
         IContainerController controller,
@@ -72,6 +74,12 @@ public sealed class AiServiceHealthMonitor
         if (!_gateMap.Contains(service.Name))
         {
             _log.LogDebug("Service {Service} is unmanaged; ignoring failure: {Reason}", service.Name, reason);
+            return;
+        }
+
+        if (_heldOff.TryGetValue(service.Name, out var holds) && holds > 0)
+        {
+            _log.LogDebug("Service {Service} is held off; ignoring failure: {Reason}", service.Name, reason);
             return;
         }
 
@@ -129,6 +137,26 @@ public sealed class AiServiceHealthMonitor
         if (_records.TryGetValue(service.Name, out var record))
         {
             lock (record.Sync) record.Failures = 0;
+        }
+    }
+
+    /// <summary>Holds are counted per service, so overlapping holds release only their own.</summary>
+    public IDisposable HoldOff(IReadOnlyCollection<string> services)
+    {
+        foreach (var name in services)
+            _heldOff.AddOrUpdate(name, 1, static (_, n) => n + 1);
+        return new HoldOffRelease(_heldOff, services);
+    }
+
+    private sealed class HoldOffRelease(ConcurrentDictionary<string, int> heldOff, IReadOnlyCollection<string> services) : IDisposable
+    {
+        private int _disposed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
+            foreach (var name in services)
+                heldOff.AddOrUpdate(name, 0, static (_, n) => Math.Max(0, n - 1));
         }
     }
 

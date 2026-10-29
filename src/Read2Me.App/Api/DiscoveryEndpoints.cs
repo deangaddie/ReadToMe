@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Read2Me.App.Characters;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services;
@@ -38,12 +39,15 @@ namespace Read2Me.App.Api
 
         private static async Task<IResult> DiscoverAsync(
             string folder, bool? thinking, IFileSystem fs, CharacterDiscoveryService discovery,
-            ICharacterReader reader, CancellationToken ct)
+            ICharacterReader reader, DiscoveryRuns runs, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
 
-            var outcome = await discovery.DiscoverAsync(folderId, thinking ?? false, ct);
+            DiscoveryOutcome outcome;
+            // Counted while it runs, so the Setup check's Full check refuses to start meanwhile.
+            using (runs.Begin())
+                outcome = await discovery.DiscoverAsync(folderId, thinking ?? false, ct);
             if (outcome.Status == DiscoveryStatus.NoLlmConfigured)
                 return Results.Problem(outcome.Reason ?? "No active LLM server configured.",
                     statusCode: StatusCodes.Status422UnprocessableEntity);

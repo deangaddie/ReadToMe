@@ -1,3 +1,4 @@
+using Read2Me.App.Services.SetupCheck;
 using Read2Me.Services.Audio;
 using Read2Me.Services.BookEdits;
 using Read2Me.Services.Characters;
@@ -219,6 +220,13 @@ public sealed record BookEditRowDto(
     public static BookEditRowDto From(ProposedEdit p) =>
         new(p.Kind.ToString(), p.Id, p.DisplayPath, p.OldValue, p.NewValue, p.Status.ToString(), p.FailureReason);
 }
+
+/// <summary>
+/// <c>kind</c>: progress | done — the Setup check's Full check, sent to every client (group <c>global</c>)
+/// so the page, the app-bar shield and every tab read one source. Each carries the whole report: the
+/// rows (the current step's are Checking) and <c>fullRun</c>; <c>done</c> carries the final one.
+/// </summary>
+public sealed record SetupCheckMessage(string Kind, SetupCheckReport Report);
 
 /// <summary>Everything a project group member needs on join: current revision plus full status maps.</summary>
 public sealed record ProjectSnapshot(

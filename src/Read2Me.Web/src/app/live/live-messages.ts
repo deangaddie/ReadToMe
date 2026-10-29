@@ -13,6 +13,7 @@ import {
   HistoryStep,
   NodeStatusSummaryDto,
   QueueItemStatus,
+  SetupCheckReport,
 } from '@app/api';
 
 // ---- families (ILiveClient.cs [HubMethodName]) --------------------------------------------------
@@ -34,6 +35,7 @@ export const LIVE_FAMILIES = [
   'bookEdit',
   'llmTest',
   'history',
+  'setupCheck',
 ] as const;
 
 export type LiveFamily = (typeof LIVE_FAMILIES)[number];
@@ -79,6 +81,7 @@ export const LIVE_KINDS = {
   llmTest: ['done', 'failed', 'cancelled'],
   history: ['stepLanded', 'stepChanged', 'stepClosed', 'busyChanged', 'restoring'],
   preflight: ['stage', 'done'],
+  setupCheck: ['progress', 'done'],
 } as const;
 
 export type AssemblyKind = (typeof LIVE_KINDS.assembly)[number];
@@ -90,6 +93,7 @@ export type BookEditKind = (typeof LIVE_KINDS.bookEdit)[number];
 export type LlmTestKind = (typeof LIVE_KINDS.llmTest)[number];
 export type HistoryKind = (typeof LIVE_KINDS.history)[number];
 export type PreflightKind = (typeof LIVE_KINDS.preflight)[number];
+export type SetupCheckKind = (typeof LIVE_KINDS.setupCheck)[number];
 
 // ---- queue (group global, debounced) ------------------------------------------------------------
 
@@ -506,6 +510,18 @@ type NullableHistoryField =
 export type LiveHistoryStep = Omit<HistoryStep, NullableHistoryField> &
   Partial<Pick<HistoryStep, NullableHistoryField>>;
 
+// ---- setupCheck (group global) -----------------------------------------------------------------
+
+/**
+ * The Setup check's Full check, sent to every client so the page, the app-bar shield and every tab
+ * read one source. Each carries the whole report (the current step's rows read `checking`, and
+ * `fullRun` says where the run is); `done` carries the final one, with `fullRun` null.
+ */
+export interface SetupCheckMessage {
+  kind: SetupCheckKind;
+  report: SetupCheckReport;
+}
+
 // ---- snapshots ----------------------------------------------------------------------------------
 
 /** Answer to `JoinProject` and one entry of {@link LiveSnapshot.projects}. */
@@ -548,4 +564,5 @@ export interface LiveMessageMap {
   bookEdit: BookEditMessage;
   llmTest: LlmTestMessage;
   history: HistoryMessage;
+  setupCheck: SetupCheckMessage;
 }

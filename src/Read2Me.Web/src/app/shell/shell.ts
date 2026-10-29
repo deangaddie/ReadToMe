@@ -13,7 +13,7 @@ import { SetupCheckStore } from '@app/setup-check/setup-check-store';
 import { SETUP_CHECK_PATH, failedLabel } from '@app/setup-check/surfacing';
 import { type SchemePreference, ThemeService } from '@app/theme/theme.service';
 import type { IconName } from '@app/ui/icons';
-import { icon } from '@app/ui/partials';
+import { icon, spinner } from '@app/ui/partials';
 import { type GuideEntry, ProjectGuide } from './project-guide';
 import { RailState } from './rail-state';
 import { GLOBAL_NAV_ITEMS, type NavItem, contextNavItems, isActive } from './shell-nav';
@@ -407,7 +407,10 @@ export class AppShell extends R2mElement {
     </div>`;
   }
 
-  /** The app-bar shield: always shown, linking to the Setup check; red with a count when something failed. */
+  /**
+   * The app-bar shield: always shown, linking to the Setup check; red with a count when something
+   * failed, a spinner with "Full check n/N" while a Full check runs.
+   */
   private setupShield() {
     const shield = this.setupCheck.shield();
     return html`<a
@@ -415,7 +418,7 @@ export class AppShell extends R2mElement {
       href=${SETUP_CHECK_PATH}
       aria-label=${shield.label}
       data-tooltip=${shield.label}
-      >${icon('health_and_safety')}${
+      >${shield.status === 'busy' ? spinner(20) : icon('health_and_safety')}${
         shield.failed > 0
           ? html`<span class="shell__setup-shield-count" aria-hidden="true">${shield.failed}</span>`
           : nothing

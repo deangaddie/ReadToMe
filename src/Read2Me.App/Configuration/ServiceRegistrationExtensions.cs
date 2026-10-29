@@ -2,10 +2,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 using Read2Me.App.Api;
 using Read2Me.App.Audio;
 using Read2Me.App.Characters;
+using Read2Me.App.Live;
 using Read2Me.App.Queueing;
 using Read2Me.App.Services.Preflight;
 using Read2Me.App.Services.SetupCheck;
@@ -286,6 +288,10 @@ public static class ServiceRegistrationExtensions
     /// <summary>The Setup check runner (it shares the watchdog's process runner) and its start-up Quick check.</summary>
     public static IServiceCollection AddSetupCheck(this IServiceCollection services)
     {
+        services.AddSingleton<SetupCheckBusy>();
+        services.AddSingleton<DiscoveryRuns>();
+        services.AddSingleton<IFfmpegEncodeCheck, FfmpegEncodeCheck>();
+        services.AddSingleton<IWatchdogHoldOff>(sp => sp.GetRequiredService<AiServiceHealthMonitor>());
         services.AddSingleton<ISetupCheckRunner>(sp => new SetupCheckRunner(
             sp.GetRequiredService<IConfiguration>(),
             sp.GetRequiredService<IHostEnvironment>().ContentRootPath,
@@ -299,7 +305,29 @@ public static class ServiceRegistrationExtensions
                 sp.GetRequiredService<ObservedAiServiceControl>(),
                 sp.GetRequiredService<DockerAiServiceRegistry>(),
                 sp.GetRequiredService<IHttpClientFactory>(),
-                sp.GetRequiredService<IOptions<AiWatchdogOptions>>())));
+                sp.GetRequiredService<IOptions<AiWatchdogOptions>>()),
+            new FullCheckServices(
+                sp.GetRequiredService<IProcessingGate<QueuedParagraph>>(),
+                sp.GetRequiredService<IProcessingGate<QueuedAudioItem>>(),
+                // Read as a run is asked for, never at start: in no-Workspace mode these are never built.
+                new InFlightWork(
+                    () =>
+                    {
+                        var audio = sp.GetRequiredService<AudioQueueService>().Snapshot();
+                        return audio.QueuedCount + audio.ProcessingCount;
+                    },
+                    () =>
+                    {
+                        var characters = sp.GetRequiredService<CharacterQueueService>().Snapshot();
+                        return characters.QueuedCount + characters.ProcessingCount;
+                    },
+                    () => sp.GetRequiredService<VoiceBatchRunner>().IsRunning,
+                    () => sp.GetRequiredService<DiscoveryRuns>().Running,
+                    () => sp.GetRequiredService<AudiobookAssemblyService>().IsRunning),
+                sp.GetRequiredService<SetupCheckBusy>(),
+                sp.GetRequiredService<IWatchdogHoldOff>(),
+                sp.GetRequiredService<IFfmpegEncodeCheck>(),
+                sp.GetRequiredService<IHubContext<LiveHub, ILiveClient>>())));
         services.AddHostedService<SetupCheckAtStart>();
         return services;
     }

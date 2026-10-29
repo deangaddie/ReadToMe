@@ -10,6 +10,28 @@
   .setup-check__summary {
     font-size: var(--r2m-text-sm);
   }
+  .setup-check__strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--r2m-space-2);
+    margin-top: var(--r2m-space-3);
+    padding: var(--r2m-space-2) var(--r2m-space-3);
+    border-radius: var(--r2m-radius-sm);
+    background: var(--r2m-status-busy-soft);
+    color: var(--r2m-text);
+    font-size: var(--r2m-text-sm);
+
+    & > .r2m-spinner {
+      color: var(--r2m-status-busy);
+    }
+    & > progress {
+      flex: 1 0 100%;
+      width: 100%;
+      height: 4px;
+      accent-color: var(--r2m-status-busy);
+    }
+  }
   .setup-check__table {
     width: 100%;
     border-collapse: collapse;

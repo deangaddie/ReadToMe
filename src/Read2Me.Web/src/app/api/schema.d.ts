@@ -6300,7 +6300,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** What must happen before the task may run: { ready, toStart: [{ name, status }], conflicts: [{ name, reason }] }. ready = nothing to do. 400 for an unknown task kind (CharacterAttribution, AudioGeneration, VoicePromptGeneration, CharacterDiscovery, VoiceDesignAudio, Transcription, BookEdit). */
+        /** What must happen before the task may run: { ready, toStart: [{ name, status }], conflicts: [{ name, reason }] }. ready = nothing to do. 409 "Setup check running" while the Setup check's Full check runs. 400 for an unknown task kind (CharacterAttribution, AudioGeneration, VoicePromptGeneration, CharacterDiscovery, VoiceDesignAudio, Transcription, BookEdit). */
         post: {
             parameters: {
                 query?: never;
@@ -6336,7 +6336,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Plan again and carry it out in the background (202 { run }): conflicts stopped, then required services started one at a time. Progress goes to the connectionId in the body as preflight { kind: stage, run, name, stage, error? } then { kind: done, run, ok, reason? }. */
+        /** Plan again and carry it out in the background (202 { run }): conflicts stopped, then required services started one at a time. Progress goes to the connectionId in the body as preflight { kind: stage, run, name, stage, error? } then { kind: done, run, ok, reason? }. 409 while the Setup check's Full check runs. */
         post: {
             parameters: {
                 query?: never;
@@ -6412,7 +6412,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Run the Quick check (Workspace, ffmpeg, docker CLI) and answer the new report. It never starts, stops or switches anything; it creates the Workspace folder when missing. */
+        /** Run the Quick check (Workspace, ffmpeg, docker CLI) and answer the new report. It never starts, stops or switches anything; it creates the Workspace folder when missing. While a Full check runs it answers the run's report instead. */
         post: {
             parameters: {
                 query?: never;
@@ -6429,6 +6429,96 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["SetupCheckReport"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup-check/full": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start the Full check in the background, or join the run already going (one per host): 202 with the report, whose fullRun { step, total, lane: local|cpu|gpu, label, cancelling } shows the run. While it runs every queue waits and Preflight refuses new AI tasks with "Setup check running". Progress and the final report go to every live hub client as setupCheck { kind: progress|done, report }. 409 naming the work in flight while the Audio or Character queue holds items, or a voice batch, discovery or assembly runs. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SetupCheckReport"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup-check/full/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel the Full check: it stops once the current step ends, and the checks it hadn't reached read Not run. 202 with the report (fullRun.cancelling true); 409 when none is running. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SetupCheckReport"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
                     };
                 };
             };
@@ -6863,6 +6953,8 @@ export interface components {
         };
         /** @enum {unknown} */
         SetupCheckGroup: "workspaceAndTools" | "aiConfigs" | "dockerServices";
+        /** @enum {unknown} */
+        SetupCheckLane: "local" | "cpu" | "gpu";
         SetupCheckReport: {
             rows: components["schemas"]["SetupCheckRow"][];
             /** Format: date-time */
@@ -6873,6 +6965,12 @@ export interface components {
             /** Format: date-time */
             startedAt: string;
             noWorkspace: boolean;
+            fullRun?: null | components["schemas"]["SetupFullRun"];
+            /**
+             * Format: int32
+             * @default 0
+             */
+            fullCheckEstimateSeconds: number | string;
         };
         /** @enum {unknown} */
         SetupCheckResult: "passed" | "failed" | "notConfirmed" | "notRun" | "notUsed" | "checking";
@@ -6894,6 +6992,15 @@ export interface components {
             text: string;
             link?: null | components["schemas"]["SetupSettingsLink"];
             copy?: null | string;
+        };
+        SetupFullRun: {
+            /** Format: int32 */
+            step: number | string;
+            /** Format: int32 */
+            total: number | string;
+            lane: components["schemas"]["SetupCheckLane"];
+            label: string;
+            cancelling: boolean;
         };
         SetupSettingsLink: {
             path: string;

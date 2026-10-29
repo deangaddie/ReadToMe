@@ -28,6 +28,7 @@ public sealed class E2eAppFixture : IAsyncLifetime
     public FakeAiServiceControl FakeControl { get; } = new();
     public FakeAudiobookEncoder Encoder { get; } = new();
     public FakeFfmpegProber Ffmpeg { get; } = new();
+    public FakeFfmpegEncode FfmpegEncode { get; } = new();
     public string WorkspaceDir { get; private set; } = "";
     public string WebRootDir { get; private set; } = "";
     public string BaseUrl { get; private set; } = "";
@@ -103,6 +104,7 @@ public sealed class E2eAppFixture : IAsyncLifetime
                 s.AddSingleton<Read2Me.Services.Health.IAiServiceControl>(FakeControl);
                 s.AddSingleton<IAudioNormalizer, PassThroughAudioNormalizer>();
                 s.AddSingleton<IFfmpegProber>(Ffmpeg);
+                s.AddSingleton<IFfmpegEncodeCheck>(FfmpegEncode);
                 s.AddSingleton<Read2Me.Services.Audio.Assembly.IAudiobookEncoder>(Encoder);
                 // Voice-editor previews expire on this clock, so a test can age them without waiting.
                 s.AddSingleton<IPreviewStore>(new PreviewStore(Clock));

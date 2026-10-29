@@ -1,4 +1,5 @@
 using Read2Me.App.Characters;
+using Read2Me.App.Services.SetupCheck;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Assembly;
 using Read2Me.Services.BookEdits;
@@ -142,6 +143,10 @@ public static class LiveMessageMapper
 
     public static PreflightMessage PreflightDone(string run, bool ok, string? reason = null) =>
         new PreflightMessage("done", run, Ok: ok, Reason: reason);
+
+    public static SetupCheckMessage SetupCheckProgress(SetupCheckReport report) => new SetupCheckMessage("progress", report);
+
+    public static SetupCheckMessage SetupCheckDone(SetupCheckReport report) => new SetupCheckMessage("done", report);
 
     public static LlmTestMessage LlmTestDone(int configId) => new LlmTestMessage("done", configId);
 
