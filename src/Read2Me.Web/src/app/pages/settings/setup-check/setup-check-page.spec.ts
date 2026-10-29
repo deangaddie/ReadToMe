@@ -55,6 +55,36 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
         note: null,
         fix: { text: 'Install Docker Desktop.', link: null, copy: 'docker --version' },
       },
+      {
+        id: 'llm',
+        group: 'aiConfigs',
+        name: 'LLM',
+        tier: 'quick',
+        result: 'passed',
+        expected: 'An active config with a parseable base URL',
+        found: 'Qwen · http://localhost:8080 · qwen-28b',
+        note: null,
+        fix: {
+          text: 'Change it in Settings → LLM.',
+          link: { path: 'settings/llm', label: 'Settings → LLM' },
+          copy: null,
+        },
+      },
+      {
+        id: 'container-llama',
+        group: 'dockerServices',
+        name: 'read2me-llama',
+        tier: 'quick',
+        result: 'notConfirmed',
+        expected: 'read2me-llama running and answering at http://localhost:8080',
+        found: 'Stopped',
+        note: null,
+        fix: {
+          text: "The Quick check doesn't start containers: run the Full check to confirm it.",
+          link: null,
+          copy: null,
+        },
+      },
     ],
   };
 }
@@ -112,14 +142,15 @@ describe('r2m-setup-check-page', () => {
     expect(
       Array.from(page.querySelectorAll('thead th')).map((th) => th.textContent?.trim()),
     ).toEqual(['Check', 'Result', 'Expected', 'Found', 'Fix']);
-    expect(page.querySelector('.setup-check__group')?.textContent?.trim()).toBe(
-      'Workspace and tools',
-    );
+    expect(
+      Array.from(page.querySelectorAll('.setup-check__group')).map((g) => g.textContent?.trim()),
+    ).toEqual(['Workspace and tools', 'AI configs', 'Docker services']);
     expect(
       Array.from(page.querySelectorAll('.setup-check__row')).map((r) =>
         r.getAttribute('data-check'),
       ),
-    ).toEqual(['workspace', 'ffmpeg', 'docker']);
+    ).toEqual(['workspace', 'ffmpeg', 'docker', 'llm', 'container-llama']);
+    expect(rowOf(page, 'container-llama')?.textContent).toContain('run the Full check');
     const ffmpeg = rowOf(page, 'ffmpeg');
     expect(ffmpeg?.classList.contains('setup-check__row--failed')).toBe(true);
     expect(ffmpeg?.querySelector('.r2m-status-chip')?.textContent).toContain('Failed');
@@ -145,7 +176,7 @@ describe('r2m-setup-check-page', () => {
   it('Run Quick check refreshes the rows and the summary time', async () => {
     const page = await mount();
     const before = page.querySelector('[data-role=summary]')?.textContent;
-    expect(before).toContain('1 failed · 2 passed');
+    expect(before).toContain('1 failed · 3 passed · 1 not confirmed');
 
     quickAnswer = report(LATER, 'passed');
     page.querySelector<HTMLButtonElement>('[data-action=run-quick]')?.click();
@@ -153,7 +184,7 @@ describe('r2m-setup-check-page', () => {
 
     expect(calls).toEqual(['report', 'quick', 'quick']);
     const after = page.querySelector('[data-role=summary]')?.textContent;
-    expect(after).toContain('3 passed');
+    expect(after).toContain('4 passed · 1 not confirmed');
     expect(after).not.toBe(before);
     expect(rowOf(page, 'ffmpeg')?.getAttribute('data-result')).toBe('passed');
   });

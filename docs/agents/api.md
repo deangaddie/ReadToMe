@@ -123,11 +123,22 @@ curl -s -X POST http://localhost:5000/api/setup-check/quick
 #     quickCheckedAt, fullCheckedAt }
 ```
 
-`id` is `workspace`, `ffmpeg` or `docker`; `group` `workspaceAndTools | aiConfigs | dockerServices`;
-`tier` `quick | full`; `result` `passed | failed | notConfirmed | notRun | notUsed` (`checking` while a run
-is on the row). A `note` never changes the result (the ffmpeg row notes an appsettings `Ffmpeg:Path` that
-differs from the Settings value the app uses). `fix.link.path` is the web app's Settings page that owns
-the value (`settings/audio`); `fix.copy` is a command or file path for things outside the app.
+`id` is `workspace`, `ffmpeg` or `docker` (Workspace and tools); `llm`, `attribution-chain`,
+`paragraph-tts`, `voice-design`, `transcription` or `similarity` (AI configs); or `container-<service>`
+per compose service, e.g. `container-llama` (Docker services). `group` is
+`workspaceAndTools | aiConfigs | dockerServices`; `tier` `quick | full`; `result`
+`passed | failed | notConfirmed | notRun | notUsed` (`checking` while a run is on the row). A `note` never
+changes the result: an appsettings `Ffmpeg:Path` that differs from the Settings value, no transcription or
+similarity config ("audio is generated without an accuracy score"), a URL the app doesn't manage, or
+`AiWatchdog:Enabled = false` on the container rows. `fix.link.path` is the web app's Settings page that
+owns the value (`settings/audio`, `settings/llm`, …); `fix.copy` is a command or file path for things
+outside the app (`docker compose up -d llama`, `Infra/llama/config/models.ini`).
+
+The AI configs rows judge each active config's base URL, and probe only a URL the app doesn't manage. A
+container row reads its Managed service status: Stopped is `notConfirmed` (the Full check confirms it),
+NotFound, Down or running-but-not-answering is `failed`, and a container no active config uses is
+`notUsed`. A running llama must list every `Model` in the attribution chain and the active LLM config,
+and a running audiocpp every active TTS and voice-design `ModelId` (`GET /v1/models`; nothing is loaded).
 
 ## 1. Create a project and import the book
 

@@ -292,7 +292,14 @@ public static class ServiceRegistrationExtensions
             sp.GetRequiredService<IDbContextFactory<Read2MeDbContext>>(),
             sp.GetRequiredService<IFfmpegProber>(),
             sp.GetRequiredService<IProcessRunner>(),
-            sp.GetRequiredService<WorkspaceStart>()));
+            sp.GetRequiredService<WorkspaceStart>(),
+            // The observed control, so each status the check reads also refreshes the live status chips.
+            new SetupCheckServices(
+                sp.GetRequiredService<IServiceScopeFactory>(),
+                sp.GetRequiredService<ObservedAiServiceControl>(),
+                sp.GetRequiredService<DockerAiServiceRegistry>(),
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<IOptions<AiWatchdogOptions>>())));
         services.AddHostedService<SetupCheckAtStart>();
         return services;
     }

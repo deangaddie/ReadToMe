@@ -13,11 +13,21 @@ namespace Read2Me.App.Services.SetupCheck
         public const string Workspace = "workspace";
         public const string Ffmpeg = "ffmpeg";
         public const string Docker = "docker";
+        public const string Llm = "llm";
+        public const string AttributionChain = "attribution-chain";
+        public const string ParagraphTts = "paragraph-tts";
+        public const string VoiceDesign = "voice-design";
+        public const string Transcription = "transcription";
+        public const string Similarity = "similarity";
+
+        /// <summary>A Docker services row, by the container's compose service name.</summary>
+        public static string Container(string service) => $"container-{service}";
     }
 
     /// <summary>
-    /// The host's one <see cref="ISetupCheckRunner"/>. The Quick check covers the Workspace, ffmpeg
-    /// and the docker CLI; one Quick check runs at a time and each replaces the whole report.
+    /// The host's one <see cref="ISetupCheckRunner"/>. The Quick check covers the Workspace, ffmpeg,
+    /// the docker CLI, the active AI configs and the docker AI services; one Quick check runs at a
+    /// time and each replaces the whole report.
     /// </summary>
     public sealed class SetupCheckRunner(
         IConfiguration configuration,
@@ -26,6 +36,7 @@ namespace Read2Me.App.Services.SetupCheck
         IFfmpegProber ffmpegProber,
         IProcessRunner processes,
         WorkspaceStart workspaceStart,
+        SetupCheckServices aiServices,
         TimeProvider? clock = null) : ISetupCheckRunner
     {
         private static readonly TimeSpan ProcessTimeout = TimeSpan.FromSeconds(10);
@@ -41,12 +52,14 @@ namespace Read2Me.App.Services.SetupCheck
             await _quick.WaitAsync(ct);
             try
             {
+                var docker = await CheckDockerAsync(ct);
                 var rows = new List<SetupCheckRow>
                 {
                     CheckWorkspace(),
                     await CheckFfmpegAsync(ct),
-                    await CheckDockerAsync(ct),
+                    docker.Row,
                 };
+                rows.AddRange(await new AiServicesCheck(aiServices).RunAsync(docker.OnPath, ct));
                 _report = _report with { Rows = rows, QuickCheckedAt = _clock.GetUtcNow() };
                 return _report;
             }
@@ -150,17 +163,18 @@ namespace Read2Me.App.Services.SetupCheck
 
         // ── docker CLI ───────────────────────────────────────────────────────
 
-        private async Task<SetupCheckRow> CheckDockerAsync(CancellationToken ct)
+        /// <summary>The docker CLI row, and whether docker is on PATH for the container rows.</summary>
+        private async Task<(SetupCheckRow Row, bool OnPath)> CheckDockerAsync(CancellationToken ct)
         {
             var fix = new SetupFixHint(
                 "Install Docker Desktop so docker is on PATH, then restart the app.", Copy: "docker --version");
             var run = await VersionAsync("docker", "--version", ct);
-            return new SetupCheckRow(
+            return (new SetupCheckRow(
                 SetupCheckIds.Docker, SetupCheckGroup.WorkspaceAndTools, "docker CLI", SetupCheckTier.Quick,
                 run.Ok ? SetupCheckResult.Passed : SetupCheckResult.Failed,
                 "docker on PATH",
                 run.Launched ? run.Banner : "docker isn't on PATH",
-                null, fix);
+                null, fix), run.Launched);
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────
