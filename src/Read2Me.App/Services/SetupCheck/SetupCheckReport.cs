@@ -44,6 +44,9 @@ namespace Read2Me.App.Services.SetupCheck
     /// <summary>
     /// One check: what the app expected and what it found. A <see cref="Note"/> never changes the
     /// result. Every row carries a fix hint; the page shows it only for rows that aren't Passed or Not used.
+    /// <see cref="Managed"/>: the app can start and restart what the row checks — a docker AI service,
+    /// or a config whose every URL is one. False for the Workspace and tools, and for a config on a
+    /// URL the app doesn't manage.
     /// </summary>
     public sealed record SetupCheckRow(
         string Id,
@@ -54,7 +57,8 @@ namespace Read2Me.App.Services.SetupCheck
         string Expected,
         string Found,
         string? Note,
-        SetupFixHint Fix);
+        SetupFixHint Fix,
+        bool Managed);
 
     /// <summary>The Setup check report: the rows in table order and when each tier last ran (null: not yet).</summary>
     public sealed record SetupCheckReport(

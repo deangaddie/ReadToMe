@@ -1402,7 +1402,10 @@ export interface SetupFixHint {
   copy: string | null;
 }
 
-/** One check: what the app expected and what it found. A note never changes the result. */
+/**
+ * One check: what the app expected and what it found. A note never changes the result. `managed`:
+ * the app can start and restart what the row checks (a docker AI service, or a config on one).
+ */
 export interface SetupCheckRow {
   id: string;
   group: SetupCheckGroup;
@@ -1413,6 +1416,7 @@ export interface SetupCheckRow {
   found: string;
   note: string | null;
   fix: SetupFixHint;
+  managed: boolean;
 }
 
 /** `GET /api/setup-check`: the rows in table order and when each tier last ran (null: not yet). */

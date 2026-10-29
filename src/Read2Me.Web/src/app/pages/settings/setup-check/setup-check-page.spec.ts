@@ -23,6 +23,7 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
         expected: 'An absolute, writable folder (Workspace:FolderPath)',
         found: 'D:\\WS',
         note: "The folder didn't exist, so the app created it.",
+        managed: false,
         fix: {
           text: 'Set Workspace:FolderPath, then restart the app.',
           link: null,
@@ -38,6 +39,7 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
         expected: 'ffmpeg -version and ffprobe -version from PATH',
         found: 'ffmpeg: The system cannot find the file specified.',
         note: null,
+        managed: false,
         fix: {
           text: 'Set the ffmpeg path to an ffmpeg with ffprobe beside it.',
           link: { path: 'settings/audio', label: 'Settings → Audio processing' },
@@ -53,6 +55,7 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
         expected: 'docker on PATH',
         found: 'Docker version 28.4.0',
         note: null,
+        managed: false,
         fix: { text: 'Install Docker Desktop.', link: null, copy: 'docker --version' },
       },
       {
@@ -64,6 +67,7 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
         expected: 'An active config with a parseable base URL',
         found: 'Qwen · http://localhost:8080 · qwen-28b',
         note: null,
+        managed: true,
         fix: {
           text: 'Change it in Settings → LLM.',
           link: { path: 'settings/llm', label: 'Settings → LLM' },
@@ -79,6 +83,7 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
         expected: 'read2me-llama running and answering at http://localhost:8080',
         found: 'Stopped',
         note: null,
+        managed: true,
         fix: {
           text: "The Quick check doesn't start containers: run the Full check to confirm it.",
           link: null,

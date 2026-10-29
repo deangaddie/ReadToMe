@@ -119,7 +119,7 @@ stops or switches anything; the one thing it writes is the Workspace folder, cre
 
 ```bash
 curl -s -X POST http://localhost:5000/api/setup-check/quick
-# → { rows: [{ id, group, name, tier, result, expected, found, note, fix: { text, link: { path, label }?, copy? } }],
+# → { rows: [{ id, group, name, tier, result, expected, found, note, fix: { text, link: { path, label }?, copy? }, managed }],
 #     quickCheckedAt, fullCheckedAt }
 ```
 
@@ -134,9 +134,12 @@ similarity config ("audio is generated without an accuracy score"), a URL the ap
 owns the value (`settings/audio`, `settings/llm`, …); `fix.copy` is a command or file path for things
 outside the app (`docker compose up -d llama`, `Infra/llama/config/models.ini`).
 
-The AI configs rows judge each active config's base URL, and probe only a URL the app doesn't manage. A
+The AI configs rows judge each active config's base URL, and probe only a URL the app doesn't manage
+(`GET /v1/models` for LLM, TTS and voice-design configs; any HTTP answer for the others). `managed` is
+true on the container rows and on a config row whose every URL is a container the app manages. A
 container row reads its Managed service status: Stopped is `notConfirmed` (the Full check confirms it),
-NotFound, Down or running-but-not-answering is `failed`, and a container no active config uses is
+NotFound, Down, or running with nothing answering its health URL is `failed`; one whose health URL
+answers an HTTP error (llama's 503 while it loads a model) is `notConfirmed`; a container no active config uses is
 `notUsed`. A running llama must list every `Model` in the attribution chain and the active LLM config,
 and a running audiocpp every active TTS and voice-design `ModelId` (`GET /v1/models`; nothing is loaded).
 
