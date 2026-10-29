@@ -6,6 +6,7 @@ import { override, resetServices, use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import type { NextStep } from '@app/pages/project/next-step';
 import type { StepRunner } from '@app/pages/project/step-runner';
+import { SetupCheckStore } from '@app/setup-check/setup-check-store';
 import { ProjectGuide } from '@app/shell/project-guide';
 import { ProjectTitles } from '@app/shell/project-titles';
 import { ThemeService } from '@app/theme/theme.service';
@@ -295,6 +296,91 @@ describe('app-root', () => {
   });
 });
 
+describe('Setup check surfacing', () => {
+  const STARTED = '2026-10-29T09:00:00Z';
+
+  /** The host's report as `main.ts` loads it before the router starts. */
+  async function loadReport(failed: number, firstRun = false) {
+    const rows = Array.from({ length: failed + 1 }, (_, i) => ({
+      id: `check-${i}`,
+      group: 'workspaceAndTools',
+      name: `Check ${i}`,
+      tier: 'quick',
+      result: i < failed ? 'failed' : 'passed',
+      expected: 'e',
+      found: 'f',
+      note: null,
+      fix: { text: 'Fix it.', link: null, copy: null },
+      managed: false,
+    }));
+    const report = {
+      rows,
+      quickCheckedAt: '2026-10-29T09:00:05Z',
+      fullCheckedAt: null,
+      firstRun,
+      startedAt: STARTED,
+    };
+    // The Setup check page, where the first run lands, runs a Quick check as it opens.
+    new FakeApi()
+      .on('GET', '/api/setup-check', report)
+      .on('POST', '/api/setup-check/quick', report)
+      .install();
+    await use(SetupCheckStore).load();
+  }
+
+  it('shows the banner under the app bar and a red shield with the count when a check failed', async () => {
+    await loadReport(2);
+    const { shell } = await mount('projects');
+
+    const banner = shell.querySelector('.shell__setup-banner');
+    expect(banner?.previousElementSibling?.classList.contains('shell__appbar')).toBe(true);
+    expect(banner?.textContent).toContain('Setup check: 2 failed.');
+    expect(banner?.querySelector('a')?.getAttribute('href')).toBe('settings/setup-check');
+
+    const shield = shell.querySelector('.shell__setup-shield');
+    expect(shield?.classList.contains('shell__setup-shield--error')).toBe(true);
+    expect(shield?.getAttribute('href')).toBe('settings/setup-check');
+    expect(shield?.querySelector('.shell__setup-shield-count')?.textContent).toBe('2');
+  });
+
+  it('shows a green shield and no banner when nothing failed', async () => {
+    await loadReport(0);
+    const { shell } = await mount('projects');
+    expect(shell.querySelector('.shell__setup-banner')).toBeNull();
+    const shield = shell.querySelector('.shell__setup-shield');
+    expect(shield?.classList.contains('shell__setup-shield--ok')).toBe(true);
+    expect(shield?.querySelector('.shell__setup-shield-count')).toBeNull();
+  });
+
+  it('keeps the banner dismissed across a reload of the same host start', async () => {
+    await loadReport(1);
+    const { shell } = await mount('projects');
+    shell.querySelector<HTMLButtonElement>('.shell__setup-banner-dismiss')?.click();
+    await settle();
+    expect(shell.querySelector('.shell__setup-banner')).toBeNull();
+
+    document.body.replaceChildren();
+    resetServices();
+    new FakeLive().install();
+    await loadReport(1);
+    const reloaded = await mount('projects');
+    expect(reloaded.shell.querySelector('.shell__setup-banner')).toBeNull();
+    // The shield still says what failed.
+    expect(reloaded.shell.querySelector('.shell__setup-shield-count')?.textContent).toBe('1');
+  });
+
+  it('lands / on the Setup check on the first run, and on Projects after', async () => {
+    await loadReport(0, true);
+    expect((await mount('')).router.path()).toBe('settings/setup-check');
+
+    document.body.replaceChildren();
+    resetServices();
+    new FakeLive().install();
+    await loadReport(0);
+    expect((await mount('')).router.path()).toBe('projects');
+  });
+});
+
 describe('next-step pill', () => {
   let calls: string[];
   let runner: StepRunner;
@@ -333,14 +419,17 @@ describe('next-step pill', () => {
 
   const pill = (shell: Element) => shell.querySelector('.shell__next');
 
-  it('sits after the spacer, then the History button, then the live dot on a project page', async () => {
+  it('sits after the spacer, then the History button, then the Setup check shield and the live dot on a project page', async () => {
     const { shell } = await mountWith('projects/pride-and-prejudice/book', ACT);
-    const bar = Array.from(shell.querySelector('.shell__appbar')?.children ?? []).map((el) =>
-      el.classList.contains('shell__history-toggle') ? 'shell__history-toggle' : el.classList[0],
+    // The icon buttons share r2m-icon-button as their first class; name them by their own.
+    const named = ['shell__history-toggle', 'shell__setup-shield'];
+    const bar = Array.from(shell.querySelector('.shell__appbar')?.children ?? []).map(
+      (el) => named.find((c) => el.classList.contains(c)) ?? el.classList[0],
     );
     expect(bar.indexOf('shell__next')).toBe(bar.indexOf('shell__spacer') + 1);
     expect(bar.indexOf('shell__history-toggle')).toBe(bar.indexOf('shell__next') + 1);
-    expect(bar.indexOf('shell__conn')).toBe(bar.indexOf('shell__history-toggle') + 1);
+    expect(bar.indexOf('shell__setup-shield')).toBe(bar.indexOf('shell__history-toggle') + 1);
+    expect(bar.indexOf('shell__conn')).toBe(bar.indexOf('shell__setup-shield') + 1);
   });
 
   it.each([

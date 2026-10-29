@@ -9,6 +9,8 @@ import { dayLabel, restoreCost, stepTime } from '@app/history/history-rows';
 import { HistorySheetState } from '@app/history/history-sheet-state';
 import { LiveService } from '@app/live/live.service';
 import { shellContext } from '@app/route-meta';
+import { SetupCheckStore } from '@app/setup-check/setup-check-store';
+import { SETUP_CHECK_PATH, failedLabel } from '@app/setup-check/surfacing';
 import { type SchemePreference, ThemeService } from '@app/theme/theme.service';
 import type { IconName } from '@app/ui/icons';
 import { icon } from '@app/ui/partials';
@@ -38,8 +40,9 @@ interface Crumb {
 }
 
 /**
- * Application shell (design §5): app bar with breadcrumbs from the matched route chain, the live
- * connection dot and the theme quick menu; the nav rail with the context group for "here" and the
+ * Application shell (design §5): app bar with breadcrumbs from the matched route chain, the Setup
+ * check shield, the live connection dot and the theme quick menu, with the Setup check's start
+ * banner under it (both read {@link SetupCheckStore}); the nav rail with the context group for "here" and the
  * global group; the main outlet; the activity bar below and the activity drawer beside the content
  * (both read {@link ActivityStore}); on a project's pages, the History button and the History sheet
  * docked beside the content (both read {@link HistorySheetState}). While the project is viewed at a
@@ -56,6 +59,7 @@ export class AppShell extends R2mElement {
   private readonly activity = use(ActivityStore);
   private readonly guide = use(ProjectGuide);
   private readonly historySheet = use(HistorySheetState);
+  private readonly setupCheck = use(SetupCheckStore);
 
   /** The activity drawer (design §5); pills and the ▲ open it through the store. */
   readonly drawerOpen = this.activity.drawerOpen;
@@ -171,7 +175,7 @@ export class AppShell extends R2mElement {
 
         <span class="shell__spacer"></span>
 
-        ${this.nextStepPill()} ${this.historyButton()}
+        ${this.nextStepPill()} ${this.historyButton()} ${this.setupShield()}
 
         <span
           class="shell__conn shell__conn--${connection}"
@@ -206,7 +210,7 @@ export class AppShell extends R2mElement {
         >
       </header>
 
-      ${this.viewingBanner()}
+      ${this.setupBanner()} ${this.viewingBanner()}
 
       <div class="shell__body">
         ${
@@ -362,6 +366,49 @@ export class AppShell extends R2mElement {
         Back to current
       </button>
     </div>`;
+  }
+
+  /**
+   * The start banner (Setup check spec): red, full width under the app bar, on a start where a
+   * check failed. Dismissing it lasts until the host starts again; it clears by itself once
+   * nothing fails.
+   */
+  private setupBanner() {
+    if (!this.setupCheck.bannerVisible()) return nothing;
+    const failed = this.setupCheck.failedCount();
+    return html`<div class="shell__setup-banner" role="alert">
+      ${icon('error')}
+      <span class="shell__setup-banner-text"
+        ><strong>${failedLabel(failed)}.</strong> Some steps will not work until they are
+        fixed.</span
+      >
+      <a class="r2m-button r2m-button--stroked" href=${SETUP_CHECK_PATH}>Open Setup check</a>
+      <button
+        type="button"
+        class="r2m-icon-button shell__setup-banner-dismiss"
+        aria-label="Dismiss"
+        data-tooltip="Dismiss until the app restarts"
+        @click=${() => this.setupCheck.dismissBanner()}
+      >
+        ${icon('close')}
+      </button>
+    </div>`;
+  }
+
+  /** The app-bar shield: always shown, linking to the Setup check; red with a count when something failed. */
+  private setupShield() {
+    const shield = this.setupCheck.shield();
+    return html`<a
+      class="r2m-icon-button shell__setup-shield shell__setup-shield--${shield.status}"
+      href=${SETUP_CHECK_PATH}
+      aria-label=${shield.label}
+      data-tooltip=${shield.label}
+      >${icon('health_and_safety')}${
+        shield.failed > 0
+          ? html`<span class="shell__setup-shield-count" aria-hidden="true">${shield.failed}</span>`
+          : nothing
+      }</a
+    >`;
   }
 
   private historyButton() {

@@ -65,6 +65,18 @@ describe('Router', () => {
     expect(router.match()?.chain.at(-1)?.tag).toBe('x-projects');
   });
 
+  it('asks a redirect function for its target on each navigation', () => {
+    let target = 'projects';
+    const nav = installNavigation('');
+    const router = new Router();
+    router.start([{ path: '', redirectTo: () => target }, ...ROUTES.slice(1)], async () => true);
+    expect(nav.calls.at(-1)?.url).toBe('http://localhost/app/projects');
+
+    target = 'projects/dracula/book';
+    router.navigate('');
+    expect(router.url().pathname).toBe('/app/projects/dracula/book');
+  });
+
   it('fills a redirect with the matched params', () => {
     const { router } = start('projects/dracula');
     expect(router.url().pathname).toBe('/app/projects/dracula/book');

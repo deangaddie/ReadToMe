@@ -1419,9 +1419,15 @@ export interface SetupCheckRow {
   managed: boolean;
 }
 
-/** `GET /api/setup-check`: the rows in table order and when each tier last ran (null: not yet). */
+/**
+ * `GET /api/setup-check`: the rows in table order and when each tier last ran (null: not yet).
+ * `firstRun`: this host start created app.db. `startedAt`: when this host started, which keys the
+ * start banner's dismissal.
+ */
 export interface SetupCheckReport {
   rows: SetupCheckRow[];
   quickCheckedAt: string | null;
   fullCheckedAt: string | null;
+  firstRun: boolean;
+  startedAt: string;
 }

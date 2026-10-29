@@ -43,9 +43,11 @@ namespace Read2Me.App.Services.SetupCheck
 
         private readonly TimeProvider _clock = clock ?? TimeProvider.System;
         private readonly SemaphoreSlim _quick = new(1, 1);
+        private readonly DateTimeOffset _startedAt = (clock ?? TimeProvider.System).GetUtcNow();
         private volatile SetupCheckReport _report = SetupCheckReport.Empty;
 
-        public SetupCheckReport Report => _report;
+        /// <summary>The first-run flag and the start time are this start's, read as the report is.</summary>
+        public SetupCheckReport Report => _report with { FirstRun = workspaceStart.CreatedDatabase, StartedAt = _startedAt };
 
         public async Task<SetupCheckReport> RunQuickCheckAsync(CancellationToken ct)
         {
@@ -61,7 +63,7 @@ namespace Read2Me.App.Services.SetupCheck
                 };
                 rows.AddRange(await new AiServicesCheck(aiServices).RunAsync(docker.OnPath, ct));
                 _report = _report with { Rows = rows, QuickCheckedAt = _clock.GetUtcNow() };
-                return _report;
+                return Report;
             }
             finally
             {

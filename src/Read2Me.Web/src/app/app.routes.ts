@@ -1,6 +1,8 @@
 import type { RouteDef } from '@app/core/router';
 import { use } from '@app/core/services';
 import { PROVIDER_PAGE_TAGS } from '@app/pages/settings/providers/provider-area';
+import { SetupCheckStore } from '@app/setup-check/setup-check-store';
+import { landingPath } from '@app/setup-check/surfacing';
 import { ProjectTitles } from '@app/shell/project-titles';
 
 /** The project crumb and tab title read the loaded project title, the folder name until then. */
@@ -25,7 +27,8 @@ const providerPage = (path: string, title: string, tag: string): RouteDef => ({
  * `guardUnsaved` asks before leaving a page with unsaved edits.
  */
 export const routes: RouteDef[] = [
-  { path: '', redirectTo: 'projects' },
+  // The first run lands on the Setup check (it reads the report main.ts loaded before the router started).
+  { path: '', redirectTo: () => landingPath(use(SetupCheckStore).report()) },
   {
     path: 'projects',
     title: 'Projects',

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Read2Me.App;
+using Read2Me.App.Services.SetupCheck;
 using Read2Me.AppData;
 using Read2Me.E2eTests.Infrastructure.FakeAi;
 using Read2Me.Services.Audio;
@@ -25,6 +26,7 @@ public sealed class E2eAppFixture : IAsyncLifetime
     public FakeAiRoutingHandler FakeAi { get; } = new();
     public FakeAiServiceControl FakeControl { get; } = new();
     public FakeAudiobookEncoder Encoder { get; } = new();
+    public FakeFfmpegProber Ffmpeg { get; } = new();
     public string WorkspaceDir { get; private set; } = "";
     public string WebRootDir { get; private set; } = "";
     public string BaseUrl { get; private set; } = "";
@@ -43,6 +45,22 @@ public sealed class E2eAppFixture : IAsyncLifetime
         WebRootDir = Path.Combine(WorkspaceDir, "wwwroot");
         Directory.CreateDirectory(WebRootDir);
 
+        await StartHostAsync();
+        await WorkspaceSeeder.SeedServiceConfigsAsync(_host!.Services);
+    }
+
+    /// <summary>
+    /// Stops this host and starts a new one on the same workspace and fakes, as restarting the app
+    /// would: the same app.db, migrated again, and nothing seeded again.
+    /// </summary>
+    public async Task RestartAsync()
+    {
+        await StopHostAsync();
+        await StartHostAsync();
+    }
+
+    private async Task StartHostAsync()
+    {
         // Mirrors Program.CreateHostBuilder minus Serilog, plus test overrides.
         // IHostBuilder.ConfigureServices delegates run after Startup.ConfigureServices,
         // so these registrations win.
@@ -62,18 +80,18 @@ public sealed class E2eAppFixture : IAsyncLifetime
                 s.AddSingleton<IHttpClientFactory>(new FakeHttpClientFactory(FakeAi));
                 s.AddSingleton<Read2Me.Services.Health.IAiServiceControl>(FakeControl);
                 s.AddSingleton<IAudioNormalizer, PassThroughAudioNormalizer>();
-                s.AddSingleton<IFfmpegProber, FakeFfmpegProber>();
+                s.AddSingleton<IFfmpegProber>(Ffmpeg);
                 s.AddSingleton<Read2Me.Services.Audio.Assembly.IAudiobookEncoder>(Encoder);
                 // Voice-editor previews expire on this clock, so a test can age them without waiting.
                 s.AddSingleton<IPreviewStore>(new PreviewStore(Clock));
             })
             .Build();
 
-        // Same migration step Program.Main performs before Run().
+        // The migration step Program.Main performs before Run(), which also notes a first run.
         using (var scope = _host.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<Read2MeDbContext>();
-            await db.Database.MigrateAsync();
+            scope.ServiceProvider.GetRequiredService<WorkspaceStart>().MigrateDatabase(db);
             _appDbConnectionString = db.Database.GetConnectionString();
         }
 
@@ -81,8 +99,23 @@ public sealed class E2eAppFixture : IAsyncLifetime
 
         BaseUrl = _host.Services.GetRequiredService<IServer>()
             .Features.Get<IServerAddressesFeature>()!.Addresses.First();
+    }
 
-        await WorkspaceSeeder.SeedServiceConfigsAsync(_host.Services);
+    private async Task StopHostAsync()
+    {
+        if (_host != null)
+        {
+            await _host.StopAsync(TimeSpan.FromSeconds(10));
+            _host.Dispose();
+            _host = null;
+        }
+
+        // Only this host's app.db pool: other classes' hosts are still running.
+        if (_appDbConnectionString != null)
+        {
+            using var connection = new SqliteConnection(_appDbConnectionString);
+            SqliteConnection.ClearPool(connection);
+        }
     }
 
     public Task<TestUtils.BookHierarchyBuilder> SeedProjectAsync(
@@ -175,18 +208,7 @@ public sealed class E2eAppFixture : IAsyncLifetime
 
     public async ValueTask DisposeAsync()
     {
-        if (_host != null)
-        {
-            await _host.StopAsync(TimeSpan.FromSeconds(10));
-            _host.Dispose();
-        }
-
-        // Only this host's app.db pool: other classes' hosts are still running.
-        if (_appDbConnectionString != null)
-        {
-            using var connection = new SqliteConnection(_appDbConnectionString);
-            SqliteConnection.ClearPool(connection);
-        }
+        await StopHostAsync();
         for (var attempt = 0; attempt < 5; attempt++)
         {
             try
