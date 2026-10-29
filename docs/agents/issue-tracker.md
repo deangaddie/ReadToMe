@@ -22,6 +22,11 @@ into an issue.
 - **Close**: `gh issue close <number> --comment "..."`
 - **Specs**: a spec is a parent issue; its implementation tickets are sub-issues of it, one issue per
   ticket. Reference other issues by `#<number>`, never a `.scratch` path.
+- **One PR per issue**: every implementation issue gets its own PR (`Closes #<number>`) and closes
+  when that PR merges, even when it is one ticket of a wider spec. Don't stack several tickets on
+  one branch, and don't leave a built ticket unpushed while starting the next. The rare exception:
+  a ticket that would leave main in a bad state that a later ticket fixes. Avoid slicing work that
+  way unless it is required.
 
 ## History
 

@@ -95,7 +95,7 @@ User imports epub/text → LLM attributes dialog items to Characters → TTS syn
 
 ### Issue tracker
 
-Issues and specs (PRDs) live as GitHub issues on `deangaddie/ReadToMe` (public), driven with `gh`. `.scratch/completed/` and `.scratch/not-implemented/` remain as local-only history. See `docs/agents/issue-tracker.md`.
+Issues and specs (PRDs) live as GitHub issues on `deangaddie/ReadToMe` (public), driven with `gh`. `.scratch/completed/` and `.scratch/not-implemented/` remain as local-only history. Every implementation issue gets its own PR and closes when it merges, even inside a wider spec. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
