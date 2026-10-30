@@ -5,6 +5,7 @@ using Read2Me.App.Queueing;
 using Read2Me.Core.Models;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Queueing;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.App.Characters
@@ -16,7 +17,7 @@ namespace Read2Me.Tests.App.Characters
         [Fact]
         public async Task Worker_ContinuesAfterPerItemFailure()
         {
-            var queue = new CharacterQueueService();
+            var queue = new CharacterQueueService(NeverBusy.Activity());
             var processed = new List<Guid>();
             var tcs = new TaskCompletionSource();
 

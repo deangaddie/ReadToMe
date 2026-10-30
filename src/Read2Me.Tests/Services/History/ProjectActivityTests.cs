@@ -18,7 +18,7 @@ public class ProjectActivityTests
     private readonly FakeBusy _busy = new();
     private readonly ProjectActivity _activity;
 
-    public ProjectActivityTests() => _activity = new ProjectActivity(new RestoringProjects(), () => _busy);
+    public ProjectActivityTests() => _activity = new ProjectActivity(() => _busy);
 
     public enum State { Idle, Busy, Restoring, BusyAndRestoring }
 
@@ -62,7 +62,7 @@ public class ProjectActivityTests
         if (expected == ActivityRefusalKind.Busy)
             Assert.Equal(BusyReason, refusal!.Reason);
         if (expected == ActivityRefusalKind.Restoring)
-            Assert.Equal(RestoringProjects.Reason, refusal!.Reason);
+            Assert.Equal(ProjectActivity.RestoringReason, refusal!.Reason);
     }
 
     [Theory]

@@ -54,12 +54,6 @@ public sealed class VoiceBatchRunner
     public ProjectFolderId? Folder { get; private set; }
 
     public VoiceBatchRunner(
-        ILogger<VoiceBatchRunner> logger,
-        EventBroadcaster<VoiceBatchEvent> batchEvents,
-        EventBroadcaster<LlmStreamEvent> llmEvents)
-        : this(scopeFactory: null!, ProjectActivity.Private(), logger, batchEvents, llmEvents) { }
-
-    public VoiceBatchRunner(
         IServiceScopeFactory scopeFactory,
         ProjectActivity activity,
         ILogger<VoiceBatchRunner> logger,

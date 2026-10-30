@@ -45,7 +45,7 @@ public class BackgroundRunTrackerTests : ProjectDbTestBase
 
         _tracker = new BackgroundRunTracker(
             _queue,
-            new VoiceBatchRunner(NullLogger<VoiceBatchRunner>.Instance, new EventBroadcaster<VoiceBatchEvent>(), new EventBroadcaster<LlmStreamEvent>()),
+            new VoiceBatchRunner(null!, _root.GetRequiredService<ProjectActivity>(), NullLogger<VoiceBatchRunner>.Instance, new EventBroadcaster<VoiceBatchEvent>(), new EventBroadcaster<LlmStreamEvent>()),
             new EventBroadcaster<VoiceBatchEvent>(),
             _root.GetRequiredService<BackgroundRuns>(),
             History,
@@ -226,8 +226,8 @@ public class BackgroundRunTrackerTests : ProjectDbTestBase
         await using var restarted = BuildRestartedRoot();
         var history = restarted.GetRequiredService<ProjectHistory>();
         var tracker = new BackgroundRunTracker(
-            new CharacterQueueService(),
-            new VoiceBatchRunner(NullLogger<VoiceBatchRunner>.Instance, new EventBroadcaster<VoiceBatchEvent>(), new EventBroadcaster<LlmStreamEvent>()),
+            new CharacterQueueService(restarted.GetRequiredService<ProjectActivity>()),
+            new VoiceBatchRunner(null!, restarted.GetRequiredService<ProjectActivity>(), NullLogger<VoiceBatchRunner>.Instance, new EventBroadcaster<VoiceBatchEvent>(), new EventBroadcaster<LlmStreamEvent>()),
             new EventBroadcaster<VoiceBatchEvent>(),
             restarted.GetRequiredService<BackgroundRuns>(),
             history,

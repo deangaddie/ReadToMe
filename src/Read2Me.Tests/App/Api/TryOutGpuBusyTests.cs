@@ -6,6 +6,7 @@ using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.App.Api;
@@ -19,12 +20,21 @@ public class TryOutGpuBusyTests
 {
     private static readonly ProjectFolderId Folder = new("other-book");
 
-    private readonly CharacterQueueService _characters = new();
-    private readonly AudioQueueService _audio = new();
-    private readonly VoiceBatchRunner _voiceBatch = new(
-        NullLogger<VoiceBatchRunner>.Instance,
-        new EventBroadcaster<VoiceBatchEvent>(),
-        new EventBroadcaster<LlmStreamEvent>());
+    private readonly CharacterQueueService _characters;
+    private readonly AudioQueueService _audio;
+    private readonly VoiceBatchRunner _voiceBatch;
+
+    public TryOutGpuBusyTests()
+    {
+        var activity = NeverBusy.Activity();
+        (_characters, _audio) = (new(activity), new(activity));
+        _voiceBatch = new(
+            null!,
+            activity,
+            NullLogger<VoiceBatchRunner>.Instance,
+            new EventBroadcaster<VoiceBatchEvent>(),
+            new EventBroadcaster<LlmStreamEvent>());
+    }
 
     private string? Reason() => PronunciationEndpoints.GpuBusyReason(_characters, _audio, _voiceBatch);
 

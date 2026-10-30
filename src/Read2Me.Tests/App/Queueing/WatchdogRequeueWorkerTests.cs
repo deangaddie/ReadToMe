@@ -4,6 +4,7 @@ using Read2Me.App.Queueing;
 using Read2Me.Core.Models;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Queueing;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.App.Queueing
@@ -17,7 +18,7 @@ namespace Read2Me.Tests.App.Queueing
         [Fact]
         public async Task RequeuedItem_WaitsOnClosedGate_ThenCompletesWhenReopened()
         {
-            var queue = new CharacterQueueService();
+            var queue = new CharacterQueueService(NeverBusy.Activity());
             var gate = new ProcessingGate<QueuedParagraph>();
             var completed = new TaskCompletionSource();
             var attempts = new List<int>(); // Retries budget observed per processing attempt

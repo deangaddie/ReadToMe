@@ -319,7 +319,7 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 
             var response = await plan;
             Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-            Assert.Equal(RestoringProjects.Reason,
+            Assert.Equal(ProjectActivity.RestoringReason,
                 JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
             Assert.Empty(app.Services.GetRequiredService<IBookEditSessionStore>().RemoveAll(folderId));
         }
@@ -351,7 +351,7 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 
             var response = await plan;
             Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-            Assert.Equal(RestoringProjects.Reason,
+            Assert.Equal(ProjectActivity.RestoringReason,
                 JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
             Assert.Empty(app.Services.GetRequiredService<IBookEditSessionStore>().RemoveAll(folderId));
         }

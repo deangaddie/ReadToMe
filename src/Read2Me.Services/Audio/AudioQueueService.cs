@@ -46,9 +46,6 @@ namespace Read2Me.Services.Audio
         // claims the project mid-enqueue then waits in BusyFor and sees the items as busy.
         private readonly object _enqueueLock = new();
 
-        /// <summary>A queue whose projects never restore.</summary>
-        public AudioQueueService() : this(ProjectActivity.Private()) { }
-
         public AudioQueueService(ProjectActivity activity) => _activity = activity;
 
         public event Action? Changed;

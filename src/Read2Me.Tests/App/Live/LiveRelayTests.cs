@@ -17,6 +17,7 @@ using Read2Me.Services.Llm;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.NodeStatus;
 using Read2Me.Services.Queueing;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.App.Live;
@@ -39,13 +40,18 @@ public class LiveRelayTests : IAsyncLifetime
     private readonly EventBroadcaster<HistoryStepEvent> _history = new();
     private readonly EventBroadcaster<RestoreEvent> _restores = new();
     private readonly EventBroadcaster<SettingsChanged> _settings = new();
-    private readonly CharacterQueueService _attribution = new();
-    private readonly AudioQueueService _audio = new();
+    private readonly ProjectActivity _activity = NeverBusy.Activity();
+    private readonly CharacterQueueService _attribution;
+    private readonly AudioQueueService _audio;
     private readonly NodeStatusService _nodes;
     private readonly AudioReviewService _reviews = new();
     private LiveRelay _relay = null!;
 
-    public LiveRelayTests() => _nodes = new NodeStatusService(_attribution);
+    public LiveRelayTests()
+    {
+        (_attribution, _audio) = (new(_activity), new(_activity));
+        _nodes = new NodeStatusService(_attribution);
+    }
 
     public async ValueTask InitializeAsync()
     {
@@ -54,7 +60,7 @@ public class LiveRelayTests : IAsyncLifetime
             new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
             Substitute.For<IAudiobookEncoder>(), _assembly, Substitute.For<IFileSystem>(),
             NullLogger<AudiobookAssemblyService>.Instance);
-        var batchRunner = new VoiceBatchRunner(NullLogger<VoiceBatchRunner>.Instance, _voiceBatch, _llm);
+        var batchRunner = new VoiceBatchRunner(null!, _activity, NullLogger<VoiceBatchRunner>.Instance, _voiceBatch, _llm);
         var throughput = new ThroughputAggregator(_llm, new EventBroadcaster<LlmTimingsSample>());
         var status = new ProjectStatusSource(_nodes, _attribution, _audio, _reviews, new BookRevisionSequence());
 

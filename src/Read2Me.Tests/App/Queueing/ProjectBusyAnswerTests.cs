@@ -6,8 +6,10 @@ using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Assembly;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Events;
+using Read2Me.Services.History;
 using Read2Me.Services.Llm;
 using Read2Me.Services.Queueing;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.App.Queueing;
@@ -22,13 +24,18 @@ public class ProjectBusyAnswerTests
     private static readonly ProjectFolderId Folder = new("test-book");
     private static readonly ProjectFolderId OtherFolder = new("other-book");
 
-    private readonly CharacterQueueService _characters = new();
-    private readonly AudioQueueService _audio = new();
+    private readonly ProjectActivity _activity = NeverBusy.Activity();
+    private readonly CharacterQueueService _characters;
+    private readonly AudioQueueService _audio;
+
+    public ProjectBusyAnswerTests() => (_characters, _audio) = (new(_activity), new(_activity));
 
     private ProjectBusyAnswer Sut() => new(
         _characters,
         _audio,
         new VoiceBatchRunner(
+            null!,
+            _activity,
             NullLogger<VoiceBatchRunner>.Instance,
             new EventBroadcaster<VoiceBatchEvent>(),
             new EventBroadcaster<LlmStreamEvent>()),
