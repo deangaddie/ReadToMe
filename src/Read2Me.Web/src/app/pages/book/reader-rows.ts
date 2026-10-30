@@ -1,5 +1,6 @@
 import type {
   AudioReviewDto,
+  Block,
   ItemVoiceDto,
   NarratorDto,
   ParagraphDto,
@@ -177,13 +178,13 @@ export interface RowContext {
   ancestry: Readonly<Record<string, ChapterParents>>;
   /** What the speaker menus offer; empty until the roster is known. */
   roster: readonly SpeakerRosterEntry[];
-  /** The editor is locked (stale view or a write in flight): every row menu is off (design §8). */
-  locked: boolean;
   /**
-   * A History step is viewed (ticket 32): why every edit control is off, shown as its tooltip
-   * (`locked` is set too); item play is off as well. Null on the current project.
+   * The page's edit gate, `editor.blocked()` (design §8): non-null turns every row write off, with
+   * its **Blocked reason** as the tooltip. A row folds its own busy in with `withLocal`.
    */
-  readOnly: string | null;
+  blocked: Block | null;
+  /** A History step is viewed (ticket 32): item play is off, as takes aren't kept in History. */
+  viewing: boolean;
   /** An audio preflight or enqueue is in flight (ticket 13): the row's Retry waits for it. */
   generating: boolean;
   /** Pronunciation spans per item (pronunciation ticket 15): marked in every mode. */

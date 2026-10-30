@@ -224,8 +224,8 @@ export class BookPage extends R2mElement {
       narratorOnlyMode: this.narratorOnlyMode(),
       ancestry: store.ancestry(),
       roster: this.roster(),
-      locked: editor.locked(),
-      readOnly: editor.readOnly(),
+      blocked: editor.blocked(),
+      viewing: project.readOnly() !== null,
       generating: generator.working(),
       marks: this.marks.marks().byItem,
       litMarks: pronunciations.open() ? pronunciations.lit() : NO_LIT,
@@ -673,8 +673,8 @@ export class BookPage extends R2mElement {
           <span class="book__pause-rule"></span>
           <span class="book__pause-menu"
             >${nodeMenuTrigger(target, {
-              disabled: this.ctx().locked,
-              reason: this.ctx().readOnly,
+              disabled: this.ctx().blocked !== null,
+              reason: this.ctx().blocked?.reason ?? null,
             })}</span
           >
         </div>`;
@@ -693,8 +693,8 @@ export class BookPage extends R2mElement {
       position: heading,
       selection: this.selectionKind(),
       status: this.project.nodes()[id] ?? null,
-      locked: this.ctx().locked,
-      readOnly: this.ctx().readOnly,
+      locked: this.ctx().blocked !== null,
+      readOnly: this.ctx().blocked?.reason ?? null,
     });
     return html`<div class="book__heading-row book__row">
       <div
@@ -1172,8 +1172,8 @@ const EMPTY_CONTEXT: RowContext = {
   narratorOnlyMode: false,
   ancestry: {},
   roster: [],
-  locked: false,
-  readOnly: null,
+  blocked: null,
+  viewing: false,
   generating: false,
   marks: {},
   litMarks: NO_LIT,

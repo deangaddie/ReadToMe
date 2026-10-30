@@ -1,5 +1,11 @@
 import { type TemplateResult, html, nothing } from 'lit-html';
-import { ITEM_AUDIO_NOT_KEPT, type ParagraphItemDto, workspaceUrl } from '@app/api';
+import {
+  type Block,
+  ITEM_AUDIO_NOT_KEPT,
+  type ParagraphItemDto,
+  withLocal,
+  workspaceUrl,
+} from '@app/api';
 import { use } from '@app/core/services';
 import { blockable, icon, statusChip } from '@app/ui/partials';
 import { nodeMenuTrigger, runMenuEntry } from './node-menu';
@@ -39,7 +45,7 @@ export interface ItemHome {
  * Audio: a selection checkbox (off for a line nobody can read yet, ticket 13), the resolved
  * voice, the delivery cue, the review chip (a dismissed review is a faded icon) and the queue
  * chip; a queued item shows a lock. Every item carries its node-menu trigger (ticket 11), off
- * while the item or its paragraph is queued or the editor is locked. Retry/Dismiss and the
+ * while the item or its paragraph is queued or the book is blocked. Retry/Dismiss and the
  * player arrive with native-web 26. Like the paragraph row, the stores are reached from the
  * event's element through `use(X, element)`.
  */
@@ -68,14 +74,14 @@ export function itemRow(
     hasAudio: !!item.audioFileName,
     ...position,
   };
-  const editingBlocked = busy || paragraphBusy || ctx.locked;
-  const cue = deliveryCue(menuTarget, editingBlocked, ctx.readOnly);
+  // The item's menu, its cue and its chip: off while it or its paragraph is queued.
+  const block = withLocal(ctx.blocked, busy || paragraphBusy);
+  const cue = deliveryCue(menuTarget, block);
   // Somebody can read the line, so it may be picked for generation (ticket 13).
   const voiced = isVoicedItem(item, ctx.narratorOnlyMode);
   const selected = ctx.itemSelectable && ctx.selectedItems.has(item.id);
-  // Speakers mode only; a paragraph the queue holds is the server's to stamp, a locked book nobody's.
-  const assignable =
-    ctx.mode === 'speakers' && !paragraphBusy && !busy && !ctx.locked && ctx.roster.length > 0;
+  // Speakers mode only; a paragraph the queue holds is the server's to stamp, a blocked book nobody's.
+  const assignable = ctx.mode === 'speakers' && block === null && ctx.roster.length > 0;
   const classes = [
     'r2m-item',
     speaker.state === 'unknown' ? 'r2m-item--unknown' : '',
@@ -107,28 +113,31 @@ export function itemRow(
             />`
           : nothing
       }
-      <r2m-speaker-chip
-        class="r2m-item__speaker"
-        .compact=${true}
-        .state=${speaker.state}
-        .name=${speaker.name}
-        .characterId=${speaker.characterId}
-        .roster=${assignable ? ctx.roster : undefined}
-        @pick=${chip.pick}
-        @clear=${chip.clear}
-        @create=${chip.create}
-      ></r2m-speaker-chip>
+      ${withReason(
+        block,
+        html`<r2m-speaker-chip
+          class="r2m-item__speaker"
+          .compact=${true}
+          .state=${speaker.state}
+          .name=${speaker.name}
+          .characterId=${speaker.characterId}
+          .roster=${assignable ? ctx.roster : undefined}
+          @pick=${chip.pick}
+          @clear=${chip.clear}
+          @create=${chip.create}
+        ></r2m-speaker-chip>`,
+      )}
       <span class="r2m-item__text" data-item-text=${item.id}
         >${markedText(item.id, item.text ?? '', ctx.marks[item.id], { lit: ctx.litMarks })}</span
       >
       ${busy ? icon('lock', 'r2m-item__lock') : nothing}
       <span class="r2m-item__menu"
-        >${nodeMenuTrigger(menuTarget, { disabled: editingBlocked, reason: ctx.readOnly })}</span
+        >${nodeMenuTrigger(menuTarget, { disabled: block !== null, reason: block?.reason ?? null })}</span
       >
     </div>
     ${
       ctx.mode === 'audio'
-        ? audioLine(item, ctx, voiced, cue)
+        ? audioLine(item, ctx, block, voiced, cue)
         : item.voiceInstructions
           ? html`<div class="r2m-item__cue">${cue}</div>`
           : nothing
@@ -168,7 +177,13 @@ export const chipOf = (view: ChipView) =>
  * busts the browser cache). Retry and Dismiss reach the {@link AudioGenerator} through DOM
  * ancestry.
  */
-function audioLine(item: ParagraphItemDto, ctx: RowContext, voiced: boolean, cue: DeliveryCueView) {
+function audioLine(
+  item: ParagraphItemDto,
+  ctx: RowContext,
+  block: Block | null,
+  voiced: boolean,
+  cue: DeliveryCueView,
+) {
   const review = reviewOf(ctx, item.id);
   const reviewView = reviewChip(review);
   const status = ctx.itemStatus[item.id];
@@ -177,6 +192,8 @@ function audioLine(item: ParagraphItemDto, ctx: RowContext, voiced: boolean, cue
   const outcome = clearableOutcome(status);
   const audioSrc = item.audioFileName ? workspaceUrl(ctx.folder, item.audioFileName) : null;
   const generator = (e: Event) => use(AudioGenerator, e.currentTarget as Element);
+  // Retry also waits for an audio preflight or enqueue in flight.
+  const retryBlock = withLocal(block, ctx.generating);
   return html`<div class="r2m-item__audio">
     <span class="r2m-item__voice" data-testid="voice-line">${voiceLine(ctx.voices[item.id])}</span>
     ${cue}
@@ -192,13 +209,13 @@ function audioLine(item: ParagraphItemDto, ctx: RowContext, voiced: boolean, cue
                 >${reviewView.icon}</span
               >`
             : html`${chipOf(reviewView)}
-              ${blockable(
-                ctx.readOnly,
+              ${withReason(
+                block,
                 html`<button
                   type="button"
                   class="r2m-item__action"
                   data-action="dismiss-review"
-                  ?disabled=${ctx.locked}
+                  ?disabled=${block !== null}
                   @click=${(e: Event) => void generator(e).dismissReview(item.id)}
                 >
                   Dismiss
@@ -209,13 +226,13 @@ function audioLine(item: ParagraphItemDto, ctx: RowContext, voiced: boolean, cue
       ${queue ? chipOf(queue) : nothing}
       ${
         queue && outcome && voiced
-          ? blockable(
-              ctx.readOnly,
+          ? withReason(
+              retryBlock,
               html`<button
                 type="button"
                 class="r2m-item__action"
                 data-action="retry-audio"
-                ?disabled=${ctx.generating || ctx.locked}
+                ?disabled=${retryBlock !== null}
                 @click=${(e: Event) => void generator(e).retry(item.id)}
               >
                 Retry
@@ -224,7 +241,7 @@ function audioLine(item: ParagraphItemDto, ctx: RowContext, voiced: boolean, cue
           : nothing
       }
     </span>
-    ${audioSrc ? itemPlayer(audioSrc, status?.audioVersion, ctx.readOnly !== null) : nothing}
+    ${audioSrc ? itemPlayer(audioSrc, status?.audioVersion, ctx.viewing) : nothing}
   </div>`;
 }
 
@@ -254,11 +271,7 @@ type DeliveryCueView = TemplateResult | typeof nothing;
  * cue. Clicking it runs the menu's Edit delivery cue… (delivery-cue-editing 03), so it is off
  * whenever the item's menu is.
  */
-function deliveryCue(
-  target: NodeMenuTarget,
-  disabled: boolean,
-  readOnly: string | null,
-): DeliveryCueView {
+function deliveryCue(target: NodeMenuTarget, block: Block | null): DeliveryCueView {
   const cue = target.cue;
   if (!cue) return nothing;
   const button = html`<button
@@ -266,10 +279,19 @@ function deliveryCue(
     class="r2m-item__instructions"
     data-testid="delivery-cue"
     aria-label=${`Edit delivery cue: ${cue}`}
-    ?disabled=${disabled}
+    ?disabled=${block !== null}
     @click=${(e: Event) => void runMenuEntry('edit-cue', target, e.currentTarget as Element)}
   >
     ${cue}
   </button>`;
-  return readOnly === null ? button : blockable(readOnly, button);
+  return withReason(block, button);
+}
+
+/**
+ * `control` with its **Blocked reason** as the tooltip when `block` has one; bare otherwise, so
+ * an inline control keeps its layout while open or blocked without a reason.
+ */
+export function withReason<T>(block: Block | null, control: T): T | TemplateResult {
+  const reason = block?.reason ?? null;
+  return reason === null ? control : blockable(reason, control);
 }
