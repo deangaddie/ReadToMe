@@ -159,13 +159,13 @@ public class ProjectActivityTests
 
     private ActivityRefusal? Ask(Act action, RestoreMark mark, ProjectFolderId? folder = null)
     {
-        var f = folder ?? Folder;
+        var asked = folder ?? Folder;
         return action switch
         {
-            Act.Write => _activity.MayWrite(f),
-            Act.Enqueue => _activity.MayEnqueue(f),
-            Act.ViewStep => _activity.MayViewStep(f),
-            Act.StartRestore => _activity.TryBeginRestore(f),
+            Act.Write => _activity.MayWrite(asked),
+            Act.Enqueue => _activity.MayEnqueue(asked),
+            Act.ViewStep => _activity.MayViewStep(asked),
+            Act.StartRestore => _activity.TryBeginRestore(asked),
             Act.PlanEdit => _activity.MayPlanEdit(mark),
             _ => throw new ArgumentOutOfRangeException(nameof(action)),
         };

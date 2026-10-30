@@ -93,5 +93,5 @@ public sealed class ProjectActivity
     private ActivityRefusal? RestoringRefusal(ProjectFolderId folder) => _restoring.IsRestoring(folder) ? Restoring : null;
 
     private ActivityRefusal? BusyRefusal(ProjectFolderId folder) =>
-        _busy().For(folder) is { } b ? new ActivityRefusal(ActivityRefusalKind.Busy, b.Reason) : null;
+        _busy().For(folder) is { } busy ? new ActivityRefusal(ActivityRefusalKind.Busy, busy.Reason) : null;
 }
