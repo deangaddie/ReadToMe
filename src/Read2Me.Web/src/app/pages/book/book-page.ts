@@ -56,7 +56,7 @@ import { type TriState, chapterDialogTotals, chapterVoicedTotals } from './selec
 import { AudioSelectionStore, SelectionStore } from './selection-store';
 import { SpeakerAssigner } from './speaker-assigner';
 import { buildRoster } from './speaker-roster';
-import { menuBlock, structureNodeMenu } from './structure-node-menu';
+import { structureNodeMenu } from './structure-node-menu';
 import '@app/ui/measured-list';
 import '@app/ui/speaker-menu';
 import './node-menu';
@@ -390,8 +390,7 @@ export class BookPage extends R2mElement {
                         .expandedIds=${store.expanded()}
                         .selection=${this.selectionKind()}
                         .nodeStates=${this.nodeStates()}
-                        .locked=${this.editor.locked()}
-                        .readOnly=${this.editor.readOnly()}
+                        .blocked=${this.editor.blocked()}
                         @expanded-change=${this.onExpandedChange}
                         @select-chapter=${this.onSelectChapter}
                         @toggle-node=${this.onToggleNode}
@@ -690,8 +689,7 @@ export class BookPage extends R2mElement {
       position: heading,
       selection: this.selectionKind(),
       status: this.project.nodes()[id] ?? null,
-      locked: this.ctx().blocked !== null,
-      readOnly: this.ctx().blocked?.reason ?? null,
+      blocked: this.ctx().blocked,
     });
     return html`<div class="book__heading-row book__row">
       <div
@@ -701,7 +699,7 @@ export class BookPage extends R2mElement {
       >
         <h2 class="book__${level} ${placeholderTitleClass(heading)}">${heading.title}</h2>
         <span class="book__heading-menu"
-          >${nodeMenuTrigger(menu.target, { block: menuBlock(menu) })}</span
+          >${nodeMenuTrigger(menu.target, { block: menu.block })}</span
         >
       </div>
     </div>`;

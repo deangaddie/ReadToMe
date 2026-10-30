@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { VIEWING_READ_ONLY } from '@app/api';
 import type { NodeStatusSummary } from '@app/live/live-messages';
 import { type StructureNodeMenuInput, structureNodeMenu } from './structure-node-menu';
 
@@ -10,15 +11,14 @@ function input(overrides: Partial<StructureNodeMenuInput> = {}): StructureNodeMe
     position: middle,
     selection: null,
     status: null,
-    locked: false,
-    readOnly: null,
+    blocked: null,
     ...overrides,
   };
 }
 
 describe('structureNodeMenu', () => {
   it('targets the node by its level and id, carrying the stored title', () => {
-    const { target, disabled } = structureNodeMenu(input());
+    const { target, block } = structureNodeMenu(input());
     expect(target).toEqual({
       kind: 'chapter',
       id: 'c1',
@@ -26,7 +26,7 @@ describe('structureNodeMenu', () => {
       isFirst: false,
       isLast: false,
     });
-    expect(disabled).toBe(false);
+    expect(block).toBeNull();
   });
 
   it('an untitled node carries a null title, not its placeholder', () => {
@@ -58,21 +58,19 @@ describe('structureNodeMenu', () => {
     expect('selection' in structureNodeMenu(input()).target).toBe(false);
   });
 
-  it('disables the trigger and gives the reason while a History step is viewed', () => {
-    const menu = structureNodeMenu(input({ locked: true, readOnly: 'Viewing a past step' }));
-    expect(menu.disabled).toBe(true);
-    expect(menu.reason).toBe('Viewing a past step');
-    expect(structureNodeMenu(input()).reason).toBeNull();
+  it('blocks the trigger with the edit gate block and its reason', () => {
+    const blocked = { reason: VIEWING_READ_ONLY };
+    expect(structureNodeMenu(input({ blocked })).block).toEqual(blocked);
   });
 
-  it('disables the trigger while the node is processing attribution', () => {
+  it('blocks the trigger without a reason while the node is processing attribution', () => {
     const menu = structureNodeMenu(input({ status: status({ attributionProcessing: true }) }));
-    expect(menu.disabled).toBe(true);
+    expect(menu.block).toEqual({ reason: null });
   });
 
-  it('disables the trigger while the node has paragraphs queued for attribution', () => {
+  it('blocks the trigger without a reason while the node has paragraphs queued for attribution', () => {
     const menu = structureNodeMenu(input({ status: status({ attributionQueued: 2 }) }));
-    expect(menu.disabled).toBe(true);
+    expect(menu.block).toEqual({ reason: null });
   });
 
   it('keeps the trigger on for an idle node, whatever else it still needs', () => {
@@ -85,11 +83,7 @@ describe('structureNodeMenu', () => {
         }),
       }),
     );
-    expect(menu.disabled).toBe(false);
-  });
-
-  it('disables the trigger while the editor is locked', () => {
-    expect(structureNodeMenu(input({ locked: true })).disabled).toBe(true);
+    expect(menu.block).toBeNull();
   });
 });
 

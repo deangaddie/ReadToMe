@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { render } from 'lit-html';
+import type { Block } from '@app/api';
 import { override, provide, resetServices } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { ConfirmService, PromptService } from '@app/ui/dialogs';
@@ -17,7 +18,7 @@ import './node-menu';
  * focus return the tree relies on (spec §7, risk 2). happy-dom has no `showPopover`, so the open
  * state is read off the rendered entries; the real top layer is E2E's job.
  */
-const locked = signal(false);
+const blocked = signal<Block | null>(null);
 let runs: unknown[];
 let confirms: unknown[];
 let confirmAnswer: boolean;
@@ -31,7 +32,7 @@ function newHost() {
   // A one-volume book: a lone volume offers no Delete.
   provide(host, BookStore, menuBookStore(1));
   provide(host, BookEditor, {
-    locked,
+    blocked,
     run: async (c: unknown) => (runs.push(c), true),
   } as unknown as BookEditor);
   document.body.append(host);
@@ -46,7 +47,7 @@ beforeEach(() => {
   confirmAnswer = true;
   prompts = [];
   promptAnswer = 'Renamed';
-  locked.set(false);
+  blocked.set(null);
   override(ConfirmService, {
     confirm: async (o: unknown) => (confirms.push(o), confirmAnswer),
   } as unknown as ConfirmService);
@@ -179,7 +180,7 @@ describe('r2m-node-menu', () => {
     expect(runs).toEqual([]);
   });
 
-  it('is disabled for a busy row and refuses to open while the editor is locked', async () => {
+  it('is disabled for a busy row and refuses to open while the editor is blocked', async () => {
     const target: NodeMenuTarget = {
       kind: 'volume',
       id: 'v',
@@ -191,10 +192,10 @@ describe('r2m-node-menu', () => {
 
     const trigger = await mount(target);
     expect(trigger.disabled).toBe(false);
-    locked.set(true);
+    blocked.set({ reason: null });
     await open(trigger);
     expect(entries()).toEqual([]);
-    locked.set(false);
+    blocked.set(null);
     await open(trigger);
     expect(entries()).toEqual([
       'edit-title',

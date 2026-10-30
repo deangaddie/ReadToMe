@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { VIEWING_READ_ONLY } from '@app/api';
 import type { NodeStatusSummary } from '@app/live/live-messages';
 import { FakeTimers } from '../../../testing/fake-timers';
 import type { TreeNode } from './book-tree';
@@ -58,7 +59,7 @@ let tree: StructureTree;
 
 async function mount(
   options: Partial<
-    Pick<StructureTree, 'nodes' | 'expandedIds' | 'statuses' | 'currentChapterId' | 'locked'>
+    Pick<StructureTree, 'nodes' | 'expandedIds' | 'statuses' | 'currentChapterId' | 'blocked'>
   > = {},
 ) {
   tree = document.createElement('r2m-structure-tree');
@@ -66,7 +67,7 @@ async function mount(
   tree.expandedIds = options.expandedIds ?? new Set(['v1', 'p1']);
   tree.statuses = options.statuses ?? {};
   tree.currentChapterId = options.currentChapterId ?? null;
-  tree.locked = options.locked ?? false;
+  tree.blocked = options.blocked ?? null;
   document.body.append(tree);
   await tree.rendered();
   return tree;
@@ -403,7 +404,7 @@ describe('r2m-structure-tree', () => {
       expect(actions).toEqual([{ id: 'p1', action: 'select-unprocessed' }]);
     });
 
-    it('the selection kind reaches the target, and a busy node or a locked editor disables the trigger', async () => {
+    it('the selection kind reaches the target, and a busy node or the edit gate block disables the trigger', async () => {
       await mount({
         statuses: {
           p1: status({ attributionQueued: 2 }),
@@ -425,9 +426,12 @@ describe('r2m-structure-tree', () => {
       trigger('v1').click();
       expect(request?.target.selection).toBe('items');
 
-      tree.locked = true;
+      tree.blocked = { reason: VIEWING_READ_ONLY };
       await tree.rendered();
       expect(trigger('v1').disabled).toBe(true);
+      expect(trigger('v1').closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(
+        VIEWING_READ_ONLY,
+      );
     });
 
     it('Shift+F10 and the ContextMenu key open the focused node menu', async () => {
