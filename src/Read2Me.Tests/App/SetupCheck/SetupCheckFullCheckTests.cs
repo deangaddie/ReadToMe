@@ -102,11 +102,10 @@ namespace Read2Me.Tests.App.SetupCheck
             return new(
                 configuration,
                 @"C:\app",
-                Factory,
                 prober ?? new AnsweringFfmpeg(),
                 new NoDocker(),
                 new WorkspaceStart(configuration),
-                SetupCheckTestServices.Create(Factory, _services),
+                SetupCheckTestServices.Create(Factory, configuration, _services),
                 SetupCheckTestServices.Full(
                     new InFlightWork(() => _audioItems, () => _characterParagraphs, () => _voiceBatch, () => _discovery, () => _assembly),
                     _watchdog, encode ?? _encode, _hub, _characterGate, _audioGate, _busy));

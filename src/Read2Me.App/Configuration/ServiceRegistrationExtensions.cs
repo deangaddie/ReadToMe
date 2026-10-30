@@ -296,7 +296,6 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<ISetupCheckRunner>(sp => new SetupCheckRunner(
             sp.GetRequiredService<IConfiguration>(),
             sp.GetRequiredService<IHostEnvironment>().ContentRootPath,
-            sp.GetRequiredService<IDbContextFactory<Read2MeDbContext>>(),
             sp.GetRequiredService<IFfmpegProber>(),
             sp.GetRequiredService<IProcessRunner>(),
             sp.GetRequiredService<WorkspaceStart>(),

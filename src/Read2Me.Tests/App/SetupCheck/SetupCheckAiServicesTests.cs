@@ -103,11 +103,10 @@ namespace Read2Me.Tests.App.SetupCheck
             return new(
                 configuration,
                 @"C:\app",
-                Factory,
                 new AnsweringFfmpeg(),
                 _processes,
                 new WorkspaceStart(configuration),
-                SetupCheckTestServices.Create(Factory, _services, _http, _watchdog),
+                SetupCheckTestServices.Create(Factory, configuration, _services, _http, _watchdog),
                 SetupCheckTestServices.Full());
         }
 

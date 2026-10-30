@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -24,13 +25,15 @@ namespace Read2Me.Tests.App.SetupCheck
 {
     /// <summary>
     /// The runner's <see cref="SetupCheckServices"/> over the test database: the real settings
-    /// services and the transcription and similarity clients in a scope, the service-control fake,
-    /// and the given HTTP factory.
+    /// services (audio processing's reading <paramref name="configuration"/>'s <c>Ffmpeg:Path</c>) and
+    /// the transcription and similarity clients in a scope, the service-control fake, and the given
+    /// HTTP factory.
     /// </summary>
     internal static class SetupCheckTestServices
     {
         public static SetupCheckServices Create(
             IDbContextFactory<Read2MeDbContext> db,
+            IConfiguration configuration,
             IAiServiceControl? control = null,
             IHttpClientFactory? http = null,
             AiWatchdogOptions? watchdog = null)
@@ -59,6 +62,10 @@ namespace Read2Me.Tests.App.SetupCheck
                 .AddScoped(_ => new VoiceDesignSettingsService(db, NullLogger<VoiceDesignSettingsService>.Instance))
                 .AddScoped(_ => new TranscriptionSettingsService(db, NullLogger<TranscriptionSettingsService>.Instance))
                 .AddScoped(_ => new SemanticSimilaritySettingsService(db, NullLogger<SemanticSimilaritySettingsService>.Instance))
+                // Ffmpeg:Path read on each use, as the host's ConfiguredFfmpegPath reads it.
+                .AddScoped(_ => new AudioProcessingSettingsService(
+                    db, new FfmpegProber(NullLogger<FfmpegProber>.Instance), NullLogger<AudioProcessingSettingsService>.Instance,
+                    changes: null, new ConfiguredFfmpegPath(() => configuration["Ffmpeg:Path"])))
                 .BuildServiceProvider()
                 .GetRequiredService<IServiceScopeFactory>();
             return new SetupCheckServices(
