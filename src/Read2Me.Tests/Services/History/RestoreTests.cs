@@ -378,6 +378,15 @@ public class RestoreTests : ProjectDbTestBase
         Assert.IsType<BookMutationOutcome.Committed>(await CommitAsync(new CreateCharacterMutation(_folder, "Carol")));
     }
 
+    [Fact]
+    public async Task WhileBusy_AWriteStillApplies()
+    {
+        await SeedAsync();
+        _busy.Answer = new ProjectBusy([new BusySource(BusySourceKind.CharacterQueue, "Attribution: 3 paragraphs left")]);
+
+        Assert.IsType<BookMutationOutcome.Committed>(await CommitAsync(new CreateCharacterMutation(_folder, "Alice")));
+    }
+
     // ── what a Restore tells others ─────────────────────────────────────────
 
     [Fact]
