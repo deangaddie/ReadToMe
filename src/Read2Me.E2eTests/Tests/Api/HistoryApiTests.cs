@@ -339,6 +339,33 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     [Fact]
+    public async Task While_a_Restore_runs_a_voice_batch_start_is_409_Project_is_restoring()
+    {
+        var folder = $"api-history-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "History Book", "Author", characterName: "Alice");
+        var activity = app.Services.GetRequiredService<ProjectActivity>();
+        var folderId = new Read2Me.Core.Models.ProjectFolderId(folder);
+
+        Assert.Null(activity.TryBeginRestore(folderId));
+        try
+        {
+            foreach (var batch in new[] { "prompts", "audio" })
+            {
+                var start = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/voice-batch/{batch}",
+                    new { regenerateAll = false });
+
+                Assert.Equal(HttpStatusCode.Conflict, start.StatusCode);
+                Assert.Equal("Project is restoring",
+                    JsonDocument.Parse(await start.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
+            }
+        }
+        finally
+        {
+            activity.EndRestore(folderId);
+        }
+    }
+
+    [Fact]
     public async Task While_a_Restore_runs_every_read_at_a_step_is_409_Project_is_restoring()
     {
         var folder = $"api-history-{Guid.NewGuid():N}";

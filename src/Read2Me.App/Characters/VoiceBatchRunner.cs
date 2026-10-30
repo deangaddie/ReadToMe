@@ -17,12 +17,24 @@ using Read2Me.Services.Queueing;
 namespace Read2Me.App.Characters;
 
 /// <summary>Whether a voice batch started, or why not.</summary>
-public enum VoiceBatchStart { Started, AlreadyRunning, Restoring }
+public abstract record VoiceBatchStart
+{
+    private VoiceBatchStart() { }
+
+    /// <summary>The batch is running in the background.</summary>
+    public sealed record Started : VoiceBatchStart;
+
+    /// <summary>A batch is already running; the runner runs one at a time, whatever the project.</summary>
+    public sealed record AlreadyRunning : VoiceBatchStart;
+
+    /// <summary>The <see cref="ProjectActivity"/> gate refused the enqueue.</summary>
+    public sealed record Refused(ActivityRefusal Refusal) : VoiceBatchStart;
+}
 
 public sealed class VoiceBatchRunner
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly RestoringProjects _restoring;
+    private readonly ProjectActivity _activity;
     private readonly ILogger<VoiceBatchRunner> _logger;
     private readonly EventBroadcaster<VoiceBatchEvent> _batchEvents;
     private readonly EventBroadcaster<LlmStreamEvent> _llmEvents;
@@ -45,17 +57,17 @@ public sealed class VoiceBatchRunner
         ILogger<VoiceBatchRunner> logger,
         EventBroadcaster<VoiceBatchEvent> batchEvents,
         EventBroadcaster<LlmStreamEvent> llmEvents)
-        : this(scopeFactory: null!, new RestoringProjects(), logger, batchEvents, llmEvents) { }
+        : this(scopeFactory: null!, ProjectActivity.Private(), logger, batchEvents, llmEvents) { }
 
     public VoiceBatchRunner(
         IServiceScopeFactory scopeFactory,
-        RestoringProjects restoring,
+        ProjectActivity activity,
         ILogger<VoiceBatchRunner> logger,
         EventBroadcaster<VoiceBatchEvent> batchEvents,
         EventBroadcaster<LlmStreamEvent> llmEvents)
     {
         _scopeFactory = scopeFactory;
-        _restoring = restoring;
+        _activity = activity;
         _logger = logger;
         _batchEvents = batchEvents;
         _llmEvents = llmEvents;
@@ -68,21 +80,22 @@ public sealed class VoiceBatchRunner
         Start("Generating audio", folder, ct => RunWithScopeAsync(new GenerateAudioPhase(), folder, ct));
 
     /// <summary>
-    /// Starts the batch unless one is running or the project is restoring. The restoring check is
-    /// under the lock <see cref="BusyFor"/> takes, so it can't race a Restore: one that set its flag
-    /// first is seen here, and one that sets it after finds this batch running and is refused.
+    /// Starts the batch unless one is running or the <see cref="ProjectActivity"/> gate refuses.
+    /// <see cref="ProjectActivity.MayEnqueue"/> is asked under the lock <see cref="BusyFor"/> takes,
+    /// so it can't race a Restore: one that claimed the project first is seen here, and one that
+    /// claims it after finds this batch running and is refused.
     /// </summary>
     private VoiceBatchStart Start(string operation, ProjectFolderId folder, Func<CancellationToken, Task> run)
     {
         lock (_lock)
         {
-            if (IsRunning) return VoiceBatchStart.AlreadyRunning;
-            if (_restoring.IsRestoring(folder)) return VoiceBatchStart.Restoring;
+            if (IsRunning) return new VoiceBatchStart.AlreadyRunning();
+            if (_activity.MayEnqueue(folder) is { } refusal) return new VoiceBatchStart.Refused(refusal);
             ResetState(operation, folder);
             var ct = _cts!.Token;
             Task.Run(() => run(ct));
         }
-        return VoiceBatchStart.Started;
+        return new VoiceBatchStart.Started();
     }
 
     public void Cancel()
