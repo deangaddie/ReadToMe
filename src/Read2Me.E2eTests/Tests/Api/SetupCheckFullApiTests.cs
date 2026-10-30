@@ -83,6 +83,43 @@ public class SetupCheckFullApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
         Assert.Equal(HttpStatusCode.Conflict, nothingToCancel.StatusCode);
     }
 
+    [Fact]
+    public async Task One_check_re_runs_alone_a_second_re_run_is_refused_and_a_Quick_tier_id_is_not_found()
+    {
+        await QuickCheckedAsync();
+        var before = await ReadAsync(await Http.GetAsync(Url()));
+        var ffmpegBefore = before.GetProperty("rows").EnumerateArray().Single(r => r.GetProperty("id").GetString() == "ffmpeg");
+        Assert.False(ffmpegBefore.GetProperty("rerun").GetProperty("gpu").GetBoolean());
+        app.FfmpegEncode.HoldNext();
+        try
+        {
+            var started = await Http.PostAsync(Url("/checks/ffmpeg/rerun"), null);
+            Assert.Equal(HttpStatusCode.Accepted, started.StatusCode);
+            var run = (await ReadAsync(started)).GetProperty("fullRun");
+            Assert.Equal(1, run.GetProperty("total").GetInt32());
+            Assert.Equal("Encoding a 1 s tone to .m4b", run.GetProperty("label").GetString());
+
+            var again = await Http.PostAsync(Url("/checks/ffmpeg/rerun"), null);
+            Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+            Assert.Equal("A check is re-running: re-run this one once it ends.", (await ReadAsync(again)).GetProperty("detail").GetString());
+            await app.FfmpegEncode.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        }
+        finally
+        {
+            app.FfmpegEncode.Release();
+        }
+
+        var final = await FinishedAsync();
+        var ffmpeg = final.GetProperty("rows").EnumerateArray().Single(r => r.GetProperty("id").GetString() == "ffmpeg");
+        Assert.Equal("passed", ffmpeg.GetProperty("result").GetString());
+        // A re-run isn't a whole Full check: its time stays as it was.
+        Assert.Equal(before.GetProperty("fullCheckedAt").ToString(), final.GetProperty("fullCheckedAt").ToString());
+        Assert.Equal("Nothing to put back: the Full check drove no containers.", final.GetProperty("putBack").GetString());
+
+        var quickTier = await Http.PostAsync(Url("/checks/docker/rerun"), null);
+        Assert.Equal(HttpStatusCode.NotFound, quickTier.StatusCode);
+    }
+
     private async Task QuickCheckedAsync()
     {
         var deadline = DateTime.UtcNow.AddSeconds(30);

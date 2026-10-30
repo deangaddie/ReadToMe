@@ -31,6 +31,7 @@ function report(
         note: null,
         fix: { text: 'Fix it.', link: null, copy: null },
         managed: false,
+        rerun: null,
       },
     ],
     quickCheckedAt: '2026-10-29T09:00:05Z',

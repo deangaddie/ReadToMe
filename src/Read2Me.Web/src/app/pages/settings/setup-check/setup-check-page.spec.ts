@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { type SetupCheckReport, SetupCheckApi } from '@app/api';
 import { override, resetServices } from '@app/core/services';
+import { ConfirmService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
 import { FakeLive } from '../../../../testing/fake-live';
 import { settle } from '../../../../testing/fake-navigation';
@@ -31,6 +32,7 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
         found: 'D:\\WS',
         note: "The folder didn't exist, so the app created it.",
         managed: false,
+        rerun: null,
         fix: {
           text: 'Set Workspace:FolderPath, then restart the app.',
           link: null,
@@ -41,12 +43,13 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
         id: 'ffmpeg',
         group: 'workspaceAndTools',
         name: 'ffmpeg',
-        tier: 'quick',
+        tier: 'full',
         result: ffmpeg,
         expected: 'ffmpeg -version and ffprobe -version from PATH',
         found: 'ffmpeg: The system cannot find the file specified.',
         note: null,
         managed: false,
+        rerun: { gpu: false },
         fix: {
           text: 'Set the ffmpeg path to an ffmpeg with ffprobe beside it.',
           link: { path: 'settings/audio', label: 'Settings → Audio processing' },
@@ -63,18 +66,20 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
         found: 'Docker version 28.4.0',
         note: null,
         managed: false,
+        rerun: null,
         fix: { text: 'Install Docker Desktop.', link: null, copy: 'docker --version' },
       },
       {
         id: 'llm',
         group: 'aiConfigs',
         name: 'LLM',
-        tier: 'quick',
+        tier: 'full',
         result: 'passed',
         expected: 'An active config with a parseable base URL',
         found: 'Qwen · http://localhost:8080 · qwen-28b',
         note: null,
         managed: true,
+        rerun: { gpu: true },
         fix: {
           text: 'Change it in Settings → LLM.',
           link: { path: 'settings/llm', label: 'Settings → LLM' },
@@ -91,6 +96,7 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
         found: 'Stopped',
         note: null,
         managed: true,
+        rerun: null,
         fix: {
           text: "The Quick check doesn't start containers: run the Full check to confirm it.",
           link: null,
@@ -104,15 +110,23 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
 let calls: string[];
 let quickAnswer: SetupCheckReport;
 let live: FakeLive;
+let confirms: string[];
+let confirmAnswer: boolean;
 
 beforeEach(() => {
   resetServices();
   calls = [];
   live = new FakeLive().install();
   quickAnswer = report(AT_START);
+  confirms = [];
+  confirmAnswer = true;
   override(SetupCheckApi, {
     report: async () => {
       calls.push('report');
+      return report(AT_START);
+    },
+    rerun: async (id: string) => {
+      calls.push(`rerun:${id}`);
       return report(AT_START);
     },
     runQuick: async () => {
@@ -120,6 +134,12 @@ beforeEach(() => {
       return quickAnswer;
     },
   } as unknown as SetupCheckApi);
+  override(ConfirmService, {
+    confirm: async (options: { title: string }) => {
+      confirms.push(options.title);
+      return confirmAnswer;
+    },
+  } as unknown as ConfirmService);
   override(ToastService, {
     success: () => undefined,
     warn: () => undefined,
@@ -152,10 +172,9 @@ describe('r2m-setup-check-page', () => {
   it('shows one row per check under its group, with expected, found and result', async () => {
     const page = await mount();
 
-    // Re-run arrives with the Full check (#81); until then the table has no empty column for it.
     expect(
       Array.from(page.querySelectorAll('thead th')).map((th) => th.textContent?.trim()),
-    ).toEqual(['Check', 'Result', 'Expected', 'Found', 'Fix']);
+    ).toEqual(['Check', 'Result', 'Expected', 'Found', 'Fix', 'Re-run']);
     expect(
       Array.from(page.querySelectorAll('.setup-check__group')).map((g) => g.textContent?.trim()),
     ).toEqual(['Workspace and tools', 'AI configs', 'Docker services']);
@@ -243,5 +262,49 @@ describe('r2m-setup-check-page', () => {
     expect(page.querySelector('[data-role=full-run]')).toBeNull();
     expect(page.querySelector('[data-action=run-full]')).not.toBeNull();
     expect(page.querySelector<HTMLButtonElement>('[data-action=run-quick]')?.disabled).toBe(false);
+  });
+
+  it('shows Re-run on Full-tier rows only, and confirms only a check that drives a GPU container', async () => {
+    const page = await mount();
+    const rerunOf = (id: string) =>
+      rowOf(page, id)?.querySelector<HTMLButtonElement>('[data-action=rerun]') ?? null;
+
+    expect(rerunOf('workspace')).toBeNull();
+    expect(rerunOf('docker')).toBeNull();
+    expect(rerunOf('container-llama')).toBeNull();
+
+    rerunOf('ffmpeg')?.click();
+    await flush(page);
+    expect(confirms).toEqual([]);
+    expect(calls).toContain('rerun:ffmpeg');
+
+    confirmAnswer = false;
+    rerunOf('llm')?.click();
+    await flush(page);
+    expect(confirms).toEqual(['Re-run the LLM check?']);
+    expect(calls).not.toContain('rerun:llm');
+
+    confirmAnswer = true;
+    rerunOf('llm')?.click();
+    await flush(page);
+    expect(calls).toContain('rerun:llm');
+  });
+
+  it('disables Re-run while a run goes, and on a Full-tier row with nothing to send', async () => {
+    quickAnswer = report(AT_START);
+    quickAnswer.rows = quickAnswer.rows.map((r) => (r.id === 'llm' ? { ...r, rerun: null } : r));
+    const page = await mount();
+    const rerunOf = (id: string) =>
+      rowOf(page, id)?.querySelector<HTMLButtonElement>('[data-action=rerun]') ?? null;
+    expect(rerunOf('llm')?.disabled).toBe(true);
+    expect(rerunOf('ffmpeg')?.disabled).toBe(false);
+
+    const running = report(AT_START);
+    running.fullRun = { step: 1, total: 1, lane: 'local', label: 'Encoding', cancelling: false };
+    live.emit('setupCheck', { kind: 'progress', report: running });
+    await flush(page);
+
+    expect(rerunOf('ffmpeg')?.disabled).toBe(true);
+    expect(rerunOf('llm')?.disabled).toBe(true);
   });
 });

@@ -79,13 +79,14 @@ namespace Read2Me.App.Services.SetupCheck
                     docker.Row,
                 };
                 rows.AddRange(await new AiServicesCheck(aiServices).RunAsync(docker.OnPath, ct));
-                var estimate = await EstimateSecondsAsync(await ReadFullContextAsync(), docker.OnPath);
+                var context = await ReadFullContextAsync();
+                var estimate = await EstimateSecondsAsync(context, docker.OnPath);
                 lock (_lock)
                 {
                     if (_run is null)
                         _report = _report with
                         {
-                            Rows = WithFullVerdicts(rows),
+                            Rows = WithRerun(WithFullVerdicts(rows), Plan(context)),
                             QuickCheckedAt = _clock.GetUtcNow(),
                             FullCheckEstimateSeconds = estimate,
                         };

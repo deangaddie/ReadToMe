@@ -1418,8 +1418,18 @@ export interface SetupFixHint {
 }
 
 /**
+ * Re-running one Full-tier check. `gpu`: it drives a GPU container, so it stops the one running and
+ * loads a model, and the page confirms first.
+ */
+export interface SetupRerun {
+  gpu: boolean;
+}
+
+/**
  * One check: what the app expected and what it found. A note never changes the result. `managed`:
  * the app can start and restart what the row checks (a docker AI service, or a config on one).
+ * `rerun`: what re-running this one check takes; null when it can't be (a Quick-tier row, or a
+ * config with no active one).
  */
 export interface SetupCheckRow {
   id: string;
@@ -1432,6 +1442,7 @@ export interface SetupCheckRow {
   note: string | null;
   fix: SetupFixHint;
   managed: boolean;
+  rerun: SetupRerun | null;
 }
 
 /**

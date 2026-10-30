@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 import type { SetupCheckReport, SetupCheckResult, SetupCheckRow } from '@app/api';
-import { clockTime, groupedRows, showsFix, summaryLine } from './setup-check-logic';
+import {
+  clockTime,
+  groupedRows,
+  rerunBlockedReason,
+  showsFix,
+  summaryLine,
+} from './setup-check-logic';
 
 const row = (
   id: string,
@@ -17,6 +23,7 @@ const row = (
   note: null,
   fix: { text: 'Fix it.', link: null, copy: null },
   managed: false,
+  rerun: null,
 });
 
 const report = (
@@ -99,4 +106,21 @@ describe('groupedRows', () => {
       ['Docker services', ['svc']],
     ]);
   });
+});
+
+describe('rerunBlockedReason', () => {
+  const full: SetupCheckRow = { ...row('llm', 'failed'), tier: 'full', rerun: { gpu: true } };
+  const run = { step: 1, total: 1, lane: 'gpu' as const, label: 'Loading', cancelling: false };
+  const cases: [string, SetupCheckRow, Partial<SetupCheckReport>, RegExp | null][] = [
+    ['a row with something to send, nothing running', full, {}, null],
+    ['no Workspace', full, { noWorkspace: true }, /Workspace/],
+    ['a run going', full, { fullRun: run }, /check is running/],
+    ['no active config', { ...full, rerun: null }, {}, /no active config/],
+  ];
+  for (const [name, r, over, expected] of cases)
+    it(name, () => {
+      const reason = rerunBlockedReason(r, { ...report([r], '2026-10-28T14:02:00Z'), ...over });
+      if (expected === null) expect(reason).toBeNull();
+      else expect(reason).toMatch(expected);
+    });
 });

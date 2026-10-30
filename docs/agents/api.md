@@ -204,6 +204,17 @@ containers as they are: each step's time with a model load (9–31 s, taken as 3
 for each container the run must start or restart after a sweep, and a model load for a running llama's
 reload.
 
+**Re-run one check.** `POST /api/setup-check/checks/{id}/rerun` re-runs one Full-tier row (`ffmpeg` or an
+AI configs row) in the background and answers 202 with the report: only the steps that judge it run, so
+`attribution-chain` exercises the chain's models alone and `similarity` alone scores the clip's text
+against itself. The Full check's rules hold — the same 409 naming the work in flight, queues wait and
+Preflight refuses with "Setup check running", the watchdog holds off, progress goes out as `setupCheck`,
+cancel works, and the containers it drives are put back. It answers 409 while a Full check or another
+re-run runs (a `POST .../full` meanwhile is refused 409 too: it would check one row), or when the row has no active config, and 404
+for an unknown or Quick-tier id. Each row's `rerun` is null when it can't be re-run, else `{ gpu }`: true
+when a step drives a GPU container, so it stops the one running (the web app confirms only then).
+`fullCheckedAt` stays the last whole Full check's.
+
 ## 1. Create a project and import the book
 
 ```bash

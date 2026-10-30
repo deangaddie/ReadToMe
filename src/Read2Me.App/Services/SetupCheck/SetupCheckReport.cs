@@ -67,8 +67,9 @@ namespace Read2Me.App.Services.SetupCheck
     /// result. Every row carries a fix hint; the page shows it only for rows that aren't Passed or Not used.
     /// <see cref="Managed"/>: the app can start and restart what the row checks — a docker AI service,
     /// or a config whose every URL is one. False for the Workspace and tools, and for a config on a
-    /// URL the app doesn't manage. The enum converters sit on the properties too: the live hub's
-    /// options would outrank the types' own.
+    /// URL the app doesn't manage. <see cref="Rerun"/>: what re-running this one check takes, null
+    /// when it can't be (a Quick-tier row, or a config with no active one). The enum converters sit
+    /// on the properties too: the live hub's options would outrank the types' own.
     /// </summary>
     public sealed record SetupCheckRow(
         string Id,
@@ -80,7 +81,14 @@ namespace Read2Me.App.Services.SetupCheck
         string Found,
         string? Note,
         SetupFixHint Fix,
-        bool Managed);
+        bool Managed,
+        SetupRerun? Rerun = null);
+
+    /// <summary>
+    /// Re-running one Full-tier check. <see cref="Gpu"/>: it drives a GPU container, so it stops the
+    /// one running and loads a model, and the web app confirms first.
+    /// </summary>
+    public sealed record SetupRerun(bool Gpu);
 
     /// <summary>
     /// The Setup check report: the rows in table order and when each tier last ran (null: not yet).

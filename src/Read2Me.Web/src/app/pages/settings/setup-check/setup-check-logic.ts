@@ -64,6 +64,24 @@ export function summaryLine(
 export const showsFix = (row: SetupCheckRow): boolean =>
   row.result !== 'passed' && row.result !== 'notUsed';
 
+/** The Re-run cell holds a button on Full-tier rows only; Quick-tier rows have nothing to send. */
+export const showsRerun = (row: SetupCheckRow): boolean => row.tier === 'full';
+
+/**
+ * Why a Full-tier row's Re-run is off, or null when it can run: no Workspace, a run going (a
+ * Full check or another re-run; one per host), or nothing to send (no active config). A Quick
+ * check in flight is a momentary busy and carries no reason.
+ */
+export function rerunBlockedReason(
+  row: SetupCheckRow,
+  report: SetupCheckReport | null,
+): string | null {
+  if (report?.noWorkspace) return 'Fix the Workspace row first, then restart the app.';
+  if (report?.fullRun) return 'A check is running: re-run this one once it ends.';
+  if (row.rerun === null) return 'Nothing to send: it has no active config.';
+  return null;
+}
+
 /** The groups that hold rows, each with its rows in report order. */
 export function groupedRows(
   rows: readonly SetupCheckRow[],

@@ -1,10 +1,17 @@
-import { type SetupCheckReport, SetupCheckApi, toApiError } from '@app/api';
+import { type SetupCheckReport, type SetupCheckRow, SetupCheckApi, toApiError } from '@app/api';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import { LiveService } from '@app/live/live.service';
 import { ConfirmService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
-import { bannerVisible, failedCount, fullCheckConfirm, noWorkspace, shieldView } from './surfacing';
+import {
+  bannerVisible,
+  failedCount,
+  fullCheckConfirm,
+  noWorkspace,
+  rerunConfirm,
+  shieldView,
+} from './surfacing';
 
 const DISMISSED_KEY = 'r2m.setupCheck.bannerDismissedStart';
 /**
@@ -104,6 +111,21 @@ export class SetupCheckStore {
     if (!(await this.confirm.confirm(fullCheckConfirm(this._report())))) return;
     try {
       await this.applyUnlessHubMoved(() => this.api.startFull());
+    } catch (error) {
+      this.toast.problem(toApiError(error).toProblem());
+    }
+  }
+
+  /**
+   * Re-run one Full-tier check: a confirm first only when it drives a GPU container, then the
+   * host runs just that check under the Full check's rules; the hub carries its progress.
+   */
+  async rerun(row: SetupCheckRow): Promise<void> {
+    if (this.fullRun() || !row.rerun) return;
+    const confirm = rerunConfirm(row);
+    if (confirm && !(await this.confirm.confirm(confirm))) return;
+    try {
+      await this.applyUnlessHubMoved(() => this.api.rerun(row.id));
     } catch (error) {
       this.toast.problem(toApiError(error).toProblem());
     }

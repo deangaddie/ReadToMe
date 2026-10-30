@@ -408,5 +408,113 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.Equal($"not found at {bogus}", ffmpeg.Found);
             Assert.Equal("settings/audio", ffmpeg.Fix.Link?.Path);
         }
+
+        // ── Re-run one check ─────────────────────────────────────────────────
+
+        [Theory]
+        [MemberData(nameof(InFlight))]
+        public async Task A_re_run_is_refused_while_work_is_in_flight_like_the_Full_check(string kind, string says)
+        {
+            switch (kind)
+            {
+                case "audio": _audioItems = 3; break;
+                case "character": _characterParagraphs = 1; break;
+                case "voiceBatch": _voiceBatch = true; break;
+                case "discovery": _discovery = true; break;
+                case "assembly": _assembly = true; break;
+            }
+            var runner = Runner();
+            await runner.RunQuickCheckAsync(CancellationToken.None);
+
+            var start = await runner.RerunCheckAsync(SetupCheckIds.Ffmpeg);
+
+            Assert.Equal($"The Full check can't start while other work is running: {says}.", start.Refusal);
+            Assert.True(start.Finished.IsCompleted);
+            Assert.Null(runner.Report.FullRun);
+            Assert.Equal(0, _encode.Calls);
+            Assert.True(_audioGate.IsOpen);
+            Assert.False(_busy.Running);
+            Assert.Empty(Sent());
+        }
+
+        [Fact]
+        public async Task While_a_re_run_goes_another_re_run_and_a_whole_Full_check_are_refused()
+        {
+            var runner = Runner();
+            await runner.RunQuickCheckAsync(CancellationToken.None);
+            var first = await runner.RerunCheckAsync(SetupCheckIds.Ffmpeg);
+            await _encode.Entered.Task.WaitAsync(Wait);
+
+            var second = await runner.RerunCheckAsync(SetupCheckIds.Ffmpeg);
+            var whole = await runner.StartFullCheckAsync();
+
+            Assert.Equal("A check is re-running: re-run this one once it ends.", second.Refusal);
+            Assert.Equal("A check is re-running: run the Full check once it ends.", whole.Refusal);
+            Assert.False(whole.Joined);
+            _encode.Release.SetResult(new FfmpegProbeResult(true, "Encoded a 1 s tone"));
+            await first.Finished.WaitAsync(Wait);
+            Assert.Equal(1, _encode.Calls);
+        }
+
+        [Fact]
+        public async Task A_re_run_is_refused_while_a_whole_Full_check_runs()
+        {
+            var runner = Runner();
+            await runner.RunQuickCheckAsync(CancellationToken.None);
+            var whole = await runner.StartFullCheckAsync();
+            await _encode.Entered.Task.WaitAsync(Wait);
+
+            var rerun = await runner.RerunCheckAsync(SetupCheckIds.Ffmpeg);
+
+            Assert.Equal("A Full check is running: re-run the check once it ends.", rerun.Refusal);
+            _encode.Release.SetResult(new FfmpegProbeResult(true, "Encoded a 1 s tone"));
+            await whole.Finished.WaitAsync(Wait);
+            Assert.Equal(1, _encode.Calls);
+        }
+
+        [Fact]
+        public async Task A_re_run_runs_under_the_Full_check_s_gates_and_keeps_the_whole_check_s_time()
+        {
+            var runner = Runner();
+            await runner.RunQuickCheckAsync(CancellationToken.None);
+            var quick = runner.Report;
+            Assert.Equal(new SetupRerun(Gpu: false), Row(quick, SetupCheckIds.Ffmpeg).Rerun);
+
+            var start = await runner.RerunCheckAsync(SetupCheckIds.Ffmpeg);
+            await _encode.Entered.Task.WaitAsync(Wait);
+
+            Assert.Equal(new SetupFullRun(1, 1, SetupCheckLane.Local, "Encoding a 1 s tone to .m4b", false), start.Report.FullRun);
+            Assert.Equal("Setup check running", _audioGate.CloseReason);
+            Assert.Equal("Setup check running", _characterGate.CloseReason);
+            Assert.True(_busy.Running);
+            _encode.Release.SetResult(new FfmpegProbeResult(true, "Encoded a 1 s tone"));
+            var final = await start.Finished.WaitAsync(Wait);
+
+            Assert.Equal(SetupCheckResult.Passed, Row(final, SetupCheckIds.Ffmpeg).Result);
+            Assert.Null(final.FullCheckedAt);
+            Assert.True(_audioGate.IsOpen);
+            Assert.False(_busy.Running);
+            Assert.Equal("done", Sent()[^1].Kind);
+        }
+
+        [Fact]
+        public async Task Only_a_Full_tier_check_with_something_to_send_can_be_re_run()
+        {
+            var runner = Runner();
+            var quick = await runner.RunQuickCheckAsync(CancellationToken.None);
+            // No LLM config: the row fails in the Quick check, and no Full check step judges it.
+            Assert.Null(Row(quick, SetupCheckIds.Llm).Rerun);
+            Assert.Null(Row(quick, SetupCheckIds.Docker).Rerun);
+
+            var llm = await runner.RerunCheckAsync(SetupCheckIds.Llm);
+            var docker = await runner.RerunCheckAsync(SetupCheckIds.Docker);
+            var unknown = await runner.RerunCheckAsync("no-such-check");
+
+            Assert.Equal("LLM has nothing for the Full check to send: it has no active config.", llm.Refusal);
+            Assert.Equal("There's no Full-tier check \"docker\" to re-run.", docker.Refusal);
+            Assert.Equal("There's no Full-tier check \"no-such-check\" to re-run.", unknown.Refusal);
+            Assert.True(_audioGate.IsOpen);
+            Assert.Empty(Sent());
+        }
     }
 }

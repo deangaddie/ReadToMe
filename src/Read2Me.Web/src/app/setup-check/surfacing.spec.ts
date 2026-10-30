@@ -7,6 +7,7 @@ import {
   fullRunLabel,
   landingPath,
   noWorkspace,
+  rerunConfirm,
   shieldView,
 } from './surfacing';
 
@@ -24,6 +25,7 @@ const row = (id: string, result: SetupCheckResult): SetupCheckRow => ({
   note: null,
   fix: { text: 'Fix it.', link: null, copy: null },
   managed: false,
+  rerun: null,
 });
 
 const report = (
@@ -173,5 +175,22 @@ describe('the Full check confirm', () => {
     );
     expect(options.message).toContain('Queues wait and new AI tasks are refused until it ends.');
     expect(options.message).toEndWith("It's likely to take about 4 minutes.");
+  });
+});
+
+describe('rerunConfirm', () => {
+  it('confirms only a re-run that drives a GPU container', () => {
+    const gpu = {
+      ...row('llm', 'failed'),
+      name: 'LLM',
+      tier: 'full' as const,
+      rerun: { gpu: true },
+    };
+    const cpu = { ...row('transcription', 'failed'), tier: 'full' as const, rerun: { gpu: false } };
+
+    expect(rerunConfirm(gpu)?.title).toBe('Re-run the LLM check?');
+    expect(rerunConfirm(gpu)?.message).toContain('stops any running GPU container');
+    expect(rerunConfirm(cpu)).toBeNull();
+    expect(rerunConfirm(row('docker', 'failed'))).toBeNull();
   });
 });

@@ -5,10 +5,17 @@ import { use } from '@app/core/services';
 import { adoptStyles } from '@app/core/styles';
 import { SetupCheckStore } from '@app/setup-check/setup-check-store';
 import { fullRunLabel } from '@app/setup-check/surfacing';
-import { callout, emptyState, icon, spinner, statusChip } from '@app/ui/partials';
+import { blockable, callout, emptyState, icon, spinner, statusChip } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
 import { fixHint } from './fix-hint';
-import { RESULT_VIEW, groupedRows, showsFix, summaryLine } from './setup-check-logic';
+import {
+  RESULT_VIEW,
+  groupedRows,
+  rerunBlockedReason,
+  showsFix,
+  showsRerun,
+  summaryLine,
+} from './setup-check-logic';
 import css from './setup-check-page.css' with { type: 'text' };
 
 adoptStyles(css);
@@ -114,13 +121,14 @@ export class SetupCheckPage extends R2mElement {
           <th scope="col">Expected</th>
           <th scope="col">Found</th>
           <th scope="col">Fix</th>
+          <th scope="col">Re-run</th>
         </tr>
       </thead>
       ${groupedRows(rows).map(
         (g) =>
           html`<tbody>
             <tr class="setup-check__group">
-              <th colspan="5" scope="colgroup">${g.label}</th>
+              <th colspan="6" scope="colgroup">${g.label}</th>
             </tr>
             ${g.rows.map((row) => this.row(row))}
           </tbody>`,
@@ -154,7 +162,26 @@ export class SetupCheckPage extends R2mElement {
             : html`<span class="setup-check__muted">—</span>`
         }
       </td>
+      <td class="setup-check__rerun">${showsRerun(row) ? this.rerunButton(row) : nothing}</td>
     </tr>`;
+  }
+
+  /** Re-run on a Full-tier row, its blocked reason on hover; a Quick check in flight just disables it. */
+  private rerunButton(row: SetupCheckRow) {
+    const reason = rerunBlockedReason(row, this.store.report());
+    return blockable(
+      reason,
+      html`<button
+        type="button"
+        class="r2m-button r2m-button--stroked"
+        data-action="rerun"
+        aria-label=${`Re-run ${row.name}`}
+        ?disabled=${reason !== null || this.store.checking()}
+        @click=${() => void this.store.rerun(row)}
+      >
+        ${icon('refresh')} Re-run
+      </button>`,
+    );
   }
 
   private async copy(text: string): Promise<void> {
