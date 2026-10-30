@@ -89,6 +89,9 @@ namespace Read2Me.Tests.App.SetupCheck
         {
             public Task<FfmpegProbeResult> EncodeToneAsync(string? ffmpegPath, CancellationToken ct = default) =>
                 Task.FromResult(new FfmpegProbeResult(true, "Encoded a 1 s tone"));
+
+            public Task<FfmpegDurationResult> MeasureAudioAsync(Stream audio, string? ffmpegPath, CancellationToken ct = default) =>
+                Task.FromResult(new FfmpegDurationResult(TimeSpan.FromSeconds(1)));
         }
 
         private sealed class AnsweringFfmpeg : IFfmpegProber

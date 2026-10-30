@@ -41,17 +41,7 @@ namespace Read2Me.App.Services.Preflight
             // something needs starting. A TTS server that already answers its health check has not
             // necessarily loaded its model onto a GPU another container (e.g. a leftover llama) is
             // holding, so its VRAM must be freed first even on the all-Ready path.
-            var conflicts = new List<DockerAiService>();
-            if (required.Any(s => s.UsesGpu))
-            {
-                var requiredNames = required.Select(s => s.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                foreach (var candidate in registry.All.Where(s => s.UsesGpu && !requiredNames.Contains(s.Name)))
-                {
-                    var status = await control.GetStatusAsync(candidate, ct);
-                    if (status is AiServiceStatus.Ready or AiServiceStatus.Starting)
-                        conflicts.Add(candidate);
-                }
-            }
+            var conflicts = await GpuConflictSweep.FindAsync(control, registry, required, ct);
 
             return new AiPreflightPlan(toStart, conflicts);
         }

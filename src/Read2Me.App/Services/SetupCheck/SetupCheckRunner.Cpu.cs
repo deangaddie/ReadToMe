@@ -48,18 +48,18 @@ namespace Read2Me.App.Services.SetupCheck
             var url = $"{ServiceConfigBaseUrls.For(config)?.TrimEnd('/')}/inference";
             var settings = AiServicesCheck.TranscriptionSettings;
 
-            return await CpuCheckAsync(context, context.Whisper, row, settings, url, async () =>
+            return await RequestCheckAsync(context, context.Whisper, row, settings, url, async () =>
             {
                 await using var clip = SampleClip.OpenWav();
                 await using var scope = aiServices.Scopes.CreateAsyncScope();
                 var transcript = (await scope.ServiceProvider.GetRequiredService<ITranscriptionClientResolver>()
                     .Resolve(config.Type).TranscribeAsync(config, clip, SampleClip.FileName)).Trim();
                 if (transcript.Length == 0)
-                    return new CpuAnswer(false, "Transcribed the sample clip to empty text", new SetupFixHint(
+                    return new CheckAnswer(false, "Transcribed the sample clip to empty text", new SetupFixHint(
                         $"It answered with no words: check its model (ggml-base.en.bin in Infra/models/), or the config in {settings.Label}.",
                         settings, "Infra/models/"));
                 context.Transcript = transcript;
-                return new CpuAnswer(true, $"Transcribed the sample clip: \"{transcript}\"");
+                return new CheckAnswer(true, $"Transcribed the sample clip: \"{transcript}\"");
             });
         }
 
@@ -82,14 +82,14 @@ namespace Read2Me.App.Services.SetupCheck
             var url = $"{ServiceConfigBaseUrls.For(config)?.TrimEnd('/')}/similarity";
             var settings = AiServicesCheck.SimilaritySettings;
 
-            return await CpuCheckAsync(context, context.SimilarityService, row, settings, url, async () =>
+            return await RequestCheckAsync(context, context.SimilarityService, row, settings, url, async () =>
             {
                 await using var scope = aiServices.Scopes.CreateAsyncScope();
                 var score = await scope.ServiceProvider.GetRequiredService<ISemanticSimilarityClientResolver>()
                     .Resolve(config.Type).ComputeAsync(config, SampleClip.Text, transcript ?? SampleClip.Text);
                 return score >= threshold
-                    ? new CpuAnswer(true, $"Scored {Score(score)} against the clip's text (pass threshold {Score(threshold)})")
-                    : new CpuAnswer(false, $"Scored {Score(score)}, below the config's pass threshold {Score(threshold)}",
+                    ? new CheckAnswer(true, $"Scored {Score(score)} against the clip's text (pass threshold {Score(threshold)})")
+                    : new CheckAnswer(false, $"Scored {Score(score)}, below the config's pass threshold {Score(threshold)}",
                         new SetupFixHint($"Check the config's model, or its pass threshold, in {settings.Label}.", settings));
             });
         }
@@ -98,71 +98,18 @@ namespace Read2Me.App.Services.SetupCheck
 
         // ── Shared ───────────────────────────────────────────────────────────
 
-        /// <summary>What a CPU check's request found; <see cref="Fix"/> is where to go when it didn't pass.</summary>
-        private sealed record CpuAnswer(bool Passed, string Found, SetupFixHint? Fix = null);
+        /// <summary>What a check's request found; <see cref="Fix"/> is where to go when it didn't pass.</summary>
+        private sealed record CheckAnswer(bool Passed, string Found, SetupFixHint? Fix = null);
 
         /// <summary>
-        /// Readies the container (when managed), sends the one request and judges the config's row and
-        /// the container's. A request the service doesn't answer fails both, and the container is left
-        /// as it is for its logs; an answer that fails the check (empty text, a low score) fails only
-        /// the config's row, and the container is put back as usual.
+        /// <see cref="SendCheckAsync"/> for a check that answers one config row: that row's verdict, and
+        /// the container's when managed.
         /// </summary>
-        private async Task<IReadOnlyList<SetupCheckRow>> CpuCheckAsync(
+        private async Task<IReadOnlyList<SetupCheckRow>> RequestCheckAsync(
             FullContext context, DockerAiService? service, SetupCheckRow row, SetupSettingsLink settings, string url,
-            Func<Task<CpuAnswer>> request)
+            Func<Task<CheckAnswer>> request, string? model = null)
         {
-            SetupCheckRow? containerRow = null;
-            ContainerUse? use = null;
-            if (service is not null)
-            {
-                (containerRow, var ready, use) = await ReadyContainerAsync(context, service);
-                if (!ready)
-                    return
-                    [
-                        row with
-                        {
-                            Result = SetupCheckResult.Failed,
-                            Found = $"Not sent: {service.ContainerName} isn't ready",
-                            Fix = new SetupFixHint($"Fix the {service.ContainerName} row first, then run the Full check again."),
-                        },
-                        containerRow,
-                    ];
-            }
-
-            CpuAnswer answer;
-            try
-            {
-                answer = await request();
-            }
-            catch (Exception ex)
-            {
-                var found = $"POST {url} failed: {(ex as AiServiceUnavailableException)?.InnerException?.Message ?? ex.Message}";
-                if (service is null)
-                    return [row with
-                    {
-                        Result = SetupCheckResult.Failed,
-                        Found = found,
-                        Fix = new SetupFixHint($"Check the service where it runs, or correct the config in {settings.Label}.", settings),
-                    }];
-                use!.Failed = true;
-                var logs = AiServicesCheck.LogsFix(service);
-                return
-                [
-                    row with
-                    {
-                        Result = SetupCheckResult.Failed,
-                        Found = found,
-                        Fix = logs with { Text = $"{logs.Text.TrimEnd('.')}, or correct the config in {settings.Label}.", Link = settings },
-                    },
-                    containerRow! with
-                    {
-                        Result = SetupCheckResult.Failed,
-                        Found = "Running, but didn't answer the check: left as it is for its logs",
-                        Fix = logs,
-                    },
-                ];
-            }
-
+            var (answer, containerRow) = await SendCheckAsync(context, service, settings, url, request, model);
             var verdict = row with
             {
                 Result = answer.Passed ? SetupCheckResult.Passed : SetupCheckResult.Failed,
@@ -170,6 +117,55 @@ namespace Read2Me.App.Services.SetupCheck
                 Fix = answer.Fix ?? new SetupFixHint($"Change it in {settings.Label}.", settings),
             };
             return containerRow is null ? [verdict] : [verdict, containerRow];
+        }
+
+        /// <summary>
+        /// Readies the container (when managed; a GPU one after the Preflight conflict sweep), sends the
+        /// one request and answers what it found, with the container's row. A request the service
+        /// doesn't answer fails both, and the container is left as it is for its logs; an answer that
+        /// fails the check (empty text, a low score) fails only the config's row, and the container is
+        /// put back as usual. A missing model file's error gets the hint that names it.
+        /// </summary>
+        private async Task<(CheckAnswer Answer, SetupCheckRow? Container)> SendCheckAsync(
+            FullContext context, DockerAiService? service, SetupSettingsLink settings, string url,
+            Func<Task<CheckAnswer>> request, string? model)
+        {
+            SetupCheckRow? containerRow = null;
+            ContainerUse? use = null;
+            if (service is not null)
+            {
+                if (service.UsesGpu)
+                    await SweepAsync(context, service);
+                (containerRow, var ready, use) = await ReadyContainerAsync(context, service);
+                if (!ready)
+                    return (new CheckAnswer(false, $"Not sent: {service.ContainerName} isn't ready",
+                        new SetupFixHint($"Fix the {service.ContainerName} row first, then run the Full check again.")), containerRow);
+            }
+
+            try
+            {
+                return (await request(), containerRow);
+            }
+            catch (Exception ex)
+            {
+                var error = (ex as AiServiceUnavailableException)?.InnerException?.Message ?? ex.Message;
+                var found = $"POST {url} failed: {error}";
+                var missing = MissingModelFix(service, model, error);
+                if (service is null)
+                    return (new CheckAnswer(false, found, missing
+                        ?? new SetupFixHint($"Check the service where it runs, or correct the config in {settings.Label}.", settings)), null);
+
+                var logs = AiServicesCheck.LogsFix(service);
+                use!.Failed = true;
+                use.Row = containerRow! with
+                {
+                    Result = SetupCheckResult.Failed,
+                    Found = "Running, but didn't answer the check: left as it is for its logs",
+                    Fix = missing ?? logs,
+                };
+                return (new CheckAnswer(false, found, missing
+                    ?? logs with { Text = $"{logs.Text.TrimEnd('.')}, or correct the config in {settings.Label}.", Link = settings }), use.Row);
+            }
         }
     }
 }

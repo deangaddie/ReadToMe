@@ -56,6 +56,7 @@ namespace Read2Me.App.Services.SetupCheck
                 new(SetupCheckLane.Local, "Encoding a 1 s tone to .m4b", [SetupCheckIds.Ffmpeg], [], 3, FullFfmpegAsync),
             };
             steps.AddRange(CpuSteps(context));
+            steps.AddRange(GpuSteps(context));
             return steps;
         }
 
@@ -153,8 +154,10 @@ namespace Read2Me.App.Services.SetupCheck
             {
                 lock (_lock)
                 {
-                    foreach (var step in steps.Skip(next))
-                        SetRows(step.RowIds, row => row with { Result = SetupCheckResult.NotRun, Found = Cancelled, Note = null });
+                    // Rows a step that ran already judged (a container or chain row several steps share) keep that verdict.
+                    var judged = steps.Take(next).SelectMany(s => s.RowIds).ToHashSet(StringComparer.Ordinal);
+                    SetRows([.. steps.Skip(next).SelectMany(s => s.RowIds).Where(id => !judged.Contains(id))],
+                        row => row with { Result = SetupCheckResult.NotRun, Found = Cancelled, Note = null });
                     _report = _report with { FullRun = null, FullCheckedAt = _clock.GetUtcNow(), PutBack = putBack };
                     _run = null;
                     full.CharacterGate.Open(GateOwners.SetupCheck);

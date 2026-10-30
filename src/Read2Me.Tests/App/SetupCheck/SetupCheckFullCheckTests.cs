@@ -73,6 +73,9 @@ namespace Read2Me.Tests.App.SetupCheck
                 Entered.TrySetResult();
                 return Release.Task;
             }
+
+            public Task<FfmpegDurationResult> MeasureAudioAsync(Stream audio, string? ffmpegPath, CancellationToken ct = default) =>
+                Task.FromResult(new FfmpegDurationResult(TimeSpan.FromSeconds(1)));
         }
 
         private sealed class AnsweringFfmpeg : IFfmpegProber
@@ -178,9 +181,10 @@ namespace Read2Me.Tests.App.SetupCheck
         [Fact]
         public async Task During_the_run_every_queue_waits_Preflight_is_refused_and_the_watchdog_holds_off_only_what_the_steps_drive()
         {
-            // An active LLM config on llama, which the ffmpeg step doesn't drive: the watchdog keeps watching it.
+            // An active LLM config on a URL the app doesn't manage: its step drives no container, so
+            // the watchdog holds off nothing.
             await new LlmSettingsService(Factory, NullLogger<LlmSettingsService>.Instance)
-                .CreateConfigAsync(new LlmServerConfig { Name = "Qwen", BaseUrl = "http://localhost:8080", Model = "qwen-28b" });
+                .CreateConfigAsync(new LlmServerConfig { Name = "Remote", BaseUrl = "http://llm-box:8080", Model = "qwen-28b" });
             var runner = Runner();
             await runner.RunQuickCheckAsync(CancellationToken.None);
 

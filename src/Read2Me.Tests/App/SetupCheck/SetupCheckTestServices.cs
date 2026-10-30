@@ -8,9 +8,13 @@ using Read2Me.AppData;
 using Read2Me.AppData.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Audio.AudioCpp;
+using Read2Me.Services.Audio.ParagraphTts;
 using Read2Me.Services.Audio.SemanticSimilarity;
 using Read2Me.Services.Audio.Transcription;
+using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Characters;
+using Read2Me.Services.Events;
 using Read2Me.Services.Health;
 using Read2Me.Services.Queueing;
 using Read2Me.Tests.App.Live;
@@ -41,6 +45,15 @@ namespace Read2Me.Tests.App.SetupCheck
                 .AddScoped<ISemanticSimilarityClientResolver, SemanticSimilarityClientResolver>()
                 .AddKeyedScoped<ISemanticSimilarityClient, SemanticSimilarityClient>(SemanticSimilarityServiceType.MiniLmL6)
                 .AddKeyedScoped<ISemanticSimilarityClient, SemanticSimilarityClient>(SemanticSimilarityServiceType.MpnetBaseV2)
+                // audio.cpp with no 503 retries: a busy answer fails at once.
+                .AddSingleton(new AudioCppRetryPolicy([]))
+                .AddSingleton<EventBroadcaster<AudioGenEvent>>()
+                .AddSingleton<IAudioCppGate, AudioCppGate>()
+                .AddSingleton<IAudioCppClient, AudioCppClient>()
+                .AddKeyedScoped<IParagraphTtsClient, BreezeParagraphTtsClient>(ParagraphTtsServiceType.Breeze)
+                .AddKeyedScoped<IParagraphTtsClient, Qwen3ParagraphTtsClient>(ParagraphTtsServiceType.Qwen3Base)
+                .AddKeyedScoped<IVoiceDesignClient, BreezeVoiceDesignClient>(VoiceDesignServiceType.Breeze)
+                .AddKeyedScoped<IVoiceDesignClient, Qwen3VoiceDesignClient>(VoiceDesignServiceType.Qwen3)
                 .AddScoped(_ => new LlmSettingsService(db, NullLogger<LlmSettingsService>.Instance))
                 .AddScoped(_ => new ParagraphTtsSettingsService(db, NullLogger<ParagraphTtsSettingsService>.Instance))
                 .AddScoped(_ => new VoiceDesignSettingsService(db, NullLogger<VoiceDesignSettingsService>.Instance))

@@ -15,7 +15,16 @@ namespace Read2Me.Services.Audio
     {
         /// <summary>A null/blank path runs ffmpeg from PATH. Never throws but for caller cancellation.</summary>
         Task<FfmpegProbeResult> EncodeToneAsync(string? ffmpegPath, CancellationToken ct = default);
+
+        /// <summary>
+        /// How long <paramref name="audio"/> plays, as the ffprobe beside the given ffmpeg reads it (a
+        /// null/blank path: ffprobe from PATH). Never throws but for caller cancellation.
+        /// </summary>
+        Task<FfmpegDurationResult> MeasureAudioAsync(Stream audio, string? ffmpegPath, CancellationToken ct = default);
     }
+
+    /// <summary>What ffprobe read: the duration, or null with why in <see cref="Error"/>.</summary>
+    public sealed record FfmpegDurationResult(TimeSpan? Duration, string? Error = null);
 
     public sealed class FfmpegEncodeCheck(ILogger<FfmpegEncodeCheck> logger) : IFfmpegEncodeCheck
     {
@@ -76,14 +85,43 @@ namespace Read2Me.Services.Audio
             }
             finally
             {
-                try
-                {
-                    File.Delete(output);
-                }
-                catch
-                {
-                    // Best effort: a temp file left behind is harmless.
-                }
+                DeleteQuietly(output);
+            }
+        }
+
+        public async Task<FfmpegDurationResult> MeasureAudioAsync(Stream audio, string? ffmpegPath, CancellationToken ct = default)
+        {
+            var file = Path.Combine(Path.GetTempPath(), $"r2m-setup-check-{Guid.NewGuid():N}.wav");
+            try
+            {
+                await using (var written = File.Create(file))
+                    await audio.CopyToAsync(written, ct);
+                return new FfmpegDurationResult(await Assembly.AudiobookEncoder.ReadDurationAsync(file, ffmpegPath, ct));
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Setup check couldn't measure the audio");
+                return new FfmpegDurationResult(null, ex.Message);
+            }
+            finally
+            {
+                DeleteQuietly(file);
+            }
+        }
+
+        private static void DeleteQuietly(string file)
+        {
+            try
+            {
+                File.Delete(file);
+            }
+            catch
+            {
+                // Best effort: a temp file left behind is harmless.
             }
         }
     }

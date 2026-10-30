@@ -163,7 +163,13 @@ describe('the Full check confirm', () => {
       'encodes a 1 s tone to .m4b with the ffmpeg audio generation uses',
     );
     expect(options.message).toContain(
-      'starts the transcription and similarity containers an active config uses, one at a time, to transcribe and score a sample clip, then puts each back as it found it.',
+      'starts the transcription and similarity containers an active config uses, one at a time, to transcribe and score a sample clip.',
+    );
+    expect(options.message).toContain(
+      'stops any running GPU container and loads each configured TTS, voice design and LLM model in turn, one GPU container at a time.',
+    );
+    expect(options.message).toContain(
+      'puts every container back as it found it, llama with the model it had loaded.',
     );
     expect(options.message).toContain('Queues wait and new AI tasks are refused until it ends.');
     expect(options.message).toEndWith("It's likely to take about 4 minutes.");

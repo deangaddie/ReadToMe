@@ -24,6 +24,10 @@ public sealed class FakeFfmpegEncode : IFfmpegEncodeCheck
         return new FfmpegProbeResult(true, "Encoded a 1 s tone to a 9,000-byte .m4b");
     }
 
+    /// <summary>Fake audio always plays: ffprobe would refuse the fake WAVs the fake AI answers.</summary>
+    public Task<FfmpegDurationResult> MeasureAudioAsync(Stream audio, string? ffmpegPath, CancellationToken ct = default) =>
+        Task.FromResult(new FfmpegDurationResult(TimeSpan.FromSeconds(1.5)));
+
     /// <summary>Holds encodes from now on, with a fresh <see cref="Entered"/> to wait on.</summary>
     public void HoldNext()
     {
