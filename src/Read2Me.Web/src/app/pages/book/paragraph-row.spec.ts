@@ -63,8 +63,8 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
     selectedItems: new Set(),
     narratorOnlyMode: false,
     ancestry: { c1: { partId: 'pt1', volumeId: 'v1' } },
-    locked: false,
-    readOnly: null,
+    blocked: null,
+    viewing: false,
     generating: false,
     marks: {},
     litMarks: new Set(),
@@ -98,6 +98,11 @@ async function mount(context: RowContext, paragraph = PARAGRAPH) {
   await Promise.resolve();
   return host.firstElementChild as HTMLElement;
 }
+
+/** A blocked book: the page's `editor.blocked()` while a History step is viewed. */
+const BLOCKED = { reason: VIEWING_READ_ONLY };
+const tooltip = (el: Element | null) =>
+  el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
 
 const text = (el: Element | null) => el?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 
@@ -281,21 +286,26 @@ describe('paragraphRow', () => {
       expect(read.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
     });
 
-    it('a locked book (saving or stale) keeps its chips inert, like the row menus', async () => {
-      const items = await mount(ctx({ mode: 'speakers', locked: true }));
-      expect(items.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
-      const read = await mount(ctx({ locked: true }));
-      expect(read.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
+    it('a blocked book keeps its chips inert, with the reason that blocks the row menu', async () => {
+      for (const mode of ['read', 'speakers'] as const) {
+        const el = await mount(ctx({ mode, blocked: BLOCKED }));
+        expect(el.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
+        expect(tooltip(el.querySelector('r2m-speaker-chip'))).toBe(VIEWING_READ_ONLY);
+      }
     });
   });
 
   describe('outcomes (ticket 12)', () => {
-    it('a locked book (saving or stale) shows the outcome as a plain chip, with nothing to clear', async () => {
+    it('a blocked book disables the outcome, with the reason', async () => {
       const el = await mount(
-        ctx({ locked: true, paragraphStatus: { p1: { outcome: { kind: 'Failed' } } } }),
+        ctx({ blocked: BLOCKED, paragraphStatus: { p1: { outcome: { kind: 'Failed' } } } }),
       );
-      expect(el.querySelector('.r2m-paragraph__outcome')).toBeNull();
-      expect(text(el.querySelector('.r2m-status-chip'))).toContain('Failed');
+      const button = el.querySelector<HTMLButtonElement>('.r2m-paragraph__outcome')!;
+      expect(text(button)).toContain('Failed');
+      expect(button.disabled).toBe(true);
+      // The reason is its one tooltip: the button's own "Click to clear" would win the hover.
+      expect(button.getAttribute('data-tooltip')).toBeNull();
+      expect(tooltip(button)).toBe(VIEWING_READ_ONLY);
     });
 
     it('a Failed chip carries the reason and clears the outcome on click', async () => {
@@ -315,29 +325,6 @@ describe('paragraphRow', () => {
       );
       expect(el.querySelector('.r2m-paragraph__outcome')).toBeNull();
       expect(text(el.querySelector('.r2m-status-chip'))).toContain('Queued');
-    });
-  });
-
-  describe('viewing a History step (ticket 32)', () => {
-    const viewing = (overrides: Partial<RowContext> = {}) =>
-      ctx({ locked: true, readOnly: VIEWING_READ_ONLY, ...overrides });
-
-    it('the node menu is off with the viewing reason, and the chip offers no menu', async () => {
-      const el = await mount(viewing());
-      const trigger = el.querySelector<HTMLButtonElement>(
-        '.r2m-paragraph__menu .r2m-node-menu__trigger',
-      )!;
-      expect(trigger.disabled).toBe(true);
-      expect(trigger.closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(
-        VIEWING_READ_ONLY,
-      );
-      expect(el.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
-    });
-
-    it('a settled outcome shows as a plain chip, with nothing to clear', async () => {
-      const el = await mount(viewing({ paragraphStatus: { p1: { outcome: { kind: 'Failed' } } } }));
-      expect(el.querySelector('.r2m-paragraph__outcome')).toBeNull();
-      expect(text(el.querySelector('.r2m-status-chip'))).toContain('Failed');
     });
   });
 
@@ -473,9 +460,9 @@ describe('paragraphRow', () => {
       ).toEqual([false, true, false]);
     });
 
-    it('a locked editor disables every menu', async () => {
-      const el = await mount(ctx({ mode: 'speakers', locked: true }));
-      expect(triggers(el).every((b) => b.disabled)).toBe(true);
+    it('a blocked book disables every menu, with the reason', async () => {
+      const el = await mount(ctx({ mode: 'speakers', blocked: BLOCKED }));
+      expect(triggers(el).every((b) => b.disabled && tooltip(b) === VIEWING_READ_ONLY)).toBe(true);
     });
 
     /** The target the paragraph's trigger opens the shared menu for. */

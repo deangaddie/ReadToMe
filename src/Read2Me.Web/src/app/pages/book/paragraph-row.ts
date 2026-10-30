@@ -1,10 +1,10 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
-import type { ParagraphDto } from '@app/api';
+import { type ParagraphDto, withLocal } from '@app/api';
 import { use } from '@app/core/services';
 import { speakerHue } from '@app/shared/speaker-color';
 import { icon } from '@app/ui/partials';
-import { chipOf, itemRow, speakerChipEvents } from './item-row';
+import { chipOf, itemRow, speakerChipEvents, withReason } from './item-row';
 import { nodeMenuTrigger } from './node-menu';
 import { proseOf } from './pronunciation-marks';
 import type { NodeMenuTarget } from './node-menu-entries';
@@ -29,8 +29,9 @@ import '@app/ui/speaker-chip';
  * paragraph speaker chip in Read, one {@link itemRow} per item in Speakers and Audio. The Read
  * chip opens the speaker menu and assigns the whole paragraph. The status column shows the
  * attribution queue chip and a lock while queued (not in Audio mode) — a settled Failed/Unknown
- * chip is a button that forgets the outcome (a plain chip while a History step is viewed) — then the paragraph's node-menu trigger (ticket 11),
- * off while the paragraph is queued or the editor is locked.
+ * chip is a button that forgets the outcome (off with the reason while the book is blocked) — then
+ * the paragraph's node-menu trigger (ticket 11), off while the paragraph is queued or the book is
+ * blocked.
  *
  * A row holds no state of its own: the selection and the assigner are the project shell's,
  * reached from the event's element through `use(X, element)` (DOM ancestry), as the Angular row
@@ -61,8 +62,10 @@ export function paragraphRow(
   // Only Character paragraphs are selectable, and only where the selection is paragraphs.
   const selectable = ctx.selectable && isDialogParagraph(paragraph);
   const selected = ctx.selected.has(paragraph.id);
-  // The Read chip assigns the whole paragraph; a queued one is the server's to stamp, a locked book nobody's.
-  const assignable = selectable && !queued && !ctx.locked && ctx.roster.length > 0;
+  // The paragraph's menu and its Read chip: off while the queue holds it.
+  const block = withLocal(ctx.blocked, queued);
+  // The Read chip assigns the whole paragraph; a queued one is the server's to stamp, a blocked book nobody's.
+  const assignable = selectable && block === null && ctx.roster.length > 0;
   const classes = [
     'r2m-paragraph',
     `r2m-paragraph--${speaker.state}`,
@@ -112,16 +115,19 @@ export function paragraphRow(
       ${
         ctx.mode === 'read'
           ? html`<div class="r2m-paragraph__meta">
-                <r2m-speaker-chip
-                  .compact=${true}
-                  .state=${speaker.state}
-                  .name=${speaker.name}
-                  .characterId=${speaker.characterId}
-                  .roster=${assignable ? ctx.roster : undefined}
-                  @pick=${chip.pick}
-                  @clear=${chip.clear}
-                  @create=${chip.create}
-                ></r2m-speaker-chip>
+                ${withReason(
+                  block,
+                  html`<r2m-speaker-chip
+                    .compact=${true}
+                    .state=${speaker.state}
+                    .name=${speaker.name}
+                    .characterId=${speaker.characterId}
+                    .roster=${assignable ? ctx.roster : undefined}
+                    @pick=${chip.pick}
+                    @clear=${chip.clear}
+                    @create=${chip.create}
+                  ></r2m-speaker-chip>`,
+                )}
               </div>
               <p class="r2m-paragraph__prose">${proseOf(paragraph, ctx.marks, ctx.litMarks)}</p>`
           : repeat(
@@ -141,22 +147,30 @@ export function paragraphRow(
 
     <div class="r2m-paragraph__status">
       ${
-        queue && outcome && !ctx.locked
-          ? html`<button
-              type="button"
-              class="r2m-paragraph__outcome"
-              data-tooltip="${queue.tooltip ? `${queue.tooltip} — ` : ''}Click to clear"
-              @click=${clearOutcome}
-            >
-              ${chipOf({ ...queue, tooltip: undefined })}
-            </button>`
+        queue && outcome
+          ? withReason(
+              block,
+              html`<button
+                type="button"
+                class="r2m-paragraph__outcome"
+                data-tooltip=${
+                  block === null
+                    ? `${queue.tooltip ? `${queue.tooltip} — ` : ''}Click to clear`
+                    : nothing
+                }
+                ?disabled=${block !== null}
+                @click=${clearOutcome}
+              >
+                ${chipOf({ ...queue, tooltip: undefined })}
+              </button>`,
+            )
           : queue
             ? chipOf(queue)
             : nothing
       }
       ${busy ? icon('lock', 'r2m-paragraph__lock') : nothing}
       <span class="r2m-paragraph__menu"
-        >${nodeMenuTrigger(menuTarget, { disabled: queued || ctx.locked, reason: ctx.readOnly })}</span
+        >${nodeMenuTrigger(menuTarget, { disabled: block !== null, reason: block?.reason ?? null })}</span
       >
     </div>
   </div>`;
