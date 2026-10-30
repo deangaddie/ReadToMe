@@ -4129,7 +4129,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Audio post-processing scalars: ffmpeg path, WER threshold, retry count, pause durations. */
+        /** Audio post-processing scalars: ffmpeg path, WER threshold, retry count, pause durations. ffmpegPath is the ffmpeg the app runs: savedFfmpegPath (Settings), else configuredFfmpegPath (the host's Ffmpeg:Path), else null (PATH). */
         get: {
             parameters: {
                 query?: never;
@@ -4185,7 +4185,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The scalars plus the assembler pause durations and the paragraph post-process step configs (silence-trim, consonant-soften), in pipeline order. */
+        /** The scalars plus the assembler pause durations and the paragraph post-process step configs (silence-trim, consonant-soften), in pipeline order. Here ffmpegPath is the saved Settings value the form edits (null: none saved), and configuredFfmpegPath the host's Ffmpeg:Path the app uses when none is saved (null: PATH). */
         get: {
             parameters: {
                 query?: never;

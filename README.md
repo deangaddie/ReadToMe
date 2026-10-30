@@ -81,7 +81,7 @@ After `dotnet run`, open <https://localhost:5001>. Configure the AI services und
 | **AI services** | Live status of each service's container, with start / restart / stop | — |
 | **Themes** | Colour themes | — |
 
-Audio processing is one settings record, not a list of configs. Leave its **ffmpeg path** blank to use `ffmpeg` from `PATH`; set it (and press **Test**) when ffmpeg is not on `PATH`.
+Audio processing is one settings record, not a list of configs. Leave its **ffmpeg path** blank to use `Ffmpeg:Path` from `appsettings.Local.json`, or `ffmpeg` from `PATH` when that is unset; a path saved here wins over both (press **Test** to probe it).
 
 ## Using the app
 

@@ -84,6 +84,10 @@ Audio post-processing scalars: `GET/PUT /api/settings/audio-processing`. The set
 `PUT /api/settings/audio-processing/pauses` saves the five pauses together (400 on a negative);
 `PUT /api/settings/audio-processing/steps/{stepId}` upserts one step (400 for a step outside the paragraph pipeline).
 `POST /api/settings/audio-processing/ffmpeg/test` with `{ ffmpegPath? }` persists the path, then probes it → `{ success, message }`.
+The ffmpeg the app runs is the saved path, else the host's `Ffmpeg:Path` (appsettings, command line, env vars; read
+live), else `ffmpeg` on PATH. `GET /api/settings/audio-processing` answers that resolved `ffmpegPath` with
+`savedFfmpegPath` and `configuredFfmpegPath`; the full view's `ffmpegPath` is the saved value the form edits, beside
+`configuredFfmpegPath`. A new `app.db` no longer copies `Ffmpeg:Path` in.
 A/B preview of an unsaved step draft: `GET /api/audio/samples/recent?limit=20` lists recently generated items that still
 hold a Preview Source (`{ itemId, folder, text, characterName, voiceName, projectTitle }`), then
 `POST /api/settings/audio-processing/steps/{stepId}/preview` with `{ sample: { folder, itemId }, settings }` answers
@@ -128,7 +132,7 @@ curl -s -X POST http://localhost:5000/api/setup-check/quick
 per compose service, e.g. `container-llama` (Docker services). `group` is
 `workspaceAndTools | aiConfigs | dockerServices`; `tier` `quick | full`; `result`
 `passed | failed | notConfirmed | notRun | notUsed` (`checking` while a run is on the row). A `note` never
-changes the result: an appsettings `Ffmpeg:Path` that differs from the Settings value, no transcription or
+changes the result: a saved Settings ffmpeg path that hides a different appsettings `Ffmpeg:Path`, no transcription or
 similarity config ("audio is generated without an accuracy score"), a URL the app doesn't manage, or
 `AiWatchdog:Enabled = false` on the container rows. `fix.link.path` is the web app's Settings page that
 owns the value (`settings/audio`, `settings/llm`, …); `fix.copy` is a command or file path for things

@@ -172,17 +172,17 @@ namespace Read2Me.App.Services.SetupCheck
         private static readonly SetupSettingsLink AudioProcessing = new("settings/audio", "Settings → Audio processing");
 
         /// <summary>
-        /// The live path is the Settings value (blank: PATH), what audio generation runs; config's
-        /// <c>Ffmpeg:Path</c> only seeds a new database, so a different one earns a note, and the
-        /// fix hint offers it when it would answer where the live one doesn't.
+        /// The live path is the one audio generation runs: the Settings value, else config's
+        /// <c>Ffmpeg:Path</c>, else PATH. A saved path hides a different config one, so that earns
+        /// a note, and the fix hint offers it when it would answer where the live one doesn't.
         /// </summary>
         private async Task<SetupCheckRow> CheckFfmpegAsync(CancellationToken ct)
         {
             var paths = await ReadFfmpegPathsAsync(ct);
             var (ok, found) = await ProbeFfmpegAsync(paths.Live, ct);
             var fix = FfmpegFix;
-            if (!ok && paths.Note is not null && (await ProbeFfmpegAsync(paths.Seeded, ct)).Ok)
-                fix = new SetupFixHint("The appsettings path answers: use it as the ffmpeg path.", AudioProcessing, paths.Seeded);
+            if (!ok && paths.Note is not null && (await ProbeFfmpegAsync(paths.Configured, ct)).Ok)
+                fix = new SetupFixHint("The appsettings path answers: use it as the ffmpeg path.", AudioProcessing, paths.Configured);
 
             // A Full-tier row: the Quick check judges -version, the Full check the encode.
             return new SetupCheckRow(
@@ -195,23 +195,43 @@ namespace Read2Me.App.Services.SetupCheck
             new("Set the ffmpeg path to an ffmpeg with ffprobe beside it.", AudioProcessing);
 
         /// <summary>
-        /// <see cref="Live"/>: the Settings value (null: PATH). <see cref="Seeded"/>: config's
-        /// <c>Ffmpeg:Path</c>. <see cref="Note"/>: set when they differ.
+        /// <see cref="Live"/>: what the app runs, the Settings value else <see cref="Configured"/>
+        /// (null: PATH). <see cref="Configured"/>: config's <c>Ffmpeg:Path</c>. <see cref="Note"/>:
+        /// set when a saved value hides a different configured one.
         /// </summary>
-        private sealed record FfmpegPaths(string? Live, string? Seeded, string Shown, string? Note);
+        private sealed record FfmpegPaths(string? Live, string? Configured, string Shown, string? Note);
 
         private async Task<FfmpegPaths> ReadFfmpegPathsAsync(CancellationToken ct)
         {
-            string? live;
+            string? saved;
             await using (var db = await dbFactory.CreateDbContextAsync(ct))
-                live = Read2Me.Services.AudioProcessingSettingsService.NormalizeFfmpegPath(
+                saved = Read2Me.Services.AudioProcessingSettingsService.NormalizeFfmpegPath(
                     (await db.Settings.SingleOrDefaultAsync(ct))?.FfmpegPath);
-            var seeded = Read2Me.Services.AudioProcessingSettingsService.NormalizeFfmpegPath(configuration["Ffmpeg:Path"]);
+            var configured = Read2Me.Services.AudioProcessingSettingsService.NormalizeFfmpegPath(configuration["Ffmpeg:Path"]);
+            var live = saved ?? configured;
             var shown = live ?? "PATH";
-            var note = seeded is not null && !string.Equals(seeded, live, StringComparison.OrdinalIgnoreCase)
-                ? $"appsettings says {seeded}; the app uses {shown} — change it in {AudioProcessing.Label}"
+            var note = configured is not null && !SamePath(configured, live)
+                ? $"appsettings says {configured}; the app uses {shown} — change it in {AudioProcessing.Label}"
                 : null;
-            return new FfmpegPaths(live, seeded, shown, note);
+            return new FfmpegPaths(live, configured, shown, note);
+        }
+
+        /// <summary>Paths that name one file however they're written (case, / or \, ..) are the same.</summary>
+        private static bool SamePath(string a, string? b)
+        {
+            if (b is null)
+                return false;
+            if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase))
+                return true;
+            try
+            {
+                return Path.IsPathFullyQualified(a) && Path.IsPathFullyQualified(b)
+                    && string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
         }
 
         /// <summary>Both tools must answer; found is ffmpeg's banner, or which one failed and why.</summary>

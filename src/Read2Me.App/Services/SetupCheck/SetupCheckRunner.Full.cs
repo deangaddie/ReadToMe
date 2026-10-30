@@ -336,8 +336,8 @@ namespace Read2Me.App.Services.SetupCheck
             // As in the Quick check: an appsettings ffmpeg that would do the job is the fix to offer.
             var fix = FfmpegFix;
             if (!encode.Success && paths.Note is not null
-                && (await full.Encode.EncodeToneAsync(paths.Seeded, CancellationToken.None)).Success)
-                fix = new SetupFixHint("The appsettings path encodes: use it as the ffmpeg path.", AudioProcessing, paths.Seeded);
+                && (await full.Encode.EncodeToneAsync(paths.Configured, CancellationToken.None)).Success)
+                fix = new SetupFixHint("The appsettings path encodes: use it as the ffmpeg path.", AudioProcessing, paths.Configured);
             return
             [
                 new SetupCheckRow(

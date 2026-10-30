@@ -15,8 +15,7 @@ namespace Read2Me.Services
     /// a fresh install works as soon as the containers are up. The values mirror the tuned
     /// development workspace (llama presets in <c>Infra/llama/config/models.ini</c>, audio.cpp model
     /// ids in <c>Infra/audiocpp/server.json</c>). Adds no configs to a database that already holds one.
-    /// It also stores the host's <c>Ffmpeg:Path</c>, so a fresh tool workspace finds ffmpeg with no
-    /// manual step; only call it for a new database, since that write ignores existing configs.
+    /// The ffmpeg path isn't seeded: with none saved the app uses the host's <c>Ffmpeg:Path</c>.
     /// </summary>
     public static class DefaultServiceConfigSeeder
     {
@@ -25,24 +24,8 @@ namespace Read2Me.Services
         public const string WhisperUrl = "http://localhost:9000";
         public const string MpnetUrl = "http://localhost:8201";
 
-        /// <param name="ffmpegPath">Stored as <see cref="AudioProcessingSettingsService.SetFfmpegPathAsync"/>
-        /// would store it, whether or not configs already existed; blank or null leaves the stored path
-        /// as it is (null on a new database, meaning ffmpeg on PATH).</param>
         /// <returns>True when the default configs were written; false when any config already existed.</returns>
-        public static async Task<bool> SeedAsync(Read2MeDbContext db, string? ffmpegPath = null, CancellationToken ct = default)
-        {
-            var seeded = await SeedConfigsAsync(db, ct);
-            var normalized = AudioProcessingSettingsService.NormalizeFfmpegPath(ffmpegPath);
-            if (normalized != null)
-            {
-                var settings = await GetOrAddSettingsAsync(db, ct);
-                settings.FfmpegPath = normalized;
-                await db.SaveChangesAsync(ct);
-            }
-            return seeded;
-        }
-
-        private static async Task<bool> SeedConfigsAsync(Read2MeDbContext db, CancellationToken ct)
+        public static async Task<bool> SeedAsync(Read2MeDbContext db, CancellationToken ct = default)
         {
             if (await db.LlmServerConfigs.AnyAsync(ct)
                 || await db.ParagraphTtsServiceConfigs.AnyAsync(ct)

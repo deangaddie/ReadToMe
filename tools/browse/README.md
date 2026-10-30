@@ -30,7 +30,7 @@ cd src/Read2Me.Web && bun run dev                                     # dev serv
 The scripts bring their own files and never touch the owner's workspace (the folder set in
 `src/Read2Me.App/appsettings.Local.json`). The host above runs on `tools/browse/workspace/`, which
 is git-ignored: the first start creates it with a fresh `app.db` seeded with the default AI service
-configs, and with the ffmpeg path set from `Ffmpeg:Path` in the local settings file, if it has one.
+configs. No ffmpeg path is saved there, so the host uses `Ffmpeg:Path` from the local settings file, if it has one.
 Other settings that live in `app.db` start at their defaults. Delete the folder to start clean.
 
 The books are Project Gutenberg epubs in `books/`, committed with the tools; `BOOKS` in
