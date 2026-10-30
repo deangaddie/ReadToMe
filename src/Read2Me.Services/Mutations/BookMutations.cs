@@ -250,7 +250,7 @@ public sealed class BookMutations(
     }
 
     /// <summary>
-    /// Every mutation but the Restore's own asks the gate. The gate refuses a write only while the
+    /// Every mutation but the Restore's own asks <see cref="ProjectActivity"/>, which refuses a write only while the
     /// project is restoring, so its refusal is always <see cref="BookMutationRejection.Restoring"/>.
     /// </summary>
     private BookMutationOutcome? RefusedWhileRestoring(BookMutation mutation) =>
