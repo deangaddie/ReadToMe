@@ -6538,7 +6538,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Re-run one Full-tier check (a row whose rerun isn't null) in the background: only the steps that judge it, under the Full check's rules — queues wait, Preflight refuses new AI tasks, the containers it drives are put back, and progress goes out as setupCheck messages. rerun.gpu says it stops the running GPU container. The report's fullCheckedAt stays the last whole Full check's. 202 with the report (fullRun shows the re-run); 404 for an unknown or Quick-tier id; 409 while a Full check runs, while work is in flight (named, as for the Full check), or when the check has no active config. */
+        /** Re-run one Full-tier check (a row whose rerun isn't null) in the background: only the steps that judge it (similarity transcribes first, to score a real transcript), under the Full check's rules — queues wait, Preflight refuses new AI tasks, the containers it drives are put back, and progress goes out as setupCheck messages. rerun.gpu says it stops the running GPU container. The report's fullCheckedAt stays the last whole Full check's. 202 with the report (fullRun shows the re-run); 404 for an unknown or Quick-tier id; 409 while a Full check runs, while work is in flight (named, as for the Full check), before the start-up Quick check ends, when the check has no active config, or when its rerun.gpu is stale (the check now drives a GPU container: run the Quick check first). */
         post: {
             parameters: {
                 query?: never;

@@ -197,7 +197,7 @@ namespace Read2Me.App.Services.SetupCheck
         private async Task<string> PutBackAsync(FullContext context)
         {
             if (context.Containers.Count == 0)
-                return "Nothing to put back: the Full check drove no containers.";
+                return "Nothing to put back: the check drove no containers.";
 
             var parts = new Dictionary<ContainerUse, string>();
             foreach (var use in context.Containers.Where(u => !u.Failed && !u.WasRunning))

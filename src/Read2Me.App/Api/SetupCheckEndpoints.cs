@@ -46,17 +46,18 @@ namespace Read2Me.App.Api
 
             group.MapPost("/checks/{id}/rerun", async (string id, ISetupCheckRunner runner) =>
                 {
-                    if (runner.Report.Rows.FirstOrDefault(r => r.Id == id) is not { Tier: SetupCheckTier.Full })
-                        return Results.Problem($"There's no Full-tier check \"{id}\" to re-run.", statusCode: StatusCodes.Status404NotFound);
                     var start = await runner.RerunCheckAsync(id);
-                    return start.Refusal is { } refusal
-                        ? Results.Problem(refusal, statusCode: StatusCodes.Status409Conflict, title: "Can't re-run the check")
-                        : Results.Accepted(value: start.Report);
+                    return start switch
+                    {
+                        { Refusal: { } unknown, UnknownCheck: true } => Results.Problem(unknown, statusCode: StatusCodes.Status404NotFound),
+                        { Refusal: { } refusal } => Results.Problem(refusal, statusCode: StatusCodes.Status409Conflict, title: "Can't re-run the check"),
+                        _ => Results.Accepted(value: start.Report),
+                    };
                 })
                 .Produces<SetupCheckReport>(StatusCodes.Status202Accepted)
                 .ProducesProblem(StatusCodes.Status404NotFound)
                 .ProducesProblem(StatusCodes.Status409Conflict)
-                .WithSummary("Re-run one Full-tier check (a row whose rerun isn't null) in the background: only the steps that judge it, under the Full check's rules — queues wait, Preflight refuses new AI tasks, the containers it drives are put back, and progress goes out as setupCheck messages. rerun.gpu says it stops the running GPU container. The report's fullCheckedAt stays the last whole Full check's. 202 with the report (fullRun shows the re-run); 404 for an unknown or Quick-tier id; 409 while a Full check runs, while work is in flight (named, as for the Full check), or when the check has no active config.");
+                .WithSummary("Re-run one Full-tier check (a row whose rerun isn't null) in the background: only the steps that judge it (similarity transcribes first, to score a real transcript), under the Full check's rules — queues wait, Preflight refuses new AI tasks, the containers it drives are put back, and progress goes out as setupCheck messages. rerun.gpu says it stops the running GPU container. The report's fullCheckedAt stays the last whole Full check's. 202 with the report (fullRun shows the re-run); 404 for an unknown or Quick-tier id; 409 while a Full check runs, while work is in flight (named, as for the Full check), before the start-up Quick check ends, when the check has no active config, or when its rerun.gpu is stale (the check now drives a GPU container: run the Quick check first).");
         }
     }
 }

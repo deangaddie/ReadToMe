@@ -688,5 +688,22 @@ namespace Read2Me.Tests.App.SetupCheck
 
             Assert.Equal(new SetupRerun(Gpu: false), Row(quick, SetupCheckIds.Llm).Rerun);
         }
+
+        [Fact]
+        public async Task A_re_run_the_report_says_needs_no_GPU_is_refused_once_its_config_drives_one()
+        {
+            await LlmSettings.SetActiveConfigAsync(
+                (await LlmSettings.CreateConfigAsync(new LlmServerConfig { Name = "Remote", BaseUrl = "http://llm-box:8080", Model = "qwen-28b" })).Id);
+            var runner = Runner();
+            await runner.RunQuickCheckAsync(CancellationToken.None);
+            // The web app skipped its GPU confirm on the report's word; the config has moved since.
+            await AddLlmAsync("Qwen", "qwen-28b", active: true);
+
+            var start = await runner.RerunCheckAsync(SetupCheckIds.Llm);
+
+            Assert.Equal("LLM now drives a GPU container: run the Quick check, then re-run it.", start.Refusal);
+            Assert.Null(start.Report.FullRun);
+            Assert.Empty(_services.OpLog);
+        }
     }
 }
