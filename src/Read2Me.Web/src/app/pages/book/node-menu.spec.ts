@@ -61,7 +61,7 @@ afterEach(() => document.body.replaceChildren());
 async function mount(target: NodeMenuTarget, disabled = false) {
   const slot = document.createElement('div');
   host.append(slot);
-  render(nodeMenuTrigger(target, { disabled }), slot);
+  render(nodeMenuTrigger(target, { block: disabled ? { reason: null } : null }), slot);
   await menu.rendered();
   return slot.querySelector<HTMLButtonElement>('.r2m-node-menu__trigger')!;
 }

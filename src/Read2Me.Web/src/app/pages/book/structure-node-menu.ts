@@ -1,4 +1,4 @@
-import type { NodeLevel } from '@app/api';
+import type { Block, NodeLevel } from '@app/api';
 import type { NodeStatusSummary } from '@app/live/live-messages';
 import type { NodeMenuTarget, SelectionKind } from './node-menu-entries';
 
@@ -31,6 +31,11 @@ export interface StructureNodeMenu {
   disabled: boolean;
   /** The trigger's tooltip while a History step is viewed; null otherwise. */
   reason: string | null;
+}
+
+/** The trigger's edit gate answer for `menu`: null while it is on. */
+export function menuBlock({ disabled, reason }: StructureNodeMenu): Block | null {
+  return disabled || reason !== null ? { reason } : null;
 }
 
 export function structureNodeMenu({

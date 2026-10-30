@@ -10,7 +10,7 @@ import { type TreeNode, placeholderTitleClass } from './book-tree';
 import { NODE_MENU_OPEN, type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
 import type { ActionEntryId, SelectionKind } from './node-menu-entries';
 import type { TriState } from './selection';
-import { structureNodeMenu } from './structure-node-menu';
+import { menuBlock, structureNodeMenu } from './structure-node-menu';
 import structureTreeCss from './structure-tree.css' with { type: 'text' };
 
 adoptStyles(structureTreeCss);
@@ -238,11 +238,7 @@ export class StructureTree extends R2mElement {
             }
             ${status ? badges(status) : nothing}
             <span class="tree__menu">
-              ${nodeMenuTrigger(menu.target, {
-                disabled: menu.disabled,
-                tabIndex: -1,
-                reason: menu.reason,
-              })}
+              ${nodeMenuTrigger(menu.target, { block: menuBlock(menu), tabIndex: -1 })}
             </span>
           </div>`;
         },

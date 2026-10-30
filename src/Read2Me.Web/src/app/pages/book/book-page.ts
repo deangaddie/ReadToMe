@@ -56,7 +56,7 @@ import { type TriState, chapterDialogTotals, chapterVoicedTotals } from './selec
 import { AudioSelectionStore, SelectionStore } from './selection-store';
 import { SpeakerAssigner } from './speaker-assigner';
 import { buildRoster } from './speaker-roster';
-import { structureNodeMenu } from './structure-node-menu';
+import { menuBlock, structureNodeMenu } from './structure-node-menu';
 import '@app/ui/measured-list';
 import '@app/ui/speaker-menu';
 import './node-menu';
@@ -672,10 +672,7 @@ export class BookPage extends R2mElement {
           <span class="book__pause-label">${row.label}</span>
           <span class="book__pause-rule"></span>
           <span class="book__pause-menu"
-            >${nodeMenuTrigger(target, {
-              disabled: this.ctx().blocked !== null,
-              reason: this.ctx().blocked?.reason ?? null,
-            })}</span
+            >${nodeMenuTrigger(target, { block: this.ctx().blocked })}</span
           >
         </div>`;
       }
@@ -704,7 +701,7 @@ export class BookPage extends R2mElement {
       >
         <h2 class="book__${level} ${placeholderTitleClass(heading)}">${heading.title}</h2>
         <span class="book__heading-menu"
-          >${nodeMenuTrigger(menu.target, { disabled: menu.disabled, reason: menu.reason })}</span
+          >${nodeMenuTrigger(menu.target, { block: menuBlock(menu) })}</span
         >
       </div>
     </div>`;
