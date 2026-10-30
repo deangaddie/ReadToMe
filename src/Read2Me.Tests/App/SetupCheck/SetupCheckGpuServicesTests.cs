@@ -630,5 +630,63 @@ namespace Read2Me.Tests.App.SetupCheck
 
             Assert.InRange(with - without, 10 + 31, 120);
         }
+
+        // ── Re-run one check ─────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Re_running_paragraph_TTS_sends_only_its_request_and_puts_the_swept_llama_back_with_its_model()
+        {
+            await AddTtsAsync();
+            await AddLlmAsync("Qwen", "qwen-28b", active: true);
+            await AddTranscriptionAsync();
+            _services.Status["llama"] = AiServiceStatus.Ready;
+            _http.LoadedLlama = "gemma-12b";
+            var runner = Runner();
+            var quick = await runner.RunQuickCheckAsync(CancellationToken.None);
+            Assert.Equal(new SetupRerun(Gpu: true), Row(quick, SetupCheckIds.ParagraphTts).Rerun);
+
+            var start = await runner.RerunCheckAsync(SetupCheckIds.ParagraphTts);
+            Assert.Null(start.Refusal);
+            Assert.Equal(1, start.Report.FullRun?.Total);
+            var report = await start.Finished.WaitAsync(Wait);
+
+            Assert.Equal(SetupCheckResult.Passed, Row(report, SetupCheckIds.ParagraphTts).Result);
+            Assert.Equal(SetupCheckResult.Passed, Row(report, SetupCheckIds.Container("audiocpp")).Result);
+            Assert.Equal(Row(quick, SetupCheckIds.Transcription), Row(report, SetupCheckIds.Transcription));
+            Assert.DoesNotContain(_http.Posts, p => p.StartsWith($"POST {Whisper}"));
+            Assert.Equal(["shutdown:llama", "start:audiocpp", "shutdown:audiocpp", "start:llama"], _services.OpLog);
+            // The only completion is llama loading the model it had again.
+            Assert.Equal(["gemma-12b"], _http.ChatBodies.Select(b => b["model"]!.GetValue<string>()));
+            Assert.Equal(
+                "Put back: read2me-llama started again, with gemma-12b loaded again; read2me-audiocpp stopped again.",
+                report.PutBack);
+            Assert.Null(report.FullCheckedAt);
+            Assert.Null(report.FullRun);
+        }
+
+        [Fact]
+        public async Task Re_running_the_attribution_chain_exercises_only_the_chain_s_models()
+        {
+            await AddLlmAsync("Gemma", "gemma-12b", active: true);
+            await ChainAsync(await AddLlmAsync("Qwen", "qwen-28b"));
+            var runner = Runner();
+            await runner.RunQuickCheckAsync(CancellationToken.None);
+
+            var report = await (await runner.RerunCheckAsync(SetupCheckIds.AttributionChain)).Finished.WaitAsync(Wait);
+
+            Assert.Equal(SetupCheckResult.Passed, Row(report, SetupCheckIds.AttributionChain).Result);
+            Assert.Equal(["qwen-28b"], _http.ChatBodies.Select(b => b["model"]!.GetValue<string>()));
+        }
+
+        [Fact]
+        public async Task A_check_on_a_URL_the_app_doesn_t_manage_re_runs_without_touching_a_GPU_container()
+        {
+            await LlmSettings.SetActiveConfigAsync(
+                (await LlmSettings.CreateConfigAsync(new LlmServerConfig { Name = "Remote", BaseUrl = "http://llm-box:8080", Model = "qwen-28b" })).Id);
+
+            var quick = await Runner().RunQuickCheckAsync(CancellationToken.None);
+
+            Assert.Equal(new SetupRerun(Gpu: false), Row(quick, SetupCheckIds.Llm).Rerun);
+        }
     }
 }

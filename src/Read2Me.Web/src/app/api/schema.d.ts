@@ -6448,7 +6448,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start the Full check in the background, or join the run already going (one per host): 202 with the report, whose fullRun { step, total, lane: local|cpu|gpu, label, cancelling } shows the run. While it runs every queue waits and Preflight refuses new AI tasks with "Setup check running". Progress and the final report go to every live hub client as setupCheck { kind: progress|done, report }. 409 naming the work in flight while the Audio or Character queue holds items, or a voice batch, discovery or assembly runs. */
+        /** Start the Full check in the background, or join the Full check already going (one per host): 202 with the report, whose fullRun { step, total, lane: local|cpu|gpu, label, cancelling } shows the run. While it runs every queue waits and Preflight refuses new AI tasks with "Setup check running". Progress and the final report go to every live hub client as setupCheck { kind: progress|done, report }. 409 naming the work in flight while the Audio or Character queue holds items, or a voice batch, discovery or assembly runs, and while one check re-runs. */
         post: {
             parameters: {
                 query?: never;
@@ -6510,6 +6510,62 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["SetupCheckReport"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup-check/checks/{id}/rerun": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Re-run one Full-tier check (a row whose rerun isn't null) in the background: only the steps that judge it, under the Full check's rules — queues wait, Preflight refuses new AI tasks, the containers it drives are put back, and progress goes out as setupCheck messages. rerun.gpu says it stops the running GPU container. The report's fullCheckedAt stays the last whole Full check's. 202 with the report (fullRun shows the re-run); 404 for an unknown or Quick-tier id; 409 while a Full check runs, while work is in flight (named, as for the Full check), or when the check has no active config. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SetupCheckReport"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
                     };
                 };
                 /** @description Conflict */
@@ -6986,6 +7042,7 @@ export interface components {
             note: null | string;
             fix: components["schemas"]["SetupFixHint"];
             managed: boolean;
+            rerun?: null | components["schemas"]["SetupRerun"];
         };
         /** @enum {unknown} */
         SetupCheckTier: "quick" | "full";
@@ -7002,6 +7059,9 @@ export interface components {
             lane: components["schemas"]["SetupCheckLane"];
             label: string;
             cancelling: boolean;
+        };
+        SetupRerun: {
+            gpu: boolean;
         };
         SetupSettingsLink: {
             path: string;

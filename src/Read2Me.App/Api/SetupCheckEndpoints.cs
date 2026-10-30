@@ -34,7 +34,7 @@ namespace Read2Me.App.Api
                 })
                 .Produces<SetupCheckReport>(StatusCodes.Status202Accepted)
                 .ProducesProblem(StatusCodes.Status409Conflict)
-                .WithSummary("Start the Full check in the background, or join the run already going (one per host): 202 with the report, whose fullRun { step, total, lane: local|cpu|gpu, label, cancelling } shows the run. While it runs every queue waits and Preflight refuses new AI tasks with \"Setup check running\". Progress and the final report go to every live hub client as setupCheck { kind: progress|done, report }. 409 naming the work in flight while the Audio or Character queue holds items, or a voice batch, discovery or assembly runs.");
+                .WithSummary("Start the Full check in the background, or join the Full check already going (one per host): 202 with the report, whose fullRun { step, total, lane: local|cpu|gpu, label, cancelling } shows the run. While it runs every queue waits and Preflight refuses new AI tasks with \"Setup check running\". Progress and the final report go to every live hub client as setupCheck { kind: progress|done, report }. 409 naming the work in flight while the Audio or Character queue holds items, or a voice batch, discovery or assembly runs, and while one check re-runs.");
 
             group.MapPost("/full/cancel", (ISetupCheckRunner runner) =>
                     runner.CancelFullCheck() is { } report
@@ -43,6 +43,20 @@ namespace Read2Me.App.Api
                 .Produces<SetupCheckReport>(StatusCodes.Status202Accepted)
                 .ProducesProblem(StatusCodes.Status409Conflict)
                 .WithSummary("Cancel the Full check: it stops once the current step ends, and the checks it hadn't reached read Not run. 202 with the report (fullRun.cancelling true); 409 when none is running.");
+
+            group.MapPost("/checks/{id}/rerun", async (string id, ISetupCheckRunner runner) =>
+                {
+                    if (runner.Report.Rows.FirstOrDefault(r => r.Id == id) is not { Tier: SetupCheckTier.Full })
+                        return Results.Problem($"There's no Full-tier check \"{id}\" to re-run.", statusCode: StatusCodes.Status404NotFound);
+                    var start = await runner.RerunCheckAsync(id);
+                    return start.Refusal is { } refusal
+                        ? Results.Problem(refusal, statusCode: StatusCodes.Status409Conflict, title: "Can't re-run the check")
+                        : Results.Accepted(value: start.Report);
+                })
+                .Produces<SetupCheckReport>(StatusCodes.Status202Accepted)
+                .ProducesProblem(StatusCodes.Status404NotFound)
+                .ProducesProblem(StatusCodes.Status409Conflict)
+                .WithSummary("Re-run one Full-tier check (a row whose rerun isn't null) in the background: only the steps that judge it, under the Full check's rules — queues wait, Preflight refuses new AI tasks, the containers it drives are put back, and progress goes out as setupCheck messages. rerun.gpu says it stops the running GPU container. The report's fullCheckedAt stays the last whole Full check's. 202 with the report (fullRun shows the re-run); 404 for an unknown or Quick-tier id; 409 while a Full check runs, while work is in flight (named, as for the Full check), or when the check has no active config.");
         }
     }
 }

@@ -58,6 +58,10 @@
     font-weight: 500;
     white-space: nowrap;
   }
+  .setup-check__table .setup-check__rerun {
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
   .setup-check__row--failed {
     background: var(--r2m-status-error-soft);
   }

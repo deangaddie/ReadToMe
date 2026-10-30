@@ -17,11 +17,18 @@ namespace Read2Me.App.Services.SetupCheck
         Task<SetupCheckReport> RunQuickCheckAsync(CancellationToken ct);
 
         /// <summary>
-        /// Starts the Full check in the background, or joins the run already going. Refused, starting
-        /// nothing, while the Audio or Character queue holds items or a voice batch, discovery or
-        /// assembly runs.
+        /// Starts the Full check in the background, or joins the Full check already going. Refused,
+        /// starting nothing, while the Audio or Character queue holds items or a voice batch, discovery
+        /// or assembly runs, and while one check re-runs.
         /// </summary>
         Task<FullCheckStart> StartFullCheckAsync();
+
+        /// <summary>
+        /// Re-runs one Full-tier check by row id in the background: only the steps that judge it,
+        /// under the Full check's refusal, gate, watchdog and put-back rules. Refused while a Full
+        /// check or another re-run is going, and for a row no step judges.
+        /// </summary>
+        Task<FullCheckStart> RerunCheckAsync(string checkId);
 
         /// <summary>
         /// Asks the run going to stop once its current step ends; the remaining checks read Not run.

@@ -1,4 +1,4 @@
-import type { SetupCheckLane, SetupCheckReport, SetupFullRun } from '@app/api';
+import type { SetupCheckLane, SetupCheckReport, SetupCheckRow, SetupFullRun } from '@app/api';
 import type { ConfirmOptions } from '@app/ui/dialogs';
 import type { StatusKind } from '@app/ui/partials';
 
@@ -73,6 +73,22 @@ export function estimateText(seconds: number): string {
   }
   const m = Math.ceil(seconds / 60);
   return `about ${m} ${m === 1 ? 'minute' : 'minutes'}`;
+}
+
+/**
+ * The confirm before re-running one check, only when it drives a GPU container; null when it
+ * doesn't (ffmpeg, a CPU service, a URL the app doesn't manage), which re-runs at once.
+ */
+export function rerunConfirm(row: SetupCheckRow): ConfirmOptions | null {
+  if (!row.rerun?.gpu) return null;
+  return {
+    title: `Re-run the ${row.name} check?`,
+    message:
+      'It stops any running GPU container, starts the one this check uses and loads its model, ' +
+      'then puts every container back as it found it, llama with the model it had loaded. ' +
+      'Queues wait and new AI tasks are refused until it ends.',
+    confirmLabel: 'Re-run',
+  };
 }
 
 /** The confirm before a Full check: what it disrupts, and how long it's likely to take. */

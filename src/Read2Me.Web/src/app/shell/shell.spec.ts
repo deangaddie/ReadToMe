@@ -312,6 +312,7 @@ describe('Setup check surfacing', () => {
       note: null,
       fix: { text: 'Fix it.', link: null, copy: null },
       managed: false,
+      rerun: null,
     }));
     const report = {
       rows,

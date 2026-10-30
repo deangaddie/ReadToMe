@@ -23,6 +23,16 @@ export class SetupCheckApi {
     return this.api.post<SetupCheckReport>('/api/setup-check/full');
   }
 
+  /**
+   * Re-runs one Full-tier check under the Full check's rules; answers the report with `fullRun`.
+   * Rejects with a 409 problem while a run goes or work is in flight, a 404 for a Quick-tier id.
+   */
+  rerun(checkId: string): Promise<SetupCheckReport> {
+    return this.api.post<SetupCheckReport>(
+      `/api/setup-check/checks/${encodeURIComponent(checkId)}/rerun`,
+    );
+  }
+
   /** Asks the Full check to stop once its current step ends; 409 when none is running. */
   cancelFull(): Promise<SetupCheckReport> {
     return this.api.post<SetupCheckReport>('/api/setup-check/full/cancel');

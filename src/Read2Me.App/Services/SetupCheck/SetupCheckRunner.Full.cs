@@ -20,9 +20,13 @@ namespace Read2Me.App.Services.SetupCheck
         private FullRun? _run;
         private readonly Dictionary<string, SetupCheckRow> _fullVerdicts = new(StringComparer.Ordinal);
 
-        /// <summary>The run going; its cancel stops it after the current step.</summary>
-        private sealed class FullRun
+        /// <summary>
+        /// The run going; its cancel stops it after the current step. <see cref="Rerun"/>: the one
+        /// check it re-runs, null for a whole Full check.
+        /// </summary>
+        private sealed class FullRun(string? rerun)
         {
+            public string? Rerun { get; } = rerun;
             public CancellationTokenSource Cancel { get; } = new();
             public TaskCompletionSource<SetupCheckReport> Finished { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         }
@@ -63,17 +67,34 @@ namespace Read2Me.App.Services.SetupCheck
         /// <summary>Serializes starts, so the configs one reads are the ones its run uses.</summary>
         private readonly SemaphoreSlim _starting = new(1, 1);
 
-        public async Task<FullCheckStart> StartFullCheckAsync()
+        public Task<FullCheckStart> StartFullCheckAsync() => StartRunAsync(rerun: null);
+
+        public Task<FullCheckStart> RerunCheckAsync(string checkId) => StartRunAsync(checkId);
+
+        /// <summary>
+        /// Starts a whole Full check (<paramref name="rerun"/> null), which joins a whole one going, or
+        /// a re-run of one check: only the steps that judge that row. Anything else going refuses it:
+        /// a whole check can't join a re-run, which checks one row.
+        /// </summary>
+        private async Task<FullCheckStart> StartRunAsync(string? rerun)
         {
             await _starting.WaitAsync();
             try
             {
                 lock (_lock)
                 {
+                    if (rerun is not null && RowOrNull(rerun) is not { Tier: SetupCheckTier.Full })
+                        return Refused($"There's no Full-tier check \"{rerun}\" to re-run.");
                     if (_run is { } going)
-                        return new FullCheckStart(Report, Joined: true, Refusal: null, going.Finished.Task);
+                        return (going.Rerun, rerun) switch
+                        {
+                            (null, null) => new FullCheckStart(Report, Joined: true, Refusal: null, going.Finished.Task),
+                            (null, _) => Refused("A Full check is running: re-run the check once it ends."),
+                            (_, null) => Refused("A check is re-running: run the Full check once it ends."),
+                            _ => Refused("A check is re-running: re-run this one once it ends."),
+                        };
                     if (FullRefusal() is { } refusal)
-                        return new FullCheckStart(Report, Joined: false, refusal, Task.FromResult(Report));
+                        return Refused(refusal);
                 }
 
                 var context = await ReadFullContextAsync();
@@ -85,11 +106,13 @@ namespace Read2Me.App.Services.SetupCheck
                 {
                     // Work may have arrived while the configs were read.
                     if (FullRefusal() is { } refusal)
-                        return new FullCheckStart(Report, Joined: false, refusal, Task.FromResult(Report));
+                        return Refused(refusal);
+                    steps = rerun is null ? Plan(context) : StepsFor(Plan(context), rerun);
+                    if (steps.Count == 0)
+                        return Refused($"{RowOrNull(rerun!)?.Name ?? rerun} has nothing for the Full check to send: it has no active config.");
 
                     context.Before = _report.Rows.ToDictionary(r => r.Id, StringComparer.Ordinal);
-                    run = _run = new FullRun();
-                    steps = Plan(context);
+                    run = _run = new FullRun(rerun);
                     full.Busy.Set(true);
                     full.CharacterGate.Close(GateOwners.SetupCheck, SetupCheckBusy.Reason);
                     full.AudioGate.Close(GateOwners.SetupCheck, SetupCheckBusy.Reason);
@@ -109,6 +132,28 @@ namespace Read2Me.App.Services.SetupCheck
             {
                 _starting.Release();
             }
+        }
+
+        // Caller holds _lock.
+        private FullCheckStart Refused(string refusal) => new(Report, Joined: false, refusal, Task.FromResult(Report));
+
+        /// <summary>The steps that judge one row, in run order.</summary>
+        private static IReadOnlyList<FullStep> StepsFor(IReadOnlyList<FullStep> plan, string rowId) =>
+            [.. plan.Where(s => s.RowIds.Contains(rowId))];
+
+        /// <summary>
+        /// Each Full-tier row with what re-running it takes: null when no step judges it (no active
+        /// config), and whether a step drives a GPU container, which the web app confirms first.
+        /// </summary>
+        private IReadOnlyList<SetupCheckRow> WithRerun(IReadOnlyList<SetupCheckRow> rows, IReadOnlyList<FullStep> plan)
+        {
+            var gpu = aiServices.Registry.All.Where(s => s.UsesGpu).Select(s => s.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return [.. rows.Select(row => row with
+            {
+                Rerun = row.Tier == SetupCheckTier.Full && StepsFor(plan, row.Id) is { Count: > 0 } steps
+                    ? new SetupRerun(Gpu: steps.Any(s => s.Services.Any(gpu.Contains)))
+                    : null,
+            })];
         }
 
         // Caller holds _lock.
@@ -158,7 +203,13 @@ namespace Read2Me.App.Services.SetupCheck
                     var judged = steps.Take(next).SelectMany(s => s.RowIds).ToHashSet(StringComparer.Ordinal);
                     SetRows([.. steps.Skip(next).SelectMany(s => s.RowIds).Where(id => !judged.Contains(id))],
                         row => row with { Result = SetupCheckResult.NotRun, Found = Cancelled, Note = null });
-                    _report = _report with { FullRun = null, FullCheckedAt = _clock.GetUtcNow(), PutBack = putBack };
+                    // A re-run judges one check: the time stays the last whole Full check's.
+                    _report = _report with
+                    {
+                        FullRun = null,
+                        FullCheckedAt = run.Rerun is null ? _clock.GetUtcNow() : _report.FullCheckedAt,
+                        PutBack = putBack,
+                    };
                     _run = null;
                     full.CharacterGate.Open(GateOwners.SetupCheck);
                     full.AudioGate.Open(GateOwners.SetupCheck);
@@ -194,7 +245,7 @@ namespace Read2Me.App.Services.SetupCheck
                 // Each step stands alone: a throw fails its own rows and the run goes on.
                 lock (_lock)
                     rows = [.. step.RowIds.Select(RowOrNull).OfType<SetupCheckRow>()
-                        .Select(row => row with { Result = SetupCheckResult.Failed, Found = ex.Message, Tier = SetupCheckTier.Full })];
+                        .Select(row => row with { Result = SetupCheckResult.Failed, Found = ex.Message })];
             }
 
             lock (_lock)

@@ -421,5 +421,42 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.Equal(["start:whisper", "shutdown:whisper"], _services.OpLog);
             Assert.Equal("Put back: read2me-whisper stopped again.", report.PutBack);
         }
+
+        // ── Re-run one check ─────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Re_running_transcription_starts_only_whisper_and_puts_it_back()
+        {
+            await AddTranscriptionAsync(Whisper);
+            await AddSimilarityAsync(MiniLm);
+            _services.StatusByName["whisper"] = AiServiceStatus.Stopped;
+            _services.StatusByName["minilm-l6"] = AiServiceStatus.Stopped;
+            _http.Transcripts[Whisper] = "It is a truth universally acknowledged.";
+            var runner = Runner();
+            var quick = await runner.RunQuickCheckAsync(CancellationToken.None);
+            Assert.Equal(new SetupRerun(Gpu: false), Row(quick, SetupCheckIds.Transcription).Rerun);
+
+            var report = await (await runner.RerunCheckAsync(SetupCheckIds.Transcription)).Finished.WaitAsync(Wait);
+
+            Assert.Equal(SetupCheckResult.Passed, Row(report, SetupCheckIds.Transcription).Result);
+            Assert.Equal(Row(quick, SetupCheckIds.Similarity).Result, Row(report, SetupCheckIds.Similarity).Result);
+            Assert.Equal([$"POST {Whisper}/inference"], _http.Requests);
+            Assert.Equal(["start:whisper", "shutdown:whisper"], _services.OpLog);
+            Assert.Equal("Put back: read2me-whisper stopped again.", report.PutBack);
+        }
+
+        [Fact]
+        public async Task Re_running_similarity_alone_scores_the_clip_s_text_against_itself_and_says_so()
+        {
+            await AddSimilarityAsync(MiniLm);
+            _http.Scores[MiniLm] = 1.0;
+            var runner = Runner();
+            await runner.RunQuickCheckAsync(CancellationToken.None);
+
+            var row = Row(await (await runner.RerunCheckAsync(SetupCheckIds.Similarity)).Finished.WaitAsync(Wait), SetupCheckIds.Similarity);
+
+            Assert.Equal(SetupCheckResult.Passed, row.Result);
+            Assert.Contains("scored against itself", row.Note);
+        }
     }
 }
