@@ -1,6 +1,6 @@
 import { html, nothing } from 'lit-html';
-import type { Block } from '@app/api';
 import { repeat } from 'lit-html/directives/repeat.js';
+import type { Block } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { computed, signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
@@ -112,7 +112,10 @@ export class StructureTree extends R2mElement {
     this.#nodeStates.set(value);
   }
 
-  /** The edit gate's answer (`BookEditor.blocked()`): non-null turns every node menu off, its reason the tooltip. */
+  /**
+   * The edit gate's answer (`BookEditor.blocked()`): non-null turns every node menu off, its
+   * reason the tooltip.
+   */
   #blocked = signal<Block | null>(null);
   get blocked() {
     return this.#blocked();
