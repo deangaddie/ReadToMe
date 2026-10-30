@@ -73,13 +73,9 @@ export function itemRow(
   // Somebody can read the line, so it may be picked for generation (ticket 13).
   const voiced = isVoicedItem(item, ctx.narratorOnlyMode);
   const selected = ctx.itemSelectable && ctx.selectedItems.has(item.id);
-  // Speakers mode only; a paragraph the queue holds is the server's to stamp, a viewed step nobody's.
+  // Speakers mode only; a paragraph the queue holds is the server's to stamp, a locked book nobody's.
   const assignable =
-    ctx.mode === 'speakers' &&
-    !paragraphBusy &&
-    !busy &&
-    ctx.readOnly === null &&
-    ctx.roster.length > 0;
+    ctx.mode === 'speakers' && !paragraphBusy && !busy && !ctx.locked && ctx.roster.length > 0;
   const classes = [
     'r2m-item',
     speaker.state === 'unknown' ? 'r2m-item--unknown' : '',

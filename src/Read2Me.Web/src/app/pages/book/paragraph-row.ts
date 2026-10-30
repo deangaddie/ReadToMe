@@ -61,8 +61,8 @@ export function paragraphRow(
   // Only Character paragraphs are selectable, and only where the selection is paragraphs.
   const selectable = ctx.selectable && isDialogParagraph(paragraph);
   const selected = ctx.selected.has(paragraph.id);
-  // The Read chip assigns the whole paragraph; a queued one is the server's to stamp, a viewed step nobody's.
-  const assignable = selectable && !queued && ctx.readOnly === null && ctx.roster.length > 0;
+  // The Read chip assigns the whole paragraph; a queued one is the server's to stamp, a locked book nobody's.
+  const assignable = selectable && !queued && !ctx.locked && ctx.roster.length > 0;
   const classes = [
     'r2m-paragraph',
     `r2m-paragraph--${speaker.state}`,

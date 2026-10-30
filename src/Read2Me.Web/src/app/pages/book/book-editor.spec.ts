@@ -144,6 +144,14 @@ describe('BookEditor', () => {
     await first;
   });
 
+  it('sends nothing while stale, and explains the declined write', async () => {
+    store.stale.set('boom');
+    expect(await editor.run({ type: 'AddPauses' })).toBe(false);
+    const declined = await editor.tryExecute({ type: 'AddBookTitle' });
+    expect(declined?.message).toBe('The book is out of date; refresh it first.');
+    expect(execute.calls).toEqual([]);
+  });
+
   it('is locked and read-only while a History step is viewed, and sends nothing', async () => {
     use(StepView).view('dracula', 's8');
     expect(editor.locked()).toBe(true);
