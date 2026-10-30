@@ -384,7 +384,7 @@ namespace Read2Me.Tests.App.SetupCheck
             var report = await CheckAsync();
 
             Assert.Equal(SetupCheckResult.NotUsed, report.Rows.Single(r => r.Id == Container("whisper")).Result);
-            Assert.Equal(1, _services.StatusCalls);
+            Assert.DoesNotContain("whisper", _services.StatusAsked);
         }
 
         [Fact]

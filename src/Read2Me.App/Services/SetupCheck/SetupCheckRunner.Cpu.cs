@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Read2Me.App.Api;
 using Read2Me.Services;
+using Read2Me.Services.Audio.AudioCpp;
 using Read2Me.Services.Audio.SemanticSimilarity;
 using Read2Me.Services.Audio.Transcription;
 using Read2Me.Services.Health;
@@ -122,9 +123,10 @@ namespace Read2Me.App.Services.SetupCheck
         /// <summary>
         /// Readies the container (when managed; a GPU one after the Preflight conflict sweep), sends the
         /// one request and answers what it found, with the container's row. A request the service
-        /// doesn't answer fails both, and the container is left as it is for its logs; an answer that
-        /// fails the check (empty text, a low score) fails only the config's row, and the container is
-        /// put back as usual. A missing model file's error gets the hint that names it.
+        /// doesn't answer at all fails both, and the container is left as it is for its logs; an HTTP
+        /// error it answers, or an answer that fails the check (empty text, a low score), fails only the
+        /// config's row, and the container is put back as usual. A model that won't load gets the hint
+        /// that says where its GGUF should be.
         /// </summary>
         private async Task<(CheckAnswer Answer, SetupCheckRow? Container)> SendCheckAsync(
             FullContext context, DockerAiService? service, SetupSettingsLink settings, string url,
@@ -148,23 +150,29 @@ namespace Read2Me.App.Services.SetupCheck
             }
             catch (Exception ex)
             {
-                var error = (ex as AiServiceUnavailableException)?.InnerException?.Message ?? ex.Message;
-                var found = $"POST {url} failed: {error}";
-                var missing = MissingModelFix(service, model, error);
+                var cause = (ex as AiServiceUnavailableException)?.InnerException ?? ex;
+                var found = $"POST {url} failed: {cause.Message}";
+                var modelFix = ModelLoadFix(service, model, cause.Message);
                 if (service is null)
-                    return (new CheckAnswer(false, found, missing
+                    return (new CheckAnswer(false, found, modelFix
                         ?? new SetupFixHint($"Check the service where it runs, or correct the config in {settings.Label}.", settings)), null);
 
                 var logs = AiServicesCheck.LogsFix(service);
+                var configFix = modelFix
+                    ?? logs with { Text = $"{logs.Text.TrimEnd('.')}, or correct the config in {settings.Label}.", Link = settings };
+                // The container answered with an error (a model that won't load, a busy server): the
+                // fault is the config's, so the container is judged as it was and put back as usual.
+                if (cause is HttpRequestException { StatusCode: not null } or TtsBusyException)
+                    return (new CheckAnswer(false, found, configFix), containerRow);
+
                 use!.Failed = true;
                 use.Row = containerRow! with
                 {
                     Result = SetupCheckResult.Failed,
                     Found = "Running, but didn't answer the check: left as it is for its logs",
-                    Fix = missing ?? logs,
+                    Fix = logs,
                 };
-                return (new CheckAnswer(false, found, missing
-                    ?? logs with { Text = $"{logs.Text.TrimEnd('.')}, or correct the config in {settings.Label}.", Link = settings }), use.Row);
+                return (new CheckAnswer(false, found, configFix), use.Row);
             }
         }
     }

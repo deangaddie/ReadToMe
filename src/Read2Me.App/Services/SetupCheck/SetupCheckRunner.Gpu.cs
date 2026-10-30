@@ -188,12 +188,14 @@ namespace Read2Me.App.Services.SetupCheck
 
         /// <summary>
         /// One non-streamed chat completion, max_tokens 1 and thinking off, naming the config's model,
-        /// which llama loads on the way. Answers the content; throws when it doesn't answer 200.
+        /// which llama loads on the way. Answers the content; throws when it doesn't answer 200, with
+        /// the status on the exception when the server answered. A probe, so it goes straight to the
+        /// endpoint rather than through <see cref="ILlmCompletionRunner"/>: that would put it in the live
+        /// stream, report health to a watchdog the run holds off, and wait out a load the check must time.
         /// </summary>
         private async Task<string> CompleteOneTokenAsync(LlmServerConfig config)
         {
-            var body = OpenAiRequestBuilder.BuildChatBody(
-                config, "Reply with one word.", stream: false, disableThinking: true, overrides: new LlmRunOverrides(MaxTokens: 1));
+            var body = LlamaModelStatus.OneTokenRequestBody(config.Model, disableThinking: true);
             using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiStreamParser.Combine(config.BaseUrl, "v1/chat/completions"))
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
@@ -204,7 +206,7 @@ namespace Read2Me.App.Services.SetupCheck
             using var response = await aiServices.Http.CreateClient().SendAsync(request);
             var text = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
-                throw new HttpRequestException($"{(int)response.StatusCode} {response.ReasonPhrase}: {text}");
+                throw new HttpRequestException($"{(int)response.StatusCode} {response.ReasonPhrase}: {text}", null, response.StatusCode);
 
             using var doc = JsonDocument.Parse(text);
             return doc.RootElement.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array
@@ -226,15 +228,7 @@ namespace Read2Me.App.Services.SetupCheck
                 if (!response.IsSuccessStatusCode)
                     return null;
                 using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(timeout.Token));
-                if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
-                    return null;
-                foreach (var item in data.EnumerateArray())
-                    if (item.TryGetProperty("status", out var status) && status.ValueKind == JsonValueKind.Object
-                        && status.TryGetProperty("value", out var value) && value.ValueKind == JsonValueKind.String
-                        && value.GetString() == "loaded"
-                        && item.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String)
-                        return id.GetString();
-                return null;
+                return LlamaModelStatus.LoadedModel(doc.RootElement);
             }
             catch
             {
@@ -251,32 +245,42 @@ namespace Read2Me.App.Services.SetupCheck
             {
                 var use = await TrackAsync(context, rival, running: true);
                 if ((await aiServices.Control.ShutdownAsync(rival, CancellationToken.None)).Succeeded)
+                {
                     use.Running = false;
+                    use.Swept = true;
+                }
             }
         }
 
         [GeneratedRegex(@"/models/[^\s""',;}\]]+")]
         private static partial Regex ModelPath();
 
+        private const string GgufFolder = "the folder GGUF_MODELS_DIR names in Infra/.env (mounted at /models)";
+
         /// <summary>
-        /// audio.cpp answers 500 "model path does not exist" and llama "failed to load" when the GGUF
-        /// isn't where the model entry says: the hint names the path and where the mount comes from.
+        /// audio.cpp answers 500 "model path does not exist" with the path: the hint names it and where
+        /// the mount comes from. llama's "failed to load" names no path and may be a missing GGUF, too
+        /// little memory or a bad preset: the hint says where the GGUF should be and to read the logs.
         /// Null when the error is something else.
         /// </summary>
-        private static SetupFixHint? MissingModelFix(DockerAiService? service, string? model, string error)
+        private static SetupFixHint? ModelLoadFix(DockerAiService? service, string? model, string error)
         {
-            if (!error.Contains("does not exist", StringComparison.OrdinalIgnoreCase)
-                && !error.Contains("failed to load", StringComparison.OrdinalIgnoreCase))
+            var restart = service is null ? "then restart the service where it runs" : $"then run docker compose up -d {service.Name} from Infra/";
+            if (error.Contains("does not exist", StringComparison.OrdinalIgnoreCase))
+            {
+                var path = ModelPath().Match(error) is { Success: true } match ? match.Value : null;
+                var file = path ?? $"the GGUF the {model} entry names in Infra/audiocpp/server.json";
+                return new SetupFixHint($"The model file is missing: {file}. Put it in {GgufFolder}, {restart}.",
+                    Copy: path ?? "Infra/.env");
+            }
+            if (!error.Contains("failed to load", StringComparison.OrdinalIgnoreCase))
                 return null;
 
-            var path = ModelPath().Match(error) is { Success: true } match ? match.Value : null;
-            var file = path ?? (service?.Name == Llama
-                ? $"the GGUF the {model} preset names in Infra/llama/config/models.ini"
-                : $"the GGUF the {model} entry names in Infra/audiocpp/server.json");
-            var restart = service is null ? "then restart the service where it runs" : $"then run docker compose up -d {service.Name} from Infra/";
+            var where = service?.Name == Llama ? "the GGUF its preset names in Infra/llama/config/models.ini" : "its GGUF";
+            var logs = service is null ? "the service's logs" : $"docker logs -f {service.ContainerName}";
             return new SetupFixHint(
-                $"The model file is missing: {file}. Put it in the folder GGUF_MODELS_DIR names in Infra/.env (mounted at /models), {restart}.",
-                Copy: path ?? "Infra/.env");
+                $"{service?.Name ?? "The service"} couldn't load {model}: check that {where} is in {GgufFolder}, then read why with {logs}.",
+                Copy: service is null ? "Infra/.env" : $"docker logs -f {service.ContainerName}");
         }
     }
 }

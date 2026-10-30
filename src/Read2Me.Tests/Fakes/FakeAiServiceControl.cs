@@ -30,6 +30,9 @@ namespace Read2Me.Tests.Fakes
         public List<string> ResolvedUrls { get; } = new();
         public int StatusCalls { get; private set; }
 
+        /// <summary>The services each status read asked about, in order.</summary>
+        public List<string> StatusAsked { get; } = new();
+
         /// <summary>Recorded op kinds: "start" / "restart" / "shutdown".</summary>
         public List<string> Ops { get; } = new();
 
@@ -45,6 +48,7 @@ namespace Read2Me.Tests.Fakes
         public Task<AiServiceStatus> GetStatusAsync(DockerAiService service, CancellationToken ct)
         {
             StatusCalls++;
+            StatusAsked.Add(service.Name);
             return Task.FromResult(StatusByName.TryGetValue(service.Name, out var status) ? status : StatusResult);
         }
 

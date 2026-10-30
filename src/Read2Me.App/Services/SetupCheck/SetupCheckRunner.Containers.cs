@@ -59,6 +59,9 @@ namespace Read2Me.App.Services.SetupCheck
             public bool Failed { get; set; }
             public SetupCheckRow? Row { get; set; }
             public string? LoadedModel { get; init; }
+
+            /// <summary>A sweep stopped it to free the GPU.</summary>
+            public bool Swept { get; set; }
         }
 
         private async Task<FullContext> ReadFullContextAsync()
@@ -234,9 +237,51 @@ namespace Read2Me.App.Services.SetupCheck
                 parts[use] = use.LoadedModel is { } model ? $"{part}, {await ReloadAsync(use.Service, model)}" : part;
             }
 
+            // A failed container is left as it is, unless a later GPU visit's sweep had to stop it;
+            // docker logs reads a stopped container too.
             var lines = context.Containers.Select(use =>
-                parts.TryGetValue(use, out var part) ? part : $"{use.Service.ContainerName} left as it is (its check failed)");
+                parts.TryGetValue(use, out var part) ? part
+                : use is { Swept: true, Running: false }
+                    ? $"{use.Service.ContainerName} left stopped (its check failed; a later GPU check's sweep stopped it, and docker logs still reads it)"
+                    : $"{use.Service.ContainerName} left as it is (its check failed)");
             return $"Put back: {string.Join("; ", lines)}.";
+        }
+
+        /// <summary>What a container start takes: docker start, the health poll and the warm-up.</summary>
+        private const int StartSeconds = 20;
+
+        /// <summary>
+        /// How long a Full check is likely to take, from the containers as they are now: each step's
+        /// own time (a model load for each GPU one), a start for each container a step must start,
+        /// one for each running GPU container another GPU step's sweep stops and putting back starts
+        /// again, and a model load for llama reloading the model it has.
+        /// </summary>
+        private async Task<int> EstimateSecondsAsync(FullContext context, bool dockerOnPath)
+        {
+            var seconds = Plan(context).Sum(s => s.EstimateSeconds);
+            if (!dockerOnPath)
+                return seconds;
+
+            var used = new[] { context.Whisper, context.SimilarityService, context.TtsService, context.DesignService }
+                .Concat(context.Llm.Select(t => t.Service))
+                .OfType<DockerAiService>()
+                .DistinctBy(s => s.Name)
+                .ToList();
+            var usedGpu = used.Where(s => s.UsesGpu).ToList();
+            var rivals = usedGpu.Count == 0 ? [] : aiServices.Registry.All.Where(s => s.UsesGpu);
+            foreach (var service in used.Concat(rivals).DistinctBy(s => s.Name))
+            {
+                var status = await aiServices.Control.GetStatusAsync(service, CancellationToken.None);
+                if (status == AiServiceStatus.Stopped && used.Contains(service))
+                    seconds += StartSeconds;
+                if (status is not (AiServiceStatus.Ready or AiServiceStatus.Starting) || !service.UsesGpu)
+                    continue;
+                if (usedGpu.Any(s => s.Name != service.Name))
+                    seconds += StartSeconds;
+                if (service.Name == Llama)
+                    seconds += ModelSwitchSeconds;
+            }
+            return seconds;
         }
 
         /// <summary>llama loads the model it had again: a 1-token completion naming it.</summary>
