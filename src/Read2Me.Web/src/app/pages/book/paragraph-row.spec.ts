@@ -465,6 +465,11 @@ describe('paragraphRow', () => {
       expect(triggers(el).every((b) => b.disabled && tooltip(b) === VIEWING_READ_ONLY)).toBe(true);
     });
 
+    it('a block without a reason (a save in flight) disables every menu, with no tooltip', async () => {
+      const el = await mount(ctx({ mode: 'speakers', blocked: { reason: null } }));
+      expect(triggers(el).every((b) => b.disabled && tooltip(b) === null)).toBe(true);
+    });
+
     /** The target the paragraph's trigger opens the shared menu for. */
     async function paragraphTarget(context: RowContext, paragraph: ParagraphDto) {
       const el = await mount(context, paragraph);

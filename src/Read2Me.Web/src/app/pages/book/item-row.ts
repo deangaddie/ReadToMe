@@ -131,9 +131,7 @@ export function itemRow(
         >${markedText(item.id, item.text ?? '', ctx.marks[item.id], { lit: ctx.litMarks })}</span
       >
       ${busy ? icon('lock', 'r2m-item__lock') : nothing}
-      <span class="r2m-item__menu"
-        >${nodeMenuTrigger(menuTarget, { disabled: block !== null, reason: block?.reason ?? null })}</span
-      >
+      <span class="r2m-item__menu">${nodeMenuTrigger(menuTarget, { block })}</span>
     </div>
     ${
       ctx.mode === 'audio'

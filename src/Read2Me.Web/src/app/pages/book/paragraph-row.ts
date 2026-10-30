@@ -169,9 +169,7 @@ export function paragraphRow(
             : nothing
       }
       ${busy ? icon('lock', 'r2m-paragraph__lock') : nothing}
-      <span class="r2m-paragraph__menu"
-        >${nodeMenuTrigger(menuTarget, { disabled: block !== null, reason: block?.reason ?? null })}</span
-      >
+      <span class="r2m-paragraph__menu">${nodeMenuTrigger(menuTarget, { block })}</span>
     </div>
   </div>`;
 }
