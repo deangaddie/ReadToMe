@@ -120,11 +120,10 @@ namespace Read2Me.Tests.App.SetupCheck
             return new(
                 configuration,
                 @"C:\app",
-                Factory,
                 new AnsweringFfmpeg(),
                 new AnsweringDocker(),
                 new WorkspaceStart(configuration),
-                SetupCheckTestServices.Create(Factory, _services, _http),
+                SetupCheckTestServices.Create(Factory, configuration, _services, _http),
                 SetupCheckTestServices.Full(watchdog: watchdog, encode: new EncodesTone()));
         }
 

@@ -1,7 +1,7 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Read2Me.App.Configuration;
-using Read2Me.AppData;
+using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Health;
 
@@ -33,7 +33,6 @@ namespace Read2Me.App.Services.SetupCheck
     public sealed partial class SetupCheckRunner(
         IConfiguration configuration,
         string contentRoot,
-        IDbContextFactory<Read2MeDbContext> dbFactory,
         IFfmpegProber ffmpegProber,
         IProcessRunner processes,
         WorkspaceStart workspaceStart,
@@ -203,12 +202,12 @@ namespace Read2Me.App.Services.SetupCheck
 
         private async Task<FfmpegPaths> ReadFfmpegPathsAsync(CancellationToken ct)
         {
-            string? saved;
-            await using (var db = await dbFactory.CreateDbContextAsync(ct))
-                saved = Read2Me.Services.AudioProcessingSettingsService.NormalizeFfmpegPath(
-                    (await db.Settings.SingleOrDefaultAsync(ct))?.FfmpegPath);
-            var configured = Read2Me.Services.AudioProcessingSettingsService.NormalizeFfmpegPath(configuration["Ffmpeg:Path"]);
-            var live = saved ?? configured;
+            // The settings audio generation reads, so the check probes the ffmpeg the app runs.
+            ct.ThrowIfCancellationRequested();
+            await using var scope = aiServices.Scopes.CreateAsyncScope();
+            var settings = await scope.ServiceProvider.GetRequiredService<AudioProcessingSettingsService>().GetAsync();
+            var live = settings.FfmpegPath;
+            var configured = settings.ConfiguredFfmpegPath;
             var shown = live ?? "PATH";
             var note = configured is not null && !SamePath(configured, live)
                 ? $"appsettings says {configured}; the app uses {shown} — change it in {AudioProcessing.Label}"

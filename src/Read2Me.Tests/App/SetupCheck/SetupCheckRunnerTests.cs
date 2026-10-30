@@ -62,11 +62,10 @@ namespace Read2Me.Tests.App.SetupCheck
             return new(
                 configuration,
                 contentRoot,
-                Factory,
                 prober ?? new FfmpegProber(NullLogger<FfmpegProber>.Instance),
                 _processes,
                 start ?? new WorkspaceStart(configuration),
-                SetupCheckTestServices.Create(Factory),
+                SetupCheckTestServices.Create(Factory, configuration),
                 SetupCheckTestServices.Full());
         }
 
