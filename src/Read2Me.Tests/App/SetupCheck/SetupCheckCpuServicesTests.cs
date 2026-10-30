@@ -354,7 +354,7 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.Contains($"POST {remote}/inference", _http.Requests);
             Assert.Empty(_services.OpLog);
             Assert.Equal(0, _services.StatusCalls);
-            Assert.Equal("Nothing to put back: the Full check drove no containers.", report.PutBack);
+            Assert.Equal("Nothing to put back: the check drove no containers.", report.PutBack);
         }
 
         [Fact]
@@ -446,7 +446,28 @@ namespace Read2Me.Tests.App.SetupCheck
         }
 
         [Fact]
-        public async Task Re_running_similarity_alone_scores_the_clip_s_text_against_itself_and_says_so()
+        public async Task Re_running_similarity_transcribes_first_and_scores_that_transcript()
+        {
+            await AddTranscriptionAsync(Whisper);
+            await AddSimilarityAsync(MiniLm);
+            _http.Transcripts[Whisper] = "It is a truth universally acknowledged.";
+            _http.Scores[MiniLm] = 0.9;
+            var runner = Runner();
+            await runner.RunQuickCheckAsync(CancellationToken.None);
+
+            var start = await runner.RerunCheckAsync(SetupCheckIds.Similarity);
+            var report = await start.Finished.WaitAsync(Wait);
+
+            Assert.Equal(2, start.Report.FullRun?.Total);
+            Assert.Equal([$"POST {Whisper}/inference", $"POST {MiniLm}/similarity"], _http.Requests);
+            Assert.Equal(SetupCheckResult.Passed, Row(report, SetupCheckIds.Transcription).Result);
+            var similarity = Row(report, SetupCheckIds.Similarity);
+            Assert.Equal(SetupCheckResult.Passed, similarity.Result);
+            Assert.DoesNotContain("scored against itself", similarity.Note ?? "");
+        }
+
+        [Fact]
+        public async Task Re_running_similarity_with_no_transcription_config_scores_the_clip_s_text_against_itself_and_says_so()
         {
             await AddSimilarityAsync(MiniLm);
             _http.Scores[MiniLm] = 1.0;

@@ -83,8 +83,10 @@ namespace Read2Me.App.Services.SetupCheck
             {
                 lock (_lock)
                 {
+                    if (rerun is not null && _report.QuickCheckedAt is null)
+                        return Refused("The start-up Quick check hasn't ended: re-run the check once it has.");
                     if (rerun is not null && RowOrNull(rerun) is not { Tier: SetupCheckTier.Full })
-                        return Refused($"There's no Full-tier check \"{rerun}\" to re-run.");
+                        return Refused($"There's no Full-tier check \"{rerun}\" to re-run.", unknownCheck: true);
                     if (_run is { } going)
                         return (going.Rerun, rerun) switch
                         {
@@ -110,6 +112,10 @@ namespace Read2Me.App.Services.SetupCheck
                     steps = rerun is null ? Plan(context) : StepsFor(Plan(context), rerun);
                     if (steps.Count == 0)
                         return Refused($"{RowOrNull(rerun!)?.Name ?? rerun} has nothing for the Full check to send: it has no active config.");
+                    // The web app confirms a GPU re-run on the report's rerun.gpu, which the last Quick
+                    // check set: a config moved onto a GPU container since must not skip that confirm.
+                    if (rerun is not null && RowOrNull(rerun) is { Rerun: not { Gpu: true } } stale && DrivesGpu(steps))
+                        return Refused($"{stale.Name} now drives a GPU container: run the Quick check, then re-run it.");
 
                     context.Before = _report.Rows.ToDictionary(r => r.Id, StringComparer.Ordinal);
                     run = _run = new FullRun(rerun);
@@ -135,26 +141,38 @@ namespace Read2Me.App.Services.SetupCheck
         }
 
         // Caller holds _lock.
-        private FullCheckStart Refused(string refusal) => new(Report, Joined: false, refusal, Task.FromResult(Report));
+        private FullCheckStart Refused(string refusal, bool unknownCheck = false) =>
+            new(Report, Joined: false, refusal, Task.FromResult(Report), unknownCheck);
 
-        /// <summary>The steps that judge one row, in run order.</summary>
-        private static IReadOnlyList<FullStep> StepsFor(IReadOnlyList<FullStep> plan, string rowId) =>
-            [.. plan.Where(s => s.RowIds.Contains(rowId))];
+        /// <summary>
+        /// The steps a re-run of one row takes, in run order: those that judge it, and before them
+        /// those that feed it. Similarity scores the transcript transcription gives, so re-running it
+        /// transcribes first (when transcription has a config) rather than scoring the clip's text
+        /// against itself.
+        /// </summary>
+        private static IReadOnlyList<FullStep> StepsFor(IReadOnlyList<FullStep> plan, string rowId)
+        {
+            string[] rows = rowId == SetupCheckIds.Similarity ? [rowId, SetupCheckIds.Transcription] : [rowId];
+            return [.. plan.Where(s => s.RowIds.Any(rows.Contains))];
+        }
+
+        private bool DrivesGpu(IReadOnlyList<FullStep> steps)
+        {
+            var gpu = aiServices.Registry.All.Where(s => s.UsesGpu).Select(s => s.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return steps.Any(s => s.Services.Any(gpu.Contains));
+        }
 
         /// <summary>
         /// Each Full-tier row with what re-running it takes: null when no step judges it (no active
         /// config), and whether a step drives a GPU container, which the web app confirms first.
         /// </summary>
-        private IReadOnlyList<SetupCheckRow> WithRerun(IReadOnlyList<SetupCheckRow> rows, IReadOnlyList<FullStep> plan)
-        {
-            var gpu = aiServices.Registry.All.Where(s => s.UsesGpu).Select(s => s.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            return [.. rows.Select(row => row with
+        private IReadOnlyList<SetupCheckRow> WithRerun(IReadOnlyList<SetupCheckRow> rows, IReadOnlyList<FullStep> plan) =>
+            [.. rows.Select(row => row with
             {
                 Rerun = row.Tier == SetupCheckTier.Full && StepsFor(plan, row.Id) is { Count: > 0 } steps
-                    ? new SetupRerun(Gpu: steps.Any(s => s.Services.Any(gpu.Contains)))
+                    ? new SetupRerun(Gpu: DrivesGpu(steps))
                     : null,
             })];
-        }
 
         // Caller holds _lock.
         private string? FullRefusal() => workspaceStart.Usable

@@ -24,9 +24,11 @@ namespace Read2Me.App.Services.SetupCheck
         Task<FullCheckStart> StartFullCheckAsync();
 
         /// <summary>
-        /// Re-runs one Full-tier check by row id in the background: only the steps that judge it,
-        /// under the Full check's refusal, gate, watchdog and put-back rules. Refused while a Full
-        /// check or another re-run is going, and for a row no step judges.
+        /// Re-runs one Full-tier check by row id in the background: only the steps that judge it (and
+        /// feed it: similarity transcribes first), under the Full check's refusal, gate, watchdog and
+        /// put-back rules. Refused while a Full check or another re-run is going, before the start-up
+        /// Quick check ends, for a row no step judges, and when the row's rerun.gpu says no GPU but the
+        /// check now drives one. An id that isn't a Full-tier row sets <see cref="FullCheckStart.UnknownCheck"/>.
         /// </summary>
         Task<FullCheckStart> RerunCheckAsync(string checkId);
 
@@ -41,7 +43,8 @@ namespace Read2Me.App.Services.SetupCheck
     /// What asking for a Full check did. <see cref="Refusal"/>: why it didn't start (nothing ran).
     /// <see cref="Joined"/>: a run was already going and this joined it. <see cref="Finished"/>
     /// completes with the final report when the run ends (at once on a refusal).
+    /// <see cref="UnknownCheck"/>: refused because a re-run named no Full-tier row.
     /// </summary>
     public sealed record FullCheckStart(
-        SetupCheckReport Report, bool Joined, string? Refusal, Task<SetupCheckReport> Finished);
+        SetupCheckReport Report, bool Joined, string? Refusal, Task<SetupCheckReport> Finished, bool UnknownCheck = false);
 }

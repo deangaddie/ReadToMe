@@ -498,6 +498,16 @@ namespace Read2Me.Tests.App.SetupCheck
         }
 
         [Fact]
+        public async Task Before_the_start_up_Quick_check_ends_a_re_run_is_refused_not_unknown()
+        {
+            var start = await Runner().RerunCheckAsync(SetupCheckIds.Ffmpeg);
+
+            Assert.Equal("The start-up Quick check hasn't ended: re-run the check once it has.", start.Refusal);
+            Assert.False(start.UnknownCheck);
+            Assert.True(_audioGate.IsOpen);
+        }
+
+        [Fact]
         public async Task Only_a_Full_tier_check_with_something_to_send_can_be_re_run()
         {
             var runner = Runner();
@@ -512,6 +522,7 @@ namespace Read2Me.Tests.App.SetupCheck
 
             Assert.Equal("LLM has nothing for the Full check to send: it has no active config.", llm.Refusal);
             Assert.Equal("There's no Full-tier check \"docker\" to re-run.", docker.Refusal);
+            Assert.Equal([false, true, true], new[] { llm, docker, unknown }.Select(s => s.UnknownCheck));
             Assert.Equal("There's no Full-tier check \"no-such-check\" to re-run.", unknown.Refusal);
             Assert.True(_audioGate.IsOpen);
             Assert.Empty(Sent());

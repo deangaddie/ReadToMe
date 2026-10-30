@@ -75,7 +75,7 @@ public class SetupCheckFullApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
         // Cancelled during the ffmpeg step: the CPU checks never ran, so no container was driven.
         var transcription = final.GetProperty("rows").EnumerateArray().Single(r => r.GetProperty("id").GetString() == "transcription");
         Assert.Equal("notRun", transcription.GetProperty("result").GetString());
-        Assert.Equal("Nothing to put back: the Full check drove no containers.", final.GetProperty("putBack").GetString());
+        Assert.Equal("Nothing to put back: the check drove no containers.", final.GetProperty("putBack").GetString());
 
         var afterwards = await Http.PostAsync($"{app.BaseUrl}/api/preflight/CharacterAttribution/plan", null);
         Assert.Equal(HttpStatusCode.OK, afterwards.StatusCode);
@@ -114,7 +114,7 @@ public class SetupCheckFullApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
         Assert.Equal("passed", ffmpeg.GetProperty("result").GetString());
         // A re-run isn't a whole Full check: its time stays as it was.
         Assert.Equal(before.GetProperty("fullCheckedAt").ToString(), final.GetProperty("fullCheckedAt").ToString());
-        Assert.Equal("Nothing to put back: the Full check drove no containers.", final.GetProperty("putBack").GetString());
+        Assert.Equal("Nothing to put back: the check drove no containers.", final.GetProperty("putBack").GetString());
 
         var quickTier = await Http.PostAsync(Url("/checks/docker/rerun"), null);
         Assert.Equal(HttpStatusCode.NotFound, quickTier.StatusCode);
