@@ -134,6 +134,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<History.HistoryStepScope>();
         // Restore: the restoring flag every write checks, the run, and its started/finished signal.
         services.TryAddSingleton<History.RestoringProjects>();
+        // The busy answer is resolved lazily: it is built from the queues, which ask this gate.
+        services.TryAddSingleton(sp => new History.ProjectActivity(
+            sp.GetRequiredService<History.RestoringProjects>(),
+            () => sp.GetRequiredService<Queueing.IProjectBusyAnswer>()));
         services.TryAddSingleton<Events.EventBroadcaster<History.RestoreEvent>>();
         services.AddScoped<History.HistoryRestore>();
         services.AddScoped<

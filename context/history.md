@@ -15,3 +15,7 @@ Use these terms exactly in code, tests, and discussion.
 - **View a step** — open the whole project read-only as it stood at a History step: you can move around it and play its voices, but an item's TTS take doesn't play, since takes are results that History doesn't keep. Changing anything requires a Restore first.
 - **Restore** — make an older History step's project state the current one by adding a **new** History step whose state equals it; the steps after the restored one stay in History and can themselves be restored. A Restore changes the project exactly as the equivalent edits would: an item whose text, speaker, delivery cue or spoken text changes has its audio discarded and needs generation, and an item brought back by a Restore returns without audio.
   _Avoid_: "rollback" as a destructive operation, "revert", "stale take" (mismatched audio is discarded, as after an edit)
+- **Busy** — a project with work queued or running: attribution, audio generation, a voice batch or an audiobook assembly. Each source counts what is left, and enqueuing more extends it. A running Restore is not busy; it is restoring.
+  _Avoid_: "busy" for a Restore in progress
+- **Restoring** — the exclusive phase while a project's Restore runs: one at a time per project, nothing queued, not extended by anything. While restoring, the project refuses every write but the Restore's own, every enqueue, and every View a step; it wins over busy wherever the two overlap.
+  _Avoid_: "busy" (a separate state with different rules)
