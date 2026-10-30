@@ -25,6 +25,9 @@
     }
   }
   .shell__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
     font-weight: 600;
     font-size: var(--r2m-text-lg);
     color: inherit;
