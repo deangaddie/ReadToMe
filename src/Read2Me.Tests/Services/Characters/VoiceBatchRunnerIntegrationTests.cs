@@ -118,6 +118,7 @@ namespace Read2Me.Tests.Services.Characters
             services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
             services.AddSingleton(reader);
             services.AddSingleton<VoiceOrchestrator>(orchestrator);
+            services.AddSingleton<IProjectBusyAnswer>(NeverBusy.Instance);
             _root = services.BuildServiceProvider();
 
             var broadcaster = new EventBroadcaster<VoiceBatchEvent>();
@@ -125,7 +126,7 @@ namespace Read2Me.Tests.Services.Characters
 
             var sut = new VoiceBatchRunner(
                 _root.GetRequiredService<IServiceScopeFactory>(),
-                _root.GetRequiredService<RestoringProjects>(),
+                _root.GetRequiredService<ProjectActivity>(),
                 NullLogger<VoiceBatchRunner>.Instance,
                 broadcaster,
                 new EventBroadcaster<LlmStreamEvent>());
@@ -432,8 +433,8 @@ namespace Read2Me.Tests.Services.Characters
             var r1 = h.Sut.StartGeneratePrompts(Folder);
             var r2 = h.Sut.StartGeneratePrompts(Folder);
 
-            Assert.Equal(VoiceBatchStart.Started, r1);
-            Assert.Equal(VoiceBatchStart.AlreadyRunning, r2);
+            Assert.IsType<VoiceBatchStart.Started>(r1);
+            Assert.IsType<VoiceBatchStart.AlreadyRunning>(r2);
 
             h.Sut.Cancel();
             await WaitForIdleAsync(h.Sut);
@@ -557,10 +558,12 @@ namespace Read2Me.Tests.Services.Characters
                 voicesByCharacter: new Dictionary<Guid, List<VoiceEntity>> { [alice.Id] = new List<VoiceEntity>() });
             var history = _root!.GetRequiredService<ProjectHistory>();
             await history.ListAsync(Folder);
-            _root!.GetRequiredService<RestoringProjects>().TryBegin(Folder);
+            Assert.Null(_root!.GetRequiredService<ProjectActivity>().TryBeginRestore(Folder));
 
-            Assert.Equal(VoiceBatchStart.Restoring, h.Sut.StartGeneratePrompts(Folder));
-            Assert.Equal(VoiceBatchStart.Restoring, h.Sut.StartGenerateAudio(Folder));
+            var refused = new VoiceBatchStart.Refused(
+                new ActivityRefusal(ActivityRefusalKind.Restoring, RestoringProjects.Reason));
+            Assert.Equal(refused, h.Sut.StartGeneratePrompts(Folder));
+            Assert.Equal(refused, h.Sut.StartGenerateAudio(Folder));
 
             Assert.False(h.Sut.IsRunning);
             Assert.Null(h.Sut.BusyFor(Folder));
@@ -840,8 +843,8 @@ namespace Read2Me.Tests.Services.Characters
             var r1 = h.Sut.StartGeneratePrompts(Folder);
             var r2 = h.Sut.StartGenerateAudio(Folder);
 
-            Assert.Equal(VoiceBatchStart.Started, r1);
-            Assert.Equal(VoiceBatchStart.AlreadyRunning, r2);
+            Assert.IsType<VoiceBatchStart.Started>(r1);
+            Assert.IsType<VoiceBatchStart.AlreadyRunning>(r2);
 
             h.Sut.Cancel();
             await WaitForIdleAsync(h.Sut);
@@ -860,8 +863,8 @@ namespace Read2Me.Tests.Services.Characters
             var r1 = h.Sut.StartGenerateAudio(Folder);
             var r2 = h.Sut.StartGeneratePrompts(Folder);
 
-            Assert.Equal(VoiceBatchStart.Started, r1);
-            Assert.Equal(VoiceBatchStart.AlreadyRunning, r2);
+            Assert.IsType<VoiceBatchStart.Started>(r1);
+            Assert.IsType<VoiceBatchStart.AlreadyRunning>(r2);
 
             h.Sut.Cancel();
             await WaitForIdleAsync(h.Sut);
