@@ -4,6 +4,7 @@ using Read2Me.AppData.Entities;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Events;
+using Read2Me.Services.History;
 using Read2Me.Services.Audio.ParagraphTts;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.Queueing;
@@ -251,7 +252,7 @@ namespace Read2Me.Tests.App.Audio
             public List<(QueuedAudioItem Item, Disposition D)> Applied { get; } = [];
             public List<QueuedAudioItem> Processing { get; } = [];
 
-            public bool Enqueue(IEnumerable<QueuedAudioItem> items) => true;
+            public ActivityRefusal? Enqueue(IEnumerable<QueuedAudioItem> items) => null;
 
             public void MarkProcessing(QueuedAudioItem item) => Processing.Add(item);
 

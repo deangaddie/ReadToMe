@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Read2Me.Services.History;
 using Read2Me.Services.Queueing;
 
 namespace Read2Me.Services.Audio
@@ -19,8 +20,8 @@ namespace Read2Me.Services.Audio
     /// </summary>
     public interface IAudioQueue
     {
-        /// <summary>Queues the items; false, queuing nothing, when any of their projects is restoring.</summary>
-        bool Enqueue(IEnumerable<QueuedAudioItem> items);
+        /// <summary>Queues the items; the gate's refusal, queuing nothing, when it refuses an enqueue for any of their projects.</summary>
+        ActivityRefusal? Enqueue(IEnumerable<QueuedAudioItem> items);
 
         /// <summary>The item has gone in flight.</summary>
         void MarkProcessing(QueuedAudioItem item);

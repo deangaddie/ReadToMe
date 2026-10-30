@@ -14,9 +14,9 @@ namespace Read2Me.App.Api
     public sealed record ParagraphsEnqueueRequest(Guid[] ParagraphIds);
     public sealed record EnqueueResponse(int Enqueued)
     {
-        /// <summary>202 with the count, or 409 "Project is restoring" when the queue refused the enqueue.</summary>
-        internal static IResult For(int? enqueued) =>
-            enqueued is { } count ? Results.Accepted(value: new EnqueueResponse(count)) : StepReads.Restoring();
+        /// <summary>202 with the count, or 409 with the gate's reason when the queue refused the enqueue.</summary>
+        internal static IResult For(EnqueueOutcome outcome) =>
+            outcome.Refusal is { } refusal ? StepReads.Refused(refusal) : Results.Accepted(value: new EnqueueResponse(outcome.Enqueued));
     }
     /// <summary>
     /// Queue state only. Attribution results are per item now — read them from the book endpoint's

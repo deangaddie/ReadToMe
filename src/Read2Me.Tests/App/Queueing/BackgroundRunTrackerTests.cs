@@ -13,6 +13,7 @@ using Read2Me.Services.History;
 using Read2Me.Services.Llm;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.Queueing;
+using Read2Me.Tests.Fakes;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
 
@@ -37,9 +38,10 @@ public class BackgroundRunTrackerTests : ProjectDbTestBase
         services.AddBookCommandHandlers();
         services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
         services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
+        services.AddSingleton<IProjectBusyAnswer>(NeverBusy.Instance);
         _root = services.BuildServiceProvider();
         _folder = new ProjectFolderId(FolderName);
-        _queue = new CharacterQueueService(_root.GetRequiredService<RestoringProjects>());
+        _queue = new CharacterQueueService(_root.GetRequiredService<ProjectActivity>());
 
         _tracker = new BackgroundRunTracker(
             _queue,
@@ -80,9 +82,9 @@ public class BackgroundRunTrackerTests : ProjectDbTestBase
     {
         await SeedOneItemAsync();
         await History.ListAsync(_folder);
-        _root.GetRequiredService<RestoringProjects>().TryBegin(_folder);
+        Assert.Null(_root.GetRequiredService<ProjectActivity>().TryBeginRestore(_folder));
 
-        Assert.False(_queue.Enqueue(Paragraphs(_folder, 2)));
+        Assert.NotNull(_queue.Enqueue(Paragraphs(_folder, 2)));
         await _tracker.ClosedAsync();
 
         Assert.Equal(["History started"], (await History.ListAsync(_folder)).Steps.Select(s => s.Label));
