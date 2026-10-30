@@ -21,6 +21,7 @@ import '@app/core/outlet';
 import '@app/activity/activity-bar';
 import '@app/activity/activity-drawer';
 import '@app/history/history-sheet';
+import logoUrl from '../../assets/images/logo-48.png';
 import shellCss from './shell.css' with { type: 'text' };
 
 adoptStyles(shellCss);
@@ -165,7 +166,9 @@ export class AppShell extends R2mElement {
         >
           ${icon('menu')}
         </button>
-        <a class="shell__brand" href="projects">Read2Me</a>
+        <a class="shell__brand" href="projects"
+          ><img src=${logoUrl} alt="" width="24" height="24" />Read2Me</a
+        >
 
         <nav class="shell__crumbs" aria-label="Breadcrumb">
           ${crumbs.map((crumb, i) => {
