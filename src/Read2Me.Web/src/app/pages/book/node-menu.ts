@@ -96,7 +96,7 @@ export function menuLabel(target: NodeMenuTarget): string {
  * Runs one command entry for `target` as the menu would: asks what the entry needs through the
  * shared dialogs, then posts the command through the {@link BookEditor} above `from`. Also how a
  * row runs an entry without the menu (clicking a delivery cue edits it). Nothing while the editor
- * is locked.
+ * is blocked.
  */
 export async function runMenuEntry(
   entry: MenuEntryId,
@@ -104,7 +104,7 @@ export async function runMenuEntry(
   from: Element,
 ): Promise<void> {
   const editor = use(BookEditor, from);
-  if (editor.locked()) return;
+  if (editor.blocked() !== null) return;
   const prompt = use(PromptService, from);
   const confirm = use(ConfirmService, from);
   const rules = use(BookStore, from).overview()?.structureRules ?? [];
@@ -128,7 +128,7 @@ export async function runMenuEntry(
  * {@link NODE_MENU_OPEN} there and re-anchors its popover to the trigger of each open, so a tree
  * re-render under an open menu keeps the anchor (lit keeps the trigger element by id). The panel
  * lives outside the tree and the rows, so its keys never reach theirs; Escape and a chosen entry
- * hand focus back to `returnTo`. Refuses to open while the editor is locked (stale or mid-write).
+ * hand focus back to `returnTo`. Refuses to open while the editor is blocked (a step viewed, stale or mid-write).
  */
 export class NodeMenu extends R2mElement {
   private editor!: BookEditor;
@@ -176,7 +176,7 @@ export class NodeMenu extends R2mElement {
 
   /** Opens the menu for `request`, anchored to its trigger; a second open re-anchors. */
   openFor(request: NodeMenuRequest): void {
-    if (this.editor.locked()) return;
+    if (this.editor.blocked() !== null) return;
     this.#release();
     request.anchor.style.setProperty('anchor-name', ANCHOR);
     request.anchor.setAttribute('aria-expanded', 'true');

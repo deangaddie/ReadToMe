@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { render } from 'lit-html';
-import { ITEM_AUDIO_NOT_KEPT, type ParagraphItemDto, VIEWING_READ_ONLY } from '@app/api';
+import {
+  type Block,
+  ITEM_AUDIO_NOT_KEPT,
+  type ParagraphItemDto,
+  VIEWING_READ_ONLY,
+} from '@app/api';
 import { provide } from '@app/core/services';
 import {
   type ConfirmOptions,
@@ -75,7 +80,7 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
 let selection: AudioSelectionStore;
 let assigner: { assign: ReturnType<typeof mock>; createAndAssign: ReturnType<typeof mock> };
 let generator: { retry: ReturnType<typeof mock>; dismissReview: ReturnType<typeof mock> };
-let editor: { locked: () => boolean; run: ReturnType<typeof mock> };
+let editor: { blocked: () => Block | null; run: ReturnType<typeof mock> };
 let prompt: { text: ReturnType<typeof mock>; answer: string | null };
 let confirm: { confirm: ReturnType<typeof mock> };
 
@@ -107,7 +112,7 @@ beforeEach(() => {
   selection = new AudioSelectionStore();
   assigner = { assign: mock(async () => undefined), createAndAssign: mock(async () => undefined) };
   generator = { retry: mock(async () => true), dismissReview: mock(async () => true) };
-  editor = { locked: () => false, run: mock(async () => true) };
+  editor = { blocked: () => null, run: mock(async () => true) };
   confirm = { confirm: mock(async (_options: ConfirmOptions) => false) };
   prompt = {
     answer: 'shouting',

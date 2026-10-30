@@ -1,4 +1,4 @@
-import type { Block, NodeLevel } from '@app/api';
+import { type Block, type NodeLevel, withLocal } from '@app/api';
 import type { NodeStatusSummary } from '@app/live/live-messages';
 import type { NodeMenuTarget, SelectionKind } from './node-menu-entries';
 
@@ -19,23 +19,14 @@ export interface StructureNodeMenuInput {
   selection: SelectionKind | null;
   /** The node's roll-up; null when it has none. */
   status: NodeStatusSummary | null;
-  /** The editor is locked (stale view, a write in flight, or a History step viewed). */
-  locked: boolean;
-  /** Why it is read-only: a History step is viewed. Null on the current project. */
-  readOnly: string | null;
+  /** The edit gate's answer for the page (`BookEditor.blocked()`); null while edits are open. */
+  blocked: Block | null;
 }
 
 export interface StructureNodeMenu {
   target: NodeMenuTarget;
-  /** The node's attribution is processing or queued, or the editor is locked: the trigger is off. */
-  disabled: boolean;
-  /** The trigger's tooltip while a History step is viewed; null otherwise. */
-  reason: string | null;
-}
-
-/** The trigger's edit gate answer for `menu`: null while it is on. */
-export function menuBlock({ disabled, reason }: StructureNodeMenu): Block | null {
-  return disabled || reason !== null ? { reason } : null;
+  /** The trigger's edit gate answer: `blocked` with the node's attribution busy folded in. */
+  block: Block | null;
 }
 
 export function structureNodeMenu({
@@ -43,8 +34,7 @@ export function structureNodeMenu({
   position,
   selection,
   status,
-  locked,
-  readOnly,
+  blocked,
 }: StructureNodeMenuInput): StructureNodeMenu {
   const target: NodeMenuTarget = {
     kind: node.level,
@@ -56,7 +46,6 @@ export function structureNodeMenu({
   const busy = !!status && (status.attributionProcessing || status.attributionQueued > 0);
   return {
     target: selection ? { ...target, selection } : target,
-    disabled: busy || locked,
-    reason: readOnly,
+    block: withLocal(blocked, busy),
   };
 }

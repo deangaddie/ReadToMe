@@ -1,4 +1,5 @@
 import { html, nothing } from 'lit-html';
+import type { Block } from '@app/api';
 import { repeat } from 'lit-html/directives/repeat.js';
 import { R2mElement, define } from '@app/core/element';
 import { computed, signal } from '@app/core/signals';
@@ -10,7 +11,7 @@ import { type TreeNode, placeholderTitleClass } from './book-tree';
 import { NODE_MENU_OPEN, type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
 import type { ActionEntryId, SelectionKind } from './node-menu-entries';
 import type { TriState } from './selection';
-import { menuBlock, structureNodeMenu } from './structure-node-menu';
+import { structureNodeMenu } from './structure-node-menu';
 import structureTreeCss from './structure-tree.css' with { type: 'text' };
 
 adoptStyles(structureTreeCss);
@@ -111,22 +112,13 @@ export class StructureTree extends R2mElement {
     this.#nodeStates.set(value);
   }
 
-  /** The editor is locked (stale view or a write in flight): every node menu is off. */
-  #locked = signal(false);
-  get locked() {
-    return this.#locked();
+  /** The edit gate's answer (`BookEditor.blocked()`): non-null turns every node menu off, its reason the tooltip. */
+  #blocked = signal<Block | null>(null);
+  get blocked() {
+    return this.#blocked();
   }
-  set locked(value: boolean) {
-    this.#locked.set(value);
-  }
-
-  /** Why every node menu is off while a History step is viewed: their tooltip. Null otherwise. */
-  #readOnly = signal<string | null>(null);
-  get readOnly() {
-    return this.#readOnly();
-  }
-  set readOnly(value: string | null) {
-    this.#readOnly.set(value);
+  set blocked(value: Block | null) {
+    this.#blocked.set(value);
   }
 
   /** The row holding the roving tab stop; null until the user moves it (the current chapter then). */
@@ -163,8 +155,7 @@ export class StructureTree extends R2mElement {
     const statuses = this.#statuses();
     const selection = this.#selection();
     const nodeStates = this.#nodeStates();
-    const locked = this.#locked();
-    const readOnly = this.#readOnly();
+    const blocked = this.#blocked();
     return html`<div class="tree" role="tree" aria-label="Book structure">
       ${repeat(
         rows,
@@ -179,8 +170,7 @@ export class StructureTree extends R2mElement {
             position: node,
             selection,
             status,
-            locked,
-            readOnly,
+            blocked,
           });
           return html`<div
             role="treeitem"
@@ -238,7 +228,7 @@ export class StructureTree extends R2mElement {
             }
             ${status ? badges(status) : nothing}
             <span class="tree__menu">
-              ${nodeMenuTrigger(menu.target, { block: menuBlock(menu), tabIndex: -1 })}
+              ${nodeMenuTrigger(menu.target, { block: menu.block, tabIndex: -1 })}
             </span>
           </div>`;
         },
