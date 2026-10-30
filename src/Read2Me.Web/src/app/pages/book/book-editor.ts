@@ -38,12 +38,18 @@ export class BookEditor {
   /** Why the book can't be changed: a History step is viewed (ticket 32); the disabled controls' reason. */
   readonly readOnly = computed(() => this.stepView.readOnly(this.store.folder()));
   /**
-   * Every mutation affordance is off: a write is in flight, the view is stale (design §6.3), or a
-   * History step is viewed.
+   * Why a write would not be sent, in blocked-reason order: a History step is viewed, the view is
+   * stale (design §6.3), or a write is in flight. The one list both `locked` and `settle` read.
    */
-  readonly locked = computed(
-    () => this._saving() || this.store.stale() !== null || this.readOnly() !== null,
-  );
+  private readonly lockReason = computed(() => {
+    const readOnly = this.readOnly();
+    if (readOnly !== null) return readOnly;
+    if (this.store.stale() !== null) return 'The book is out of date; refresh it first.';
+    if (this._saving()) return 'Another change is still being saved.';
+    return null;
+  });
+  /** Every mutation affordance is off, for any of the reasons in `lockReason`. */
+  readonly locked = computed(() => this.lockReason() !== null);
 
   constructor(private readonly store: BookStore) {}
 
@@ -77,9 +83,7 @@ export class BookEditor {
   /** Why a write would not be sent right now, or null when it would. */
   private declineReason(): string | null {
     if (!this.store.folder()) return 'No project is open.';
-    if (this._saving()) return 'Another change is still being saved.';
-    if (this.store.stale() !== null) return 'The book is out of date; refresh it first.';
-    return this.readOnly();
+    return this.lockReason();
   }
 
   /** Rereads the source file from scratch (the caller has already confirmed). */

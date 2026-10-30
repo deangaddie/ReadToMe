@@ -290,6 +290,14 @@ describe('paragraphRow', () => {
   });
 
   describe('outcomes (ticket 12)', () => {
+    it('a locked book (saving or stale) shows the outcome as a plain chip, with nothing to clear', async () => {
+      const el = await mount(
+        ctx({ locked: true, paragraphStatus: { p1: { outcome: { kind: 'Failed' } } } }),
+      );
+      expect(el.querySelector('.r2m-paragraph__outcome')).toBeNull();
+      expect(text(el.querySelector('.r2m-status-chip'))).toContain('Failed');
+    });
+
     it('a Failed chip carries the reason and clears the outcome on click', async () => {
       const el = await mount(
         ctx({ paragraphStatus: { p1: { outcome: { kind: 'Failed', reason: 'LLM timed out' } } } }),

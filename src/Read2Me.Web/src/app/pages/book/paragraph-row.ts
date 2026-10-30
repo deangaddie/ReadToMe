@@ -141,7 +141,7 @@ export function paragraphRow(
 
     <div class="r2m-paragraph__status">
       ${
-        queue && outcome && ctx.readOnly === null
+        queue && outcome && !ctx.locked
           ? html`<button
               type="button"
               class="r2m-paragraph__outcome"

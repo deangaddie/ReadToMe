@@ -152,6 +152,12 @@ describe('BookEditor', () => {
     expect(execute.calls).toEqual([]);
   });
 
+  it('a viewed step outranks a stale view in the declined reason', async () => {
+    store.stale.set('boom');
+    use(StepView).view('dracula', 's8');
+    expect((await editor.tryExecute({ type: 'AddPauses' }))?.message).toBe(VIEWING_READ_ONLY);
+  });
+
   it('is locked and read-only while a History step is viewed, and sends nothing', async () => {
     use(StepView).view('dracula', 's8');
     expect(editor.locked()).toBe(true);
