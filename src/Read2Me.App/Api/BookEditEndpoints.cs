@@ -69,18 +69,18 @@ namespace Read2Me.App.Api
 
         private static async Task<IResult> PlanAsync(
             string folder, PlanBookEditRequest? body, IFileSystem fs, BookEditPlanner planner,
-            ScopeResolver resolver, IBookEditSessionStore sessions, RestoringProjects restoring, CancellationToken ct)
+            ScopeResolver resolver, IBookEditSessionStore sessions, ProjectActivity activity, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
             if (string.IsNullOrWhiteSpace(body?.Instruction))
                 return Results.Problem("An instruction is required.", statusCode: StatusCodes.Status400BadRequest);
 
-            var generation = restoring.Generation(folderId);
-            // A Restore that began since the filter is already counted: refuse it here, or the check
-            // below would pass once it ended and leave targets read while it ran.
-            if (restoring.IsRestoring(folderId))
-                return StepReads.Restoring();
+            var mark = activity.Mark(folderId);
+            // A Restore already running is counted in the mark, so only its flag shows it: refuse it
+            // here, or the check below would pass once it ended and leave targets read while it ran.
+            if (activity.MayPlanEdit(mark) is { } refusal)
+                return StepReads.Refused(refusal);
             var outcome = await planner.PlanAsync(folderId, body.Instruction, !body.Thinking, ct);
             if (outcome.Status != EditPlanStatus.Ok)
                 return Results.Ok(NotPlanned(outcome.Status.ToString(), outcome.Reason));
@@ -94,10 +94,10 @@ namespace Read2Me.App.Api
             // A Restore that began while the LLM was thinking or the scope resolved drops the project's
             // sessions as it ends, or has ended and left targets read from the book before it; the
             // dialog, holding no program yet, would miss either: refuse as the Restore would have.
-            if (restoring.IsRestoring(folderId) || restoring.Generation(folderId) != generation)
+            if (activity.MayPlanEdit(mark) is { } overtaken)
             {
                 sessions.Remove(folderId, session.Id);
-                return StepReads.Restoring();
+                return StepReads.Refused(overtaken);
             }
             // Read off the service that will send them, so the count cannot drift from the job.
             var batch = BookEditProposalService.BatchSize;

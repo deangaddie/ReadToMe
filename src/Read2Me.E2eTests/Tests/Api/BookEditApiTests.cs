@@ -306,7 +306,7 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         var folder = $"api-edit-restore-{Guid.NewGuid():N}";
         await app.SeedMultiChapterProjectAsync(folder, "Restore Book", "Author", chapters: 2);
         var folderId = new Read2Me.Core.Models.ProjectFolderId(folder);
-        var restoring = app.Services.GetRequiredService<RestoringProjects>();
+        var activity = app.Services.GetRequiredService<ProjectActivity>();
         app.FakeAi.LlmReply = _ => TemplatePlan;
         app.FakeAi.HoldLlmAfter(0);
         try
@@ -314,7 +314,7 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             // Past the endpoint's restoring check and waiting on the LLM when the Restore begins.
             var plan = Http.PostAsJsonAsync(Url(folder, "/plan"), new { instruction = "number the chapters" });
             await WaitForAsync(() => { lock (app.FakeAi.LlmPromptsSeen) return app.FakeAi.LlmPromptsSeen.Count > 0; });
-            Assert.True(restoring.TryBegin(folderId));
+            Assert.Null(activity.TryBeginRestore(folderId));
             app.FakeAi.ReleaseLlm();
 
             var response = await plan;
@@ -325,7 +325,7 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         }
         finally
         {
-            restoring.End(folderId);
+            activity.EndRestore(folderId);
             app.FakeAi.Reset();
         }
     }
@@ -336,7 +336,7 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         var folder = $"api-edit-restored-{Guid.NewGuid():N}";
         await app.SeedMultiChapterProjectAsync(folder, "Restored Book", "Author", chapters: 2);
         var folderId = new Read2Me.Core.Models.ProjectFolderId(folder);
-        var restoring = app.Services.GetRequiredService<RestoringProjects>();
+        var activity = app.Services.GetRequiredService<ProjectActivity>();
         app.FakeAi.LlmReply = _ => TemplatePlan;
         app.FakeAi.HoldLlmAfter(0);
         try
@@ -345,8 +345,8 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             // but the plan's targets would come from the book as it was before.
             var plan = Http.PostAsJsonAsync(Url(folder, "/plan"), new { instruction = "number the chapters" });
             await WaitForAsync(() => { lock (app.FakeAi.LlmPromptsSeen) return app.FakeAi.LlmPromptsSeen.Count > 0; });
-            Assert.True(restoring.TryBegin(folderId));
-            restoring.End(folderId);
+            Assert.Null(activity.TryBeginRestore(folderId));
+            activity.EndRestore(folderId);
             app.FakeAi.ReleaseLlm();
 
             var response = await plan;
@@ -357,7 +357,7 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         }
         finally
         {
-            restoring.End(folderId);
+            activity.EndRestore(folderId);
             app.FakeAi.Reset();
         }
     }
