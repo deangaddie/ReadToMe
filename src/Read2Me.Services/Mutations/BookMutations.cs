@@ -37,7 +37,7 @@ public sealed class BookMutations(
     MutationOrigin origin,
     ProjectHistory history,
     HistoryStepScope stepScope,
-    RestoringProjects restoring,
+    ProjectActivity activity,
     ILogger<BookMutations> logger)
 {
     private BookMutationOptions Options => options.Value;
@@ -249,10 +249,13 @@ public sealed class BookMutations(
         }
     }
 
-    /// <summary>Every mutation but the Restore's own is refused while the project is restoring.</summary>
+    /// <summary>
+    /// Every mutation but the Restore's own asks the gate. The gate refuses a write only while the
+    /// project is restoring, so its refusal is always <see cref="BookMutationRejection.Restoring"/>.
+    /// </summary>
     private BookMutationOutcome? RefusedWhileRestoring(BookMutation mutation) =>
-        mutation is not RestoreStepMutation && restoring.IsRestoring(mutation.FolderId)
-            ? new BookMutationOutcome.Rejected(BookMutationRejection.Restoring, RestoringProjects.Reason)
+        mutation is not RestoreStepMutation && activity.MayWrite(mutation.FolderId) is { } refusal
+            ? new BookMutationOutcome.Rejected(BookMutationRejection.Restoring, refusal.Reason)
             : null;
 
     private BookMutationOutcome Cancelled() =>
