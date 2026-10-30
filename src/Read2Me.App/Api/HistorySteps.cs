@@ -68,8 +68,8 @@ namespace Read2Me.App.Api
                     var http = context.HttpContext;
                     return http.Request.RouteValues["folder"] is string folder
                            && ProjectEndpoints.TryResolve(folder, http.RequestServices.GetRequiredService<IFileSystem>(), out var folderId)
-                           && http.RequestServices.GetRequiredService<RestoringProjects>().IsRestoring(folderId)
-                        ? StepReads.Restoring()
+                           && http.RequestServices.GetRequiredService<ProjectActivity>().MayWrite(folderId) is { } refusal
+                        ? StepReads.Refused(refusal)
                         : await next(context);
                 });
     }

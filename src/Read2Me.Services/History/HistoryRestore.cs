@@ -3,7 +3,6 @@ using Read2Me.Core.Models;
 using Read2Me.Services.BookEdits;
 using Read2Me.Services.Events;
 using Read2Me.Services.Mutations;
-using Read2Me.Services.Queueing;
 
 namespace Read2Me.Services.History;
 
@@ -24,8 +23,7 @@ public sealed class HistoryRestore(
     ProjectHistory history,
     BookMutations mutations,
     HistoryStepScope stepScope,
-    RestoringProjects restoring,
-    IProjectBusyAnswer busy,
+    ProjectActivity activity,
     IBookEditSessionStore editSessions,
     EventBroadcaster<RestoreEvent> events,
     TimeProvider clock,
@@ -33,20 +31,17 @@ public sealed class HistoryRestore(
 {
     public async Task<RestoreOutcome> RestoreAsync(ProjectFolderId folder, Guid stepId, CancellationToken ct = default)
     {
-        if (!restoring.TryBegin(folder))
-            return new RestoreOutcome.Refused(RestoringProjects.Reason);
+        // The gate sets the flag before it asks about busy, so an enqueue that arrives from here on
+        // is refused, by the endpoint or by the queue itself. One already past the queue's check can
+        // still land; its writes are then refused with Restoring, and its items run again after the Restore.
+        if (activity.TryBeginRestore(folder) is { } refusal)
+            return new RestoreOutcome.Refused(refusal.Reason);
 
         var started = false;
         HistoryStep? landed = null;
         IReadOnlyList<string> dropped = [];
         try
         {
-            // After the flag is set, so an enqueue that arrives from here on is refused, by the
-            // endpoint or by the queue itself. One already past the queue's check can still land;
-            // its writes are then refused with Restoring, and its items run again after the Restore.
-            if (busy.For(folder) is { } b)
-                return new RestoreOutcome.Refused(b.Reason);
-
             StepState target;
             switch (await history.OpenStepAsync(folder, stepId, ct))
             {
@@ -92,7 +87,7 @@ public sealed class HistoryRestore(
         }
         finally
         {
-            restoring.End(folder);
+            activity.EndRestore(folder);
             if (started)
                 Announce(new RestoreEvent(folder, RestoreEventKind.Finished, landed, dropped));
         }

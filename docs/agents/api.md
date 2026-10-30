@@ -912,7 +912,8 @@ curl -s "http://localhost:5000/api/projects/{folder}/characters?at={stepId}"
   `/characters/{id}/voice-rules` (and `/preview`), `/voices/{voiceId}`,
   `/paragraphs/{id}/context`, `/pronunciations` (and `/matches`) and the `/nodes/...` reads. The OpenAPI document lists `at` on each.
 - 404 for a step the project's History doesn't have, 409 while anything is queued or running for
-  the project (`detail` carries the reason, as `busy.reason` does), 422 for a step marked
+  the project (`detail` carries the reason, as `busy.reason` does) or while it is restoring
+  (`detail` is "Project is restoring", which wins when both hold), 422 for a step marked
   `cantOpen`, 400 when `at` is not a step id. A step recorded before a schema upgrade is migrated
   as it opens. One whose chunks fail to replay (a damaged patchset), or whose old schema fails to
   migrate, is marked `cantOpen` for good: the read that found out answers 422, and the hub sends
