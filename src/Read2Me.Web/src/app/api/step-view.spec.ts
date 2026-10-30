@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { resetServices, use } from '@app/core/services';
 import { ApiClient, type FetchFn } from './api-client';
-import { StepView, readsAtStep } from './step-view';
+import {
+  STALE_READ_ONLY,
+  StepView,
+  VIEWING_READ_ONLY,
+  blockedReason,
+  readsAtStep,
+  withLocal,
+} from './step-view';
 import { voiceOriginalUrl } from './voice-editor-api';
 import { stateFileUrl, workspaceUrl } from './workspace-url';
 
@@ -82,5 +89,48 @@ describe('StepView', () => {
     );
     expect(workspaceUrl('dracula', 'audio/i1.wav')).toBe('/workspace/dracula/audio/i1.wav');
     expect(stateFileUrl('emma', 'cover.jpg')).toBe('/workspace/emma/cover.jpg');
+  });
+});
+
+describe('blockedReason', () => {
+  const open = { viewing: false, stale: false, saving: false };
+
+  it('is open when nothing blocks and there is no local busy', () => {
+    expect(blockedReason(open)).toBeNull();
+    expect(blockedReason(open, false)).toBeNull();
+  });
+
+  it('names each blocked reason on its own', () => {
+    expect(blockedReason({ ...open, viewing: true })).toEqual({ reason: VIEWING_READ_ONLY });
+    expect(blockedReason({ ...open, stale: true })).toEqual({ reason: STALE_READ_ONLY });
+    expect(blockedReason(open, 'Bulk assign waits')).toEqual({ reason: 'Bulk assign waits' });
+  });
+
+  it('blocks without a reason while saving, or for a plain local flag', () => {
+    expect(blockedReason({ ...open, saving: true })).toEqual({ reason: null });
+    expect(blockedReason(open, true)).toEqual({ reason: null });
+  });
+
+  it('gives one reason, in the order viewing > stale > local reason > none', () => {
+    const all = { viewing: true, stale: true, saving: true };
+    expect(blockedReason(all, 'local')).toEqual({ reason: VIEWING_READ_ONLY });
+    expect(blockedReason({ ...all, viewing: false }, 'local')).toEqual({
+      reason: STALE_READ_ONLY,
+    });
+    expect(blockedReason({ ...open, saving: true }, 'local')).toEqual({ reason: 'local' });
+    expect(blockedReason({ ...open, saving: true }, true)).toEqual({ reason: null });
+  });
+});
+
+describe('withLocal', () => {
+  it('folds a local busy into a block, its reason only filling a block without one', () => {
+    expect(withLocal(null)).toBeNull();
+    expect(withLocal(null, false)).toBeNull();
+    expect(withLocal(null, true)).toEqual({ reason: null });
+    expect(withLocal(null, 'local')).toEqual({ reason: 'local' });
+    expect(withLocal(null, '')).toEqual({ reason: null });
+    expect(withLocal({ reason: null }, 'local')).toEqual({ reason: 'local' });
+    expect(withLocal({ reason: STALE_READ_ONLY }, 'local')).toEqual({ reason: STALE_READ_ONLY });
+    expect(withLocal({ reason: STALE_READ_ONLY }, false)).toEqual({ reason: STALE_READ_ONLY });
   });
 });

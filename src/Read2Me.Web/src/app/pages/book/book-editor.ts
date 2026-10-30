@@ -1,6 +1,8 @@
 import {
   ApiError,
+  type Block,
   BookApi,
+  blockedReason,
   type BookCommand,
   type CommandResponse,
   type ManualImportRequest,
@@ -37,21 +39,26 @@ export class BookEditor {
   readonly saving = this._saving.asReadonly();
   /** Why the book can't be changed: a History step is viewed (ticket 32); the disabled controls' reason. */
   readonly readOnly = computed(() => this.stepView.readOnly(this.store.folder()));
-  /**
-   * Why a write would not be sent, in blocked-reason order: a History step is viewed, the view is
-   * stale (design §6.3), or a write is in flight. The one list both `locked` and `settle` read.
-   */
-  private readonly lockReason = computed(() => {
-    const readOnly = this.readOnly();
-    if (readOnly !== null) return readOnly;
-    if (this.store.stale() !== null) return 'The book is out of date; refresh it first.';
-    if (this._saving()) return 'Another change is still being saved.';
-    return null;
-  });
-  /** Every mutation affordance is off, for any of the reasons in `lockReason`. */
-  readonly locked = computed(() => this.lockReason() !== null);
+  /** Every mutation affordance is off: {@link blocked} is non-null. */
+  readonly locked = computed(() => this.blocked() !== null);
 
   constructor(private readonly store: BookStore) {}
+
+  /**
+   * The edit gate for a book write: null when open, else the control's **Blocked reason** (null
+   * while saving). Blocked by a viewed History step, a stale view (design §6.3), a write in flight,
+   * or the caller's `local` busy (`true`, or a string with its own reason). `settle` declines on it.
+   */
+  blocked(local?: boolean | string): Block | null {
+    return blockedReason(
+      {
+        viewing: this.readOnly() !== null,
+        stale: this.store.stale() !== null,
+        saving: this._saving(),
+      },
+      local,
+    );
+  }
 
   /** Posts one command. Resolves true when the host accepted it. */
   async run(command: BookCommand): Promise<boolean> {
@@ -83,7 +90,8 @@ export class BookEditor {
   /** Why a write would not be sent right now, or null when it would. */
   private declineReason(): string | null {
     if (!this.store.folder()) return 'No project is open.';
-    return this.lockReason();
+    const block = this.blocked();
+    return block === null ? null : (block.reason ?? 'Another change is still being saved.');
   }
 
   /** Rereads the source file from scratch (the caller has already confirmed). */
@@ -107,7 +115,7 @@ export class BookEditor {
     quiet = false,
   ): Promise<{ value?: T; error: ApiError | null } | null> {
     const folder = this.store.folder();
-    if (!folder || this.declineReason() !== null) return null;
+    if (!folder || this.blocked() !== null) return null;
 
     // Armed before the request: the receipt can arrive before the HTTP response does.
     const receipt = this.store.expectOwnReceipt(OWN_RECEIPT_TIMEOUT_MS);

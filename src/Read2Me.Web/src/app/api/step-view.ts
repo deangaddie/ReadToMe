@@ -6,6 +6,49 @@ import type { paths } from './schema';
 /** Why an edit control is off while a History step is viewed (story 40). */
 export const VIEWING_READ_ONLY = 'Viewing a past step. Restore it to change anything';
 
+/** Why a book write control is off while the view is stale; the banner keeps the detailed cause. */
+export const STALE_READ_ONLY = 'This view may be out of date. Refresh to change anything';
+
+/**
+ * A control's edit gate answer when it is off: `reason` is its **Blocked reason** (context/web.md),
+ * or null when it is blocked without one (a save in flight, a plain local busy flag). Open is null.
+ */
+export interface Block {
+  reason: string | null;
+}
+
+/** The page-wide states that block a book write. */
+export interface BlockingState {
+  viewing: boolean;
+  stale: boolean;
+  saving: boolean;
+}
+
+/**
+ * A caller's local busy folded into `block`: `true` blocks without a reason, a string blocks with
+ * that reason (an empty one as none). The local reason only fills a block that has none, so viewing
+ * and stale win.
+ */
+export function withLocal(block: Block | null, local?: boolean | string): Block | null {
+  if (local === undefined || local === false) return block;
+  const localReason = local === true || local === '' ? null : local;
+  if (block === null) return { reason: localReason };
+  return block.reason === null && localReason !== null ? { reason: localReason } : block;
+}
+
+/**
+ * The edit gate's one answer: whether a book write control is off and why, at most one reason in
+ * the order viewing a step > stale > the caller's local reason > none.
+ */
+export function blockedReason(
+  { viewing, stale, saving }: BlockingState,
+  local?: boolean | string,
+): Block | null {
+  if (viewing) return { reason: VIEWING_READ_ONLY };
+  if (stale) return { reason: STALE_READ_ONLY };
+  return withLocal(saving ? { reason: null } : null, local);
+}
+
 /** Why an item's play button is off while viewing: takes aren't Project state, so it would play today's. */
 export const ITEM_AUDIO_NOT_KEPT = "Item audio isn't kept in History";
 
