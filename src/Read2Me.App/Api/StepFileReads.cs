@@ -13,7 +13,7 @@ namespace Read2Me.App.Api
     /// book file — as it was after that step, from the History blobs, so past voices play and past
     /// covers show as they were. The same answers as a project read at <c>?at=</c>: 400 for a value
     /// that isn't a step id, 404 for an unknown step or a file that didn't exist then (any file that
-    /// isn't Project state, such as an item's take, never does), 409 while the project is busy.
+    /// isn't Project state, such as an item's take, never does), 409 while the project is busy or restoring.
     /// Without <c>?at=</c> the static mount serves the live file as before.
     /// </summary>
     public static class StepFileReads

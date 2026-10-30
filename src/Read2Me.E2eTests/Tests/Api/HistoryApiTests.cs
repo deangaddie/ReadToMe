@@ -310,6 +310,36 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     [Fact]
+    public async Task While_a_Restore_runs_every_read_at_a_step_is_409_Project_is_restoring()
+    {
+        var folder = $"api-history-{Guid.NewGuid():N}";
+        await app.SeedProjectAsync(folder, "History Book", "Author");
+        var started = (await HistoryAsync(folder)).GetProperty("headStepId").GetGuid();
+        await PutCoverAsync(folder, "a cover");
+        var covered = (await HistoryAsync(folder)).GetProperty("headStepId").GetGuid();
+        var restoring = app.Services.GetRequiredService<RestoringProjects>();
+        var folderId = new Read2Me.Core.Models.ProjectFolderId(folder);
+
+        Assert.True(restoring.TryBegin(folderId));
+        try
+        {
+            var read = await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/book?at={started}");
+            var file = await Http.GetAsync($"{app.BaseUrl}/workspace/{folder}/cover.png?at={covered}");
+
+            Assert.Equal(HttpStatusCode.Conflict, read.StatusCode);
+            Assert.Equal(HttpStatusCode.Conflict, file.StatusCode);
+            Assert.Equal("Project is restoring",
+                JsonDocument.Parse(await read.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
+            Assert.Equal("Project is restoring",
+                JsonDocument.Parse(await file.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
+        }
+        finally
+        {
+            restoring.End(folderId);
+        }
+    }
+
+    [Fact]
     public async Task While_the_project_is_busy_a_step_cannot_be_read_or_viewed_and_409_says_why()
     {
         var folder = $"api-history-{Guid.NewGuid():N}";
@@ -338,6 +368,22 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             Assert.Equal(HttpStatusCode.Conflict, restore.StatusCode);
             var detail = JsonDocument.Parse(await read.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString();
             Assert.StartsWith("Assembly", detail);
+
+            // Busy and restoring at once: restoring wins.
+            var restoring = app.Services.GetRequiredService<RestoringProjects>();
+            var folderId = new Read2Me.Core.Models.ProjectFolderId(folder);
+            Assert.True(restoring.TryBegin(folderId));
+            try
+            {
+                var both = await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/history/{started}");
+                Assert.Equal(HttpStatusCode.Conflict, both.StatusCode);
+                Assert.Equal("Project is restoring",
+                    JsonDocument.Parse(await both.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
+            }
+            finally
+            {
+                restoring.End(folderId);
+            }
         }
         finally
         {

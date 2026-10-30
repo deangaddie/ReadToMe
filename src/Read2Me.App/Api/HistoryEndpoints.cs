@@ -98,7 +98,7 @@ namespace Read2Me.App.Api
         }
 
         private static async Task<IResult> ListAsync(
-            string folder, IFileSystem fs, ProjectHistory history, ProjectBusyAnswer busy, RestoringProjects restoring, CancellationToken ct)
+            string folder, IFileSystem fs, ProjectHistory history, ProjectBusyAnswer busy, ProjectActivity activity, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
@@ -106,20 +106,17 @@ namespace Read2Me.App.Api
             var list = await history.ListAsync(folderId, ct);
             return Results.Ok(new HistoryDto(
                 list.Steps, list.HeadStepId, busy.For(folderId) is { } b ? new HistoryBusyDto(b.Reason) : null,
-                restoring.IsRestoring(folderId)));
+                activity.IsRestoring(folderId)));
         }
 
         /// <summary>The step a client is about to view, with what restoring it would cost.</summary>
         private static async Task<IResult> GetStepAsync(
-            string folder, Guid stepId, IFileSystem fs, ProjectHistory history, ProjectBusyAnswer busy, RestoringProjects restoring,
-            CancellationToken ct)
+            string folder, Guid stepId, IFileSystem fs, ProjectHistory history, ProjectActivity activity, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
-            if (busy.For(folderId) is { } b)
-                return StepReads.Busy(b);
-            if (restoring.IsRestoring(folderId))
-                return StepReads.Restoring();
+            if (activity.MayViewStep(folderId) is { } refusal)
+                return StepReads.Refused(refusal);
 
             return await history.OpenStepAsync(folderId, stepId, ct) switch
             {

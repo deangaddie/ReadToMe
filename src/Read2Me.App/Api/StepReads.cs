@@ -3,12 +3,10 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi;
-using Read2Me.App.Queueing;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.History;
-using Read2Me.Services.Queueing;
 
 namespace Read2Me.App.Api
 {
@@ -97,26 +95,26 @@ namespace Read2Me.App.Api
         /// <summary>
         /// What every read at <c>?at=</c> checks before it reads the step — a project read and a
         /// state file under <c>/workspace</c> alike: 400 for a value that isn't a step id, 409 while
-        /// the project is busy. Null, with the step id, when the read may go ahead; the caller then
-        /// answers <see cref="UnknownStep"/> for a step the project's History doesn't have. A null
-        /// <paramref name="folder"/> is a project that doesn't exist: only the step id is checked.
+        /// the project is busy or restoring. Null, with the step id, when the read may go ahead; the
+        /// caller then answers <see cref="UnknownStep"/> for a step the project's History doesn't have.
+        /// A null <paramref name="folder"/> is a project that doesn't exist: only the step id is checked.
         /// </summary>
         internal static IResult? RefuseReadAt(HttpContext http, ProjectFolderId? folder, string at, out Guid stepId)
         {
             if (!Guid.TryParse(at, out stepId))
                 return Results.Problem($"'{at}' is not a History step id.", statusCode: StatusCodes.Status400BadRequest);
-            return folder is { } project && http.RequestServices.GetRequiredService<ProjectBusyAnswer>().For(project) is { } busy
-                ? Busy(busy)
+            return folder is { } project && http.RequestServices.GetRequiredService<ProjectActivity>().MayViewStep(project) is { } refusal
+                ? Refused(refusal)
                 : null;
         }
 
-        /// <summary>409: a busy project can't be viewed at a step, and <c>detail</c> says what keeps it busy.</summary>
-        internal static IResult Busy(ProjectBusy busy) =>
-            Results.Problem(busy.Reason, statusCode: StatusCodes.Status409Conflict);
+        /// <summary>409: the <see cref="ProjectActivity"/> gate refused, and <c>detail</c> says why.</summary>
+        internal static IResult Refused(ActivityRefusal refusal) =>
+            Results.Problem(refusal.Reason, statusCode: StatusCodes.Status409Conflict);
 
-        /// <summary>409: a Restore of the project is running.</summary>
+        /// <summary>409: a Restore of the project is running. For the callers not yet asking the gate.</summary>
         internal static IResult Restoring() =>
-            Results.Problem(RestoringProjects.Reason, statusCode: StatusCodes.Status409Conflict);
+            Refused(new ActivityRefusal(ActivityRefusalKind.Restoring, RestoringProjects.Reason));
 
         internal static IResult UnknownStep(Guid stepId) =>
             Results.Problem($"The project's History has no step {stepId}.", statusCode: StatusCodes.Status404NotFound);
