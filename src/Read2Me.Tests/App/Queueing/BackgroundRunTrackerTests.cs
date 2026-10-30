@@ -10,7 +10,6 @@ using Read2Me.Services;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Events;
 using Read2Me.Services.History;
-using Read2Me.Services.Llm;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.Queueing;
 using Read2Me.Tests.Fakes;
@@ -45,7 +44,7 @@ public class BackgroundRunTrackerTests : ProjectDbTestBase
 
         _tracker = new BackgroundRunTracker(
             _queue,
-            new VoiceBatchRunner(null!, _root.GetRequiredService<ProjectActivity>(), NullLogger<VoiceBatchRunner>.Instance, new EventBroadcaster<VoiceBatchEvent>(), new EventBroadcaster<LlmStreamEvent>()),
+            UnscopedVoiceBatch.Runner(_root.GetRequiredService<ProjectActivity>()),
             new EventBroadcaster<VoiceBatchEvent>(),
             _root.GetRequiredService<BackgroundRuns>(),
             History,
@@ -227,7 +226,7 @@ public class BackgroundRunTrackerTests : ProjectDbTestBase
         var history = restarted.GetRequiredService<ProjectHistory>();
         var tracker = new BackgroundRunTracker(
             new CharacterQueueService(restarted.GetRequiredService<ProjectActivity>()),
-            new VoiceBatchRunner(null!, restarted.GetRequiredService<ProjectActivity>(), NullLogger<VoiceBatchRunner>.Instance, new EventBroadcaster<VoiceBatchEvent>(), new EventBroadcaster<LlmStreamEvent>()),
+            UnscopedVoiceBatch.Runner(restarted.GetRequiredService<ProjectActivity>()),
             new EventBroadcaster<VoiceBatchEvent>(),
             restarted.GetRequiredService<BackgroundRuns>(),
             history,

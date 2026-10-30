@@ -7,7 +7,6 @@ using Read2Me.Services.Audio.Assembly;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Events;
 using Read2Me.Services.History;
-using Read2Me.Services.Llm;
 using Read2Me.Services.Queueing;
 using Read2Me.Tests.Fakes;
 using Xunit;
@@ -33,12 +32,7 @@ public class ProjectBusyAnswerTests
     private ProjectBusyAnswer Sut() => new(
         _characters,
         _audio,
-        new VoiceBatchRunner(
-            null!,
-            _activity,
-            NullLogger<VoiceBatchRunner>.Instance,
-            new EventBroadcaster<VoiceBatchEvent>(),
-            new EventBroadcaster<LlmStreamEvent>()),
+        UnscopedVoiceBatch.Runner(_activity),
         new AudiobookAssemblyService(
             null!, null!, new EventBroadcaster<AssemblyEvent>(), null!,
             NullLogger<AudiobookAssemblyService>.Instance));

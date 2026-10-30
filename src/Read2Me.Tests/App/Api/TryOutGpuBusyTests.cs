@@ -1,11 +1,8 @@
-using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.App.Api;
 using Read2Me.App.Characters;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
-using Read2Me.Services.Events;
-using Read2Me.Services.Llm;
 using Read2Me.Tests.Fakes;
 using Xunit;
 
@@ -28,12 +25,7 @@ public class TryOutGpuBusyTests
     {
         var activity = NeverBusy.Activity();
         (_characters, _audio) = (new(activity), new(activity));
-        _voiceBatch = new(
-            null!,
-            activity,
-            NullLogger<VoiceBatchRunner>.Instance,
-            new EventBroadcaster<VoiceBatchEvent>(),
-            new EventBroadcaster<LlmStreamEvent>());
+        _voiceBatch = UnscopedVoiceBatch.Runner(activity);
     }
 
     private string? Reason() => PronunciationEndpoints.GpuBusyReason(_characters, _audio, _voiceBatch);

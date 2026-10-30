@@ -60,7 +60,7 @@ public class LiveRelayTests : IAsyncLifetime
             new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
             Substitute.For<IAudiobookEncoder>(), _assembly, Substitute.For<IFileSystem>(),
             NullLogger<AudiobookAssemblyService>.Instance);
-        var batchRunner = new VoiceBatchRunner(null!, _activity, NullLogger<VoiceBatchRunner>.Instance, _voiceBatch, _llm);
+        var batchRunner = UnscopedVoiceBatch.Runner(_activity, _voiceBatch, _llm);
         var throughput = new ThroughputAggregator(_llm, new EventBroadcaster<LlmTimingsSample>());
         var status = new ProjectStatusSource(_nodes, _attribution, _audio, _reviews, new BookRevisionSequence());
 
