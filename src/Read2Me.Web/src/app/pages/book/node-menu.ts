@@ -128,7 +128,8 @@ export async function runMenuEntry(
  * {@link NODE_MENU_OPEN} there and re-anchors its popover to the trigger of each open, so a tree
  * re-render under an open menu keeps the anchor (lit keeps the trigger element by id). The panel
  * lives outside the tree and the rows, so its keys never reach theirs; Escape and a chosen entry
- * hand focus back to `returnTo`. Refuses to open while the editor is blocked (a step viewed, stale or mid-write).
+ * hand focus back to `returnTo`. Refuses to open while the editor is blocked (a step viewed, stale
+ * or mid-write).
  */
 export class NodeMenu extends R2mElement {
   private editor!: BookEditor;
