@@ -827,9 +827,14 @@ export interface PromptCatalogEntry {
   warnings: string[];
 }
 
-/** `AudioProcessingSettingsService.GetAsync()`; the PUT only accepts the four scalars below. */
+/**
+ * `AudioProcessingSettingsService.GetAsync()`; the PUT only accepts the four scalars below.
+ * `ffmpegPath` is the ffmpeg the app runs: the saved path, else the configured one, else null (PATH).
+ */
 export interface AudioProcessingSettings {
-  ffmpegPath: string;
+  ffmpegPath: string | null;
+  savedFfmpegPath: string | null;
+  configuredFfmpegPath: string | null;
   werThreshold: number;
   sentenceSplitEnabled: boolean;
   chunkPauseMs: number;
@@ -919,9 +924,14 @@ export interface ConsonantSoftenSettings {
   deesser?: DeesserParams | null;
 }
 
-/** `GET /api/settings/audio-processing/full`: everything the page shows, in one read. */
+/**
+ * `GET /api/settings/audio-processing/full`: everything the page shows, in one read. `ffmpegPath` is
+ * the saved value the form edits; with none saved the app runs `configuredFfmpegPath` (the host's
+ * `Ffmpeg:Path`), else ffmpeg on PATH.
+ */
 export interface AudioProcessingFull {
   ffmpegPath: string | null;
+  configuredFfmpegPath: string | null;
   werThreshold: number;
   sentenceSplitEnabled: boolean;
   chunkPauseMs: number;

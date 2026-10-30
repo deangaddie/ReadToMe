@@ -43,6 +43,7 @@ function full(overrides: Partial<AudioProcessingFull> = {}): AudioProcessingFull
         settings: { engine: 'adyneq', preset: 'strong' },
       },
     ],
+    configuredFfmpegPath: null,
     ...overrides,
   };
 }
@@ -240,6 +241,22 @@ describe('r2m-audio-settings-page', () => {
     expect(saveButton(page, 'wer').disabled).toBe(false);
     expect(field(page, 'chunkPauseMs').value).toBe('450'); // untouched card follows the host
     expect(field(page, 'ffmpegPath').value).toBe('');
+  });
+
+  it('a blank ffmpeg path names what the app uses instead: the configured path, else PATH', async () => {
+    const page = await render(
+      full({ ffmpegPath: null, configuredFfmpegPath: 'D:\\Dev\\ffmpeg\\bin\\ffmpeg.exe' }),
+    );
+
+    expect(field(page, 'ffmpegPath').placeholder).toBe(
+      'Blank: uses D:\\Dev\\ffmpeg\\bin\\ffmpeg.exe (Ffmpeg:Path in appsettings)',
+    );
+
+    api.on('GET', FULL, full({ ffmpegPath: null }));
+    live.emit('settingsChanged', { area: 'audio-processing' });
+    await flush(page);
+
+    expect(field(page, 'ffmpegPath').placeholder).toBe('Blank: uses ffmpeg on PATH');
   });
 
   it('other areas do not trigger a reload', async () => {

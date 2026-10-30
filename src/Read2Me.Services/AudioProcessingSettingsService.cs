@@ -16,7 +16,8 @@ namespace Read2Me.Services
     /// </summary>
     /// <summary>
     /// Snapshot of the audio post-processing settings row, with defaults already applied for
-    /// a missing row.
+    /// a missing row. <see cref="FfmpegPath"/> is the ffmpeg every consumer runs: the
+    /// <see cref="SavedFfmpegPath"/>, else the <see cref="ConfiguredFfmpegPath"/>, else null (PATH).
     /// </summary>
     public readonly record struct AudioProcessingSettings(
         string? FfmpegPath,
@@ -28,7 +29,18 @@ namespace Read2Me.Services
         int ChapterPauseMs,
         int ParagraphPauseMs,
         int PauseMs,
-        int AudioMaxAttempts);
+        int AudioMaxAttempts,
+        string? SavedFfmpegPath = null,
+        string? ConfiguredFfmpegPath = null);
+
+    /// <summary>
+    /// The host's <c>Ffmpeg:Path</c> (appsettings, command line or env vars), read on each use so an
+    /// edited <c>appsettings.Local.json</c> counts without a restart. Used when Settings has no path.
+    /// </summary>
+    public sealed class ConfiguredFfmpegPath(Func<string?> read)
+    {
+        public string? Value => AudioProcessingSettingsService.NormalizeFfmpegPath(read());
+    }
 
     public class AudioProcessingSettingsService
     {
@@ -49,6 +61,7 @@ namespace Read2Me.Services
         public event Action? OnChanged;
 
         private readonly EventBroadcaster<SettingsChanged>? _changes;
+        private readonly ConfiguredFfmpegPath? _configuredFfmpeg;
 
         private void NotifyChanged()
         {
@@ -64,9 +77,11 @@ namespace Read2Me.Services
             IDbContextFactory<Read2MeDbContext> dbFactory,
             IFfmpegProber prober,
             ILogger<AudioProcessingSettingsService> logger,
-            EventBroadcaster<SettingsChanged>? changes)
+            EventBroadcaster<SettingsChanged>? changes,
+            ConfiguredFfmpegPath? configuredFfmpeg = null)
         {
             _changes = changes;
+            _configuredFfmpeg = configuredFfmpeg;
             _dbFactory = dbFactory;
             _prober = prober;
             _logger = logger;
@@ -76,8 +91,10 @@ namespace Read2Me.Services
         {
             await using var db = await _dbFactory.CreateDbContextAsync();
             var settings = await db.Settings.SingleOrDefaultAsync();
+            var saved = NormalizeFfmpegPath(settings?.FfmpegPath);
+            var configured = _configuredFfmpeg?.Value;
             return new AudioProcessingSettings(
-                settings?.FfmpegPath,
+                saved ?? configured,
                 settings?.WerThreshold ?? DefaultWerThreshold,
                 settings?.SentenceSplitEnabled ?? DefaultSentenceSplitEnabled,
                 settings?.ChunkPauseMs ?? DefaultChunkPauseMs,
@@ -86,14 +103,16 @@ namespace Read2Me.Services
                 settings?.ChapterPauseMs ?? DefaultChapterPauseMs,
                 settings?.ParagraphPauseMs ?? DefaultParagraphPauseMs,
                 settings?.PauseMs ?? DefaultPauseMs,
-                settings?.AudioMaxAttempts ?? DefaultAudioMaxAttempts);
+                settings?.AudioMaxAttempts ?? DefaultAudioMaxAttempts,
+                saved,
+                configured);
         }
 
-        /// <summary>The stored form of an ffmpeg path: trimmed, with blank/whitespace as null (rely on PATH).</summary>
+        /// <summary>The stored form of an ffmpeg path: trimmed, with blank/whitespace as null (not saved).</summary>
         public static string? NormalizeFfmpegPath(string? ffmpegPath) =>
             string.IsNullOrWhiteSpace(ffmpegPath) ? null : ffmpegPath.Trim();
 
-        /// <summary>Saves the ffmpeg path. Blank/whitespace is stored as null (rely on PATH).</summary>
+        /// <summary>Saves the ffmpeg path. Blank/whitespace is stored as null: the configured path, else PATH.</summary>
         public async Task SetFfmpegPathAsync(string? ffmpegPath)
         {
             var normalized = NormalizeFfmpegPath(ffmpegPath);
@@ -210,7 +229,7 @@ namespace Read2Me.Services
             }
         }
 
-        /// <summary>Probes ffmpeg using the currently saved path.</summary>
+        /// <summary>Probes the ffmpeg the app runs (the saved path, else the configured one, else PATH).</summary>
         public async Task<FfmpegProbeResult> TestFfmpegAsync(CancellationToken ct = default)
         {
             var settings = await GetAsync();

@@ -55,12 +55,8 @@ namespace Read2Me.App
             var db = scope.ServiceProvider.GetRequiredService<Read2MeDbContext>();
             if (!workspaceStart.MigrateDatabase(db))
                 return;
-            var ffmpegPath = AudioProcessingSettingsService.NormalizeFfmpegPath(
-                scope.ServiceProvider.GetRequiredService<IConfiguration>()["Ffmpeg:Path"]);
-            if (DefaultServiceConfigSeeder.SeedAsync(db, ffmpegPath).GetAwaiter().GetResult())
+            if (DefaultServiceConfigSeeder.SeedAsync(db).GetAwaiter().GetResult())
                 Log.Information("New app database: seeded the default AI service configs for the Infra containers");
-            if (ffmpegPath != null)
-                Log.Information("New app database: seeded the ffmpeg path {FfmpegPath} from Ffmpeg:Path", ffmpegPath);
         }
 
         public static IHostBuilder CreateHostBuilder(string[] args) =>

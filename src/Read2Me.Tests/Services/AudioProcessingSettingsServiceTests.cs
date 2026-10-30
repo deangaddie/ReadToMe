@@ -27,6 +27,52 @@ namespace Read2Me.Tests.Services
         private AudioProcessingSettingsService NewService(IFfmpegProber? prober = null) =>
             new(Factory, prober ?? new StubProber(), NullLogger<AudioProcessingSettingsService>.Instance);
 
+        private string? _configured;
+
+        private AudioProcessingSettingsService WithConfigured(IFfmpegProber? prober = null) =>
+            new(Factory, prober ?? new StubProber(), NullLogger<AudioProcessingSettingsService>.Instance, null,
+                new ConfiguredFfmpegPath(() => _configured));
+
+        [Fact]
+        public async Task With_no_saved_path_the_configured_one_is_used()
+        {
+            _configured = @"  D:\Dev\ffmpeg\bin\ffmpeg.exe ";
+            var prober = new StubProber();
+
+            var settings = await WithConfigured(prober).GetAsync();
+            await WithConfigured(prober).TestFfmpegAsync();
+
+            Assert.Equal(@"D:\Dev\ffmpeg\bin\ffmpeg.exe", settings.FfmpegPath);
+            Assert.Null(settings.SavedFfmpegPath);
+            Assert.Equal(@"D:\Dev\ffmpeg\bin\ffmpeg.exe", settings.ConfiguredFfmpegPath);
+            Assert.Equal(@"D:\Dev\ffmpeg\bin\ffmpeg.exe", prober.LastPath);
+        }
+
+        [Fact]
+        public async Task A_saved_path_wins_over_the_configured_one()
+        {
+            _configured = @"D:\Dev\ffmpeg\bin\ffmpeg.exe";
+            await WithConfigured().SetFfmpegPathAsync(@"C:\tools\ffmpeg.exe");
+
+            var settings = await WithConfigured().GetAsync();
+
+            Assert.Equal(@"C:\tools\ffmpeg.exe", settings.FfmpegPath);
+            Assert.Equal(@"C:\tools\ffmpeg.exe", settings.SavedFfmpegPath);
+            Assert.Equal(@"D:\Dev\ffmpeg\bin\ffmpeg.exe", settings.ConfiguredFfmpegPath);
+        }
+
+        [Fact]
+        public async Task With_neither_ffmpeg_is_looked_up_on_PATH_and_the_configured_value_is_read_live()
+        {
+            _configured = "  ";
+            var svc = WithConfigured();
+            Assert.Null((await svc.GetAsync()).FfmpegPath);
+
+            _configured = @"D:\Dev\ffmpeg\bin\ffmpeg.exe";
+
+            Assert.Equal(@"D:\Dev\ffmpeg\bin\ffmpeg.exe", (await svc.GetAsync()).FfmpegPath);
+        }
+
         [Fact]
         public async Task Get_MissingRow_ReturnsDefaults()
         {

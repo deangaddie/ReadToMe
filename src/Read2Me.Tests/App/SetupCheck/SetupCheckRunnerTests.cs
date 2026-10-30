@@ -387,11 +387,36 @@ namespace Read2Me.Tests.App.SetupCheck
         }
 
         [Fact]
+        public async Task With_no_saved_path_the_appsettings_path_is_checked_with_no_note()
+        {
+            var ffmpeg = TestFfmpeg.Require();
+            _config["Ffmpeg:Path"] = ffmpeg;
+
+            var row = await RowAsync(SetupCheckIds.Ffmpeg);
+
+            Assert.Equal(SetupCheckResult.Passed, row.Result);
+            Assert.Equal($"ffmpeg -version and ffprobe -version from {ffmpeg}", row.Expected);
+            Assert.Null(row.Note);
+        }
+
+        [Fact]
         public async Task An_appsettings_path_equal_to_the_live_one_adds_no_note()
         {
             var ffmpeg = TestFfmpeg.Require();
             await SetLiveFfmpegPathAsync(ffmpeg);
             _config["Ffmpeg:Path"] = $"  {ffmpeg} ";
+
+            var row = await RowAsync(SetupCheckIds.Ffmpeg);
+
+            Assert.Null(row.Note);
+        }
+
+        [Fact]
+        public async Task The_same_path_written_with_forward_slashes_adds_no_note()
+        {
+            var ffmpeg = TestFfmpeg.Require();
+            await SetLiveFfmpegPathAsync(ffmpeg.Replace('\\', '/'));
+            _config["Ffmpeg:Path"] = ffmpeg.Replace('/', '\\');
 
             var row = await RowAsync(SetupCheckIds.Ffmpeg);
 

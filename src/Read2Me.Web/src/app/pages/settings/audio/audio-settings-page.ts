@@ -209,6 +209,12 @@ const switchField = (
     ${label}
   </label>`;
 
+/** What a blank ffmpeg path runs: the host's `Ffmpeg:Path` when set, else ffmpeg on PATH. */
+const blankFfmpegHint = (configured: string | null) =>
+  configured
+    ? `Blank: uses ${configured} (Ffmpeg:Path in appsettings)`
+    : 'Blank: uses ffmpeg on PATH';
+
 /**
  * `/settings/audio` (ticket 24): the seven independently saved cards of the Audio Processing
  * settings — ffmpeg, silence trim and consonant soften (each with an A/B preview of the unsaved
@@ -330,7 +336,7 @@ export class AudioSettingsPage extends R2mElement implements HasUnsavedChanges {
         card: 'ffmpeg',
         title: 'ffmpeg',
         blurb:
-          'Path to the ffmpeg executable used by the audio post-processing pipeline. Leave blank to rely on the system PATH.',
+          'Path to the ffmpeg executable used by the audio post-processing pipeline. Leave blank to use Ffmpeg:Path from appsettings, or the system PATH when that is unset.',
         state: card,
         onSave: () => void this.saveFfmpeg(),
         actions: html`<button
@@ -352,7 +358,7 @@ export class AudioSettingsPage extends R2mElement implements HasUnsavedChanges {
             aria-invalid=${a.invalid}
             type="text"
             autocomplete="off"
-            placeholder="(blank = rely on PATH)"
+            placeholder=${blankFfmpegHint(this.store.full()?.configuredFfmpegPath ?? null)}
             data-field="ffmpegPath"
             .value=${card.draft()}
             @input=${(e: Event) => card.draft.set(controlValue(e))}

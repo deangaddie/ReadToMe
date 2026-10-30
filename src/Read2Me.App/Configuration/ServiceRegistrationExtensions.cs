@@ -130,6 +130,7 @@ public static class ServiceRegistrationExtensions
         services.AddKeyedScoped<ISemanticSimilarityClient, SemanticSimilarityClient>(Read2Me.AppData.Entities.SemanticSimilarityServiceType.MpnetBaseV2);
         services.AddScoped<ParagraphTtsSettingsService>();
         services.AddSingleton<IFfmpegProber, FfmpegProber>(); // stateless; the Setup check runner (a singleton) uses it
+        services.AddSingleton(sp => new ConfiguredFfmpegPath(() => sp.GetRequiredService<IConfiguration>()["Ffmpeg:Path"]));
         services.AddScoped<AudioProcessingSettingsService>();
         services.AddSingleton<IWerComparer, WerComparer>();
         services.AddSingleton<Read2Me.Services.Audio.AudioReviewService>();

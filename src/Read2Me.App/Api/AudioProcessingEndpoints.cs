@@ -25,7 +25,8 @@ namespace Read2Me.App.Api
         int ChunkPauseMs,
         int AudioMaxAttempts,
         PauseDurationsDto Pauses,
-        IReadOnlyList<AudioPostProcessStepConfig> Steps);
+        IReadOnlyList<AudioPostProcessStepConfig> Steps,
+        string? ConfiguredFfmpegPath);
 
     public sealed record FfmpegTestRequest(string? FfmpegPath = null);
 
@@ -58,11 +59,11 @@ namespace Read2Me.App.Api
         public static void MapAudioProcessingEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapGet("/api/settings/audio-processing", GetAudioProcessingAsync)
-                .WithSummary("Audio post-processing scalars: ffmpeg path, WER threshold, retry count, pause durations.");
+                .WithSummary("Audio post-processing scalars: ffmpeg path, WER threshold, retry count, pause durations. ffmpegPath is the ffmpeg the app runs: savedFfmpegPath (Settings), else configuredFfmpegPath (the host's Ffmpeg:Path), else null (PATH).");
             endpoints.MapPut("/api/settings/audio-processing", UpdateAudioProcessingAsync)
                 .WithSummary("Update audio post-processing scalars; only supplied fields change.");
             endpoints.MapGet("/api/settings/audio-processing/full", GetFullAsync)
-                .WithSummary("The scalars plus the assembler pause durations and the paragraph post-process step configs (silence-trim, consonant-soften), in pipeline order.");
+                .WithSummary("The scalars plus the assembler pause durations and the paragraph post-process step configs (silence-trim, consonant-soften), in pipeline order. Here ffmpegPath is the saved Settings value the form edits (null: none saved), and configuredFfmpegPath the host's Ffmpeg:Path the app uses when none is saved (null: PATH).");
             endpoints.MapPut("/api/settings/audio-processing/pauses", SetPausesAsync)
                 .WithSummary("Save the five assembler pause durations together. 400 on a negative value.");
             endpoints.MapPut("/api/settings/audio-processing/steps/{stepId}", UpsertStepAsync)
@@ -100,9 +101,9 @@ namespace Read2Me.App.Api
             var s = await svc.GetAsync();
             var steps = await svc.GetPostProcessStepsAsync();
             return new AudioProcessingFullResponse(
-                s.FfmpegPath, s.WerThreshold, s.SentenceSplitEnabled, s.ChunkPauseMs, s.AudioMaxAttempts,
+                s.SavedFfmpegPath, s.WerThreshold, s.SentenceSplitEnabled, s.ChunkPauseMs, s.AudioMaxAttempts,
                 new PauseDurationsDto(s.VolumePauseMs, s.PartPauseMs, s.ChapterPauseMs, s.ParagraphPauseMs, s.PauseMs),
-                steps);
+                steps, s.ConfiguredFfmpegPath);
         }
 
         private static async Task<IResult> SetPausesAsync(PauseDurationsDto request, AudioProcessingSettingsService svc)
