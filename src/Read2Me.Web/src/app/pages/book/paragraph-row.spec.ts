@@ -280,6 +280,13 @@ describe('paragraphRow', () => {
       const read = await mount(ctx({ paragraphStatus: { p1: { status: 'Queued' } } }));
       expect(read.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
     });
+
+    it('a locked book (saving or stale) keeps its chips inert, like the row menus', async () => {
+      const items = await mount(ctx({ mode: 'speakers', locked: true }));
+      expect(items.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
+      const read = await mount(ctx({ locked: true }));
+      expect(read.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
+    });
   });
 
   describe('outcomes (ticket 12)', () => {

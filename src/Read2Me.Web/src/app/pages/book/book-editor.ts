@@ -78,6 +78,7 @@ export class BookEditor {
   private declineReason(): string | null {
     if (!this.store.folder()) return 'No project is open.';
     if (this._saving()) return 'Another change is still being saved.';
+    if (this.store.stale() !== null) return 'The book is out of date; refresh it first.';
     return this.readOnly();
   }
 
@@ -94,15 +95,15 @@ export class BookEditor {
 
   /**
    * Runs one write; resolves once the view has caught up. Null means nothing was sent (no project,
-   * a write already in flight, or a History step viewed). `quiet` hands the refusal back on
-   * `error` instead of toasting it, for a caller that shows it itself.
+   * a write already in flight, a stale view, or a History step viewed). `quiet` hands the refusal
+   * back on `error` instead of toasting it, for a caller that shows it itself.
    */
   private async settle<T>(
     write: (folder: string) => Promise<T>,
     quiet = false,
   ): Promise<{ value?: T; error: ApiError | null } | null> {
     const folder = this.store.folder();
-    if (!folder || this._saving() || this.readOnly() !== null) return null;
+    if (!folder || this.declineReason() !== null) return null;
 
     // Armed before the request: the receipt can arrive before the HTTP response does.
     const receipt = this.store.expectOwnReceipt(OWN_RECEIPT_TIMEOUT_MS);
