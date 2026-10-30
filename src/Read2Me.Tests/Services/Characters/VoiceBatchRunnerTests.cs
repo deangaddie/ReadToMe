@@ -7,6 +7,7 @@ using Read2Me.App.Characters;
 using Read2Me.Core.Models;
 using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Characters;
@@ -36,7 +37,7 @@ public class VoiceBatchRunnerTests
         var llmEvents = new List<LlmStreamEvent>();
         llmBroadcaster.Event += e => { lock (llmEvents) llmEvents.Add(e); };
 
-        var runner = new VoiceBatchRunner(NullLogger<VoiceBatchRunner>.Instance, broadcaster, llmBroadcaster);
+        var runner = new VoiceBatchRunner(null!, NeverBusy.Activity(), NullLogger<VoiceBatchRunner>.Instance, broadcaster, llmBroadcaster);
         return (runner, events, llmEvents);
     }
 
@@ -294,7 +295,7 @@ public class VoiceBatchRunnerTests
         batchEvents.Event += sequence.Add;
         llmEvents.Event += sequence.Add;
         var runner = new VoiceBatchRunner(
-            NullLogger<VoiceBatchRunner>.Instance, batchEvents, llmEvents);
+            null!, NeverBusy.Activity(), NullLogger<VoiceBatchRunner>.Instance, batchEvents, llmEvents);
 
         await runner.RunPhaseAsync(
             new FakeSweepPhase(new[] { "a" }),

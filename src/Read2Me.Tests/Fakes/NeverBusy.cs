@@ -15,6 +15,6 @@ namespace Read2Me.Tests.Fakes
         public ProjectBusy? For(ProjectFolderId folder) => null;
 
         /// <summary>A gate of its own whose projects are never busy.</summary>
-        public static ProjectActivity Activity() => new(new RestoringProjects(), () => Instance);
+        public static ProjectActivity Activity() => new(() => Instance);
     }
 }

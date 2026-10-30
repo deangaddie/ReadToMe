@@ -133,7 +133,7 @@ namespace Read2Me.Tests.Services.Characters
 
             // History follows the batch as the app does: its commits are a Background run step.
             var tracker = new BackgroundRunTracker(
-                new Read2Me.Services.Characters.CharacterQueueService(), sut, broadcaster,
+                new Read2Me.Services.Characters.CharacterQueueService(_root.GetRequiredService<ProjectActivity>()), sut, broadcaster,
                 _root.GetRequiredService<BackgroundRuns>(), _root.GetRequiredService<ProjectHistory>(),
                 _root.GetRequiredService<IFileSystem>(), NullLogger<BackgroundRunTracker>.Instance);
             tracker.Follow();
@@ -561,7 +561,7 @@ namespace Read2Me.Tests.Services.Characters
             Assert.Null(_root!.GetRequiredService<ProjectActivity>().TryBeginRestore(Folder));
 
             var refused = new VoiceBatchStart.Refused(
-                new ActivityRefusal(ActivityRefusalKind.Restoring, RestoringProjects.Reason));
+                new ActivityRefusal(ActivityRefusalKind.Restoring, ProjectActivity.RestoringReason));
             Assert.Equal(refused, h.Sut.StartGeneratePrompts(Folder));
             Assert.Equal(refused, h.Sut.StartGenerateAudio(Folder));
 

@@ -5,6 +5,7 @@ using Read2Me.App.Queueing;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Queueing;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.App.Audio
@@ -16,7 +17,7 @@ namespace Read2Me.Tests.App.Audio
         [Fact]
         public async Task Worker_ContinuesAfterPerItemFailure()
         {
-            var queue = new AudioQueueService();
+            var queue = new AudioQueueService(NeverBusy.Activity());
             var processed = new List<Guid>();
             var tcs = new TaskCompletionSource();
 

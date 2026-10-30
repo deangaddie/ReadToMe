@@ -10,6 +10,7 @@ using Read2Me.Services.History;
 using Read2Me.Services.Llm;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.Queueing;
+using Read2Me.Tests.Fakes;
 using Read2Me.Tests.Infrastructure;
 using Xunit;
 
@@ -54,6 +55,7 @@ namespace Read2Me.Tests.App.Characters
             services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
             services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
             services.AddSingleton<IBookMutationImplementation<AttributeParagraphItemsMutation>>(_commits);
+            services.AddSingleton<IProjectBusyAnswer>(NeverBusy.Instance);
             _root = services.BuildServiceProvider();
 
             _sut = new CharacterQueueProcessor(
@@ -278,7 +280,7 @@ namespace Read2Me.Tests.App.Characters
         public async Task StampsRefusedWhileRestoring_RunsAgainAfterTheRestore()
         {
             _attribution.Outcome = Resolved();
-            _root.GetRequiredService<RestoringProjects>().TryBegin(_item.Folder);
+            Assert.Null(_root.GetRequiredService<ProjectActivity>().TryBeginRestore(_item.Folder));
 
             await _sut.ProcessItemAsync(_item, CancellationToken.None);
 

@@ -55,9 +55,6 @@ namespace Read2Me.Services.Characters
         // claims the project mid-enqueue then waits in BusyFor and sees the paragraphs as busy.
         private readonly object _enqueueLock = new();
 
-        /// <summary>A queue whose projects never restore.</summary>
-        public CharacterQueueService() : this(ProjectActivity.Private()) { }
-
         public CharacterQueueService(ProjectActivity activity) => _activity = activity;
 
         public event Action? Changed;

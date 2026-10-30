@@ -374,7 +374,7 @@ public class RestoreTests : ProjectDbTestBase
         Assert.Equal(new BookMutationOutcome.Rejected(BookMutationRejection.Restoring, "Project is restoring"), write);
         Assert.Equal(new BookMutationOutcome.Rejected(BookMutationRejection.Restoring, "Project is restoring"), results);
         Assert.Equal(new RestoreOutcome.Refused("Project is restoring"), second);
-        Assert.False(_root.GetRequiredService<RestoringProjects>().IsRestoring(_folder));
+        Assert.False(_root.GetRequiredService<ProjectActivity>().IsRestoring(_folder));
         Assert.IsType<BookMutationOutcome.Committed>(await CommitAsync(new CreateCharacterMutation(_folder, "Carol")));
     }
 

@@ -112,10 +112,6 @@ namespace Read2Me.App.Api
         internal static IResult Refused(ActivityRefusal refusal) =>
             Results.Problem(refusal.Reason, statusCode: StatusCodes.Status409Conflict);
 
-        /// <summary>409: a Restore of the project is running. For the callers not yet asking the gate.</summary>
-        internal static IResult Restoring() =>
-            Refused(new ActivityRefusal(ActivityRefusalKind.Restoring, RestoringProjects.Reason));
-
         internal static IResult UnknownStep(Guid stepId) =>
             Results.Problem($"The project's History has no step {stepId}.", statusCode: StatusCodes.Status404NotFound);
 

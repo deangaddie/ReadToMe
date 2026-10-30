@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Read2Me.Core.Models;
 using Read2Me.Services.Queueing;
 
@@ -34,28 +35,26 @@ public readonly record struct RestoreMark
 /// </list>
 /// An enqueue's restoring check must be atomic with its queue becoming busy, so a queue asks
 /// <see cref="MayEnqueue"/> under its own lock.
+/// <para>
+/// The gate holds the per-project <b>restoring flag</b> itself: set for the whole of a Restore, so
+/// every other write and enqueue is refused at once rather than waiting on the write lock. At most
+/// one Restore runs per project.
+/// </para>
 /// </summary>
 public sealed class ProjectActivity
 {
-    private readonly RestoringProjects _restoring;
+    public const string RestoringReason = "Project is restoring";
+
+    private readonly ConcurrentDictionary<string, TaskCompletionSource> _restoring = new(StringComparer.OrdinalIgnoreCase);
+    // Restores begun per project: a change since a mark means one began, even one that has ended since.
+    private readonly ConcurrentDictionary<string, long> _begun = new(StringComparer.OrdinalIgnoreCase);
     private readonly Func<IProjectBusyAnswer> _busy;
 
     /// <param name="busy">
     /// Resolved on each ask rather than injected directly: the busy answer is built from the queues,
     /// and the queues ask this gate before they enqueue, so taking it eagerly would be a DI loop.
     /// </param>
-    public ProjectActivity(RestoringProjects restoring, Func<IProjectBusyAnswer> busy)
-    {
-        _restoring = restoring;
-        _busy = busy;
-    }
-
-    /// <summary>
-    /// A gate for one owner that never starts a Restore on it, so no project is ever restoring and
-    /// nothing asks it about busy.
-    /// </summary>
-    internal static ProjectActivity Private() =>
-        new(new RestoringProjects(), () => throw new InvalidOperationException("A private gate is never asked about busy."));
+    public ProjectActivity(Func<IProjectBusyAnswer> busy) => _busy = busy;
 
     public ActivityRefusal? MayWrite(ProjectFolderId folder) => RestoringRefusal(folder);
 
@@ -71,33 +70,41 @@ public sealed class ProjectActivity
     /// </summary>
     public ActivityRefusal? TryBeginRestore(ProjectFolderId folder)
     {
-        if (!_restoring.TryBegin(folder))
+        if (!_restoring.TryAdd(folder.Value, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)))
             return Restoring;
+        _begun.AddOrUpdate(folder.Value, 1, (_, begun) => begun + 1);
         if (BusyRefusal(folder) is { } busy)
         {
-            _restoring.End(folder);
+            EndRestore(folder);
             return busy;
         }
         return null;
     }
 
-    public void EndRestore(ProjectFolderId folder) => _restoring.End(folder);
+    public void EndRestore(ProjectFolderId folder)
+    {
+        if (_restoring.TryRemove(folder.Value, out var ended))
+            ended.TrySetResult();
+    }
 
     /// <summary>Completes when the project's Restore ends; already complete when none is running.</summary>
-    public Task WhenRestoreEnded(ProjectFolderId folder) => _restoring.WhenEnded(folder);
+    public Task WhenRestoreEnded(ProjectFolderId folder) =>
+        _restoring.TryGetValue(folder.Value, out var running) ? running.Task : Task.CompletedTask;
 
-    public RestoreMark Mark(ProjectFolderId folder) => new(folder, _restoring.Generation(folder));
+    public RestoreMark Mark(ProjectFolderId folder) => new(folder, RestoresBegun(folder));
 
     /// <summary>Refused while restoring, and when a Restore began since <paramref name="since"/>, even one that has ended.</summary>
     public ActivityRefusal? MayPlanEdit(RestoreMark since) =>
-        RestoringRefusal(since.Folder) ?? (_restoring.Generation(since.Folder) != since.Begun ? Restoring : null);
+        RestoringRefusal(since.Folder) ?? (RestoresBegun(since.Folder) != since.Begun ? Restoring : null);
 
     /// <summary>State for the History list's <c>restoring</c> field and the hub, not policy.</summary>
-    public bool IsRestoring(ProjectFolderId folder) => _restoring.IsRestoring(folder);
+    public bool IsRestoring(ProjectFolderId folder) => _restoring.ContainsKey(folder.Value);
 
-    private static readonly ActivityRefusal Restoring = new(ActivityRefusalKind.Restoring, RestoringProjects.Reason);
+    private static readonly ActivityRefusal Restoring = new(ActivityRefusalKind.Restoring, RestoringReason);
 
-    private ActivityRefusal? RestoringRefusal(ProjectFolderId folder) => _restoring.IsRestoring(folder) ? Restoring : null;
+    private long RestoresBegun(ProjectFolderId folder) => _begun.GetValueOrDefault(folder.Value);
+
+    private ActivityRefusal? RestoringRefusal(ProjectFolderId folder) => IsRestoring(folder) ? Restoring : null;
 
     private ActivityRefusal? BusyRefusal(ProjectFolderId folder) =>
         _busy().For(folder) is { } busy ? new ActivityRefusal(ActivityRefusalKind.Busy, busy.Reason) : null;
