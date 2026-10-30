@@ -121,6 +121,17 @@ public class ProjectActivityTests
     }
 
     [Fact]
+    public void Planning_is_allowed_when_the_only_restore_since_the_mark_was_refused_as_busy()
+    {
+        var mark = _activity.Mark(Folder);
+        _busy.Answer = Busy();
+        Assert.Equal(ActivityRefusalKind.Busy, _activity.TryBeginRestore(Folder)?.Kind);
+        _busy.Answer = null;
+
+        Assert.Null(_activity.MayPlanEdit(mark));
+    }
+
+    [Fact]
     public void Writes_are_allowed_again_once_the_restore_ends()
     {
         Assert.Null(_activity.TryBeginRestore(Folder));

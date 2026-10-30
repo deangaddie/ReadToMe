@@ -72,12 +72,14 @@ public sealed class ProjectActivity
     {
         if (!_restoring.TryAdd(folder.Value, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)))
             return Restoring;
-        _begun.AddOrUpdate(folder.Value, 1, (_, begun) => begun + 1);
         if (BusyRefusal(folder) is { } busy)
         {
             EndRestore(folder);
             return busy;
         }
+        // Counted only once it has begun: a plan marked during the claim is refused by the flag
+        // while it is up, and by the count after.
+        _begun.AddOrUpdate(folder.Value, 1, (_, begun) => begun + 1);
         return null;
     }
 
