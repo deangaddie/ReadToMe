@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
+using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Routing;
@@ -307,6 +308,34 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             restoring.End(folderId);
         }
         Assert.DoesNotContain("Ganondorf", await CharacterNamesAsync($"/api/projects/{folder}/characters"));
+    }
+
+    [Fact]
+    public async Task While_a_Restore_runs_an_enqueue_is_409_Project_is_restoring()
+    {
+        var folder = $"api-history-{Guid.NewGuid():N}";
+        var builder = await app.SeedProjectAsync(folder, "History Book", "Author", characterName: "Alice");
+        var activity = app.Services.GetRequiredService<ProjectActivity>();
+        var folderId = new Read2Me.Core.Models.ProjectFolderId(folder);
+
+        Assert.Null(activity.TryBeginRestore(folderId));
+        try
+        {
+            var enqueue = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/attribution/enqueue",
+                new { level = "chapter", nodeId = builder.ChapterId("ch1"), unprocessedOnly = true });
+
+            Assert.Equal(HttpStatusCode.Conflict, enqueue.StatusCode);
+            Assert.Equal("Project is restoring",
+                JsonDocument.Parse(await enqueue.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
+        }
+        finally
+        {
+            activity.EndRestore(folderId);
+        }
+        // Nothing was queued: the paragraph has no place in the Character Queue.
+        var status = JsonDocument.Parse(await Http.GetStringAsync(
+            $"{app.BaseUrl}/api/projects/{folder}/attribution/paragraphs/{builder.ParagraphId("p2")}"));
+        Assert.Equal(JsonValueKind.Null, status.RootElement.GetProperty("status").ValueKind);
     }
 
     [Fact]

@@ -2,6 +2,7 @@ using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
 using Read2Me.Services.History;
 using Read2Me.Services.Queueing;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Audio
@@ -179,14 +180,14 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void Enqueue_WhileTheProjectIsRestoring_IsRefused_AndQueuesNothing()
         {
-            var restoring = new RestoringProjects();
-            var svc = new AudioQueueService(restoring);
+            var activity = NeverBusy.Activity();
+            var svc = new AudioQueueService(activity);
             var changed = 0;
             svc.Changed += () => changed++;
-            restoring.TryBegin(Folder);
+            Assert.Null(activity.TryBeginRestore(Folder));
 
             var item = MakeItem();
-            Assert.False(svc.Enqueue([item]));
+            Assert.Equal(ActivityRefusalKind.Restoring, svc.Enqueue([item])?.Kind);
 
             Assert.Null(svc.StatusOf(Folder, IdOf(item)));
             Assert.Null(svc.BusyFor(Folder));
@@ -197,11 +198,11 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task Apply_RetryAfterRestore_StaysQueued_AndRunsOnceTheRestoreEnds()
         {
-            var restoring = new RestoringProjects();
-            var svc = new AudioQueueService(restoring);
+            var activity = NeverBusy.Activity();
+            var svc = new AudioQueueService(activity);
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
-            restoring.TryBegin(Folder);
+            Assert.Null(activity.TryBeginRestore(Folder));
 
             svc.Apply(item, new Disposition.RetryAfterRestore());
 
@@ -210,7 +211,7 @@ namespace Read2Me.Tests.Services.Audio
             await Task.Delay(50, TestContext.Current.CancellationToken);
             Assert.False(svc.Reader.TryPeek(out _));
 
-            restoring.End(Folder);
+            activity.EndRestore(Folder);
 
             var back = await svc.Reader.ReadAsync(TestContext.Current.CancellationToken)
                 .AsTask().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
@@ -222,15 +223,15 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task Apply_RetryAfterRestore_CancelAllDuringTheRestore_DoesNotResurrectTheItem()
         {
-            var restoring = new RestoringProjects();
-            var svc = new AudioQueueService(restoring);
+            var activity = NeverBusy.Activity();
+            var svc = new AudioQueueService(activity);
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
-            restoring.TryBegin(Folder);
+            Assert.Null(activity.TryBeginRestore(Folder));
 
             svc.Apply(item, new Disposition.RetryAfterRestore());
             svc.CancelAll();
-            restoring.End(Folder);
+            activity.EndRestore(Folder);
 
             await Task.Delay(100, TestContext.Current.CancellationToken);
             Assert.False(svc.Reader.TryRead(out _));

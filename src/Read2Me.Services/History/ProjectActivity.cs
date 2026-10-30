@@ -50,6 +50,13 @@ public sealed class ProjectActivity
         _busy = busy;
     }
 
+    /// <summary>
+    /// A gate for one owner that never starts a Restore on it, so no project is ever restoring and
+    /// nothing asks it about busy.
+    /// </summary>
+    internal static ProjectActivity Private() =>
+        new(new RestoringProjects(), () => throw new InvalidOperationException("A private gate is never asked about busy."));
+
     public ActivityRefusal? MayWrite(ProjectFolderId folder) => RestoringRefusal(folder);
 
     public ActivityRefusal? MayEnqueue(ProjectFolderId folder) => RestoringRefusal(folder);

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using Read2Me.Services.History;
 using Read2Me.Services.Queueing;
 
 namespace Read2Me.Services.Characters
@@ -26,8 +27,8 @@ namespace Read2Me.Services.Characters
         /// <summary>Cancelled when the queue is cleared, so in-flight work stops with it.</summary>
         CancellationToken ItemCancellationToken { get; }
 
-        /// <summary>Queues the paragraphs; false, queuing nothing, when any of their projects is restoring.</summary>
-        bool Enqueue(IEnumerable<QueuedParagraph> paragraphs);
+        /// <summary>Queues the paragraphs; the gate's refusal, queuing nothing, when it refuses an enqueue for any of their projects.</summary>
+        ActivityRefusal? Enqueue(IEnumerable<QueuedParagraph> paragraphs);
 
         /// <summary>
         /// Returns <paramref name="first"/> plus every remaining queued paragraph, drained from the

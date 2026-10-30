@@ -2,6 +2,7 @@ using Read2Me.Core.Models;
 using Read2Me.Services.Characters;
 using Read2Me.Services.History;
 using Read2Me.Services.Queueing;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Characters
@@ -281,14 +282,14 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void Enqueue_WhileTheProjectIsRestoring_IsRefused_AndQueuesNothing()
         {
-            var restoring = new RestoringProjects();
-            var svc = new CharacterQueueService(restoring);
+            var activity = NeverBusy.Activity();
+            var svc = new CharacterQueueService(activity);
             var changed = 0;
             svc.Changed += () => changed++;
-            restoring.TryBegin(Folder);
+            Assert.Null(activity.TryBeginRestore(Folder));
 
             var item = MakeItem();
-            Assert.False(svc.Enqueue([item]));
+            Assert.Equal(ActivityRefusalKind.Restoring, svc.Enqueue([item])?.Kind);
 
             Assert.Null(svc.StatusOf(Folder, item.ParagraphId));
             Assert.Null(svc.BusyFor(Folder));
@@ -300,22 +301,22 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void Enqueue_AnotherProjectRestoring_IsAccepted()
         {
-            var restoring = new RestoringProjects();
-            var svc = new CharacterQueueService(restoring);
-            restoring.TryBegin(new ProjectFolderId("another-book"));
+            var activity = NeverBusy.Activity();
+            var svc = new CharacterQueueService(activity);
+            Assert.Null(activity.TryBeginRestore(new ProjectFolderId("another-book")));
 
-            Assert.True(svc.Enqueue([MakeItem()]));
+            Assert.Null(svc.Enqueue([MakeItem()]));
         }
 
         [Fact]
         public async Task Apply_RetryAfterRestore_StaysQueued_AndRunsOnceTheRestoreEnds()
         {
-            var restoring = new RestoringProjects();
-            var svc = new CharacterQueueService(restoring);
+            var activity = NeverBusy.Activity();
+            var svc = new CharacterQueueService(activity);
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
             Assert.True(svc.Reader.TryRead(out _));
-            restoring.TryBegin(Folder);
+            Assert.Null(activity.TryBeginRestore(Folder));
 
             svc.Apply(item, new Disposition.RetryAfterRestore());
 
@@ -324,7 +325,7 @@ namespace Read2Me.Tests.Services.Characters
             await Task.Delay(50, TestContext.Current.CancellationToken);
             Assert.False(svc.Reader.TryPeek(out _));
 
-            restoring.End(Folder);
+            activity.EndRestore(Folder);
 
             var requeued = await svc.Reader.ReadAsync(TestContext.Current.CancellationToken)
                 .AsTask().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
@@ -336,16 +337,16 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Apply_RetryAfterRestore_CancelAllDuringTheRestore_DoesNotResurrectTheItem()
         {
-            var restoring = new RestoringProjects();
-            var svc = new CharacterQueueService(restoring);
+            var activity = NeverBusy.Activity();
+            var svc = new CharacterQueueService(activity);
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
             Assert.True(svc.Reader.TryRead(out _));
-            restoring.TryBegin(Folder);
+            Assert.Null(activity.TryBeginRestore(Folder));
 
             svc.Apply(item, new Disposition.RetryAfterRestore());
             svc.CancelAll();
-            restoring.End(Folder);
+            activity.EndRestore(Folder);
 
             await Task.Delay(100, TestContext.Current.CancellationToken);
             Assert.False(svc.Reader.TryRead(out _));

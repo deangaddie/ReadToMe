@@ -49,12 +49,16 @@ namespace Read2Me.Services.Characters
 
         private CancellationTokenSource _itemCts = new();
 
-        private readonly RestoringProjects _restoring;
+        private readonly ProjectActivity _activity;
+
+        // Held by Enqueue across its gate check and its queuing, and by BusyFor: a Restore that
+        // claims the project mid-enqueue then waits in BusyFor and sees the paragraphs as busy.
+        private readonly object _enqueueLock = new();
 
         /// <summary>A queue whose projects never restore.</summary>
-        public CharacterQueueService() : this(new RestoringProjects()) { }
+        public CharacterQueueService() : this(ProjectActivity.Private()) { }
 
-        public CharacterQueueService(RestoringProjects restoring) => _restoring = restoring;
+        public CharacterQueueService(ProjectActivity activity) => _activity = activity;
 
         public event Action? Changed;
 
@@ -86,22 +90,26 @@ namespace Read2Me.Services.Characters
         }
 
         /// <summary>
-        /// Queues the paragraphs, or refuses them all — queuing and announcing nothing — when any of
-        /// their projects is restoring. A paragraph already queued or processing is not queued twice.
+        /// Queues the paragraphs, or refuses them all — queuing and announcing nothing — when the gate
+        /// refuses an enqueue for any of their projects. A paragraph already queued or processing is
+        /// not queued twice. Null means queued.
         /// </summary>
-        public bool Enqueue(IEnumerable<QueuedParagraph> paragraphs)
+        public ActivityRefusal? Enqueue(IEnumerable<QueuedParagraph> paragraphs)
         {
             var list = paragraphs.ToList();
-            if (list.Any(p => _restoring.IsRestoring(p.Folder)))
-                return false;
-
-            foreach (var p in list)
+            lock (_enqueueLock)
             {
-                if (_store.TryMarkQueued(Key(p)))
-                    _channel.Writer.TryWrite(p);
+                if (list.Select(p => p.Folder).Distinct().Select(_activity.MayEnqueue).FirstOrDefault(r => r is not null) is { } refusal)
+                    return refusal;
+
+                foreach (var p in list)
+                {
+                    if (_store.TryMarkQueued(Key(p)))
+                        _channel.Writer.TryWrite(p);
+                }
             }
             Changed?.Invoke();
-            return true;
+            return null;
         }
 
         /// <summary>
@@ -220,7 +228,7 @@ namespace Read2Me.Services.Characters
                 // As RetryAfter, but the wait is the project's Restore, and no budget is spent.
                 case Disposition.RetryAfterRestore:
                     if (!_store.ReturnToQueued(key)) break;
-                    _ = DelayedWrite.ScheduleWhen(_channel.Writer, item, _restoring.WhenEnded(item.Folder), _itemCts.Token);
+                    _ = DelayedWrite.ScheduleWhen(_channel.Writer, item, _activity.WhenRestoreEnded(item.Folder), _itemCts.Token);
                     break;
             }
 
@@ -261,7 +269,9 @@ namespace Read2Me.Services.Characters
         /// </summary>
         public BusySource? BusyFor(ProjectFolderId folder)
         {
-            var left = _store.TrackedKeys().Count(k => k.Folder == folder);
+            int left;
+            lock (_enqueueLock)
+                left = _store.TrackedKeys().Count(k => k.Folder == folder);
             return left == 0
                 ? null
                 : new BusySource(BusySourceKind.CharacterQueue, $"Attribution: {BusySource.Plural(left, "paragraph")} left");

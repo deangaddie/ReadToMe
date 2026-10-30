@@ -571,7 +571,7 @@ namespace Read2Me.Tests.App.Characters
 
             public CancellationToken ItemCancellationToken => CancellationToken.None;
 
-            public bool Enqueue(IEnumerable<QueuedParagraph> paragraphs) { _queued.AddRange(paragraphs); return true; }
+            public ActivityRefusal? Enqueue(IEnumerable<QueuedParagraph> paragraphs) { _queued.AddRange(paragraphs); return null; }
 
             public IReadOnlyList<QueuedParagraph> DrainAll(QueuedParagraph first)
             {
