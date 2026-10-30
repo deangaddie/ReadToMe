@@ -82,7 +82,7 @@ describe('BookEditor', () => {
     await flush();
     expect(execute.calls).toEqual([['dracula', { type: 'AddPauses' }]]);
     expect(editor.saving()).toBe(true);
-    expect(editor.locked()).toBe(true);
+    expect(editor.blocked()).not.toBeNull();
 
     store.settle(true);
     expect(await run).toBe(true);
@@ -138,9 +138,9 @@ describe('BookEditor', () => {
     await first;
   });
 
-  it('is locked while stale even when idle, and refuses to overlap writes', async () => {
+  it('is blocked while stale even when idle, and refuses to overlap writes', async () => {
     store.stale.set('boom');
-    expect(editor.locked()).toBe(true);
+    expect(editor.blocked()).not.toBeNull();
     store.stale.set(null);
 
     const first = editor.run({ type: 'AddPauses' });
@@ -165,17 +165,15 @@ describe('BookEditor', () => {
     expect((await editor.tryExecute({ type: 'AddPauses' }))?.message).toBe(VIEWING_READ_ONLY);
   });
 
-  it('is locked and read-only while a History step is viewed, and sends nothing', async () => {
+  it('is blocked while a History step is viewed, and sends nothing', async () => {
     use(StepView).view('dracula', 's8');
-    expect(editor.locked()).toBe(true);
-    expect(editor.readOnly()).toBe(VIEWING_READ_ONLY);
+    expect(editor.blocked()).toEqual({ reason: VIEWING_READ_ONLY });
 
     expect(await editor.run({ type: 'AddPauses' })).toBe(false);
     expect(execute.calls).toEqual([]);
 
     use(StepView).clear('dracula');
-    expect(editor.locked()).toBe(false);
-    expect(editor.readOnly()).toBeNull();
+    expect(editor.blocked()).toBeNull();
   });
 
   it('blocked() answers the blocked reason for viewing, stale and saving, and is open otherwise', async () => {

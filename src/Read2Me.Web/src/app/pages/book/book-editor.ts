@@ -11,7 +11,7 @@ import {
   toApiError,
 } from '@app/api';
 import { use } from '@app/core/services';
-import { computed, signal } from '@app/core/signals';
+import { signal } from '@app/core/signals';
 import { ToastService } from '@app/ui/toast';
 import type { BookStore } from './book-store';
 
@@ -37,10 +37,6 @@ export class BookEditor {
 
   /** A write is in flight (not staleness: the stale banner covers that); the toolbar shows "Saving…". */
   readonly saving = this._saving.asReadonly();
-  /** Why the book can't be changed: a History step is viewed (ticket 32); the disabled controls' reason. */
-  readonly readOnly = computed(() => this.stepView.readOnly(this.store.folder()));
-  /** Every mutation affordance is off: {@link blocked} is non-null. */
-  readonly locked = computed(() => this.blocked() !== null);
 
   constructor(private readonly store: BookStore) {}
 
@@ -52,7 +48,7 @@ export class BookEditor {
   blocked(local?: boolean | string): Block | null {
     return blockedReason(
       {
-        viewing: this.readOnly() !== null,
+        viewing: this.stepView.readOnly(this.store.folder()) !== null,
         stale: this.store.stale() !== null,
         saving: this._saving(),
       },

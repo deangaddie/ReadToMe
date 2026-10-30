@@ -82,6 +82,8 @@ const MODE_LABELS: Record<ReaderMode, string> = {
 const SKELETON = [1, 2, 3, 4, 5, 6];
 const NO_LIT: ReadonlySet<string> = new Set();
 const BULK_MENU_ID = 'r2m-book-bulk-menu';
+/** Bulk assign's local **Blocked reason** while the attribution queue is busy. */
+const BULK_WAITS_REASON = 'Bulk assign waits until attribution has finished';
 const ACTIONS_MENU_ID = 'r2m-book-actions-menu';
 
 /**
@@ -181,7 +183,7 @@ export class BookPage extends R2mElement {
     });
     // The panel is off while a step is viewed.
     this.effect(() => {
-      if (editor.readOnly() !== null) untracked(() => pronunciations.hide());
+      if (project.readOnly() !== null) untracked(() => pronunciations.hide());
     });
 
     this.noContent = computed(() => store.overview()?.hasContent === false);
@@ -236,7 +238,7 @@ export class BookPage extends R2mElement {
       const folder = store.folder();
       const chapterIds = store.chapters().map((c) => c.id);
       // Viewing a step (or going back to current) rereads the marks at that step.
-      editor.readOnly();
+      project.readOnly();
       if (folder) untracked(() => this.marks.follow(folder, chapterIds));
     });
     this.onDisconnect(() => this.marks.close());
@@ -270,8 +272,8 @@ export class BookPage extends R2mElement {
       const action = this.router.query().get('action');
       const overview = store.overview();
       if (action === null || !overview || !project.pipeline()) return;
-      const viewing = editor.readOnly() !== null;
-      if (editor.locked() && !viewing) return;
+      const viewing = project.readOnly() !== null;
+      if (editor.blocked() !== null && !viewing) return;
       untracked(() => {
         const query = Object.fromEntries(this.router.query());
         this.router.navigate(this.router.path(), {
@@ -430,7 +432,7 @@ export class BookPage extends R2mElement {
                 .folder=${store.folder()}
                 .marks=${this.marks.marks()}
                 .itemsWithAudio=${this.itemsWithAudio()}
-                .readOnly=${this.editor.readOnly()}
+                .readOnly=${this.project.readOnly()}
                 .audioInFlight=${this.project.audioInFlight()}
               ></r2m-pronunciation-panel>
             </div>`
@@ -439,12 +441,12 @@ export class BookPage extends R2mElement {
       <r2m-pronunciation-card
         .folder=${store.folder()}
         .marks=${this.marks.marks()}
-        .readOnly=${this.editor.readOnly()}
+        .readOnly=${this.project.readOnly()}
         @pronunciation-edit=${this.onPronunciationEdit}
       ></r2m-pronunciation-card>
       <r2m-pronunciation-pill
         .state=${this.pronunciations}
-        .readOnly=${this.editor.readOnly()}
+        .readOnly=${this.project.readOnly()}
       ></r2m-pronunciation-pill>
     `;
   }
@@ -452,7 +454,7 @@ export class BookPage extends R2mElement {
   /** The toolbar's Pronunciations toggle (pronunciation ticket 16): off while a step is viewed. */
   private pronunciationsToggle() {
     const open = this.pronunciations.open();
-    const readOnly = this.editor.readOnly();
+    const readOnly = this.project.readOnly();
     return blockable(
       readOnly,
       html`<button
@@ -477,9 +479,9 @@ export class BookPage extends R2mElement {
   /** The paragraph selection's action bar (ticket 12): count, Attribute, Bulk assign speaker, Clear. */
   private selectionBar() {
     const count = this.selection.count();
-    const busy = this.working() || this.editor.locked();
-    const queueBusy = this.queueBusy();
-    const readOnly = this.editor.readOnly();
+    const attribute = this.editor.blocked(this.working());
+    // A busy queue gives Bulk assign its own reason; viewing and stale still win.
+    const bulk = this.editor.blocked(this.queueBusy() ? BULK_WAITS_REASON : this.working());
     return html`<div
       class="book__selection"
       role="group"
@@ -490,12 +492,12 @@ export class BookPage extends R2mElement {
         >${count} paragraph${count === 1 ? '' : 's'}</span
       >
       ${blockable(
-        readOnly,
+        attribute?.reason ?? null,
         html`<button
           type="button"
           class="r2m-button r2m-button--filled"
           data-action="attribute-selection"
-          ?disabled=${busy}
+          ?disabled=${attribute !== null}
           @click=${this.attributeSelection}
         >
           ${icon('auto_awesome')} Attribute
@@ -503,15 +505,14 @@ export class BookPage extends R2mElement {
       )}
       <span class="book__bulk">
         ${blockable(
-          readOnly,
+          bulk?.reason ?? null,
           html`<button
             type="button"
             class="r2m-button r2m-button--stroked"
             data-action="bulk-assign"
             popovertarget=${BULK_MENU_ID}
             aria-haspopup="listbox"
-            ?disabled=${busy || queueBusy}
-            data-tooltip=${queueBusy ? 'Bulk assign waits until attribution has finished' : nothing}
+            ?disabled=${bulk !== null}
           >
             ${icon('groups')} Bulk assign speaker ${icon('expand_more')}
           </button>`,
@@ -546,6 +547,7 @@ export class BookPage extends R2mElement {
   /** The item selection's action bar (ticket 13): count, Generate audio, Clear. */
   private audioSelectionBar() {
     const count = this.audioSelection.count();
+    const generate = this.editor.blocked(this.working() || this.generator.working());
     return html`<div
       class="book__selection"
       role="group"
@@ -556,12 +558,12 @@ export class BookPage extends R2mElement {
         >${count} item${count === 1 ? '' : 's'}</span
       >
       ${blockable(
-        this.editor.readOnly(),
+        generate?.reason ?? null,
         html`<button
           type="button"
           class="r2m-button r2m-button--filled"
           data-action="generate-audio-selection"
-          ?disabled=${this.working() || this.generator.working() || this.editor.locked()}
+          ?disabled=${generate !== null}
           @click=${this.generateSelection}
         >
           ${icon('graphic_eq')} Generate audio
@@ -591,8 +593,9 @@ export class BookPage extends R2mElement {
       run: () => void,
       hint: string | null = null,
     ) => menuItem({ action, label, icon: glyph, run, ...(hint === null ? {} : { hint }) });
+    const block = this.editor.blocked(!this.store.overview());
     return html`${blockable(
-        this.editor.readOnly(),
+        block?.reason ?? null,
         html`<button
           type="button"
           class="r2m-icon-button"
@@ -600,7 +603,7 @@ export class BookPage extends R2mElement {
           aria-haspopup="menu"
           data-testid="book-actions"
           popovertarget=${ACTIONS_MENU_ID}
-          ?disabled=${this.editor.locked() || !this.store.overview()}
+          ?disabled=${block !== null}
         >
           ${icon('more_vert')}
         </button>`,

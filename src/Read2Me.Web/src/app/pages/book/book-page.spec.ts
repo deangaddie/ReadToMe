@@ -3,6 +3,7 @@ import {
   type BookOverviewDto,
   type ParagraphDto,
   type ProjectStatusDto,
+  STALE_READ_ONLY,
   StepView,
   VIEWING_READ_ONLY,
 } from '@app/api';
@@ -888,7 +889,9 @@ describe('r2m-book-page', () => {
       live.queue.set({ attribution: { isBusy: true } } as unknown as QueueMessage);
       await page.rendered();
       expect(bulk.disabled).toBe(true);
-      expect(bulk.getAttribute('data-tooltip')).toContain('waits until attribution has finished');
+      expect(bulk.closest('.r2m-blockable')!.getAttribute('data-tooltip')).toBe(
+        'Bulk assign waits until attribution has finished',
+      );
     });
 
     it('Audio mode hides the paragraph checkboxes and bar; the paragraph selection is kept aside', async () => {
@@ -1243,7 +1246,7 @@ describe('r2m-book-page', () => {
       expect(store.mode()).toBe('speakers');
     });
 
-    it('the selection bar keeps Clear but Attribute and Bulk assign are off with the reason', async () => {
+    it('the selection bar keeps Clear but Attribute is off with the reason', async () => {
       use(StepView).view('dracula', 's8');
       const { page } = await start('projects/dracula/book');
       const box = page.querySelector<HTMLInputElement>(
@@ -1253,14 +1256,29 @@ describe('r2m-book-page', () => {
       box.dispatchEvent(new Event('change'));
       await page.rendered();
 
-      for (const action of ['attribute-selection', 'bulk-assign']) {
-        const button = page.querySelector<HTMLButtonElement>(`[data-action=${action}]`)!;
-        expect(button.disabled).toBe(true);
-        expect(reason(button)).toBe(VIEWING_READ_ONLY);
-      }
+      const attribute = page.querySelector<HTMLButtonElement>('[data-action=attribute-selection]')!;
+      expect(attribute.disabled).toBe(true);
+      expect(reason(attribute)).toBe(VIEWING_READ_ONLY);
       expect(page.querySelector<HTMLButtonElement>('[data-action=clear-selection]')!.disabled).toBe(
         false,
       );
+    });
+  });
+
+  describe('a stale view (edit gate)', () => {
+    it('turns Book actions off with the stale reason; the Pronunciations toggle stays', async () => {
+      const { page, store } = await start('projects/dracula/book');
+      // A failed read leaves the view stale.
+      api.on('GET', `${BASE}/nodes/part/p1/children`, () => problem(500, 'db locked'));
+      await store.refresh();
+      await page.rendered();
+      expect(store.stale()).toContain('db locked');
+
+      const actions = page.querySelector<HTMLButtonElement>('[data-testid=book-actions]')!;
+      expect(actions.disabled).toBe(true);
+      expect(actions.closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(STALE_READ_ONLY);
+      const toggle = page.querySelector<HTMLButtonElement>('[data-action=toggle-pronunciations]')!;
+      expect(toggle.disabled).toBe(false);
     });
   });
 
