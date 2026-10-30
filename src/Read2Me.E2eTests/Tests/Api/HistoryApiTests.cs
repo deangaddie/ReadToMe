@@ -57,6 +57,15 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     [Fact]
+    public void The_host_resolves_the_Project_activity_gate_and_its_busy_answer_without_a_loop()
+    {
+        var activity = app.Services.GetRequiredService<ProjectActivity>();
+
+        // Asking about busy resolves the busy answer, and through it the queues that use the gate.
+        Assert.Null(activity.MayViewStep(new Read2Me.Core.Models.ProjectFolderId($"api-activity-{Guid.NewGuid():N}")));
+    }
+
+    [Fact]
     public async Task One_request_is_one_step_labelled_in_user_terms_whatever_it_commits()
     {
         var folder = $"api-history-{Guid.NewGuid():N}";
