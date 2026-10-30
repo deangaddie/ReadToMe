@@ -100,6 +100,9 @@ namespace Read2Me.Tests.App.SetupCheck
             public Dictionary<string, string> LlamaErrors { get; } = new();
             public Dictionary<string, string> SpeechErrors { get; } = new();
 
+            /// <summary>Models whose request gets no answer at all, as from a container that died mid-request.</summary>
+            public HashSet<string> Unanswered { get; } = [];
+
             /// <summary>Each POST, "POST http://localhost:8080/v1/chat/completions"-style.</summary>
             public List<string> Posts { get; } = [];
             public List<JsonObject> ChatBodies { get; } = [];
@@ -128,6 +131,7 @@ namespace Read2Me.Tests.App.SetupCheck
                 if (baseUrl == Llama && path == "/v1/chat/completions")
                 {
                     ChatBodies.Add(body);
+                    ThrowIfUnanswered(model);
                     if (LlamaErrors.TryGetValue(model, out var error))
                         return new HttpResponseMessage(HttpStatusCode.InternalServerError) { Content = new StringContent(error) };
                     LoadedLlama = model;
@@ -137,11 +141,18 @@ namespace Read2Me.Tests.App.SetupCheck
                 {
                     SpeechBodies.Add(body);
                     OnSpeech?.Invoke();
+                    ThrowIfUnanswered(model);
                     if (SpeechErrors.TryGetValue(model, out var error))
                         return new HttpResponseMessage(HttpStatusCode.InternalServerError) { Content = new StringContent(error) };
                     return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(Encoding.ASCII.GetBytes("RIFF____WAVEfmt ")) };
                 }
                 throw new HttpRequestException("No connection could be made because the target machine actively refused it.");
+            }
+
+            private void ThrowIfUnanswered(string model)
+            {
+                if (Unanswered.Contains(model))
+                    throw new HttpRequestException("An existing connection was forcibly closed by the remote host.");
             }
 
             private static HttpResponseMessage Json(object value) =>
@@ -368,8 +379,8 @@ namespace Read2Me.Tests.App.SetupCheck
             var chain = Row(report, SetupCheckIds.AttributionChain);
             Assert.Equal(SetupCheckResult.Failed, chain.Result);
             Assert.Contains("gemma-12b answered \"OK\"", chain.Found);
-            // A later model answering doesn't clear the container's failure.
-            Assert.Equal(SetupCheckResult.Failed, Row(report, SetupCheckIds.Container("llama")).Result);
+            // llama answered both: a model that won't load is the config's fault, not the container's.
+            Assert.Equal(SetupCheckResult.Passed, Row(report, SetupCheckIds.Container("llama")).Result);
         }
 
         // ── Order, sweep and putting back ────────────────────────────────────
@@ -438,7 +449,7 @@ namespace Read2Me.Tests.App.SetupCheck
         public async Task A_failed_container_is_left_as_it_was_found()
         {
             await AddTtsAsync();
-            _http.SpeechErrors["breeze-q8"] = "generation failed";
+            _http.Unanswered.Add("breeze-q8");
 
             var report = await FullCheckAsync();
 
@@ -455,12 +466,45 @@ namespace Read2Me.Tests.App.SetupCheck
             await AddLlmAsync("Qwen", "qwen-28b", active: true);
             _services.Status["llama"] = AiServiceStatus.Ready;
             _http.LoadedLlama = "gemma-12b";
+            _http.Unanswered.Add("qwen-28b");
+
+            var report = await FullCheckAsync();
+
+            Assert.Equal(SetupCheckResult.Failed, Row(report, SetupCheckIds.Container("llama")).Result);
+            Assert.DoesNotContain(_http.ChatBodies, b => b["model"]!.GetValue<string>() == "gemma-12b");
+            Assert.Equal("Put back: read2me-llama left as it is (its check failed).", report.PutBack);
+        }
+
+        [Fact]
+        public async Task A_model_that_won_t_load_fails_only_its_config_rows_and_llama_reloads_the_model_it_had()
+        {
+            await AddLlmAsync("Qwen", "qwen-28b", active: true);
+            _services.Status["llama"] = AiServiceStatus.Ready;
+            _http.LoadedLlama = "gemma-12b";
             _http.LlamaErrors["qwen-28b"] = "model name=qwen-28b failed to load";
 
             var report = await FullCheckAsync();
 
-            Assert.Equal(["qwen-28b"], _http.ChatBodies.Select(b => b["model"]!.GetValue<string>()));
-            Assert.Equal("Put back: read2me-llama left as it is (its check failed).", report.PutBack);
+            Assert.Equal(SetupCheckResult.Failed, Row(report, SetupCheckIds.Llm).Result);
+            Assert.Equal(SetupCheckResult.Passed, Row(report, SetupCheckIds.Container("llama")).Result);
+            Assert.Equal(["qwen-28b", "gemma-12b"], _http.ChatBodies.Select(b => b["model"]!.GetValue<string>()));
+            Assert.Equal("Put back: read2me-llama left running, as it was, with gemma-12b loaded again.", report.PutBack);
+        }
+
+        [Fact]
+        public async Task A_failed_GPU_container_a_later_sweep_stops_is_left_stopped_and_the_line_says_why()
+        {
+            await AddTtsAsync();
+            await AddLlmAsync("Qwen", "qwen-28b", active: true);
+            _http.Unanswered.Add("breeze-q8");
+
+            var report = await FullCheckAsync();
+
+            Assert.Equal(["start:audiocpp", "shutdown:audiocpp", "start:llama", "shutdown:llama"], _services.OpLog);
+            Assert.Equal(SetupCheckResult.Passed, Row(report, SetupCheckIds.Llm).Result);
+            Assert.Equal(
+                "Put back: read2me-audiocpp left stopped (its check failed; a later GPU check's sweep stopped it, and docker logs still reads it); read2me-llama stopped again.",
+                report.PutBack);
         }
 
         [Fact]
@@ -479,7 +523,7 @@ namespace Read2Me.Tests.App.SetupCheck
         {
             await AddTtsAsync();
             _services.Status["llama"] = AiServiceStatus.Ready;
-            _http.SpeechErrors["breeze-q8"] = "generation failed";
+            _http.Unanswered.Add("breeze-q8");
 
             var report = await FullCheckAsync();
 
@@ -494,7 +538,7 @@ namespace Read2Me.Tests.App.SetupCheck
         {
             await AddTtsAsync();
             await AddVoiceDesignAsync();
-            _http.SpeechErrors["breeze-q8"] = "generation failed";
+            _http.Unanswered.Add("breeze-q8");
             var runner = Runner();
             await runner.RunQuickCheckAsync(CancellationToken.None);
             // Cancelled during paragraph TTS: voice design never runs, but the audiocpp row it shares keeps TTS's verdict.
@@ -523,11 +567,12 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.Contains("GGUF_MODELS_DIR", row.Fix.Text);
             Assert.Contains("Infra/.env", row.Fix.Text);
             Assert.Equal(path, row.Fix.Copy);
-            Assert.Contains(path, Row(report, SetupCheckIds.Container("audiocpp")).Fix.Text);
+            Assert.Equal(SetupCheckResult.Passed, Row(report, SetupCheckIds.Container("audiocpp")).Result);
+            Assert.Equal("Put back: read2me-audiocpp stopped again.", report.PutBack);
         }
 
         [Fact]
-        public async Task A_llama_model_that_fails_to_load_points_at_its_preset_and_GGUF_MODELS_DIR()
+        public async Task A_llama_model_that_fails_to_load_points_at_its_preset_GGUF_MODELS_DIR_and_the_logs()
         {
             await AddLlmAsync("Qwen", "qwen-28b", active: true);
             _http.LlamaErrors["qwen-28b"] = """{"error":{"code":500,"message":"model name=qwen-28b failed to load"}}""";
@@ -536,10 +581,11 @@ namespace Read2Me.Tests.App.SetupCheck
 
             Assert.Equal(SetupCheckResult.Failed, row.Result);
             Assert.Contains("failed to load", row.Found);
-            Assert.Contains("qwen-28b preset", row.Fix.Text);
-            Assert.Contains("Infra/llama/config/models.ini", row.Fix.Text);
-            Assert.Contains("GGUF_MODELS_DIR", row.Fix.Text);
-            Assert.Equal("Infra/.env", row.Fix.Copy);
+            // No path in the error, and it may not be the file: the hint hedges and points at the logs.
+            Assert.Equal(
+                "llama couldn't load qwen-28b: check that the GGUF its preset names in Infra/llama/config/models.ini is in the folder GGUF_MODELS_DIR names in Infra/.env (mounted at /models), then read why with docker logs -f read2me-llama.",
+                row.Fix.Text);
+            Assert.Equal("docker logs -f read2me-llama", row.Fix.Copy);
         }
 
         // ── Estimate ─────────────────────────────────────────────────────────
@@ -556,6 +602,33 @@ namespace Read2Me.Tests.App.SetupCheck
 
             // A model switch takes 9–31 s on top of the request.
             Assert.InRange(two - one, 31, 120);
+        }
+
+        [Fact]
+        public async Task The_estimate_counts_a_start_for_each_container_the_run_must_start()
+        {
+            await AddTtsAsync();
+            _services.Status["audiocpp"] = AiServiceStatus.Ready;
+            var running = (await Runner().RunQuickCheckAsync(CancellationToken.None)).FullCheckEstimateSeconds;
+
+            _services.Status["audiocpp"] = AiServiceStatus.Stopped;
+            var stopped = (await Runner().RunQuickCheckAsync(CancellationToken.None)).FullCheckEstimateSeconds;
+
+            Assert.InRange(stopped - running, 10, 60);
+        }
+
+        [Fact]
+        public async Task The_estimate_counts_a_running_llama_s_restart_and_its_model_reload()
+        {
+            await AddTtsAsync();
+            _services.Status["audiocpp"] = AiServiceStatus.Ready;
+            var without = (await Runner().RunQuickCheckAsync(CancellationToken.None)).FullCheckEstimateSeconds;
+
+            // The TTS step's sweep stops llama; putting back starts it and reloads its model.
+            _services.Status["llama"] = AiServiceStatus.Ready;
+            var with = (await Runner().RunQuickCheckAsync(CancellationToken.None)).FullCheckEstimateSeconds;
+
+            Assert.InRange(with - without, 10 + 31, 120);
         }
     }
 }

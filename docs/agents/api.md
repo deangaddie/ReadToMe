@@ -185,17 +185,24 @@ none and stays `notUsed`):
   passes on 200 with non-empty content. A row is `failed` when any of its models fails.
 
 A managed container a step uses is started when stopped, and its Docker services row gets the step's
-verdict (a failure stays for the rest of the run). Each visit to a GPU container first goes through the
-Preflight conflict sweep, which stops the other GPU container if it runs; the watchdog leaves every GPU
-container alone for the run. Afterwards (finished, failed or cancelled) each goes back as it was found,
-running or stopped, and llama reloads the model it had (`status.value` `loaded` on `GET /v1/models` when
-the run first touched it), except a container whose check failed, which is left as it is for its logs;
-the report's `putBack` says what happened ("Put back: read2me-llama left running, as it was, with
-qwen-28b loaded again; read2me-audiocpp stopped again."). A URL the app doesn't manage is sent the same
-request but never started, stopped or put back. When audiocpp answers 500 "model path does not exist" or
-llama's model "failed to load", the fix hint names the missing GGUF (its path when the error gives one,
-otherwise the `models.ini` preset or `server.json` entry) and `GGUF_MODELS_DIR` in `Infra/.env`.
-`fullCheckEstimateSeconds` counts a model load (9–31 s, taken as 30) for every GPU step.
+verdict. A container fails only when it doesn't answer the request at all (or won't start); an HTTP error
+it answers, such as a model that won't load, fails only the config's row, and that failure stays for the
+rest of the run. Each visit to a GPU container first goes through the Preflight conflict sweep, which
+stops the other GPU container if it runs, even one whose check failed (one GPU wins over "left as
+found"); the watchdog leaves every GPU container alone for the run. Afterwards (finished, failed or
+cancelled) each goes back as it was found, running or stopped, and llama reloads the model it had
+(`status.value` `loaded` on `GET /v1/models` when the run first touched it), except a container whose
+check failed, which is left as it is for its logs (or stopped, when a later sweep stopped it), and a GPU
+container isn't started again while a failed one holds the card. The report's `putBack` says what
+happened ("Put back: read2me-llama left running, as it was, with qwen-28b loaded again; read2me-audiocpp
+stopped again."). A URL the app doesn't manage is sent the same request but never started, stopped or
+put back. When audiocpp answers 500 "model path does not exist", the fix hint names the missing path and
+`GGUF_MODELS_DIR` in `Infra/.env`; when llama's model "failed to load" (no path; a missing GGUF, too
+little memory or a bad preset), it says to check the GGUF the `models.ini` preset names is under
+`GGUF_MODELS_DIR` and to read `docker logs -f read2me-llama`. `fullCheckEstimateSeconds` reads the
+containers as they are: each step's time with a model load (9–31 s, taken as 30) per GPU step, a start
+for each container the run must start or restart after a sweep, and a model load for a running llama's
+reload.
 
 ## 1. Create a project and import the book
 

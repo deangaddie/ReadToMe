@@ -82,7 +82,7 @@ namespace Read2Me.Services.Llm
             // the load finishes, and aborting it mid-load would defeat the whole switch.
             var triggerHttp = CreateClient(config, budget + TimeSpan.FromSeconds(30));
             var url = OpenAiStreamParser.Combine(config.BaseUrl, "v1/chat/completions");
-            var body = BuildTriggerBody(config);
+            var body = LlamaModelStatus.OneTokenRequestBody(config.Model);
 
             // Detached autoload trigger, CT linked to the caller. We do NOT await its slow completion
             // (a valid switch blocks for ~a minute); we only observe it to surface an immediate hard
@@ -185,50 +185,8 @@ namespace Read2Me.Services.Llm
                 await using var stream = await response.Content.ReadAsStreamAsync(ct);
                 using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
 
-                return TargetStatusIsLoaded(doc.RootElement, config.Model);
+                return LlamaModelStatus.IsLoaded(doc.RootElement, config.Model);
             }
-        }
-
-        /// <summary>
-        /// True only when the item in <c>data[]</c> whose <c>id</c> equals <paramref name="model"/>
-        /// reports <c>status.value == "loaded"</c>. Any other state (unloaded/loading/absent) is false.
-        /// </summary>
-        private static bool TargetStatusIsLoaded(JsonElement root, string? model)
-        {
-            if (string.IsNullOrWhiteSpace(model))
-                return false;
-
-            if (root.ValueKind != JsonValueKind.Object ||
-                !root.TryGetProperty("data", out var data) ||
-                data.ValueKind != JsonValueKind.Array)
-                return false;
-
-            foreach (var item in data.EnumerateArray())
-            {
-                if (item.ValueKind != JsonValueKind.Object ||
-                    !item.TryGetProperty("id", out var id) ||
-                    id.ValueKind != JsonValueKind.String ||
-                    !string.Equals(id.GetString(), model, StringComparison.Ordinal))
-                    continue;
-
-                if (item.TryGetProperty("status", out var status) &&
-                    status.ValueKind == JsonValueKind.Object &&
-                    status.TryGetProperty("value", out var value) &&
-                    value.ValueKind == JsonValueKind.String)
-                    return string.Equals(value.GetString(), "loaded", StringComparison.Ordinal);
-
-                return false;
-            }
-
-            return false;
-        }
-
-        // A minimal autoload request: names the target model with max_tokens=1 so the router evicts the
-        // current model and loads the target with negligible generation cost.
-        private static string BuildTriggerBody(LlmServerConfig config)
-        {
-            var probe = new LlmServerConfig { Model = config.Model, MaxTokens = 1 };
-            return OpenAiRequestBuilder.BuildChatBody(probe, "ping", stream: false);
         }
 
         private HttpClient CreateClient(LlmServerConfig config, TimeSpan? timeout = null)
