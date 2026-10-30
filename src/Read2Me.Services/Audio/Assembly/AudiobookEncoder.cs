@@ -28,7 +28,14 @@ namespace Read2Me.Services.Audio.Assembly
 
         // ── 1. Duration probe ────────────────────────────────────────────────
 
-        public async Task<TimeSpan> GetDurationAsync(string wavPath, string? ffmpegPath, CancellationToken ct = default)
+        public Task<TimeSpan> GetDurationAsync(string wavPath, string? ffmpegPath, CancellationToken ct = default) =>
+            ReadDurationAsync(wavPath, ffmpegPath, ct);
+
+        /// <summary>
+        /// <see cref="GetDurationAsync"/> without an encoder: the file's duration as ffprobe reads it.
+        /// Throws <see cref="InvalidOperationException"/> when ffprobe is absent, fails or answers no number.
+        /// </summary>
+        public static async Task<TimeSpan> ReadDurationAsync(string wavPath, string? ffmpegPath, CancellationToken ct = default)
         {
             var ffprobe = FfmpegProber.ResolveFfprobe(ffmpegPath);
             var stderr = new StringBuilder();

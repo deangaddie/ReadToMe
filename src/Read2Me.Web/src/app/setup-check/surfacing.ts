@@ -80,10 +80,12 @@ export function fullCheckConfirm(report: SetupCheckReport | null): ConfirmOption
   return {
     title: 'Run the Full check?',
     message:
-      // Says only what the steps do today; each new step adds its own sentence.
       'It encodes a 1 s tone to .m4b with the ffmpeg audio generation uses, then ' +
       'starts the transcription and similarity containers an active config uses, one at a time, ' +
-      'to transcribe and score a sample clip, then puts each back as it found it. ' +
+      'to transcribe and score a sample clip. ' +
+      'Then it stops any running GPU container and loads each configured TTS, voice design and LLM ' +
+      'model in turn, one GPU container at a time. ' +
+      'Afterwards it puts every container back as it found it, llama with the model it had loaded. ' +
       'Queues wait and new AI tasks are refused until it ends. ' +
       `It's likely to take ${estimateText(report?.fullCheckEstimateSeconds ?? 0)}.`,
     confirmLabel: 'Run Full check',

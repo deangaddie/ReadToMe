@@ -176,12 +176,26 @@ none and stays `notUsed`):
   sentence, `src/Read2Me.App/Services/SetupCheck/SampleClip/`) to non-empty text.
 - `similarity` (lane `cpu`): the transcript scored against the clip's known text; it fails below the
   config's own `PassThreshold`. With no transcript, the clip's text is scored against itself (a note says so).
+- `paragraph-tts` (lane `gpu`): a short sentence spoken with the sample clip as the reference voice; it
+  passes when the live ffmpeg's ffprobe reads a duration above 0 from the audio.
+- `voice-design` (lane `gpu`): a voice designed from a fixed prompt, speaking the clip's text; the same
+  pass rule.
+- `llm` and `attribution-chain` (lane `gpu`): one step per distinct `Model` in the active LLM config and
+  the attribution chain, each a non-streamed chat completion with `max_tokens` 1 and thinking off; it
+  passes on 200 with non-empty content. A row is `failed` when any of its models fails.
 
 A managed container a step uses is started when stopped, and its Docker services row gets the step's
-verdict. Afterwards (finished, failed or cancelled) each goes back as it was found, running or stopped,
-except one whose check failed, which is left as it is for its logs; the report's `putBack` says what
-happened ("Put back: read2me-whisper stopped again."). A URL the app doesn't manage is sent the same
-request but never started, stopped or put back.
+verdict (a failure stays for the rest of the run). Each visit to a GPU container first goes through the
+Preflight conflict sweep, which stops the other GPU container if it runs; the watchdog leaves every GPU
+container alone for the run. Afterwards (finished, failed or cancelled) each goes back as it was found,
+running or stopped, and llama reloads the model it had (`status.value` `loaded` on `GET /v1/models` when
+the run first touched it), except a container whose check failed, which is left as it is for its logs;
+the report's `putBack` says what happened ("Put back: read2me-llama left running, as it was, with
+qwen-28b loaded again; read2me-audiocpp stopped again."). A URL the app doesn't manage is sent the same
+request but never started, stopped or put back. When audiocpp answers 500 "model path does not exist" or
+llama's model "failed to load", the fix hint names the missing GGUF (its path when the error gives one,
+otherwise the `models.ini` preset or `server.json` entry) and `GGUF_MODELS_DIR` in `Infra/.env`.
+`fullCheckEstimateSeconds` counts a model load (9–31 s, taken as 30) for every GPU step.
 
 ## 1. Create a project and import the book
 

@@ -41,8 +41,9 @@ public class SetupCheckFullApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
 
             var joined = await Http.PostAsync(Url("/full"), null);
             Assert.Equal(HttpStatusCode.Accepted, joined.StatusCode);
-            // The seeded transcription and similarity configs each add a CPU step.
-            Assert.Equal(3, (await ReadAsync(joined)).GetProperty("fullRun").GetProperty("total").GetInt32());
+            // The seeded configs add a CPU step each for transcription and similarity, and GPU steps
+            // for paragraph TTS, voice design and the one LLM model.
+            Assert.Equal(6, (await ReadAsync(joined)).GetProperty("fullRun").GetProperty("total").GetInt32());
 
             // Cancelled once the run is in its step, which then finishes.
             await app.FfmpegEncode.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));

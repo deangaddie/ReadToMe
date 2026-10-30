@@ -18,9 +18,9 @@ namespace Read2Me.App.Services.SetupCheck
         private const string NoAccuracyScore = "audio is generated without an accuracy score";
         private const string WatchdogOff = "AiWatchdog:Enabled is false: a wedged container won't be restarted";
 
-        private static readonly SetupSettingsLink LlmSettings = new("settings/llm", "Settings → LLM");
-        private static readonly SetupSettingsLink TtsSettings = new("settings/tts", "Settings → Paragraph TTS");
-        private static readonly SetupSettingsLink VoiceDesignSettings = new("settings/voice-design", "Settings → Voice design");
+        internal static readonly SetupSettingsLink LlmSettings = new("settings/llm", "Settings → LLM");
+        internal static readonly SetupSettingsLink TtsSettings = new("settings/tts", "Settings → Paragraph TTS");
+        internal static readonly SetupSettingsLink VoiceDesignSettings = new("settings/voice-design", "Settings → Voice design");
         internal static readonly SetupSettingsLink TranscriptionSettings = new("settings/transcription", "Settings → Transcription");
         internal static readonly SetupSettingsLink SimilaritySettings = new("settings/similarity", "Settings → Similarity");
 
@@ -60,9 +60,8 @@ namespace Read2Me.App.Services.SetupCheck
                 await ChainRowAsync(configs.Chain, ct),
                 await ConfigRowAsync(SetupCheckIds.ParagraphTts, "Paragraph TTS", ConfigExpected, TtsSettings, Single(configs.ParagraphTts), required: true, Reach.ModelList, Describe, ct),
                 await ConfigRowAsync(SetupCheckIds.VoiceDesign, "Voice design", ConfigExpected, VoiceDesignSettings, Single(configs.VoiceDesign), required: true, Reach.ModelList, Describe, ct),
-                // Full-tier rows: the Quick check judges the config, the Full check the sample clip.
-                await ConfigRowAsync(SetupCheckIds.Transcription, "Transcription", ConfigExpected, TranscriptionSettings, Single(configs.Transcription), required: false, Reach.AnyAnswer, Describe, ct) with { Tier = SetupCheckTier.Full },
-                await ConfigRowAsync(SetupCheckIds.Similarity, "Similarity", ConfigExpected, SimilaritySettings, Single(configs.Similarity), required: false, Reach.AnyAnswer, Describe, ct) with { Tier = SetupCheckTier.Full },
+                await ConfigRowAsync(SetupCheckIds.Transcription, "Transcription", ConfigExpected, TranscriptionSettings, Single(configs.Transcription), required: false, Reach.AnyAnswer, Describe, ct),
+                await ConfigRowAsync(SetupCheckIds.Similarity, "Similarity", ConfigExpected, SimilaritySettings, Single(configs.Similarity), required: false, Reach.AnyAnswer, Describe, ct),
             };
             foreach (var service in deps.Registry.All)
                 rows.Add(await ContainerRowAsync(service, configs, dockerOnPath, ct));
@@ -73,7 +72,7 @@ namespace Read2Me.App.Services.SetupCheck
         public IReadOnlyList<SetupCheckRow> NotRun(string found, SetupFixHint fix)
         {
             SetupCheckRow Config(string id, string name, string expected) =>
-                new(id, SetupCheckGroup.AiConfigs, name, SetupCheckTier.Quick, SetupCheckResult.NotRun,
+                new(id, SetupCheckGroup.AiConfigs, name, SetupCheckTier.Full, SetupCheckResult.NotRun,
                     expected, found, null, fix, Managed: false);
 
             var rows = new List<SetupCheckRow>
@@ -134,7 +133,7 @@ namespace Read2Me.App.Services.SetupCheck
         {
             if (chain.Count == 0)
                 return new SetupCheckRow(
-                    SetupCheckIds.AttributionChain, SetupCheckGroup.AiConfigs, "Attribution chain", SetupCheckTier.Quick,
+                    SetupCheckIds.AttributionChain, SetupCheckGroup.AiConfigs, "Attribution chain", SetupCheckTier.Full,
                     SetupCheckResult.NotRun, ChainExpected, "Needs an active LLM config", null,
                     new SetupFixHint($"no active config — choose one in {LlmSettings.Label}", LlmSettings), Managed: false);
             return await ConfigRowAsync(SetupCheckIds.AttributionChain, "Attribution chain", ChainExpected, LlmSettings, chain,
@@ -154,8 +153,9 @@ namespace Read2Me.App.Services.SetupCheck
         {
             // Managed once every config the step uses is on a URL the app manages.
             var managed = false;
+            // Full-tier: the Quick check judges the config, the Full check sends it a real request.
             SetupCheckRow Row(SetupCheckResult result, string found, string? note, SetupFixHint fix) =>
-                new(id, SetupCheckGroup.AiConfigs, name, SetupCheckTier.Quick, result, expected, found, note, fix, managed);
+                new(id, SetupCheckGroup.AiConfigs, name, SetupCheckTier.Full, result, expected, found, note, fix, managed);
 
             if (configs.Count == 0)
             {
