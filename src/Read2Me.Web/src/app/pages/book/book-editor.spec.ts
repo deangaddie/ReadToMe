@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { ApiError, BookApi, ProjectsApi, StepView, VIEWING_READ_ONLY } from '@app/api';
+import {
+  ApiError,
+  BookApi,
+  ProjectsApi,
+  STALE_READ_ONLY,
+  StepView,
+  VIEWING_READ_ONLY,
+} from '@app/api';
 import { override, resetServices, use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { ToastService } from '@app/ui/toast';
@@ -148,7 +155,7 @@ describe('BookEditor', () => {
     store.stale.set('boom');
     expect(await editor.run({ type: 'AddPauses' })).toBe(false);
     const declined = await editor.tryExecute({ type: 'AddBookTitle' });
-    expect(declined?.message).toBe('The book is out of date; refresh it first.');
+    expect(declined?.message).toBe(STALE_READ_ONLY);
     expect(execute.calls).toEqual([]);
   });
 
@@ -169,6 +176,31 @@ describe('BookEditor', () => {
     use(StepView).clear('dracula');
     expect(editor.locked()).toBe(false);
     expect(editor.readOnly()).toBeNull();
+  });
+
+  it('blocked() answers the blocked reason for viewing, stale and saving, and is open otherwise', async () => {
+    expect(editor.blocked()).toBeNull();
+
+    store.stale.set('boom');
+    expect(editor.blocked()).toEqual({ reason: STALE_READ_ONLY });
+    use(StepView).view('dracula', 's8');
+    expect(editor.blocked()).toEqual({ reason: VIEWING_READ_ONLY });
+    use(StepView).clear('dracula');
+    store.stale.set(null);
+
+    const run = editor.run({ type: 'AddPauses' });
+    await flush();
+    expect(editor.blocked()).toEqual({ reason: null });
+    store.settle(true);
+    await run;
+    expect(editor.blocked()).toBeNull();
+  });
+
+  it('blocked() folds in the caller local busy, behind viewing and stale', () => {
+    expect(editor.blocked(true)).toEqual({ reason: null });
+    expect(editor.blocked('Bulk assign waits')).toEqual({ reason: 'Bulk assign waits' });
+    store.stale.set('boom');
+    expect(editor.blocked('Bulk assign waits')).toEqual({ reason: STALE_READ_ONLY });
   });
 
   it('reread and manual reread go through the same wait', async () => {
