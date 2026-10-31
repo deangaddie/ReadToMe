@@ -1,19 +1,11 @@
 import { html, nothing } from 'lit-html';
-import {
-  AttributionApi,
-  BookApi,
-  type NarrationReleaseScope,
-  type NodeLevel,
-  type ParagraphDto,
-  toApiError,
-} from '@app/api';
+import type { NodeLevel } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
 import { computed, signal, untracked } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import { LiveService } from '@app/live/live.service';
-import { Preflight } from '@app/shared/preflight';
 import { ConfirmService, confirmPermanent } from '@app/ui/dialogs';
 import type { IconName } from '@app/ui/icons';
 import type { MeasuredList } from '@app/ui/measured-list';
@@ -39,11 +31,7 @@ import type { PronunciationEditRequest } from './pronunciation-card';
 import { PronunciationMarks } from './pronunciation-marks-store';
 import type { PronunciationPanel } from './pronunciation-panel';
 import { PronunciationPanelState } from './pronunciation-panel-store';
-import {
-  addPausesChange,
-  attributeSelectionChange,
-  generateAudioChange,
-} from './permanent-changes';
+import { addPausesChange } from './permanent-changes';
 import {
   READER_MODES,
   type ReaderMode,
@@ -52,9 +40,8 @@ import {
   buildRows,
   parseMode,
 } from './reader-rows';
-import { chapterDialogTotals, chapterVoicedTotals } from './selection';
 import { AudioSelectionStore, SelectionStore } from './selection-store';
-import { SelectionWorkflow } from './selection-workflow';
+import { type ActionNode, SelectionWorkflow } from './selection-workflow';
 import { SpeakerAssigner } from './speaker-assigner';
 import { buildRoster } from './speaker-roster';
 import { structureNodeMenu } from './structure-node-menu';
@@ -101,16 +88,15 @@ const ACTIONS_MENU_ID = 'r2m-book-actions-menu';
  * bar — Attribute (gated by preflight), Bulk assign speaker, Clear. Audio mode (ticket 13) does
  * the same for items over the {@link AudioSelectionStore}: item and tree checkboxes, "Select
  * needs audio", and a bar with Generate audio and Clear through the {@link AudioGenerator}. The
- * toolbar overflow holds the book-level actions (titles, pauses, Edit with AI, reread, manual
- * reread); Edit with AI (ticket 27) is `r2m-edit-with-ai-dialog`, full screen, applying through
- * this page's {@link BookEditor}.
+ * page forwards tree checkboxes, node shortcuts, Release narration and both bars' queue buttons
+ * to the {@link SelectionWorkflow}; Clear and Bulk assign stay here. The toolbar overflow holds
+ * the book-level actions (titles, pauses, Edit with AI, reread, manual reread); Edit with AI
+ * (ticket 27) is `r2m-edit-with-ai-dialog`, full screen, applying through this page's
+ * {@link BookEditor}.
  */
 export class BookPage extends R2mElement {
   private readonly router = use(Router);
-  private readonly book = use(BookApi);
-  private readonly attribution = use(AttributionApi);
   private readonly live = use(LiveService);
-  private readonly preflight = use(Preflight);
   private readonly toast = use(ToastService);
   private readonly confirm = use(ConfirmService);
   private project!: ProjectStore;
@@ -120,7 +106,7 @@ export class BookPage extends R2mElement {
   private audioSelection!: AudioSelectionStore;
   private assigner!: SpeakerAssigner;
   private generator!: AudioGenerator;
-  /** Which selection is active, the tree's roll-up over it, and the totals both learn. */
+  /** The selection intents, which selection is active, and the tree's roll-up over it. */
   private workflow!: SelectionWorkflow;
   /** The Pronunciation marks of the chapters in the reader (pronunciation ticket 15). */
   private readonly marks = new PronunciationMarks();
@@ -129,8 +115,6 @@ export class BookPage extends R2mElement {
   /** The loaded items that have audio: the panel rows' with-audio counts. */
   private itemsWithAudio = computed<ReadonlySet<string>>(() => new Set());
   private readonly treeOpen = signal(true);
-  /** A selection read or enqueue in flight: the action bar waits for it. */
-  private readonly working = signal(false);
   /** The bulk-assign menu is open: its speaker menu is rendered fresh per open. */
   private readonly bulkOpen = signal(false);
 
@@ -147,8 +131,6 @@ export class BookPage extends R2mElement {
   private ctx = computed<RowContext>(() => EMPTY_CONTEXT);
   private noContent = computed(() => false);
   private roster = computed(() => buildRoster([], null));
-  /** Narrator-only mode reads unattributed lines too, so they count as voiced. */
-  private narratorOnlyMode = computed(() => false);
   /** Bulk assign is disarmed while attribution runs anywhere (research §3). */
   private queueBusy = computed(() => false);
 
@@ -190,7 +172,6 @@ export class BookPage extends R2mElement {
       buildRoster(store.overview()?.characters ?? [], project.detail()?.narrator ?? null),
     );
     this.queueBusy = computed(() => this.live.queue()?.attribution.isBusy ?? false);
-    this.narratorOnlyMode = computed(() => project.detail()?.narratorOnlyMode ?? false);
 
     this.ctx = computed<RowContext>(() => ({
       folder: store.folder() ?? '',
@@ -204,7 +185,7 @@ export class BookPage extends R2mElement {
       selected: selection.selected(),
       itemSelectable: workflow.kind() === 'items',
       selectedItems: audioSelection.selected(),
-      narratorOnlyMode: this.narratorOnlyMode(),
+      narratorOnlyMode: workflow.narratorOnlyMode(),
       ancestry: store.ancestry(),
       roster: this.roster(),
       blocked: editor.blocked(),
@@ -273,11 +254,6 @@ export class BookPage extends R2mElement {
     this.onDisconnect(() => clearInterval(edges));
   }
 
-  /** The selection the mode is in: items in Audio, paragraphs otherwise. */
-  private activeSelection(): SelectionStore {
-    return this.workflow.kind() === 'items' ? this.audioSelection : this.selection;
-  }
-
   protected template() {
     const store = this.store;
     const rows = this.rows();
@@ -312,7 +288,7 @@ export class BookPage extends R2mElement {
         </fieldset>
         ${noContent ? nothing : this.pronunciationsToggle()}
         ${
-          this.activeSelection().count() === 0
+          this.workflow.active().count() === 0
             ? nothing
             : this.workflow.kind() === 'items'
               ? this.audioSelectionBar()
@@ -450,9 +426,11 @@ export class BookPage extends R2mElement {
   /** The paragraph selection's action bar (ticket 12): count, Attribute, Bulk assign speaker, Clear. */
   private selectionBar() {
     const count = this.selection.count();
-    const attribute = this.editor.blocked(this.working());
+    const attribute = this.editor.blocked(this.workflow.working());
     // A busy queue gives Bulk assign its own reason; viewing and stale still win.
-    const bulk = this.editor.blocked(this.queueBusy() ? BULK_WAITS_REASON : this.working());
+    const bulk = this.editor.blocked(
+      this.queueBusy() ? BULK_WAITS_REASON : this.workflow.working(),
+    );
     return html`<div
       class="book__selection"
       role="group"
@@ -469,7 +447,7 @@ export class BookPage extends R2mElement {
           class="r2m-button r2m-button--filled"
           data-action="attribute-selection"
           ?disabled=${attribute !== null}
-          @click=${this.attributeSelection}
+          @click=${() => void this.workflow.attribute()}
         >
           ${icon('auto_awesome')} Attribute
         </button>`,
@@ -518,7 +496,7 @@ export class BookPage extends R2mElement {
   /** The item selection's action bar (ticket 13): count, Generate audio, Clear. */
   private audioSelectionBar() {
     const count = this.audioSelection.count();
-    const generate = this.editor.blocked(this.working() || this.generator.working());
+    const generate = this.editor.blocked(this.workflow.working() || this.generator.working());
     return html`<div
       class="book__selection"
       role="group"
@@ -535,7 +513,7 @@ export class BookPage extends R2mElement {
           class="r2m-button r2m-button--filled"
           data-action="generate-audio-selection"
           ?disabled=${generate !== null}
-          @click=${this.generateSelection}
+          @click=${() => void this.workflow.generate()}
         >
           ${icon('graphic_eq')} Generate audio
         </button>`,
@@ -706,94 +684,17 @@ export class BookPage extends R2mElement {
 
   // ---- selection (tickets 12 and 13) ----------------------------------------------------------------
 
-  /**
-   * A tree checkbox: everything the mode's selection holds under the node — Character paragraphs,
-   * or voiced items in Audio mode — joins or leaves it.
-   */
+  /** A tree checkbox: the workflow reads what the node holds into the mode's selection. */
   private readonly onToggleNode = (e: Event): void => {
     const { node, on } = (e as CustomEvent<{ node: TreeNode; on: boolean }>).detail;
-    void this.withSelectionRead(async (folder) => {
-      const store = this.activeSelection();
-      const refs =
-        this.workflow.kind() === 'items'
-          ? await this.book.itemIds(folder, node.level, node.id, {
-              narratorOnlyMode: this.narratorOnlyMode(),
-            })
-          : await this.book.paragraphIds(folder, node.level, node.id);
-      // A full read is the node's total, whichever way the box went.
-      store.learnTotals({ [node.id]: refs.length });
-      if (on) store.add(refs);
-      else store.remove(refs.map((r) => r.id));
-    });
+    void this.workflow.toggleNode(node, on);
   };
 
   /** The tree's node menu shortcuts; a Book page heading's arrive through {@link onRowMenuOpen}. */
   private readonly onNodeAction = (e: Event): void => {
     const { node, action } = (e as CustomEvent<{ node: TreeNode; action: ActionEntryId }>).detail;
-    this.nodeAction(node, action);
+    void this.workflow.nodeAction(node, action);
   };
-
-  /**
-   * A Volume, Part or Chapter's selection shortcuts, from the tree or a Book page heading, for
-   * whichever selection the mode is in. The release names the node by the title it shows.
-   */
-  private nodeAction(node: ActionNode, action: ActionEntryId): void {
-    switch (action) {
-      case 'select-unprocessed':
-        // The node's unprocessed paragraphs, without loading every chapter.
-        void this.withSelectionRead(async (folder) => {
-          this.selection.add(await this.book.paragraphIds(folder, node.level, node.id, true));
-        });
-        return;
-      case 'attribute-node':
-        // The node-scoped enqueue the overview also uses.
-        void this.enqueue((folder) =>
-          this.attribution.enqueue(folder, {
-            level: node.level,
-            nodeId: node.id,
-            unprocessedOnly: true,
-          }),
-        );
-        return;
-      case 'select-needs-audio':
-        // The node's Generatable items (voiced, still missing a WAV), without loading chapters.
-        void this.withSelectionRead(async (folder) => {
-          this.audioSelection.add(
-            await this.book.itemIds(folder, node.level, node.id, {
-              needsAudioOnly: true,
-              narratorOnlyMode: this.narratorOnlyMode(),
-            }),
-          );
-        });
-        return;
-      case 'generate-audio-node':
-        void this.generator.enqueueNode(node.level, node.id, this.narratorOnlyMode());
-        return;
-      case 'release-narration':
-        if (node.level === 'volume') return;
-        void this.releaseNarration(node.level === 'part' ? 'Part' : 'Chapter', node.id, node.title);
-        return;
-    }
-  }
-
-  /**
-   * A release flips paragraphs into Character paragraphs, so both selections clear and their
-   * learnt totals reseed (CONTEXT.md "Character paragraph"): the receipt reloads the rows, but a
-   * part's total read before the release would undercount. Loaded chapters relearn theirs now, and
-   * again when the receipt's reload lands.
-   */
-  private async releaseNarration(
-    scope: NarrationReleaseScope,
-    nodeId: string,
-    title: string,
-  ): Promise<void> {
-    if (!(await this.assigner.releaseNarration(scope, nodeId, title))) return;
-    const chapters = this.store.chapters();
-    this.selection.reset();
-    this.selection.learnTotals(chapterDialogTotals(chapters));
-    this.audioSelection.reset();
-    this.audioSelection.learnTotals(chapterVoicedTotals(chapters, this.narratorOnlyMode()));
-  }
 
   /**
    * A reader row's menu opening (`NODE_MENU_OPEN`, on its way to the shared menu): rows have no
@@ -811,86 +712,16 @@ export class BookPage extends R2mElement {
         .find((h) => h?.id === target.id);
       if (!heading) return;
       const node: ActionNode = { level, id: heading.id, title: heading.title };
-      request.onAction = (action) => this.nodeAction(node, action);
+      request.onAction = (action) => void this.workflow.nodeAction(node, action);
       return;
     }
     if (target.kind !== 'paragraph') return;
     request.onAction = (action) => {
       if (action === 'release-narration') {
-        void this.releaseNarration('Paragraph', target.id, target.text ?? '');
+        void this.workflow.releaseParagraph(target.id, target.text ?? '');
       }
     };
   };
-
-  /**
-   * The action bar's Attribute: asks first when a selected paragraph already has a speaker or
-   * audio (permanent-change confirm), then queues the selection and clears it: the queue owns it
-   * now.
-   */
-  private readonly attributeSelection = async (): Promise<void> => {
-    const ids = this.selection.ids();
-    if (ids.length === 0) return;
-    const paragraphs = await this.selectedParagraphs(this.selection);
-    if (!paragraphs || !(await confirmPermanent(attributeSelectionChange(paragraphs)))) return;
-    const queued = await this.enqueue((folder) => this.attribution.enqueueParagraphs(folder, ids));
-    if (queued) this.selection.clear();
-  };
-
-  /**
-   * The action bar's Generate audio: asks first when a selected item already has a take, then
-   * queues the selection and clears it: the queue owns it now.
-   */
-  private readonly generateSelection = async (): Promise<void> => {
-    const ids = this.audioSelection.ids();
-    if (ids.length === 0) return;
-    const paragraphs = await this.selectedParagraphs(this.audioSelection);
-    if (!paragraphs) return;
-    const wanted = new Set(ids);
-    const items = paragraphs.flatMap((p) => p.items.filter((i) => wanted.has(i.id)));
-    if (!(await confirmPermanent(generateAudioChange(items)))) return;
-    const queued = await this.generator.enqueueItems(ids);
-    if (queued) this.audioSelection.clear();
-  };
-
-  /**
-   * The paragraphs a selection names (its own, or those holding its items), from the loaded
-   * window where it has them and by a chapter read where it does not: a tree checkbox selects
-   * across chapters the reader never opened. Null when a read failed (toasted).
-   */
-  private async selectedParagraphs(selection: SelectionStore): Promise<ParagraphDto[] | null> {
-    const folder = this.store.folder();
-    if (!folder) return null;
-    const chapters = new Map(this.store.chapters().map((c) => [c.id, c.paragraphs]));
-    const missing = new Set(
-      Object.values(selection.selection())
-        .map((a) => a.chapterId)
-        .filter((id) => !chapters.has(id)),
-    );
-    if (missing.size > 0) {
-      this.working.set(true);
-      try {
-        const reads = await Promise.all(
-          [...missing].map(
-            async (id) => [id, await this.book.children(folder, 'chapter', id)] as const,
-          ),
-        );
-        for (const [id, children] of reads) chapters.set(id, children.paragraphs ?? []);
-      } catch (error) {
-        this.toast.problem(toApiError(error).toProblem());
-        return null;
-      } finally {
-        this.working.set(false);
-      }
-    }
-    const ids = new Set(selection.ids());
-    const paragraphs: ParagraphDto[] = [];
-    for (const list of chapters.values()) {
-      for (const p of list) {
-        if (ids.has(p.id) || p.items.some((i) => ids.has(i.id))) paragraphs.push(p);
-      }
-    }
-    return paragraphs;
-  }
 
   /** A pick, clear or create closes the menu, like a mat-menu item click. */
   private readonly onBulkToggle = (e: ToggleEvent): void => {
@@ -924,43 +755,6 @@ export class BookPage extends R2mElement {
       { kind: 'selection', paragraphIds: this.selection.ids() },
       name,
     );
-  }
-
-  /** Preflight, then one enqueue; the toast says how many. True when something was queued. */
-  private async enqueue(
-    request: (folder: string) => Promise<{ enqueued: number }>,
-  ): Promise<boolean> {
-    const folder = this.store.folder();
-    if (!folder || this.working()) return false;
-    this.working.set(true);
-    try {
-      if (!(await this.preflight.ensureReady('attribution'))) return false;
-      const { enqueued } = await request(folder);
-      this.toast.success(
-        enqueued === 0
-          ? 'Nothing to queue'
-          : `Queued ${enqueued} paragraph${enqueued === 1 ? '' : 's'}`,
-      );
-      return enqueued > 0;
-    } catch (error) {
-      this.toast.problem(toApiError(error).toProblem());
-      return false;
-    } finally {
-      this.working.set(false);
-    }
-  }
-
-  private async withSelectionRead(read: (folder: string) => Promise<void>): Promise<void> {
-    const folder = this.store.folder();
-    if (!folder) return;
-    this.working.set(true);
-    try {
-      await read(folder);
-    } catch (error) {
-      this.toast.problem(toApiError(error).toProblem());
-    } finally {
-      this.working.set(false);
-    }
   }
 
   // ---- book actions (ticket 11) -------------------------------------------------------------------
@@ -1121,9 +915,6 @@ export class BookPage extends R2mElement {
     return this.rows().findIndex((r) => r.kind === 'chapter' && r.chapterId === chapterId);
   }
 }
-
-/** What a selection shortcut needs of the node it was chosen on: a tree node or a Book page heading. */
-type ActionNode = Pick<TreeNode, 'level' | 'id' | 'title'>;
 
 const rowKey = (row: ReaderRow) => row.key;
 

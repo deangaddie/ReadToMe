@@ -17,11 +17,11 @@ import { STRUCTURE_RULES } from '../../../testing/structure-rules';
 import { FakeApi, problem } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';
 import { type FakeNavigation, installNavigation, settle } from '../../../testing/fake-navigation';
-import { AudioGenerator } from './audio-generator';
 import { BookEditor } from './book-editor';
 import { BookStore } from './book-store';
 import type { BookPage } from './book-page';
 import { AudioSelectionStore, SelectionStore } from './selection-store';
+import { SelectionWorkflow } from './selection-workflow';
 import { SpeakerAssigner } from './speaker-assigner';
 import '../project/project-shell';
 import './book-page';
@@ -750,7 +750,7 @@ describe('r2m-book-page', () => {
     expect(new URL(navigation.calls.at(-1)!.url).searchParams.has('mode')).toBe(false);
   });
 
-  describe('selection (ticket 12)', () => {
+  describe('selection (tickets 12 and 13)', () => {
     const A = { chapterId: 'c1', partId: 'p1', volumeId: 'v1' };
     const bar = (page: BookPage) => page.querySelector('[data-testid=selection-bar]');
     /** The paragraph checkboxes of chapter 1 (the window may hold chapter 2 as well). */
@@ -761,7 +761,7 @@ describe('r2m-book-page', () => {
         ),
       );
 
-    it('a tree checkbox reads the node paragraph ids, selects them and shows the action bar', async () => {
+    it('a tree checkbox selects the node and shows the action bar, whose Attribute reaches the workflow', async () => {
       api.on('GET', `${BASE}/nodes/chapter/c1/paragraph-ids`, [
         { id: 'p1', chapterId: 'c1', partId: 'p1', volumeId: 'v1' },
         { id: 'p2', chapterId: 'c1', partId: 'p1', volumeId: 'v1' },
@@ -769,102 +769,20 @@ describe('r2m-book-page', () => {
       const { page } = await start('projects/dracula/book?mode=speakers');
       expect(bar(page)).toBeNull();
 
-      const box = page.querySelector<HTMLInputElement>('[data-node-id=c1] .tree__select')!;
-      box.click();
+      page.querySelector<HTMLInputElement>('[data-node-id=c1] .tree__select')!.click();
       for (let i = 0; i < 4; i++) await settle();
       await page.rendered();
 
-      const selection = use(SelectionStore, page);
-      expect(selection.ids()).toEqual(['p1', 'p2']);
-      expect(selection.nodeState('chapter', 'c1')).toBe('checked');
       expect(text(page.querySelector('[data-testid=selection-count]'))).toBe('2 paragraphs');
       expect(page.querySelector<HTMLInputElement>('[data-node-id=c1] .tree__select')!.checked).toBe(
         true,
       );
       expect(rowBoxes(page).map((b) => b.checked)).toEqual([true, true]);
 
-      // Unticking reads again and removes exactly those.
-      api.on('GET', `${BASE}/nodes/chapter/c1/paragraph-ids`, [
-        { id: 'p1', chapterId: 'c1', partId: 'p1', volumeId: 'v1' },
-      ]);
-      page.querySelector<HTMLInputElement>('[data-node-id=c1] .tree__select')!.click();
-      for (let i = 0; i < 4; i++) await settle();
-      expect(selection.ids()).toEqual(['p2']);
-      expect(api.calls('GET', `${BASE}/nodes/chapter/c1/paragraph-ids`)).toHaveLength(2);
-    });
-
-    it('Attribute gates on preflight, posts the selected ids, reports the count and clears the selection', async () => {
-      api.on('POST', `${BASE}/attribution/enqueue-paragraphs`, { enqueued: 1 });
-      const { page } = await start('projects/dracula/book?mode=speakers');
-      const selection = use(SelectionStore, page);
-      selection.toggle('p1', A, true);
-      await page.rendered();
-      expect(text(page.querySelector('[data-testid=selection-count]'))).toBe('1 paragraph');
-
+      const attribute = mock(async () => undefined);
+      use(SelectionWorkflow, page).attribute = attribute;
       page.querySelector<HTMLButtonElement>('[data-action=attribute-selection]')!.click();
-      for (let i = 0; i < 4; i++) await settle();
-
-      expect(ensureReady).toHaveBeenCalledWith('attribution');
-      expect(
-        api.calls('POST', `${BASE}/attribution/enqueue-paragraphs`).map((r) => r.body),
-      ).toEqual([{ paragraphIds: ['p1'] }]);
-      expect(toasts).toEqual(['Queued 1 paragraph']);
-      expect(selection.count()).toBe(0);
-      // Nothing selected had an assigned speaker: no permanent-change confirm.
-      expect(confirms).toEqual([]);
-    });
-
-    it('Attribute confirms when a selected paragraph has an assigned speaker, reading chapters not in the window', async () => {
-      api.on('POST', `${BASE}/attribution/enqueue-paragraphs`, { enqueued: 2 });
-      api.on('GET', `${BASE}/nodes/chapter/c1/children`, {
-        paragraphs: [DIALOG('p1'), DIALOG('p2')],
-      });
-      const far = DIALOG('p9');
-      far.items[0]!.characterId = 'h';
-      api.on('GET', `${BASE}/nodes/chapter/c9/children`, { paragraphs: [far] });
-      const { page } = await start('projects/dracula/book?mode=speakers');
-      const selection = use(SelectionStore, page);
-      selection.toggle('p1', A, true);
-      selection.toggle('p9', { chapterId: 'c9', partId: 'p1', volumeId: 'v1' }, true);
-      await page.rendered();
-
-      confirmAnswer = false;
-      page.querySelector<HTMLButtonElement>('[data-action=attribute-selection]')!.click();
-      for (let i = 0; i < 6; i++) await settle();
-      expect(confirms).toEqual([
-        {
-          title: 'Attribute?',
-          message:
-            'Re-attributes 2 paragraphs: 1 assigned speaker is replaced. ' +
-            'Getting a replaced speaker back means assigning it again by hand.',
-          confirmLabel: 'Attribute',
-          destructive: true,
-        },
-      ]);
-      expect(api.calls('GET', `${BASE}/nodes/chapter/c9/children`)).toHaveLength(1);
-      expect(api.calls('POST', `${BASE}/attribution/enqueue-paragraphs`)).toHaveLength(0);
-      expect(selection.count()).toBe(2);
-
-      confirmAnswer = true;
-      page.querySelector<HTMLButtonElement>('[data-action=attribute-selection]')!.click();
-      for (let i = 0; i < 6; i++) await settle();
-      expect(
-        api.calls('POST', `${BASE}/attribution/enqueue-paragraphs`).map((r) => r.body),
-      ).toEqual([{ paragraphIds: ['p1', 'p9'] }]);
-      expect(selection.count()).toBe(0);
-    });
-
-    it('a cancelled preflight sends nothing and keeps the selection', async () => {
-      ensureReady.mockResolvedValueOnce(false);
-      const { page } = await start('projects/dracula/book?mode=speakers');
-      const selection = use(SelectionStore, page);
-      selection.toggle('p1', A, true);
-      await page.rendered();
-      page.querySelector<HTMLButtonElement>('[data-action=attribute-selection]')!.click();
-      for (let i = 0; i < 4; i++) await settle();
-      expect(api.calls('POST', `${BASE}/attribution/enqueue-paragraphs`)).toHaveLength(0);
-      expect(selection.count()).toBe(1);
-      expect(toasts).toEqual([]);
+      expect(attribute).toHaveBeenCalledTimes(1);
     });
 
     it('Bulk assign hands the selection to the assigner and is disarmed while attribution runs', async () => {
@@ -894,7 +812,7 @@ describe('r2m-book-page', () => {
       );
     });
 
-    it('Audio mode hides the paragraph checkboxes and bar; the paragraph selection is kept aside', async () => {
+    it('Audio mode swaps the paragraph checkboxes and bar for the items; the paragraph selection is kept aside', async () => {
       const { page } = await start('projects/dracula/book?mode=audio');
       const selection = use(SelectionStore, page);
       selection.toggle('p1', { chapterId: 'c1', partId: null, volumeId: null }, true);
@@ -912,62 +830,16 @@ describe('r2m-book-page', () => {
         '.r2m-paragraph[data-chapter-id=c1] .r2m-item input[type=checkbox]',
       );
       expect(Array.from(items, (b) => b.disabled)).toEqual([true, true]);
-    });
 
-    it('Select unprocessed and Attribute unprocessed from a node menu act on the node', async () => {
-      api
-        .on('GET', `${BASE}/nodes/chapter/c1/paragraph-ids`, (_body, url) =>
-          url.searchParams.get('unprocessedOnly') === 'true'
-            ? [{ id: 'p2', chapterId: 'c1', partId: 'p1', volumeId: 'v1' }]
-            : [],
-        )
-        .on('POST', `${BASE}/attribution/enqueue`, { enqueued: 2 });
-      const { page } = await start('projects/dracula/book?mode=speakers');
-      const open = async () => {
-        page.querySelector<HTMLButtonElement>('[data-node-id=c1] .r2m-node-menu__trigger')!.click();
-        await page.rendered();
-      };
-
-      await open();
-      page
-        .querySelector<HTMLButtonElement>('[role="menu"] [data-entry=select-unprocessed]')!
-        .click();
-      for (let i = 0; i < 4; i++) await settle();
-      expect(use(SelectionStore, page).ids()).toEqual(['p2']);
-
-      await open();
-      page.querySelector<HTMLButtonElement>('[role="menu"] [data-entry=attribute-node]')!.click();
-      for (let i = 0; i < 4; i++) await settle();
-      expect(ensureReady).toHaveBeenCalledTimes(1);
-      expect(api.calls('POST', `${BASE}/attribution/enqueue`).map((r) => r.body)).toEqual([
-        { level: 'chapter', nodeId: 'c1', unprocessedOnly: true },
-      ]);
-      expect(toasts).toEqual(['Queued 2 paragraphs']);
-    });
-
-    it('Release narration from a node menu releases the node, then clears the selection and its stale totals', async () => {
-      const { page } = await start('projects/dracula/book?mode=speakers');
-      const selection = use(SelectionStore, page);
-      const assigner = use(SpeakerAssigner, page);
-      const release = mock(async () => true);
-      assigner.releaseNarration = release;
-      selection.toggle('p1', A, true);
-      selection.learnTotals({ 'part-x': 3 });
-
-      page.querySelector<HTMLButtonElement>('[data-node-id=c1] .r2m-node-menu__trigger')!.click();
+      // An item selection brings its own bar, whose Generate audio reaches the workflow.
+      use(AudioSelectionStore, page).toggle('p1-i', A, true);
       await page.rendered();
-      page
-        .querySelector<HTMLButtonElement>('[role="menu"] [data-entry=release-narration]')!
-        .click();
-      for (let i = 0; i < 4; i++) await settle();
-
-      expect(release).toHaveBeenCalledWith('Chapter', 'c1', 'Jonathan Harker’s Journal');
-      expect(selection.count()).toBe(0);
-      expect(selection.totals()['part-x']).toBeUndefined();
-      // The loaded chapter's total is relearnt straight away.
-      expect(selection.totals()['c1']).toBeDefined();
-      // The release itself never queues attribution.
-      expect(api.calls('POST', `${BASE}/attribution/enqueue`)).toHaveLength(0);
+      expect(text(page.querySelector('[data-testid=selection-count]'))).toBe('1 item');
+      expect(page.querySelector('[data-action=attribute-selection]')).toBeNull();
+      const generate = mock(async () => undefined);
+      use(SelectionWorkflow, page).generate = generate;
+      page.querySelector<HTMLButtonElement>('[data-action=generate-audio-selection]')!.click();
+      expect(generate).toHaveBeenCalledTimes(1);
     });
 
     it('a chapter heading menu runs the shortcuts and Release narration as the tree does', async () => {
@@ -1007,23 +879,7 @@ describe('r2m-book-page', () => {
       expect(selection.count()).toBe(0);
     });
 
-    it('a release that writes nothing keeps the selection', async () => {
-      const { page } = await start('projects/dracula/book?mode=speakers');
-      const selection = use(SelectionStore, page);
-      use(SpeakerAssigner, page).releaseNarration = mock(async () => false);
-      selection.toggle('p1', A, true);
-
-      page.querySelector<HTMLButtonElement>('[data-node-id=c1] .r2m-node-menu__trigger')!.click();
-      await page.rendered();
-      page
-        .querySelector<HTMLButtonElement>('[role="menu"] [data-entry=release-narration]')!
-        .click();
-      for (let i = 0; i < 4; i++) await settle();
-
-      expect(selection.count()).toBe(1);
-    });
-
-    it("Release narration from a narration-only paragraph's menu releases that paragraph and clears the selection", async () => {
+    it("a narration-only paragraph's menu releases that paragraph; a dialog row offers no release", async () => {
       const narration: ParagraphDto = {
         id: 'q1',
         isPauseParagraph: false,
@@ -1033,10 +889,8 @@ describe('r2m-book-page', () => {
         paragraphs: [DIALOG('p1'), narration],
       });
       const { page } = await start('projects/dracula/book?mode=speakers');
-      const selection = use(SelectionStore, page);
       const release = mock(async () => true);
       use(SpeakerAssigner, page).releaseNarration = release;
-      selection.toggle('p1', A, true);
 
       page
         .querySelector<HTMLButtonElement>('[data-paragraph-id=q1] .r2m-paragraph__menu button')!
@@ -1046,168 +900,13 @@ describe('r2m-book-page', () => {
         .querySelector<HTMLButtonElement>('[role="menu"] [data-entry=release-narration]')!
         .click();
       for (let i = 0; i < 4; i++) await settle();
-
       expect(release).toHaveBeenCalledWith('Paragraph', 'q1', 'Q: Your name?');
-      expect(selection.count()).toBe(0);
 
-      // A dialog-bearing row offers no release.
       page
         .querySelector<HTMLButtonElement>('[data-paragraph-id=p1] .r2m-paragraph__menu button')!
         .click();
       await page.rendered();
       expect(page.querySelector('[role="menu"] [data-entry=release-narration]')).toBeNull();
-    });
-  });
-
-  describe('audio selection (ticket 13)', () => {
-    const NARRATION = (id: string): ParagraphDto => ({
-      id,
-      isPauseParagraph: false,
-      items: [
-        {
-          id: `${id}-i`,
-          itemType: 'Narration',
-          text: `${id} narration`,
-          characterId: 'narrator',
-          audioFileName: null,
-          voiceInstructions: null,
-          orderKey: 'a',
-          isPause: false,
-        },
-      ],
-    });
-    const REF = { id: 'p1-i', paragraphId: 'p1', chapterId: 'c1', partId: 'p1', volumeId: 'v1' };
-
-    it('a tree checkbox reads the node item ids, selects them and shows the item action bar', async () => {
-      api
-        .on('GET', `${BASE}/nodes/chapter/c1/children`, {
-          paragraphs: [NARRATION('p1'), DIALOG('p2')],
-        })
-        .on('GET', `${BASE}/nodes/chapter/c1/item-ids`, [REF]);
-      const { page } = await start('projects/dracula/book?mode=audio');
-      expect(page.querySelector('[data-testid=selection-bar]')).toBeNull();
-
-      page.querySelector<HTMLInputElement>('[data-node-id=c1] .tree__select')!.click();
-      for (let i = 0; i < 4; i++) await settle();
-      await page.rendered();
-
-      const selection = use(AudioSelectionStore, page);
-      expect(selection.ids()).toEqual(['p1-i']);
-      expect(selection.nodeState('chapter', 'c1')).toBe('checked');
-      expect(page.querySelector<HTMLInputElement>('[data-node-id=c1] .tree__select')!.checked).toBe(
-        true,
-      );
-      expect(text(page.querySelector('[data-testid=selection-count]'))).toBe('1 item');
-      const rows = Array.from(
-        page.querySelectorAll<HTMLInputElement>(
-          '.r2m-paragraph[data-chapter-id=c1] .r2m-item input[type=checkbox]',
-        ),
-      );
-      expect(rows.map((b) => [b.checked, b.disabled])).toEqual([
-        [true, false],
-        [false, true],
-      ]);
-      expect(use(SelectionStore, page).count()).toBe(0);
-    });
-
-    it('Select needs audio reads with the filter and narrator-only flag; Generate audio queues and clears', async () => {
-      api
-        .on('GET', BASE, {
-          folderName: 'dracula',
-          title: 'Dracula',
-          narrator: null,
-          narratorOnlyMode: true,
-        })
-        .on('GET', `${BASE}/nodes/chapter/c1/children`, { paragraphs: [NARRATION('p1')] })
-        .on('GET', `${BASE}/nodes/chapter/c1/item-ids`, (_body, url) =>
-          url.searchParams.get('needsAudioOnly') === 'true' &&
-          url.searchParams.get('narratorOnlyMode') === 'true'
-            ? [REF]
-            : [],
-        );
-      const { page } = await start('projects/dracula/book?mode=audio');
-      const generator = use(AudioGenerator, page);
-      const enqueueItems = mock(async () => true);
-      generator.enqueueItems = enqueueItems;
-
-      page.querySelector<HTMLButtonElement>('[data-node-id=c1] .r2m-node-menu__trigger')!.click();
-      await page.rendered();
-      page
-        .querySelector<HTMLButtonElement>('[role="menu"] [data-entry=select-needs-audio]')!
-        .click();
-      for (let i = 0; i < 4; i++) await settle();
-      await page.rendered();
-
-      const selection = use(AudioSelectionStore, page);
-      expect(selection.ids()).toEqual(['p1-i']);
-      page.querySelector<HTMLButtonElement>('[data-action=generate-audio-selection]')!.click();
-      for (let i = 0; i < 4; i++) await settle();
-      expect(enqueueItems).toHaveBeenCalledWith(['p1-i']);
-      expect(selection.count()).toBe(0);
-      expect(confirms).toEqual([]);
-    });
-
-    it('Generate audio confirms when a selected item already has a take', async () => {
-      const taken = NARRATION('p1');
-      taken.items[0]!.audioFileName = 'p1.wav';
-      api.on('GET', `${BASE}/nodes/chapter/c1/children`, { paragraphs: [taken] });
-      const { page } = await start('projects/dracula/book?mode=audio');
-      const generator = use(AudioGenerator, page);
-      const enqueueItems = mock(async () => true);
-      generator.enqueueItems = enqueueItems;
-      const selection = use(AudioSelectionStore, page);
-      selection.add([REF]);
-      await page.rendered();
-
-      confirmAnswer = false;
-      page.querySelector<HTMLButtonElement>('[data-action=generate-audio-selection]')!.click();
-      for (let i = 0; i < 4; i++) await settle();
-      expect(confirms).toEqual([
-        {
-          title: 'Generate audio?',
-          message: 'Replaces existing audio on 1 item. The current takes cannot be brought back.',
-          confirmLabel: 'Generate audio',
-          destructive: true,
-        },
-      ]);
-      expect(enqueueItems).not.toHaveBeenCalled();
-      expect(selection.count()).toBe(1);
-
-      confirmAnswer = true;
-      page.querySelector<HTMLButtonElement>('[data-action=generate-audio-selection]')!.click();
-      for (let i = 0; i < 4; i++) await settle();
-      expect(enqueueItems).toHaveBeenCalledWith(['p1-i']);
-      expect(selection.count()).toBe(0);
-    });
-
-    it('Generate audio for this node hands the node to the generator', async () => {
-      api.on('GET', `${BASE}/nodes/chapter/c1/children`, { paragraphs: [NARRATION('p1')] });
-      const { page } = await start('projects/dracula/book?mode=audio');
-      const generator = use(AudioGenerator, page);
-      const enqueueNode = mock(async () => true);
-      generator.enqueueNode = enqueueNode;
-
-      page.querySelector<HTMLButtonElement>('[data-node-id=c1] .r2m-node-menu__trigger')!.click();
-      await page.rendered();
-      page
-        .querySelector<HTMLButtonElement>('[role="menu"] [data-entry=generate-audio-node]')!
-        .click();
-      for (let i = 0; i < 4; i++) await settle();
-      expect(enqueueNode).toHaveBeenCalledWith('chapter', 'c1', false);
-
-      // The chapter's heading on the Book page does the same.
-      enqueueNode.mockClear();
-      page
-        .querySelector<HTMLButtonElement>(
-          '.book__heading[data-chapter-id=c1] .r2m-node-menu__trigger',
-        )!
-        .click();
-      await page.rendered();
-      page
-        .querySelector<HTMLButtonElement>('[role="menu"] [data-entry=generate-audio-node]')!
-        .click();
-      for (let i = 0; i < 4; i++) await settle();
-      expect(enqueueNode).toHaveBeenCalledWith('chapter', 'c1', false);
     });
   });
 
