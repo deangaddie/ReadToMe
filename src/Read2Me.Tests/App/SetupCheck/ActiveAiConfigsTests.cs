@@ -37,6 +37,15 @@ namespace Read2Me.Tests.App.SetupCheck
         private Task<LlmServerConfig> AddLlmAsync(string name, string baseUrl, string model) =>
             Llm().CreateConfigAsync(new LlmServerConfig { Name = name, BaseUrl = baseUrl, Model = model });
 
+        private Task AddWhisperAsync() =>
+            new TranscriptionSettingsService(Factory, NullLogger<TranscriptionSettingsService>.Instance).CreateConfigAsync(
+                new TranscriptionServiceConfig
+                {
+                    Name = "Whisper",
+                    Type = TranscriptionServiceType.LocalWhisper,
+                    SettingsJson = $$"""{"BaseUrl":"{{Whisper}}"}""",
+                });
+
         private async Task AddEveryConfigAsync(string llmUrl = Llama)
         {
             await AddLlmAsync("Qwen", llmUrl, "qwen-28b");
@@ -54,13 +63,7 @@ namespace Read2Me.Tests.App.SetupCheck
                     Type = VoiceDesignServiceType.Breeze,
                     SettingsJson = $$"""{"baseUrl":"{{AudioCpp}}","modelId":"breeze-design"}""",
                 });
-            await new TranscriptionSettingsService(Factory, NullLogger<TranscriptionSettingsService>.Instance).CreateConfigAsync(
-                new TranscriptionServiceConfig
-                {
-                    Name = "Whisper",
-                    Type = TranscriptionServiceType.LocalWhisper,
-                    SettingsJson = $$"""{"BaseUrl":"{{Whisper}}"}""",
-                });
+            await AddWhisperAsync();
             await new SemanticSimilaritySettingsService(Factory, NullLogger<SemanticSimilaritySettingsService>.Instance).CreateConfigAsync(
                 new SemanticSimilarityServiceConfig
                 {
@@ -137,6 +140,34 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.Equal(
                 ["audiocpp", "llama", "minilm-l6", "whisper"],
                 configs.UsedServices.Select(s => s.Name).Order(StringComparer.Ordinal));
+        }
+
+        [Fact]
+        public async Task The_status_read_covers_the_used_services_and_every_gpu_container_when_one_is_gpu()
+        {
+            await AddLlmAsync("Qwen", Llama, "qwen-28b");
+            await AddWhisperAsync();
+            _services.StatusByName["audiocpp"] = AiServiceStatus.Ready;
+            var configs = await ReadAsync();
+
+            var statuses = await configs.ReadStatusesAsync(_services, new DockerAiServiceRegistry(), CancellationToken.None);
+
+            // llama is GPU, so audiocpp, which its sweep would stop, is read too; unused CPU containers aren't.
+            Assert.Equal(["audiocpp", "llama", "whisper"], statuses.Keys.Order(StringComparer.Ordinal));
+            Assert.Equal(AiServiceStatus.Ready, statuses["audiocpp"]);
+            Assert.Equal(AiServiceStatus.Stopped, statuses["llama"]);
+            Assert.Equal(3, _services.StatusCalls);
+        }
+
+        [Fact]
+        public async Task With_no_gpu_service_used_the_status_read_covers_only_the_used_services()
+        {
+            await AddWhisperAsync();
+            var configs = await ReadAsync();
+
+            var statuses = await configs.ReadStatusesAsync(_services, new DockerAiServiceRegistry(), CancellationToken.None);
+
+            Assert.Equal(["whisper"], statuses.Keys);
         }
     }
 }

@@ -6,9 +6,9 @@ using Read2Me.Services.Health;
 namespace Read2Me.App.Services.SetupCheck
 {
     /// <summary>
-    /// The Quick check's AI configs and Docker services rows. It judges the active configs the
-    /// caller read, and reads each container's Managed service status and what llama and audiocpp
-    /// list; it never starts, stops or switches anything.
+    /// The Quick check's AI configs and Docker services rows. It judges the active configs and
+    /// container statuses the caller read, and reads what llama and audiocpp list; it never starts,
+    /// stops or switches anything.
     /// </summary>
     internal sealed class AiServicesCheck(SetupCheckServices deps)
     {
@@ -28,8 +28,9 @@ namespace Read2Me.App.Services.SetupCheck
             AnyAnswer,
         }
 
-        /// <summary>The AI configs and Docker services rows of the given configs, read by the caller.</summary>
-        public async Task<IReadOnlyList<SetupCheckRow>> RunAsync(ActiveAiConfigs configs, bool dockerOnPath, CancellationToken ct)
+        /// <summary>The AI configs and Docker services rows of the given configs and statuses, read by the caller.</summary>
+        public async Task<IReadOnlyList<SetupCheckRow>> RunAsync(
+            ActiveAiConfigs configs, IReadOnlyDictionary<string, AiServiceStatus> statuses, bool dockerOnPath, CancellationToken ct)
         {
             static (string, string?, string?) ReadLlm(LlmServerConfig c) => (c.Name, ServiceConfigBaseUrls.For(c), ServiceConfigModelIds.For(c));
             var llm = View(configs.Llm, ReadLlm);
@@ -50,7 +51,7 @@ namespace Read2Me.App.Services.SetupCheck
             };
             var all = llm.Concat(tts).Concat(design).Concat(transcription).Concat(similarity).Concat(chain).ToList();
             foreach (var service in deps.Registry.All)
-                rows.Add(await ContainerRowAsync(service, all, dockerOnPath, ct));
+                rows.Add(await ContainerRowAsync(service, all, statuses, dockerOnPath, ct));
             return rows;
         }
 
@@ -194,7 +195,8 @@ namespace Read2Me.App.Services.SetupCheck
         // ── Docker services ──────────────────────────────────────────────────
 
         private async Task<SetupCheckRow> ContainerRowAsync(
-            DockerAiService service, IReadOnlyList<ConfigView> configs, bool dockerOnPath, CancellationToken ct)
+            DockerAiService service, IReadOnlyList<ConfigView> configs, IReadOnlyDictionary<string, AiServiceStatus> statuses,
+            bool dockerOnPath, CancellationToken ct)
         {
             var users = configs.Where(c => c.Service?.Name == service.Name).ToList();
             var models = users.Select(c => c.Model).OfType<string>()
@@ -214,7 +216,8 @@ namespace Read2Me.App.Services.SetupCheck
                 return Row(SetupCheckResult.NotUsed, "No active config uses it",
                     new SetupFixHint("Nothing to do: no active config uses this container."));
 
-            var containerStatus = await deps.Control.GetStatusAsync(service, ct);
+            // A container an active config uses is one of the used services the caller read.
+            var containerStatus = statuses[service.Name];
             if (ContainerVerdicts.For(service, containerStatus, SetupCheckTier.Quick) is { } verdict)
                 return Row(verdict.Result, verdict.Found, verdict.Fix);
 
