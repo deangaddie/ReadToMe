@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Read2Me.AppData.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Health;
@@ -14,22 +13,15 @@ namespace Read2Me.App.Services.SetupCheck
     public sealed partial class SetupCheckRunner
     {
         /// <summary>
-        /// The active configs the steps use, the managed service behind each (null: not managed), the
+        /// The active configs the steps use, each with its managed service, and the run's state: the
         /// rows as the run found them, what the steps hand on (the transcript) and the containers driven.
         /// </summary>
-        private sealed class FullContext
+        private sealed class FullContext(ActiveAiConfigs configs)
         {
-            public TranscriptionServiceConfig? Transcription { get; init; }
-            public DockerAiService? Whisper { get; init; }
-            public SemanticSimilarityServiceConfig? Similarity { get; init; }
-            public DockerAiService? SimilarityService { get; init; }
-            public ParagraphTtsServiceConfig? ParagraphTts { get; init; }
-            public DockerAiService? TtsService { get; init; }
-            public VoiceDesignServiceConfig? VoiceDesign { get; init; }
-            public DockerAiService? DesignService { get; init; }
+            public ActiveAiConfigs Configs { get; } = configs;
 
             /// <summary>Each distinct model the active LLM config and the attribution chain name, active first.</summary>
-            public IReadOnlyList<LlmTarget> Llm { get; init; } = [];
+            public IReadOnlyList<LlmTarget> Llm { get; } = LlmTargets(configs);
 
             public IReadOnlyDictionary<string, SetupCheckRow> Before { get; set; } = new Dictionary<string, SetupCheckRow>();
 
@@ -64,40 +56,14 @@ namespace Read2Me.App.Services.SetupCheck
             public bool Swept { get; set; }
         }
 
-        private async Task<FullContext> ReadFullContextAsync()
-        {
-            await using var scope = aiServices.Scopes.CreateAsyncScope();
-            var sp = scope.ServiceProvider;
-            var transcription = await sp.GetRequiredService<TranscriptionSettingsService>().GetActiveConfigAsync();
-            var similarity = await sp.GetRequiredService<SemanticSimilaritySettingsService>().GetActiveConfigAsync();
-            var tts = await sp.GetRequiredService<ParagraphTtsSettingsService>().GetActiveConfigAsync();
-            var design = await sp.GetRequiredService<VoiceDesignSettingsService>().GetActiveConfigAsync();
-            var llmSettings = sp.GetRequiredService<LlmSettingsService>();
-            var llm = await llmSettings.GetActiveConfigAsync();
-            var chain = await llmSettings.GetAttributionChainAsync();
-
-            return new FullContext
-            {
-                Transcription = transcription,
-                Whisper = ManagedService(transcription is null ? null : ServiceConfigBaseUrls.For(transcription)),
-                Similarity = similarity,
-                SimilarityService = ManagedService(similarity is null ? null : ServiceConfigBaseUrls.For(similarity)),
-                ParagraphTts = tts,
-                TtsService = ManagedService(tts is null ? null : ServiceConfigBaseUrls.For(tts)),
-                VoiceDesign = design,
-                DesignService = ManagedService(design is null ? null : ServiceConfigBaseUrls.For(design)),
-                Llm = LlmTargets(llm, chain.Select(s => s.Config)),
-            };
-        }
-
         /// <summary>One target per distinct model on each endpoint, so each is exercised once.</summary>
-        private List<LlmTarget> LlmTargets(LlmServerConfig? active, IEnumerable<LlmServerConfig> chain)
+        private static List<LlmTarget> LlmTargets(ActiveAiConfigs configs)
         {
             var targets = new List<LlmTarget>();
-            void Add(LlmServerConfig config, bool isActive)
+            void Add(ActiveConfig<LlmServerConfig> active, bool isActive)
             {
+                var (config, service) = active;
                 var baseUrl = ServiceConfigBaseUrls.For(config);
-                var service = ManagedService(baseUrl);
                 var endpoint = service?.Name ?? baseUrl?.TrimEnd('/');
                 var model = ServiceConfigModelIds.For(config);
                 var target = targets.FirstOrDefault(t =>
@@ -111,15 +77,12 @@ namespace Read2Me.App.Services.SetupCheck
                     target.InChain = true;
             }
 
-            if (active is not null)
-                Add(active, isActive: true);
-            foreach (var config in chain)
-                Add(config, isActive: false);
+            if (configs.Llm is { } llm)
+                Add(llm, isActive: true);
+            foreach (var entry in configs.Chain)
+                Add(entry, isActive: false);
             return targets;
         }
-
-        private DockerAiService? ManagedService(string? baseUrl) =>
-            string.IsNullOrWhiteSpace(baseUrl) ? null : aiServices.Control.Resolve(baseUrl);
 
         /// <summary>The container's use, made as the run first touches it: running then or not, and llama's loaded model.</summary>
         private async Task<ContainerUse> TrackAsync(FullContext context, DockerAiService service, bool running)
@@ -253,17 +216,13 @@ namespace Read2Me.App.Services.SetupCheck
         /// one for each running GPU container another GPU step's sweep stops and putting back starts
         /// again, and a model load for llama reloading the model it has.
         /// </summary>
-        private async Task<int> EstimateSecondsAsync(FullContext context, bool dockerOnPath)
+        private async Task<int> EstimateSecondsAsync(ActiveAiConfigs configs, IReadOnlyList<FullStep> plan, bool dockerOnPath)
         {
-            var seconds = Plan(context).Sum(s => s.EstimateSeconds);
+            var seconds = plan.Sum(s => s.EstimateSeconds);
             if (!dockerOnPath)
                 return seconds;
 
-            var used = new[] { context.Whisper, context.SimilarityService, context.TtsService, context.DesignService }
-                .Concat(context.Llm.Select(t => t.Service))
-                .OfType<DockerAiService>()
-                .DistinctBy(s => s.Name)
-                .ToList();
+            var used = configs.UsedServices;
             var usedGpu = used.Where(s => s.UsesGpu).ToList();
             var rivals = usedGpu.Count == 0 ? [] : aiServices.Registry.All.Where(s => s.UsesGpu);
             foreach (var service in used.Concat(rivals).DistinctBy(s => s.Name))

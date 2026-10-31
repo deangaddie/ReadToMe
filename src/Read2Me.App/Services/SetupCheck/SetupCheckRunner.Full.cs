@@ -99,7 +99,8 @@ namespace Read2Me.App.Services.SetupCheck
                         return Refused(refusal);
                 }
 
-                var context = await ReadFullContextAsync();
+                // Read fresh: the configs may have changed since the Quick check.
+                var context = new FullContext(await ActiveAiConfigs.ReadAsync(aiServices));
 
                 FullRun run;
                 IReadOnlyList<FullStep> steps;
