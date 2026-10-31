@@ -33,7 +33,7 @@ import { type HeadingRef, type TreeNode, placeholderTitleClass } from './book-tr
 import { openEditWithAiDialog } from './edit-with-ai/edit-with-ai-dialog';
 import { openManualRereadDialog } from './manual-reread-dialog';
 import { type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
-import type { ActionEntryId, NodeMenuTarget, SelectionKind } from './node-menu-entries';
+import type { ActionEntryId, NodeMenuTarget } from './node-menu-entries';
 import { paragraphRow } from './paragraph-row';
 import type { PronunciationEditRequest } from './pronunciation-card';
 import { PronunciationMarks } from './pronunciation-marks-store';
@@ -52,8 +52,9 @@ import {
   buildRows,
   parseMode,
 } from './reader-rows';
-import { type TriState, chapterDialogTotals, chapterVoicedTotals } from './selection';
+import { chapterDialogTotals, chapterVoicedTotals } from './selection';
 import { AudioSelectionStore, SelectionStore } from './selection-store';
+import { SelectionWorkflow } from './selection-workflow';
 import { SpeakerAssigner } from './speaker-assigner';
 import { buildRoster } from './speaker-roster';
 import { structureNodeMenu } from './structure-node-menu';
@@ -119,6 +120,8 @@ export class BookPage extends R2mElement {
   private audioSelection!: AudioSelectionStore;
   private assigner!: SpeakerAssigner;
   private generator!: AudioGenerator;
+  /** Which selection is active, the tree's roll-up over it, and the totals both learn. */
+  private workflow!: SelectionWorkflow;
   /** The Pronunciation marks of the chapters in the reader (pronunciation ticket 15). */
   private readonly marks = new PronunciationMarks();
   /** The Pronunciations panel (pronunciation ticket 16): open or not, and what its editor holds. */
@@ -144,14 +147,8 @@ export class BookPage extends R2mElement {
   private ctx = computed<RowContext>(() => EMPTY_CONTEXT);
   private noContent = computed(() => false);
   private roster = computed(() => buildRoster([], null));
-  /** Paragraph selection lives in Read and Speakers modes; Audio selects items (ticket 13). */
-  private selectable = computed(() => true);
-  private audioSelectable = computed(() => false);
-  /** Which selection the tree offers checkboxes and shortcuts for. */
-  private selectionKind = computed<SelectionKind>(() => 'paragraphs');
   /** Narrator-only mode reads unattributed lines too, so they count as voiced. */
   private narratorOnlyMode = computed(() => false);
-  private nodeStates = computed<Readonly<Record<string, TriState>>>(() => ({}));
   /** Bulk assign is disarmed while attribution runs anywhere (research §3). */
   private queueBusy = computed(() => false);
 
@@ -163,7 +160,8 @@ export class BookPage extends R2mElement {
     this.audioSelection = use(AudioSelectionStore, this);
     this.assigner = use(SpeakerAssigner, this);
     this.generator = use(AudioGenerator, this);
-    const { project, store, editor, selection, audioSelection, generator } = this;
+    this.workflow = use(SelectionWorkflow, this);
+    const { project, store, editor, selection, audioSelection, generator, workflow } = this;
     const pronunciations = (this.pronunciations = new PronunciationPanelState(
       () => this.querySelector<PronunciationPanel>('r2m-pronunciation-panel')?.dirty() === true,
     ));
@@ -191,25 +189,8 @@ export class BookPage extends R2mElement {
     this.roster = computed(() =>
       buildRoster(store.overview()?.characters ?? [], project.detail()?.narrator ?? null),
     );
-    this.selectable = computed(() => store.mode() !== 'audio');
-    this.audioSelectable = computed(() => store.mode() === 'audio');
-    this.selectionKind = computed(() => (this.audioSelectable() ? 'items' : 'paragraphs'));
     this.queueBusy = computed(() => this.live.queue()?.attribution.isBusy ?? false);
     this.narratorOnlyMode = computed(() => project.detail()?.narratorOnlyMode ?? false);
-
-    // Every tree node's checkbox state over the selection the mode is in.
-    this.nodeStates = computed(() => {
-      const active = this.activeSelection();
-      const states: Record<string, TriState> = {};
-      const walk = (nodes: readonly TreeNode[]) => {
-        for (const node of nodes) {
-          states[node.id] = active.nodeState(node.level, node.id);
-          walk(node.children);
-        }
-      };
-      walk(store.tree());
-      return states;
-    });
 
     this.ctx = computed<RowContext>(() => ({
       folder: store.folder() ?? '',
@@ -219,9 +200,9 @@ export class BookPage extends R2mElement {
       itemStatus: project.items(),
       voices: store.itemVoices(),
       reviews: store.reviews(),
-      selectable: this.selectable(),
+      selectable: workflow.kind() === 'paragraphs',
       selected: selection.selected(),
-      itemSelectable: this.audioSelectable(),
+      itemSelectable: workflow.kind() === 'items',
       selectedItems: audioSelection.selected(),
       narratorOnlyMode: this.narratorOnlyMode(),
       ancestry: store.ancestry(),
@@ -246,16 +227,6 @@ export class BookPage extends R2mElement {
     this.effect(() => {
       const mode = parseMode(this.router.query().get('mode'));
       untracked(() => store.setMode(mode));
-    });
-
-    // A loaded chapter tells each selection how many rows of its kind it holds.
-    this.effect(() => {
-      const totals = chapterDialogTotals(store.chapters());
-      untracked(() => selection.learnTotals(totals));
-    });
-    this.effect(() => {
-      const totals = chapterVoicedTotals(store.chapters(), this.narratorOnlyMode());
-      untracked(() => audioSelection.learnTotals(totals));
     });
 
     this.effect(() => {
@@ -304,7 +275,7 @@ export class BookPage extends R2mElement {
 
   /** The selection the mode is in: items in Audio, paragraphs otherwise. */
   private activeSelection(): SelectionStore {
-    return this.audioSelectable() ? this.audioSelection : this.selection;
+    return this.workflow.kind() === 'items' ? this.audioSelection : this.selection;
   }
 
   protected template() {
@@ -341,11 +312,11 @@ export class BookPage extends R2mElement {
         </fieldset>
         ${noContent ? nothing : this.pronunciationsToggle()}
         ${
-          this.audioSelectable() && this.audioSelection.count() > 0
-            ? this.audioSelectionBar()
-            : this.selectable() && this.selection.count() > 0
-              ? this.selectionBar()
-              : nothing
+          this.activeSelection().count() === 0
+            ? nothing
+            : this.workflow.kind() === 'items'
+              ? this.audioSelectionBar()
+              : this.selectionBar()
         }
         <span class="book__spacer"></span>
         ${
@@ -390,8 +361,8 @@ export class BookPage extends R2mElement {
                         .statuses=${this.project.nodes()}
                         .currentChapterId=${store.currentChapterId()}
                         .expandedIds=${store.expanded()}
-                        .selection=${this.selectionKind()}
-                        .nodeStates=${this.nodeStates()}
+                        .selection=${this.workflow.kind()}
+                        .nodeStates=${this.workflow.nodeStates()}
                         .blocked=${this.editor.blocked()}
                         @expanded-change=${this.onExpandedChange}
                         @select-chapter=${this.onSelectChapter}
@@ -690,7 +661,7 @@ export class BookPage extends R2mElement {
     const menu = structureNodeMenu({
       node: { level, id, rawTitle: heading.rawTitle },
       position: heading,
-      selection: this.selectionKind(),
+      selection: this.workflow.kind(),
       status: this.project.nodes()[id] ?? null,
       blocked: this.ctx().blocked,
     });
@@ -743,11 +714,12 @@ export class BookPage extends R2mElement {
     const { node, on } = (e as CustomEvent<{ node: TreeNode; on: boolean }>).detail;
     void this.withSelectionRead(async (folder) => {
       const store = this.activeSelection();
-      const refs = this.audioSelectable()
-        ? await this.book.itemIds(folder, node.level, node.id, {
-            narratorOnlyMode: this.narratorOnlyMode(),
-          })
-        : await this.book.paragraphIds(folder, node.level, node.id);
+      const refs =
+        this.workflow.kind() === 'items'
+          ? await this.book.itemIds(folder, node.level, node.id, {
+              narratorOnlyMode: this.narratorOnlyMode(),
+            })
+          : await this.book.paragraphIds(folder, node.level, node.id);
       // A full read is the node's total, whichever way the box went.
       store.learnTotals({ [node.id]: refs.length });
       if (on) store.add(refs);

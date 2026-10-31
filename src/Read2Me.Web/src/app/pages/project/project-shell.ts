@@ -9,6 +9,7 @@ import { AudioGenerator } from '@app/pages/book/audio-generator';
 import { BookEditor } from '@app/pages/book/book-editor';
 import { BookStore } from '@app/pages/book/book-store';
 import { AudioSelectionStore, SelectionStore } from '@app/pages/book/selection-store';
+import { SelectionWorkflow } from '@app/pages/book/selection-workflow';
 import { SpeakerAssigner } from '@app/pages/book/speaker-assigner';
 import { HistorySheetState } from '@app/history/history-sheet-state';
 import { HistoryStore } from '@app/history/history-store';
@@ -27,7 +28,8 @@ import '@app/core/outlet';
  * The {@link BookEditor}, the reader's one write path, is provided beside it for the node menus,
  * with the reader's two selections ({@link SelectionStore} for paragraphs,
  * {@link AudioSelectionStore} for items) and the {@link SpeakerAssigner} the rows reach through
- * DOM ancestry. The selections are forgotten when the shell leaves the project. The
+ * DOM ancestry. The {@link SelectionWorkflow} works over both selections for the page and is
+ * disposed on disconnect. The selections are forgotten when the shell leaves the project. The
  * {@link StepRunner} runs Pipeline actions for the Overview rows, and the shell publishes the next
  * step with it into the root {@link ProjectGuide} for the app bar's next-step pill. The project's
  * {@link HistoryStore} follows its History on the hub and is published into the root
@@ -46,14 +48,32 @@ export class ProjectShell extends R2mElement {
   private readonly selection = provide(this, SelectionStore, new SelectionStore());
   private readonly audioSelection = provide(this, AudioSelectionStore, new AudioSelectionStore());
   private readonly runner = provide(this, StepRunner, new StepRunner(this.store));
+  private readonly workflow: SelectionWorkflow;
   /** The step the page was mounted at; the outlet is keyed on it. */
   private readonly shownAt = signal<Guid | null>(null);
 
   constructor() {
     super();
-    // Provided for the rows and the page only: the shell itself never reads them, so no field holds them.
-    provide(this, SpeakerAssigner, new SpeakerAssigner(this.editor, this.book, this.store));
-    provide(this, AudioGenerator, new AudioGenerator(this.editor, this.book));
+    // Provided for the rows and the page only: the shell itself never reads them, so no field holds
+    // them. The workflow keeps a field for its dispose.
+    const assigner = provide(
+      this,
+      SpeakerAssigner,
+      new SpeakerAssigner(this.editor, this.book, this.store),
+    );
+    const generator = provide(this, AudioGenerator, new AudioGenerator(this.editor, this.book));
+    this.workflow = provide(
+      this,
+      SelectionWorkflow,
+      new SelectionWorkflow(
+        this.book,
+        this.store,
+        this.selection,
+        this.audioSelection,
+        assigner,
+        generator,
+      ),
+    );
   }
 
   protected override connected(): void {
@@ -96,6 +116,7 @@ export class ProjectShell extends R2mElement {
         this.historySheet.clear(folder);
       }
       this.history.close();
+      this.workflow.dispose();
       this.resetSelections();
       this.book.close();
       this.store.close();
