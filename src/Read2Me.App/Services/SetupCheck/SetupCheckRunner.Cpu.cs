@@ -47,7 +47,7 @@ namespace Read2Me.App.Services.SetupCheck
             var row = context.Row(SetupCheckIds.Transcription, SetupCheckGroup.AiConfigs, "Transcription")
                 with { Tier = SetupCheckTier.Full, Expected = TranscriptionExpected };
             var url = $"{ServiceConfigBaseUrls.For(config)?.TrimEnd('/')}/inference";
-            var settings = AiServicesCheck.TranscriptionSettings;
+            var settings = SetupSettingsLink.Transcription;
 
             return await RequestCheckAsync(context, context.Whisper, row, settings, url, async () =>
             {
@@ -81,7 +81,7 @@ namespace Read2Me.App.Services.SetupCheck
                 Note = transcript is not null ? row.Note : row.Note is null ? NoTranscript : $"{row.Note}. {NoTranscript}",
             };
             var url = $"{ServiceConfigBaseUrls.For(config)?.TrimEnd('/')}/similarity";
-            var settings = AiServicesCheck.SimilaritySettings;
+            var settings = SetupSettingsLink.Similarity;
 
             return await RequestCheckAsync(context, context.SimilarityService, row, settings, url, async () =>
             {
@@ -157,7 +157,7 @@ namespace Read2Me.App.Services.SetupCheck
                     return (new CheckAnswer(false, found, modelFix
                         ?? new SetupFixHint($"Check the service where it runs, or correct the config in {settings.Label}.", settings)), null);
 
-                var logs = AiServicesCheck.LogsFix(service);
+                var logs = ContainerVerdicts.LogsFix(service);
                 var configFix = modelFix
                     ?? logs with { Text = $"{logs.Text.TrimEnd('.')}, or correct the config in {settings.Label}.", Link = settings };
                 // The container answered with an error (a model that won't load, a busy server): the

@@ -54,7 +54,14 @@ namespace Read2Me.App.Services.SetupCheck
         bool Cancelling);
 
     /// <summary>The in-app Settings section that owns the value: an app-relative path and its label.</summary>
-    public sealed record SetupSettingsLink(string Path, string Label);
+    public sealed record SetupSettingsLink(string Path, string Label)
+    {
+        internal static readonly SetupSettingsLink Llm = new("settings/llm", "Settings → LLM");
+        internal static readonly SetupSettingsLink Tts = new("settings/tts", "Settings → Paragraph TTS");
+        internal static readonly SetupSettingsLink VoiceDesign = new("settings/voice-design", "Settings → Voice design");
+        internal static readonly SetupSettingsLink Transcription = new("settings/transcription", "Settings → Transcription");
+        internal static readonly SetupSettingsLink Similarity = new("settings/similarity", "Settings → Similarity");
+    }
 
     /// <summary>
     /// Where to go next: one sentence, plus a link to the Settings section that owns the value and/or

@@ -341,6 +341,23 @@ namespace Read2Me.Tests.App.SetupCheck
         }
 
         [Fact]
+        public async Task A_container_the_watchdog_is_restarting_fails_and_gets_no_request()
+        {
+            await AddTranscriptionAsync(Whisper);
+            _services.StatusByName["whisper"] = AiServiceStatus.Recovering;
+            _http.Transcripts[Whisper] = "It is a truth.";
+
+            var report = await FullCheckAsync();
+
+            var container = Row(report, SetupCheckIds.Container("whisper"));
+            Assert.Equal(SetupCheckResult.Failed, container.Result);
+            Assert.Equal("The watchdog is restarting it", container.Found);
+            Assert.Equal("Not sent: read2me-whisper isn't ready", Row(report, SetupCheckIds.Transcription).Found);
+            Assert.Empty(_http.Requests);
+            Assert.Empty(_services.OpLog);
+        }
+
+        [Fact]
         public async Task An_unmanaged_URL_is_sent_the_same_request_but_never_started_stopped_or_put_back()
         {
             const string remote = "http://whisper-box:9000";

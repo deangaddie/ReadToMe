@@ -99,14 +99,14 @@ namespace Read2Me.App.Services.SetupCheck
                 Tier = SetupCheckTier.Full,
                 Expected = "A short sentence spoken with the sample clip as the reference voice, which ffprobe reads a duration from",
             };
-            return await RequestCheckAsync(context, context.TtsService, row, AiServicesCheck.TtsSettings, SpeechUrl(ServiceConfigBaseUrls.For(config)), async () =>
+            return await RequestCheckAsync(context, context.TtsService, row, SetupSettingsLink.Tts, SpeechUrl(ServiceConfigBaseUrls.For(config)), async () =>
             {
                 await using var scope = aiServices.Scopes.CreateAsyncScope();
                 var client = scope.ServiceProvider.GetKeyedService<IParagraphTtsClient>(config.Type)
                     ?? throw new NotSupportedException($"No paragraph TTS client for {config.Type}");
                 await using var clip = SampleClip.OpenWav();
                 await using var audio = await client.GenerateAsync(TtsSentence, null, clip, config, null, SampleClip.Text);
-                return await AudioAnswerAsync(audio, "Spoke", AiServicesCheck.TtsSettings);
+                return await AudioAnswerAsync(audio, "Spoke", SetupSettingsLink.Tts);
             }, ServiceConfigModelIds.For(config));
         }
 
@@ -118,13 +118,13 @@ namespace Read2Me.App.Services.SetupCheck
                 Tier = SetupCheckTier.Full,
                 Expected = "A voice designed from a fixed prompt, speaking the sample text, which ffprobe reads a duration from",
             };
-            return await RequestCheckAsync(context, context.DesignService, row, AiServicesCheck.VoiceDesignSettings, SpeechUrl(ServiceConfigBaseUrls.For(config)), async () =>
+            return await RequestCheckAsync(context, context.DesignService, row, SetupSettingsLink.VoiceDesign, SpeechUrl(ServiceConfigBaseUrls.For(config)), async () =>
             {
                 await using var scope = aiServices.Scopes.CreateAsyncScope();
                 var client = scope.ServiceProvider.GetKeyedService<IVoiceDesignClient>(config.Type)
                     ?? throw new NotSupportedException($"No voice design client for {config.Type}");
                 await using var audio = await client.DesignVoiceAsync(config, DesignPrompt, SampleClip.Text, null);
-                return await AudioAnswerAsync(audio, "Designed", AiServicesCheck.VoiceDesignSettings);
+                return await AudioAnswerAsync(audio, "Designed", SetupSettingsLink.VoiceDesign);
             }, ServiceConfigModelIds.For(config));
         }
 
@@ -150,13 +150,13 @@ namespace Read2Me.App.Services.SetupCheck
         private async Task<IReadOnlyList<SetupCheckRow>> FullLlmAsync(FullContext context, LlmTarget target)
         {
             var url = $"{target.BaseUrl?.TrimEnd('/')}/v1/chat/completions";
-            var (answer, container) = await SendCheckAsync(context, target.Service, AiServicesCheck.LlmSettings, url, async () =>
+            var (answer, container) = await SendCheckAsync(context, target.Service, SetupSettingsLink.Llm, url, async () =>
             {
                 var content = await CompleteOneTokenAsync(target.Config);
                 return content.Length > 0
                     ? new CheckAnswer(true, $"answered \"{content}\"")
                     : new CheckAnswer(false, "answered 200 with no content",
-                        new SetupFixHint($"Check the model's chat template, or correct the model in {AiServicesCheck.LlmSettings.Label}.", AiServicesCheck.LlmSettings));
+                        new SetupFixHint($"Check the model's chat template, or correct the model in {SetupSettingsLink.Llm.Label}.", SetupSettingsLink.Llm));
             }, target.Model);
             target.Answer = answer;
 
@@ -182,7 +182,7 @@ namespace Read2Me.App.Services.SetupCheck
                 Expected = $"A 1-token chat completion with thinking off answers with text from {string.Join(", ", all.Select(t => t.Label))}",
                 Result = failed is null ? SetupCheckResult.Passed : SetupCheckResult.Failed,
                 Found = string.Join("; ", answered.Select(t => $"{t.Label} {t.Answer!.Found}")),
-                Fix = failed?.Answer!.Fix ?? new SetupFixHint($"Change it in {AiServicesCheck.LlmSettings.Label}.", AiServicesCheck.LlmSettings),
+                Fix = failed?.Answer!.Fix ?? new SetupFixHint($"Change it in {SetupSettingsLink.Llm.Label}.", SetupSettingsLink.Llm),
             };
         }
 
