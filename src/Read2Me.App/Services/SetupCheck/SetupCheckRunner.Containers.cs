@@ -214,21 +214,20 @@ namespace Read2Me.App.Services.SetupCheck
         /// How long a Full check is likely to take, from the containers as they are now: each step's
         /// own time (a model load for each GPU one), a start for each container a step must start,
         /// one for each running GPU container another GPU step's sweep stops and putting back starts
-        /// again, and a model load for llama reloading the model it has.
+        /// again, and a model load for llama reloading the model it has. No statuses (docker isn't on
+        /// PATH) leaves the steps' own time.
         /// </summary>
-        private async Task<int> EstimateSecondsAsync(ActiveAiConfigs configs, IReadOnlyList<FullStep> plan, bool dockerOnPath)
+        private int EstimateSeconds(
+            ActiveAiConfigs configs, IReadOnlyList<FullStep> plan, IReadOnlyDictionary<string, AiServiceStatus> statuses)
         {
             var seconds = plan.Sum(s => s.EstimateSeconds);
-            if (!dockerOnPath)
-                return seconds;
-
             var used = configs.UsedServices;
             var usedGpu = used.Where(s => s.UsesGpu).ToList();
-            var rivals = usedGpu.Count == 0 ? [] : aiServices.Registry.All.Where(s => s.UsesGpu);
-            foreach (var service in used.Concat(rivals).DistinctBy(s => s.Name))
+            foreach (var service in aiServices.Registry.All)
             {
-                var status = await aiServices.Control.GetStatusAsync(service, CancellationToken.None);
-                if (status == AiServiceStatus.Stopped && used.Contains(service))
+                if (!statuses.TryGetValue(service.Name, out var status))
+                    continue;
+                if (status == AiServiceStatus.Stopped && used.Any(s => s.Name == service.Name))
                     seconds += StartSeconds;
                 if (status is not (AiServiceStatus.Ready or AiServiceStatus.Starting) || !service.UsesGpu)
                     continue;

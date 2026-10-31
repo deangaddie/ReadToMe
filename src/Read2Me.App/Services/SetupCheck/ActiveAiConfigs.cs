@@ -31,6 +31,22 @@ namespace Read2Me.App.Services.SetupCheck
                 .DistinctBy(s => s.Name),
         ];
 
+        /// <summary>
+        /// The status of each used service, plus every GPU container when a used one is GPU (a GPU
+        /// step's sweep stops them, and the estimate counts their restarts), keyed by service name.
+        /// A Quick check takes one, so a container's row and the estimate can't disagree about it.
+        /// </summary>
+        public async Task<IReadOnlyDictionary<string, AiServiceStatus>> ReadStatusesAsync(
+            IAiServiceControl control, DockerAiServiceRegistry registry, CancellationToken ct)
+        {
+            var used = UsedServices;
+            var rivals = used.Any(s => s.UsesGpu) ? registry.All.Where(s => s.UsesGpu) : [];
+            var statuses = new Dictionary<string, AiServiceStatus>();
+            foreach (var service in used.Concat(rivals).DistinctBy(s => s.Name))
+                statuses[service.Name] = await control.GetStatusAsync(service, ct);
+            return statuses;
+        }
+
         /// <summary>Reads the settings services in one scope and resolves each config's base URL.</summary>
         public static async Task<ActiveAiConfigs> ReadAsync(SetupCheckServices deps)
         {

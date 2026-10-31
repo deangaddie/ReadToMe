@@ -79,9 +79,13 @@ namespace Read2Me.App.Services.SetupCheck
                     await CheckFfmpegAsync(ct),
                     docker.Row,
                 };
-                rows.AddRange(await new AiServicesCheck(aiServices).RunAsync(configs, docker.OnPath, ct));
+                // One status read for every container row and the estimate; none without the docker CLI.
+                var statuses = docker.OnPath
+                    ? await configs.ReadStatusesAsync(aiServices.Control, aiServices.Registry, ct)
+                    : new Dictionary<string, AiServiceStatus>();
+                rows.AddRange(await new AiServicesCheck(aiServices).RunAsync(configs, statuses, docker.OnPath, ct));
                 var plan = Plan(new FullContext(configs));
-                var estimate = await EstimateSecondsAsync(configs, plan, docker.OnPath);
+                var estimate = EstimateSeconds(configs, plan, statuses);
                 lock (_lock)
                 {
                     if (_run is null)

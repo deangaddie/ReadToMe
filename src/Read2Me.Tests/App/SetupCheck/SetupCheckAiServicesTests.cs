@@ -398,6 +398,20 @@ namespace Read2Me.Tests.App.SetupCheck
         }
 
         [Fact]
+        public async Task A_quick_check_reads_each_container_status_once()
+        {
+            await AddEveryConfigAsync();
+            _services.StatusResult = AiServiceStatus.Ready;
+
+            await CheckAsync();
+
+            // The rows and the estimate share one read: the used containers, GPU rivals included.
+            Assert.Equal(
+                ["audiocpp", "llama", "minilm-l6", "whisper"],
+                _services.StatusAsked.Order(StringComparer.Ordinal));
+        }
+
+        [Fact]
         public async Task A_container_no_active_config_uses_is_not_used_and_left_alone()
         {
             await AddLlmAsync("Qwen", Llama, "qwen-28b");
