@@ -70,6 +70,8 @@ namespace Read2Me.App.Services.SetupCheck
                     return Report;
                 }
 
+                // One read for every row, the plan, the re-run flags and the estimate.
+                var configs = await ActiveAiConfigs.ReadAsync(aiServices);
                 var docker = await CheckDockerAsync(ct);
                 var rows = new List<SetupCheckRow>
                 {
@@ -77,15 +79,15 @@ namespace Read2Me.App.Services.SetupCheck
                     await CheckFfmpegAsync(ct),
                     docker.Row,
                 };
-                rows.AddRange(await new AiServicesCheck(aiServices).RunAsync(docker.OnPath, ct));
-                var context = await ReadFullContextAsync();
-                var estimate = await EstimateSecondsAsync(context, docker.OnPath);
+                rows.AddRange(await new AiServicesCheck(aiServices).RunAsync(configs, docker.OnPath, ct));
+                var plan = Plan(new FullContext(configs));
+                var estimate = await EstimateSecondsAsync(configs, plan, docker.OnPath);
                 lock (_lock)
                 {
                     if (_run is null)
                         _report = _report with
                         {
-                            Rows = WithRerun(WithFullVerdicts(rows), Plan(context)),
+                            Rows = WithRerun(WithFullVerdicts(rows), plan),
                             QuickCheckedAt = _clock.GetUtcNow(),
                             FullCheckEstimateSeconds = estimate,
                         };

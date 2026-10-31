@@ -49,17 +49,17 @@ namespace Read2Me.App.Services.SetupCheck
 
         private IEnumerable<FullStep> GpuSteps(FullContext context)
         {
-            if (context.ParagraphTts is { } tts)
+            if (context.Configs.ParagraphTts is { Config: var tts, Service: var ttsService })
                 yield return new FullStep(
                     SetupCheckLane.Gpu,
-                    $"Speaking a sentence with {ServiceConfigModelIds.For(tts) ?? tts.Name} on {Where(context.TtsService, ServiceConfigBaseUrls.For(tts))}",
-                    RowIds(SetupCheckIds.ParagraphTts, context.TtsService), Driven(context.TtsService),
+                    $"Speaking a sentence with {ServiceConfigModelIds.For(tts) ?? tts.Name} on {Where(ttsService, ServiceConfigBaseUrls.For(tts))}",
+                    RowIds(SetupCheckIds.ParagraphTts, ttsService), Driven(ttsService),
                     ModelSwitchSeconds + 15, () => FullParagraphTtsAsync(context));
-            if (context.VoiceDesign is { } design)
+            if (context.Configs.VoiceDesign is { Config: var design, Service: var designService })
                 yield return new FullStep(
                     SetupCheckLane.Gpu,
-                    $"Designing a voice with {ServiceConfigModelIds.For(design) ?? design.Name} on {Where(context.DesignService, ServiceConfigBaseUrls.For(design))}",
-                    RowIds(SetupCheckIds.VoiceDesign, context.DesignService), Driven(context.DesignService),
+                    $"Designing a voice with {ServiceConfigModelIds.For(design) ?? design.Name} on {Where(designService, ServiceConfigBaseUrls.For(design))}",
+                    RowIds(SetupCheckIds.VoiceDesign, designService), Driven(designService),
                     ModelSwitchSeconds + 15, () => FullVoiceDesignAsync(context));
             foreach (var target in context.Llm)
                 yield return new FullStep(
@@ -93,13 +93,13 @@ namespace Read2Me.App.Services.SetupCheck
 
         private async Task<IReadOnlyList<SetupCheckRow>> FullParagraphTtsAsync(FullContext context)
         {
-            var config = context.ParagraphTts!;
+            var (config, ttsService) = context.Configs.ParagraphTts!;
             var row = context.Row(SetupCheckIds.ParagraphTts, SetupCheckGroup.AiConfigs, "Paragraph TTS") with
             {
                 Tier = SetupCheckTier.Full,
                 Expected = "A short sentence spoken with the sample clip as the reference voice, which ffprobe reads a duration from",
             };
-            return await RequestCheckAsync(context, context.TtsService, row, SetupSettingsLink.Tts, SpeechUrl(ServiceConfigBaseUrls.For(config)), async () =>
+            return await RequestCheckAsync(context, ttsService, row, SetupSettingsLink.Tts, SpeechUrl(ServiceConfigBaseUrls.For(config)), async () =>
             {
                 await using var scope = aiServices.Scopes.CreateAsyncScope();
                 var client = scope.ServiceProvider.GetKeyedService<IParagraphTtsClient>(config.Type)
@@ -112,13 +112,13 @@ namespace Read2Me.App.Services.SetupCheck
 
         private async Task<IReadOnlyList<SetupCheckRow>> FullVoiceDesignAsync(FullContext context)
         {
-            var config = context.VoiceDesign!;
+            var (config, designService) = context.Configs.VoiceDesign!;
             var row = context.Row(SetupCheckIds.VoiceDesign, SetupCheckGroup.AiConfigs, "Voice design") with
             {
                 Tier = SetupCheckTier.Full,
                 Expected = "A voice designed from a fixed prompt, speaking the sample text, which ffprobe reads a duration from",
             };
-            return await RequestCheckAsync(context, context.DesignService, row, SetupSettingsLink.VoiceDesign, SpeechUrl(ServiceConfigBaseUrls.For(config)), async () =>
+            return await RequestCheckAsync(context, designService, row, SetupSettingsLink.VoiceDesign, SpeechUrl(ServiceConfigBaseUrls.For(config)), async () =>
             {
                 await using var scope = aiServices.Scopes.CreateAsyncScope();
                 var client = scope.ServiceProvider.GetKeyedService<IVoiceDesignClient>(config.Type)

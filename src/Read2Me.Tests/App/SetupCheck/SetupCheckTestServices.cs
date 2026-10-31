@@ -25,7 +25,8 @@ namespace Read2Me.Tests.App.SetupCheck
 {
     /// <summary>
     /// The runner's <see cref="SetupCheckServices"/> over the test database: the real settings
-    /// services (audio processing's reading <paramref name="configuration"/>'s <c>Ffmpeg:Path</c>) and
+    /// services (audio processing's reading <paramref name="configuration"/>'s <c>Ffmpeg:Path</c>; the
+    /// LLM one <paramref name="llmSettings"/> when given) and
     /// the transcription and similarity clients in a scope, the service-control fake, and the given
     /// HTTP factory.
     /// </summary>
@@ -36,7 +37,8 @@ namespace Read2Me.Tests.App.SetupCheck
             IConfiguration configuration,
             IAiServiceControl? control = null,
             IHttpClientFactory? http = null,
-            AiWatchdogOptions? watchdog = null)
+            AiWatchdogOptions? watchdog = null,
+            LlmSettingsService? llmSettings = null)
         {
             http ??= new SingleHandlerHttpClientFactory(new FakeAudioCppHandler());
             var scopes = new ServiceCollection()
@@ -57,7 +59,7 @@ namespace Read2Me.Tests.App.SetupCheck
                 .AddKeyedScoped<IParagraphTtsClient, Qwen3ParagraphTtsClient>(ParagraphTtsServiceType.Qwen3Base)
                 .AddKeyedScoped<IVoiceDesignClient, BreezeVoiceDesignClient>(VoiceDesignServiceType.Breeze)
                 .AddKeyedScoped<IVoiceDesignClient, Qwen3VoiceDesignClient>(VoiceDesignServiceType.Qwen3)
-                .AddScoped(_ => new LlmSettingsService(db, NullLogger<LlmSettingsService>.Instance))
+                .AddScoped(_ => llmSettings ?? new LlmSettingsService(db, NullLogger<LlmSettingsService>.Instance))
                 .AddScoped(_ => new ParagraphTtsSettingsService(db, NullLogger<ParagraphTtsSettingsService>.Instance))
                 .AddScoped(_ => new VoiceDesignSettingsService(db, NullLogger<VoiceDesignSettingsService>.Instance))
                 .AddScoped(_ => new TranscriptionSettingsService(db, NullLogger<TranscriptionSettingsService>.Instance))

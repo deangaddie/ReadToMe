@@ -1,8 +1,10 @@
 using System.ComponentModel;
 using System.Net;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.App.Services.SetupCheck;
+using Read2Me.AppData;
 using Read2Me.AppData.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
@@ -31,6 +33,7 @@ namespace Read2Me.Tests.App.SetupCheck
         private readonly FakeEndpoints _http = new();
         private readonly AiWatchdogOptions _watchdog = new();
         private readonly NoDocker _processes = new();
+        private CountingLlmSettings? _llmSettings;
 
         public SetupCheckAiServicesTests()
         {
@@ -95,6 +98,26 @@ namespace Read2Me.Tests.App.SetupCheck
                     $$"""{"object":"list","data":[{{string.Join(",", ids.Select(id => $$"""{"id":"{{id}}"}"""))}}]}""");
         }
 
+        /// <summary>The real LLM settings, counting how often the active config and the chain are read.</summary>
+        private sealed class CountingLlmSettings(IDbContextFactory<Read2MeDbContext> db)
+            : LlmSettingsService(db, NullLogger<LlmSettingsService>.Instance)
+        {
+            public int ActiveReads { get; private set; }
+            public int ChainReads { get; private set; }
+
+            public override Task<LlmServerConfig?> GetActiveConfigAsync()
+            {
+                ActiveReads++;
+                return base.GetActiveConfigAsync();
+            }
+
+            public override Task<IReadOnlyList<ResolvedChainStep>> GetAttributionChainAsync()
+            {
+                ChainReads++;
+                return base.GetAttributionChainAsync();
+            }
+        }
+
         // ── Builders ─────────────────────────────────────────────────────────
 
         private SetupCheckRunner Runner()
@@ -106,7 +129,7 @@ namespace Read2Me.Tests.App.SetupCheck
                 new AnsweringFfmpeg(),
                 _processes,
                 new WorkspaceStart(configuration),
-                SetupCheckTestServices.Create(Factory, configuration, _services, _http, _watchdog),
+                SetupCheckTestServices.Create(Factory, configuration, _services, _http, _watchdog, _llmSettings),
                 SetupCheckTestServices.Full());
         }
 
@@ -572,6 +595,18 @@ namespace Read2Me.Tests.App.SetupCheck
             }
 
             Assert.Empty(_services.Ops);
+        }
+
+        [Fact]
+        public async Task A_quick_check_reads_the_active_configs_once()
+        {
+            await AddEveryConfigAsync();
+            _llmSettings = new CountingLlmSettings(Factory);
+
+            await CheckAsync();
+
+            Assert.Equal(1, _llmSettings.ActiveReads);
+            Assert.Equal(1, _llmSettings.ChainReads);
         }
     }
 }

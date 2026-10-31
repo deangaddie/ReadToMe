@@ -1,14 +1,14 @@
 using System.Text.Json;
-using Microsoft.Extensions.DependencyInjection;
+using Read2Me.AppData.Entities;
 using Read2Me.Services;
 using Read2Me.Services.Health;
 
 namespace Read2Me.App.Services.SetupCheck
 {
     /// <summary>
-    /// The Quick check's AI configs and Docker services rows. It reads the active configs, each
-    /// container's Managed service status and what llama and audiocpp list; it never starts, stops
-    /// or switches anything.
+    /// The Quick check's AI configs and Docker services rows. It judges the active configs the
+    /// caller read, and reads each container's Managed service status and what llama and audiocpp
+    /// list; it never starts, stops or switches anything.
     /// </summary>
     internal sealed class AiServicesCheck(SetupCheckServices deps)
     {
@@ -28,37 +28,29 @@ namespace Read2Me.App.Services.SetupCheck
             AnyAnswer,
         }
 
-        /// <summary>One config a step uses: its name, base URL and the model it names (null: none).</summary>
-        private sealed record UsedConfig(string Name, string? BaseUrl, string? Model);
-
-        /// <summary>The active configs, read once per check.</summary>
-        private sealed record ActiveConfigs(
-            UsedConfig? Llm,
-            IReadOnlyList<UsedConfig> Chain,
-            UsedConfig? ParagraphTts,
-            UsedConfig? VoiceDesign,
-            UsedConfig? Transcription,
-            UsedConfig? Similarity)
+        /// <summary>The AI configs and Docker services rows of the given configs, read by the caller.</summary>
+        public async Task<IReadOnlyList<SetupCheckRow>> RunAsync(ActiveAiConfigs configs, bool dockerOnPath, CancellationToken ct)
         {
-            public IEnumerable<UsedConfig> All =>
-                new[] { Llm, ParagraphTts, VoiceDesign, Transcription, Similarity }.OfType<UsedConfig>().Concat(Chain);
-        }
+            static (string, string?, string?) ReadLlm(LlmServerConfig c) => (c.Name, ServiceConfigBaseUrls.For(c), ServiceConfigModelIds.For(c));
+            var llm = View(configs.Llm, ReadLlm);
+            var chain = configs.Chain.SelectMany(c => View(c, ReadLlm)).ToList();
+            var tts = View(configs.ParagraphTts, c => (c.Name, ServiceConfigBaseUrls.For(c), ServiceConfigModelIds.For(c)));
+            var design = View(configs.VoiceDesign, c => (c.Name, ServiceConfigBaseUrls.For(c), ServiceConfigModelIds.For(c)));
+            var transcription = View(configs.Transcription, c => (c.Name, ServiceConfigBaseUrls.For(c), (string?)null));
+            var similarity = View(configs.Similarity, c => (c.Name, ServiceConfigBaseUrls.For(c), (string?)null));
 
-        /// <summary>The AI configs rows, then one Docker services row per registered container.</summary>
-        public async Task<IReadOnlyList<SetupCheckRow>> RunAsync(bool dockerOnPath, CancellationToken ct)
-        {
-            var configs = await ReadActiveConfigsAsync();
             var rows = new List<SetupCheckRow>
             {
-                await ConfigRowAsync(SetupCheckIds.Llm, "LLM", ConfigExpected, SetupSettingsLink.Llm, Single(configs.Llm), required: true, Reach.ModelList, Describe, ct),
-                await ChainRowAsync(configs.Chain, ct),
-                await ConfigRowAsync(SetupCheckIds.ParagraphTts, "Paragraph TTS", ConfigExpected, SetupSettingsLink.Tts, Single(configs.ParagraphTts), required: true, Reach.ModelList, Describe, ct),
-                await ConfigRowAsync(SetupCheckIds.VoiceDesign, "Voice design", ConfigExpected, SetupSettingsLink.VoiceDesign, Single(configs.VoiceDesign), required: true, Reach.ModelList, Describe, ct),
-                await ConfigRowAsync(SetupCheckIds.Transcription, "Transcription", ConfigExpected, SetupSettingsLink.Transcription, Single(configs.Transcription), required: false, Reach.AnyAnswer, Describe, ct),
-                await ConfigRowAsync(SetupCheckIds.Similarity, "Similarity", ConfigExpected, SetupSettingsLink.Similarity, Single(configs.Similarity), required: false, Reach.AnyAnswer, Describe, ct),
+                await ConfigRowAsync(SetupCheckIds.Llm, "LLM", ConfigExpected, SetupSettingsLink.Llm, llm, required: true, Reach.ModelList, Describe, ct),
+                await ChainRowAsync(chain, ct),
+                await ConfigRowAsync(SetupCheckIds.ParagraphTts, "Paragraph TTS", ConfigExpected, SetupSettingsLink.Tts, tts, required: true, Reach.ModelList, Describe, ct),
+                await ConfigRowAsync(SetupCheckIds.VoiceDesign, "Voice design", ConfigExpected, SetupSettingsLink.VoiceDesign, design, required: true, Reach.ModelList, Describe, ct),
+                await ConfigRowAsync(SetupCheckIds.Transcription, "Transcription", ConfigExpected, SetupSettingsLink.Transcription, transcription, required: false, Reach.AnyAnswer, Describe, ct),
+                await ConfigRowAsync(SetupCheckIds.Similarity, "Similarity", ConfigExpected, SetupSettingsLink.Similarity, similarity, required: false, Reach.AnyAnswer, Describe, ct),
             };
+            var all = llm.Concat(tts).Concat(design).Concat(transcription).Concat(similarity).Concat(chain).ToList();
             foreach (var service in deps.Registry.All)
-                rows.Add(await ContainerRowAsync(service, configs, dockerOnPath, ct));
+                rows.Add(await ContainerRowAsync(service, all, dockerOnPath, ct));
             return rows;
         }
 
@@ -85,45 +77,34 @@ namespace Read2Me.App.Services.SetupCheck
             return rows;
         }
 
-        private async Task<ActiveConfigs> ReadActiveConfigsAsync()
-        {
-            await using var scope = deps.Scopes.CreateAsyncScope();
-            var sp = scope.ServiceProvider;
-            var llmSettings = sp.GetRequiredService<LlmSettingsService>();
-
-            var llm = await llmSettings.GetActiveConfigAsync();
-            var chain = await llmSettings.GetAttributionChainAsync();
-            var tts = await sp.GetRequiredService<ParagraphTtsSettingsService>().GetActiveConfigAsync();
-            var design = await sp.GetRequiredService<VoiceDesignSettingsService>().GetActiveConfigAsync();
-            var transcription = await sp.GetRequiredService<TranscriptionSettingsService>().GetActiveConfigAsync();
-            var similarity = await sp.GetRequiredService<SemanticSimilaritySettingsService>().GetActiveConfigAsync();
-
-            return new ActiveConfigs(
-                llm is null ? null : new UsedConfig(llm.Name, ServiceConfigBaseUrls.For(llm), ServiceConfigModelIds.For(llm)),
-                [.. chain.Select(s => new UsedConfig(s.Config.Name, ServiceConfigBaseUrls.For(s.Config), ServiceConfigModelIds.For(s.Config)))],
-                tts is null ? null : new UsedConfig(tts.Name, ServiceConfigBaseUrls.For(tts), ServiceConfigModelIds.For(tts)),
-                design is null ? null : new UsedConfig(design.Name, ServiceConfigBaseUrls.For(design), ServiceConfigModelIds.For(design)),
-                transcription is null ? null : new UsedConfig(transcription.Name, ServiceConfigBaseUrls.For(transcription), null),
-                similarity is null ? null : new UsedConfig(similarity.Name, ServiceConfigBaseUrls.For(similarity), null));
-        }
-
         // ── AI configs ───────────────────────────────────────────────────────
 
-        private static IReadOnlyList<UsedConfig> Single(UsedConfig? config) => config is null ? [] : [config];
+        /// <summary>What a row reads of one config: its name, base URL, the model it names (null: none) and its managed service.</summary>
+        private sealed record ConfigView(string Name, string? BaseUrl, string? Model, DockerAiService? Service);
+
+        /// <summary>A step's config as its row sees it; none when the step has no active config.</summary>
+        private static IReadOnlyList<ConfigView> View<T>(
+            ActiveConfig<T>? active, Func<T, (string Name, string? BaseUrl, string? Model)> read) where T : class
+        {
+            if (active is null)
+                return [];
+            var (name, baseUrl, model) = read(active.Config);
+            return [new ConfigView(name, baseUrl, model, active.Service)];
+        }
 
         /// <summary>"Qwen · http://localhost:8080 · qwen-28b".</summary>
-        private static string Describe(IReadOnlyList<UsedConfig> configs) =>
+        private static string Describe(IReadOnlyList<ConfigView> configs) =>
             string.Join(" · ", new[] { configs[0].Name, configs[0].BaseUrl, configs[0].Model }.OfType<string>());
 
         /// <summary>"Gemma (gemma-12b) → Qwen (qwen-28b)".</summary>
-        private static string DescribeChain(IReadOnlyList<UsedConfig> configs) =>
+        private static string DescribeChain(IReadOnlyList<ConfigView> configs) =>
             string.Join(" → ", configs.Select(c => c.Model is null ? c.Name : $"{c.Name} ({c.Model})"));
 
         /// <summary>
         /// The resolved chain is empty only when there's no stored chain and no active LLM config,
         /// which the LLM row already fails; the chain isn't judged twice.
         /// </summary>
-        private async Task<SetupCheckRow> ChainRowAsync(IReadOnlyList<UsedConfig> chain, CancellationToken ct)
+        private async Task<SetupCheckRow> ChainRowAsync(IReadOnlyList<ConfigView> chain, CancellationToken ct)
         {
             if (chain.Count == 0)
                 return new SetupCheckRow(
@@ -142,8 +123,8 @@ namespace Read2Me.App.Services.SetupCheck
         /// answer a reachability probe. A managed URL is judged on its Docker services row instead.
         /// </summary>
         private async Task<SetupCheckRow> ConfigRowAsync(
-            string id, string name, string expected, SetupSettingsLink settings, IReadOnlyList<UsedConfig> configs, bool required,
-            Reach reach, Func<IReadOnlyList<UsedConfig>, string> describe, CancellationToken ct)
+            string id, string name, string expected, SetupSettingsLink settings, IReadOnlyList<ConfigView> configs, bool required,
+            Reach reach, Func<IReadOnlyList<ConfigView>, string> describe, CancellationToken ct)
         {
             // Managed once every config the step uses is on a URL the app manages.
             var managed = false;
@@ -161,11 +142,11 @@ namespace Read2Me.App.Services.SetupCheck
 
             // In a chain that mixes managed and unmanaged configs, the note names the unmanaged ones.
             var distinct = configs.DistinctBy(c => (c.Name, c.BaseUrl)).ToList();
-            var unmanaged = distinct.Where(c => c.BaseUrl is not null && deps.Control.Resolve(c.BaseUrl) is null).ToList();
+            var unmanaged = distinct.Where(c => c.BaseUrl is not null && c.Service is null).ToList();
             var note = unmanaged.Count == 0 ? null
                 : unmanaged.Count == distinct.Count ? NotManaged
                 : $"{string.Join(", ", unmanaged.Select(c => c.Name))}: {NotManaged}";
-            managed = distinct.All(c => c.BaseUrl is not null && deps.Control.Resolve(c.BaseUrl) is not null);
+            managed = distinct.All(c => c.Service is not null);
 
             foreach (var config in distinct)
             {
@@ -175,7 +156,7 @@ namespace Read2Me.App.Services.SetupCheck
                 if (!IsHttpUrl(config.BaseUrl))
                     return Row(SetupCheckResult.Failed, $"{config.Name}: \"{config.BaseUrl}\" isn't a URL", null,
                         new SetupFixHint($"Correct the config's base URL in {settings.Label}.", settings));
-                if (deps.Control.Resolve(config.BaseUrl) is not null)
+                if (config.Service is not null)
                     continue;
 
                 var (url, error) = await ReachAsync(config.BaseUrl, reach, ct);
@@ -213,11 +194,9 @@ namespace Read2Me.App.Services.SetupCheck
         // ── Docker services ──────────────────────────────────────────────────
 
         private async Task<SetupCheckRow> ContainerRowAsync(
-            DockerAiService service, ActiveConfigs configs, bool dockerOnPath, CancellationToken ct)
+            DockerAiService service, IReadOnlyList<ConfigView> configs, bool dockerOnPath, CancellationToken ct)
         {
-            var users = configs.All
-                .Where(c => c.BaseUrl is not null && deps.Control.Resolve(c.BaseUrl)?.Name == service.Name)
-                .ToList();
+            var users = configs.Where(c => c.Service?.Name == service.Name).ToList();
             var models = users.Select(c => c.Model).OfType<string>()
                 .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
 

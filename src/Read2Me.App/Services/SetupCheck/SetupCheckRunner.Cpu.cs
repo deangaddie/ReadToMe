@@ -20,15 +20,15 @@ namespace Read2Me.App.Services.SetupCheck
 
         private IEnumerable<FullStep> CpuSteps(FullContext context)
         {
-            if (context.Transcription is { } transcription)
+            if (context.Configs.Transcription is { Config: var transcription, Service: var whisper })
                 yield return new FullStep(
-                    SetupCheckLane.Cpu, $"Transcribing the sample clip on {Where(context.Whisper, ServiceConfigBaseUrls.For(transcription))}",
-                    RowIds(SetupCheckIds.Transcription, context.Whisper), Services(context.Whisper), 15,
+                    SetupCheckLane.Cpu, $"Transcribing the sample clip on {Where(whisper, ServiceConfigBaseUrls.For(transcription))}",
+                    RowIds(SetupCheckIds.Transcription, whisper), Services(whisper), 15,
                     () => FullTranscriptionAsync(context));
-            if (context.Similarity is { } similarity)
+            if (context.Configs.Similarity is { Config: var similarity, Service: var similarityService })
                 yield return new FullStep(
-                    SetupCheckLane.Cpu, $"Scoring the transcript on {Where(context.SimilarityService, ServiceConfigBaseUrls.For(similarity))}",
-                    RowIds(SetupCheckIds.Similarity, context.SimilarityService), Services(context.SimilarityService), 15,
+                    SetupCheckLane.Cpu, $"Scoring the transcript on {Where(similarityService, ServiceConfigBaseUrls.For(similarity))}",
+                    RowIds(SetupCheckIds.Similarity, similarityService), Services(similarityService), 15,
                     () => FullSimilarityAsync(context));
         }
 
@@ -43,13 +43,13 @@ namespace Read2Me.App.Services.SetupCheck
 
         private async Task<IReadOnlyList<SetupCheckRow>> FullTranscriptionAsync(FullContext context)
         {
-            var config = context.Transcription!;
+            var (config, whisper) = context.Configs.Transcription!;
             var row = context.Row(SetupCheckIds.Transcription, SetupCheckGroup.AiConfigs, "Transcription")
                 with { Tier = SetupCheckTier.Full, Expected = TranscriptionExpected };
             var url = $"{ServiceConfigBaseUrls.For(config)?.TrimEnd('/')}/inference";
             var settings = SetupSettingsLink.Transcription;
 
-            return await RequestCheckAsync(context, context.Whisper, row, settings, url, async () =>
+            return await RequestCheckAsync(context, whisper, row, settings, url, async () =>
             {
                 await using var clip = SampleClip.OpenWav();
                 await using var scope = aiServices.Scopes.CreateAsyncScope();
@@ -70,7 +70,7 @@ namespace Read2Me.App.Services.SetupCheck
 
         private async Task<IReadOnlyList<SetupCheckRow>> FullSimilarityAsync(FullContext context)
         {
-            var config = context.Similarity!;
+            var (config, service) = context.Configs.Similarity!;
             var threshold = ProviderSettingsJson.ReadSimilarity(config).PassThreshold;
             var transcript = context.Transcript;
             var row = context.Row(SetupCheckIds.Similarity, SetupCheckGroup.AiConfigs, "Similarity");
@@ -83,7 +83,7 @@ namespace Read2Me.App.Services.SetupCheck
             var url = $"{ServiceConfigBaseUrls.For(config)?.TrimEnd('/')}/similarity";
             var settings = SetupSettingsLink.Similarity;
 
-            return await RequestCheckAsync(context, context.SimilarityService, row, settings, url, async () =>
+            return await RequestCheckAsync(context, service, row, settings, url, async () =>
             {
                 await using var scope = aiServices.Scopes.CreateAsyncScope();
                 var score = await scope.ServiceProvider.GetRequiredService<ISemanticSimilarityClientResolver>()
