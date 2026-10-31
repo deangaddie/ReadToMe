@@ -47,7 +47,6 @@ export class SelectionWorkflow {
     private readonly store: ProjectStore,
     private readonly selection: SelectionStore,
     private readonly audioSelection: AudioSelectionStore,
-    // Read by the intents (#150).
     private readonly assigner: SpeakerAssigner,
     private readonly generator: AudioGenerator,
   ) {
