@@ -11,12 +11,13 @@ export interface EnqueueOptions {
   task: PreflightTask;
   /** What the toast counts, singular ("item", "paragraph"). */
   unit: string;
-  /** The enqueue itself; the caller has already checked its folder. */
+  /** The enqueue itself, sent once the preflight passes. */
   request: () => Promise<{ enqueued: number }>;
 }
 
 /**
- * Preflight → enqueue → toast, the one shape every queue button shares (#144, #145 point 5).
+ * Preflight → enqueue → toast, the one shape every queue button shares (the reader's Generate
+ * audio and Retry, and its Attribute). Guards such as a missing project folder stay with the caller.
  * Never throws: a failure is a problem toast. True when something was queued.
  */
 export async function enqueueWithPreflight({
@@ -25,9 +26,9 @@ export async function enqueueWithPreflight({
   unit,
   request,
 }: EnqueueOptions): Promise<boolean> {
+  const toast = use(ToastService);
   if (busy()) return false;
   busy.set(true);
-  const toast = use(ToastService);
   try {
     if (!(await use(Preflight).ensureReady(task))) return false;
     const { enqueued } = await request();
