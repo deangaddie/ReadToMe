@@ -1,8 +1,7 @@
-import { AudioApi, type Guid, type NodeLevel, toApiError } from '@app/api';
+import { AudioApi, type Guid, type NodeLevel } from '@app/api';
 import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
-import { Preflight } from '@app/shared/preflight';
-import { ToastService } from '@app/ui/toast';
+import { enqueueWithPreflight } from '@app/shared/enqueue';
 import type { BookEditor } from './book-editor';
 import type { BookStore } from './book-store';
 
@@ -16,8 +15,6 @@ import type { BookStore } from './book-store';
  */
 export class AudioGenerator {
   private readonly audio = use(AudioApi);
-  private readonly preflight = use(Preflight);
-  private readonly toast = use(ToastService);
 
   private readonly _working = signal(false);
   /** A preflight or enqueue is in flight: the action bar waits for it. */
@@ -30,45 +27,43 @@ export class AudioGenerator {
 
   /** The action bar's Generate audio. True when something was queued. */
   enqueueItems(itemIds: readonly Guid[]): Promise<boolean> {
-    if (itemIds.length === 0) return Promise.resolve(false);
-    return this.enqueue((folder) => this.audio.enqueueItems(folder, [...itemIds]));
+    const folder = this.store.folder();
+    if (!folder || itemIds.length === 0) return Promise.resolve(false);
+    return enqueueWithPreflight({
+      busy: this._working,
+      task: 'audio',
+      unit: 'item',
+      request: () => this.audio.enqueueItems(folder, [...itemIds]),
+    });
   }
 
   /** "Generate audio for this node": the node-scoped enqueue the overview also uses. */
   enqueueNode(level: NodeLevel, nodeId: Guid, narratorOnlyMode: boolean): Promise<boolean> {
-    return this.enqueue((folder) =>
-      this.audio.enqueue(folder, { level, nodeId, needsAudioOnly: true, narratorOnlyMode }),
-    );
+    const folder = this.store.folder();
+    if (!folder) return Promise.resolve(false);
+    return enqueueWithPreflight({
+      busy: this._working,
+      task: 'audio',
+      unit: 'item',
+      request: () =>
+        this.audio.enqueue(folder, { level, nodeId, needsAudioOnly: true, narratorOnlyMode }),
+    });
   }
 
   /** Retry on a Failed/Unfinished chip: re-queues just that item (the queue state wins over the outcome). */
   retry(itemId: Guid): Promise<boolean> {
-    return this.enqueue((folder) => this.audio.enqueueItems(folder, [itemId]));
+    const folder = this.store.folder();
+    if (!folder) return Promise.resolve(false);
+    return enqueueWithPreflight({
+      busy: this._working,
+      task: 'audio',
+      unit: 'item',
+      request: () => this.audio.enqueueItems(folder, [itemId]),
+    });
   }
 
   /** The review chip's dismiss: the flag stays, faded, and the node's review count drops. */
   dismissReview(itemId: Guid): Promise<boolean> {
     return this.editor.run({ type: 'DismissAudioReview', paragraphItemId: itemId });
-  }
-
-  private async enqueue(
-    request: (folder: string) => Promise<{ enqueued: number }>,
-  ): Promise<boolean> {
-    const folder = this.store.folder();
-    if (!folder || this._working()) return false;
-    this._working.set(true);
-    try {
-      if (!(await this.preflight.ensureReady('audio'))) return false;
-      const { enqueued } = await request(folder);
-      this.toast.success(
-        enqueued === 0 ? 'Nothing to queue' : `Queued ${enqueued} item${enqueued === 1 ? '' : 's'}`,
-      );
-      return enqueued > 0;
-    } catch (error) {
-      this.toast.problem(toApiError(error).toProblem());
-      return false;
-    } finally {
-      this._working.set(false);
-    }
   }
 }
