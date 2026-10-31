@@ -400,19 +400,6 @@ namespace Read2Me.Tests.App.SetupCheck
         }
 
         [Fact]
-        public async Task A_stopped_container_is_not_confirmed_until_the_full_check()
-        {
-            await AddLlmAsync("Qwen", Llama, "qwen-28b");
-            _services.StatusByName["llama"] = AiServiceStatus.Stopped;
-
-            var row = await RowAsync(Container("llama"));
-
-            Assert.Equal(SetupCheckResult.NotConfirmed, row.Result);
-            Assert.Equal("Stopped", row.Found);
-            Assert.Contains("run the Full check", row.Fix.Text);
-        }
-
-        [Fact]
         public async Task A_missing_container_fails_with_the_compose_command()
         {
             await AddLlmAsync("Qwen", Llama, "qwen-28b");
@@ -424,19 +411,6 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.Equal("No read2me-llama container", row.Found);
             Assert.Equal("docker compose up -d llama", row.Fix.Copy);
             Assert.Contains("Infra/", row.Fix.Text);
-        }
-
-        [Fact]
-        public async Task A_down_container_fails_with_the_logs_then_compose_commands()
-        {
-            await AddTtsAsync(AudioCpp);
-            _services.StatusByName["audiocpp"] = AiServiceStatus.Down;
-
-            var row = await RowAsync(Container("audiocpp"));
-
-            Assert.Equal(SetupCheckResult.Failed, row.Result);
-            Assert.Equal("docker logs -f read2me-audiocpp", row.Fix.Copy);
-            Assert.Contains("docker compose up -d audiocpp", row.Fix.Text);
         }
 
         [Fact]
@@ -488,30 +462,6 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.False(Managed(SetupCheckIds.Transcription));
             Assert.False(Managed(SetupCheckIds.Docker));
             Assert.All(report.Rows.Where(r => r.Group == SetupCheckGroup.DockerServices), r => Assert.True(r.Managed));
-        }
-
-        [Fact]
-        public async Task A_container_the_watchdog_is_restarting_is_not_confirmed()
-        {
-            await AddLlmAsync("Qwen", Llama, "qwen-28b");
-            _services.StatusByName["llama"] = AiServiceStatus.Recovering;
-
-            var row = await RowAsync(Container("llama"));
-
-            Assert.Equal(SetupCheckResult.NotConfirmed, row.Result);
-            Assert.Equal("The watchdog is restarting it", row.Found);
-        }
-
-        [Fact]
-        public async Task A_container_whose_state_docker_cannot_tell_is_not_run()
-        {
-            await AddLlmAsync("Qwen", Llama, "qwen-28b");
-            _services.StatusByName["llama"] = AiServiceStatus.Unknown;
-
-            var row = await RowAsync(Container("llama"));
-
-            Assert.Equal(SetupCheckResult.NotRun, row.Result);
-            Assert.Contains("Docker Desktop is running", row.Fix.Text);
         }
 
         [Fact]

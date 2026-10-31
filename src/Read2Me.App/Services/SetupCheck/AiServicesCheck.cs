@@ -18,12 +18,6 @@ namespace Read2Me.App.Services.SetupCheck
         private const string NoAccuracyScore = "audio is generated without an accuracy score";
         private const string WatchdogOff = "AiWatchdog:Enabled is false: a wedged container won't be restarted";
 
-        internal static readonly SetupSettingsLink LlmSettings = new("settings/llm", "Settings → LLM");
-        internal static readonly SetupSettingsLink TtsSettings = new("settings/tts", "Settings → Paragraph TTS");
-        internal static readonly SetupSettingsLink VoiceDesignSettings = new("settings/voice-design", "Settings → Voice design");
-        internal static readonly SetupSettingsLink TranscriptionSettings = new("settings/transcription", "Settings → Transcription");
-        internal static readonly SetupSettingsLink SimilaritySettings = new("settings/similarity", "Settings → Similarity");
-
         /// <summary>How an unmanaged URL is probed for reachability.</summary>
         private enum Reach
         {
@@ -56,12 +50,12 @@ namespace Read2Me.App.Services.SetupCheck
             var configs = await ReadActiveConfigsAsync();
             var rows = new List<SetupCheckRow>
             {
-                await ConfigRowAsync(SetupCheckIds.Llm, "LLM", ConfigExpected, LlmSettings, Single(configs.Llm), required: true, Reach.ModelList, Describe, ct),
+                await ConfigRowAsync(SetupCheckIds.Llm, "LLM", ConfigExpected, SetupSettingsLink.Llm, Single(configs.Llm), required: true, Reach.ModelList, Describe, ct),
                 await ChainRowAsync(configs.Chain, ct),
-                await ConfigRowAsync(SetupCheckIds.ParagraphTts, "Paragraph TTS", ConfigExpected, TtsSettings, Single(configs.ParagraphTts), required: true, Reach.ModelList, Describe, ct),
-                await ConfigRowAsync(SetupCheckIds.VoiceDesign, "Voice design", ConfigExpected, VoiceDesignSettings, Single(configs.VoiceDesign), required: true, Reach.ModelList, Describe, ct),
-                await ConfigRowAsync(SetupCheckIds.Transcription, "Transcription", ConfigExpected, TranscriptionSettings, Single(configs.Transcription), required: false, Reach.AnyAnswer, Describe, ct),
-                await ConfigRowAsync(SetupCheckIds.Similarity, "Similarity", ConfigExpected, SimilaritySettings, Single(configs.Similarity), required: false, Reach.AnyAnswer, Describe, ct),
+                await ConfigRowAsync(SetupCheckIds.ParagraphTts, "Paragraph TTS", ConfigExpected, SetupSettingsLink.Tts, Single(configs.ParagraphTts), required: true, Reach.ModelList, Describe, ct),
+                await ConfigRowAsync(SetupCheckIds.VoiceDesign, "Voice design", ConfigExpected, SetupSettingsLink.VoiceDesign, Single(configs.VoiceDesign), required: true, Reach.ModelList, Describe, ct),
+                await ConfigRowAsync(SetupCheckIds.Transcription, "Transcription", ConfigExpected, SetupSettingsLink.Transcription, Single(configs.Transcription), required: false, Reach.AnyAnswer, Describe, ct),
+                await ConfigRowAsync(SetupCheckIds.Similarity, "Similarity", ConfigExpected, SetupSettingsLink.Similarity, Single(configs.Similarity), required: false, Reach.AnyAnswer, Describe, ct),
             };
             foreach (var service in deps.Registry.All)
                 rows.Add(await ContainerRowAsync(service, configs, dockerOnPath, ct));
@@ -135,8 +129,8 @@ namespace Read2Me.App.Services.SetupCheck
                 return new SetupCheckRow(
                     SetupCheckIds.AttributionChain, SetupCheckGroup.AiConfigs, "Attribution chain", SetupCheckTier.Full,
                     SetupCheckResult.NotRun, ChainExpected, "Needs an active LLM config", null,
-                    new SetupFixHint($"no active config — choose one in {LlmSettings.Label}", LlmSettings), Managed: false);
-            return await ConfigRowAsync(SetupCheckIds.AttributionChain, "Attribution chain", ChainExpected, LlmSettings, chain,
+                    new SetupFixHint($"no active config — choose one in {SetupSettingsLink.Llm.Label}", SetupSettingsLink.Llm), Managed: false);
+            return await ConfigRowAsync(SetupCheckIds.AttributionChain, "Attribution chain", ChainExpected, SetupSettingsLink.Llm, chain,
                 required: true, Reach.ModelList, DescribeChain, ct);
         }
 
@@ -241,38 +235,26 @@ namespace Read2Me.App.Services.SetupCheck
                 return Row(SetupCheckResult.NotUsed, "No active config uses it",
                     new SetupFixHint("Nothing to do: no active config uses this container."));
 
-            switch (await deps.Control.GetStatusAsync(service, ct))
+            var containerStatus = await deps.Control.GetStatusAsync(service, ct);
+            if (ContainerVerdicts.For(service, containerStatus, SetupCheckTier.Quick) is { } verdict)
+                return Row(verdict.Result, verdict.Found, verdict.Fix);
+
+            if (containerStatus == AiServiceStatus.Starting)
             {
-                case AiServiceStatus.NotFound:
-                    return Row(SetupCheckResult.Failed, $"No {service.ContainerName} container", CreateFix(service));
-                case AiServiceStatus.Down:
-                    return Row(SetupCheckResult.Failed, "Down: the watchdog gave up restarting it", RestartFix(service));
-                case AiServiceStatus.Starting:
-                    // Running, health not 2xx. No answer at all means nothing listens where the app
-                    // expects it; an HTTP error (llama's 503 while it loads a model) means not ready yet.
-                    var health = $"{service.BaseUrl.TrimEnd('/')}{service.HealthPath}";
-                    var status = await HealthStatusAsync(health, ct);
-                    if (status is null)
-                        return Row(SetupCheckResult.Failed, $"Running, but {health} didn't answer",
-                            new SetupFixHint(
-                                $"The app expects {service.Name} at {service.BaseUrl}: check the port mapping for {service.Name} in Infra/docker-compose.yml.",
-                                Copy: "Infra/docker-compose.yml"));
-                    if (status is < 200 or > 299)
-                        return Row(SetupCheckResult.NotConfirmed,
-                            $"{health} answers {status}: not ready yet (a model may still be loading)",
-                            new SetupFixHint("Wait for it to finish loading, then run the Quick check again."));
-                    break; // Ready since the status was read.
-                case AiServiceStatus.Stopped:
-                    return Row(SetupCheckResult.NotConfirmed, "Stopped",
-                        new SetupFixHint("The Quick check doesn't start containers: run the Full check to confirm it."));
-                case AiServiceStatus.Recovering:
-                    return Row(SetupCheckResult.NotConfirmed, "The watchdog is restarting it",
-                        new SetupFixHint("Wait for the restart, then run the Quick check again."));
-                case AiServiceStatus.Ready:
-                    break;
-                default:
-                    return Row(SetupCheckResult.NotRun, "docker didn't answer",
-                        new SetupFixHint("Check that Docker Desktop is running, then run the Quick check again."));
+                // Running, health not 2xx. No answer at all means nothing listens where the app
+                // expects it; an HTTP error (llama's 503 while it loads a model) means not ready yet.
+                var health = $"{service.BaseUrl.TrimEnd('/')}{service.HealthPath}";
+                var status = await HealthStatusAsync(health, ct);
+                if (status is null)
+                    return Row(SetupCheckResult.Failed, $"Running, but {health} didn't answer",
+                        new SetupFixHint(
+                            $"The app expects {service.Name} at {service.BaseUrl}: check the port mapping for {service.Name} in Infra/docker-compose.yml.",
+                            Copy: "Infra/docker-compose.yml"));
+                if (status is < 200 or > 299)
+                    return Row(SetupCheckResult.NotConfirmed,
+                        $"{health} answers {status}: not ready yet (a model may still be loading)",
+                        new SetupFixHint("Wait for it to finish loading, then run the Quick check again."));
+                // 2xx: it became ready since the status was read, so it goes on as Ready.
             }
 
             if (models.Count == 0)
@@ -296,25 +278,12 @@ namespace Read2Me.App.Services.SetupCheck
                 : Row(SetupCheckResult.Passed, $"Running; lists {string.Join(", ", models)}", modelFix);
         }
 
-        /// <summary>A container that doesn't exist: create it with compose.</summary>
-        internal static SetupFixHint CreateFix(DockerAiService service) => new(
-            $"Create it: run docker compose up -d {service.Name} from Infra/.", Copy: $"docker compose up -d {service.Name}");
-
-        /// <summary>A container that gave up or won't start: read why, then bring it up with compose.</summary>
-        internal static SetupFixHint RestartFix(DockerAiService service) => new(
-            $"Read why with docker logs -f {service.ContainerName}, then run docker compose up -d {service.Name} from Infra/.",
-            Copy: $"docker logs -f {service.ContainerName}");
-
-        /// <summary>A running container that didn't answer a request: read why.</summary>
-        internal static SetupFixHint LogsFix(DockerAiService service) => new(
-            $"Read why with docker logs -f {service.ContainerName}.", Copy: $"docker logs -f {service.ContainerName}");
-
         /// <summary>Where a model name the server doesn't list is fixed: its model file, or the config.</summary>
         private static SetupFixHint ModelListFix(string serviceName) => serviceName switch
         {
             "llama" => new SetupFixHint(
-                $"Add a preset with that name to Infra/llama/config/models.ini, or correct the model in {LlmSettings.Label}.",
-                LlmSettings, "Infra/llama/config/models.ini"),
+                $"Add a preset with that name to Infra/llama/config/models.ini, or correct the model in {SetupSettingsLink.Llm.Label}.",
+                SetupSettingsLink.Llm, "Infra/llama/config/models.ini"),
             "audiocpp" => new SetupFixHint(
                 "Add that entry to Infra/audiocpp/server.json and restart audiocpp, or correct the config's model in Settings → Paragraph TTS or Voice design.",
                 Copy: "Infra/audiocpp/server.json"),

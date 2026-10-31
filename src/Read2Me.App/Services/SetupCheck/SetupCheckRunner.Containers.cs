@@ -158,20 +158,17 @@ namespace Read2Me.App.Services.SetupCheck
                 return (use.Row, false, use);
             }
 
+            // A Full verdict is Passed or Failed, so any final one here fails the container.
+            if (ContainerVerdicts.For(service, status, SetupCheckTier.Full) is { } verdict)
+                return Failed(verdict.Found, verdict.Fix);
+
             switch (status)
             {
-                case AiServiceStatus.NotFound:
-                    return Failed($"No {service.ContainerName} container", AiServicesCheck.CreateFix(service));
-                case AiServiceStatus.Down:
-                    return Failed("Down: the watchdog gave up restarting it", AiServicesCheck.RestartFix(service));
-                case AiServiceStatus.Unknown:
-                    return Failed("docker didn't answer",
-                        new SetupFixHint("Check that Docker Desktop is running, then run the Full check again."));
                 case AiServiceStatus.Stopped:
                     var start = await aiServices.Control.StartAsync(service, CancellationToken.None);
                     use.Started = true;
                     if (!start.Succeeded)
-                        return Failed($"Didn't start: {start.Error}", AiServicesCheck.RestartFix(service));
+                        return Failed($"Didn't start: {start.Error}", ContainerVerdicts.RestartFix(service));
                     use.Running = true;
                     break;
                 case AiServiceStatus.Starting:
@@ -179,7 +176,7 @@ namespace Read2Me.App.Services.SetupCheck
                     // leaves a running container running, so it was never the run's to stop.
                     var ready = await aiServices.Control.StartAsync(service, CancellationToken.None);
                     if (!ready.Succeeded)
-                        return Failed($"Never became ready: {ready.Error}", AiServicesCheck.RestartFix(service));
+                        return Failed($"Never became ready: {ready.Error}", ContainerVerdicts.RestartFix(service));
                     break;
             }
             if (use is { Failed: true, Row: { } failed })
