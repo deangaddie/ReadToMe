@@ -23,12 +23,6 @@ jobs:
         with:
           bun-version-file: src/Read2Me.Web/package.json
 
-      # Format check, lint, typecheck, api:check, icons:check, bun tests and the production build into
-      # src/Read2Me.App/wwwroot/app — the bundle the browser E2E tests (Tests/Web) stage into the in-proc host.
-      # Same script as the local gate: it also checks the installed Bun against the pin and that the bundle landed.
-      - name: Web check and build
-        run: pwsh scripts/build-web.ps1 -Check
-
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -36,6 +30,17 @@ jobs:
 
       - name: Build
         run: dotnet build src/Read2Me.slnx --configuration Release
+
+      # Regenerates src/Read2Me.Web/src/app/api/openapi.json and schema.d.ts from the in-proc host (ADR 0017);
+      # the web check's typecheck then fails any web code a contract change breaks.
+      - name: API contract
+        run: pwsh scripts/api-types.ps1 -NoBuild -Configuration Release
+
+      # Format check, lint, typecheck, icons:check, help:check, bun tests and the production build into
+      # src/Read2Me.App/wwwroot/app — the bundle the browser E2E tests (Tests/Web) stage into the in-proc host.
+      # Same script as the local gate: it also checks the installed Bun against the pin and that the bundle landed.
+      - name: Web check and build
+        run: pwsh scripts/build-web.ps1 -Check
 
       - name: Unit tests
         run: dotnet test src/Read2Me.Tests --configuration Release --no-build

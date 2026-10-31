@@ -2,5 +2,10 @@
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "printWidth": 100,
   "singleQuote": true,
-  "ignorePatterns": ["src/app/api/schema.d.ts", "src/app/help/help.generated.ts", "bun.lock"]
+  "ignorePatterns": [
+    "src/app/api/schema.d.ts",
+    "src/app/api/openapi.json",
+    "src/app/help/help.generated.ts",
+    "bun.lock"
+  ]
 }

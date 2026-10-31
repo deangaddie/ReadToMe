@@ -37,9 +37,9 @@ cd src/Read2Me.Web
 bun install --frozen-lockfile           # Bun 1.4.2 pinned by packageManager; no Node needed
 bun run dev                             # HMR dev server on http://localhost:4300/app/, proxies /api,/hubs,/workspace,/openapi,/audio-preview,/preview-source to :5000
 bun run build                           # emits to src/Read2Me.App/wwwroot/app/ (git-ignored); host serves it at /app
-bun run check                           # format:check + lint + typecheck + api:check + icons:check + help:check + bun test + build
+bun run check                           # format:check + lint + typecheck + icons:check + help:check + bun test + build
 bun test src/app/core/router.spec.ts    # one spec file
-bun run api:types                       # regenerate src/app/api/schema.d.ts from a running host /openapi/v1.json
+bun run api:types                       # regenerate src/app/api/schema.d.ts from the checked-in src/app/api/openapi.json
 bun run icons                           # rebuild the subset icon font from the IconName union (network); icons:check gates offline
 bun run help                            # render docs/guide/<step>.md into src/app/help/help.generated.ts (committed); help:check gates in check
 
@@ -50,7 +50,10 @@ R2M_E2E_BROWSER=firefox dotnet test src/Read2Me.E2eTests   # whole suite in Fire
 dotnet test src/Read2Me.E2eTests --filter-namespace 'Read2Me.E2eTests.Tests.Web*'   # only the browser suite (Tests/Web)
 # Ad-hoc browser driving of a running host: tools/browse/README.md (or the `verify` skill)
 
-# PR gate: every CI stage in order, stopping at the first failure (web check and build, dotnet build, unit, E2E Chromium, E2E Firefox browser tests only)
+# API contract (ADR 0017): host OpenAPI document → src/Read2Me.Web/src/app/api/openapi.json → schema.d.ts, via the in-proc E2E host (no Workspace touched); commit both files
+pwsh scripts/api-types.ps1              # after changing a DTO or endpoint; -NoBuild, -SkipInstall
+
+# PR gate: every CI stage in order, stopping at the first failure (dotnet build, API contract, web check and build, unit, E2E Chromium, E2E Firefox browser tests only)
 pwsh scripts/check.ps1                  # -SkipInstall once node_modules are current; installs Playwright Firefox on first use; an E2E stage hung past -E2eTimeoutMinutes (10) is killed and dumped
 ```
 

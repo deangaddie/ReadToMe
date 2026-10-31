@@ -5,7 +5,7 @@ can serve it at /app and the browser E2E tests run instead of skipping.
 
 .DESCRIPTION
 Runs `bun install --frozen-lockfile` (exactly what bun.lock says) and `bun run build` in src/Read2Me.Web.
-Pass -Check to run `bun run check` (format:check + lint + typecheck + api:check + icons:check + tests + build) instead of a
+Pass -Check to run `bun run check` (format:check + lint + typecheck + icons:check + help:check + tests + build) instead of a
 bare build, which is what a PR gate wants. Pass -SkipInstall when node_modules is already current (local loops).
 
 Bun is looked up on PATH first, then at ~/.bun/bin/bun.exe (where the Windows installer puts it without adding
@@ -29,37 +29,8 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $web = Join-Path $repoRoot 'src/Read2Me.Web'
 $bundle = Join-Path $repoRoot 'src/Read2Me.App/wwwroot/app/index.html'
-$installHint = 'Install Bun: `powershell -c "irm bun.sh/install.ps1 | iex"` (https://bun.sh), then try again.'
-
-# Find Bun: PATH first, then the installer's default location.
-$bun = $null
-if ($found = Get-Command bun -ErrorAction SilentlyContinue) { $bun = $found.Source }
-if (-not $bun) {
-    $homeBun = Join-Path $HOME '.bun/bin/bun.exe'
-    if (Test-Path $homeBun) { $bun = $homeBun }
-}
-if (-not $bun) {
-    throw "Bun is neither on PATH nor at ~/.bun/bin/bun.exe. $installHint"
-}
-
-# The packageManager pin ("bun@1.4.2") is the only version pin; CI's setup-bun reads the same field.
-$package = Get-Content -Raw (Join-Path $web 'package.json') | ConvertFrom-Json
-$pin = [string]$package.packageManager
-if ($pin -notmatch '^bun@(\d+)\.(\d+)') {
-    throw "package.json ""packageManager"" is '$pin'; expected bun@<major>.<minor>.<patch>."
-}
-$pinned = "$($Matches[1]).$($Matches[2])"
-
-$installed = [string](& $bun --version)
-if ($LASTEXITCODE -ne 0) { throw "bun --version failed ($LASTEXITCODE) using $bun" }
-$installed = $installed.Trim()
-if ($installed -notmatch '^(\d+)\.(\d+)') {
-    throw "Could not parse Bun version '$installed' from $bun."
-}
-$actual = "$($Matches[1]).$($Matches[2])"
-if ($actual -ne $pinned) {
-    throw "Bun $installed at $bun does not match the package.json pin $pin (major.minor $pinned). Install that version (bun upgrade, or https://bun.sh)."
-}
+. (Join-Path $PSScriptRoot 'find-bun.ps1')
+$bun = Find-Bun -WebDir $web
 
 Push-Location $web
 try {

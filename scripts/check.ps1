@@ -5,11 +5,15 @@ The PR gate: runs the stages CI runs, in the same order, and stops at the first 
 .DESCRIPTION
 Stages, in order (each one is a separate named step in .github/workflows/ci.yml):
 
-  1. build-web.ps1 -Check      format:check + lint + typecheck + api:check + icons:check + bun tests + build into wwwroot/app
-  2. dotnet build              the whole solution
-  3. unit tests                src/Read2Me.Tests
-  4. E2E in Chromium           src/Read2Me.E2eTests with R2M_E2E_BROWSER=chromium, the whole suite
-  5. E2E in Firefox            the browser tests only (Tests/Web) with R2M_E2E_BROWSER=firefox; the API and
+  1. dotnet build              the whole solution
+  2. API contract              api-types.ps1 -NoBuild: the host's OpenAPI document into src/Read2Me.Web/src/app/api/
+                               openapi.json, then schema.d.ts from it (ADR 0017); prints when either file changed,
+                               and the web check's typecheck then fails any web code the change breaks
+  3. build-web.ps1 -Check      format:check + lint + typecheck + icons:check + help:check + bun tests + build into wwwroot/app
+  4. unit tests                src/Read2Me.Tests
+  5. E2E in Chromium           src/Read2Me.E2eTests with R2M_E2E_BROWSER=chromium, the whole suite; the test that writes
+                               openapi.json is xunit-explicit, so only stage 2 (--explicit only) runs it
+  6. E2E in Firefox            the browser tests only (Tests/Web) with R2M_E2E_BROWSER=firefox; the API and
                                host tests never open a browser, so Chromium's pass already covers them
 
 Before the E2E stages it installs any Playwright browser the driver wants that is not in the Playwright cache
@@ -221,11 +225,14 @@ $skip = @{}
 if ($SkipInstall) { $skip.SkipInstall = $true }
 
 try {
-    Invoke-Stage 'Web check and build (build-web.ps1 -Check)' {
-        & (Join-Path $PSScriptRoot 'build-web.ps1') -Check @skip
-    }
     Invoke-Stage "dotnet build ($Configuration)" {
         dotnet build $solution --configuration $Configuration
+    }
+    Invoke-Stage 'API contract (api-types.ps1)' {
+        & (Join-Path $PSScriptRoot 'api-types.ps1') -NoBuild -Configuration $Configuration @skip
+    }
+    Invoke-Stage 'Web check and build (build-web.ps1 -Check)' {
+        & (Join-Path $PSScriptRoot 'build-web.ps1') -Check @skip
     }
     Invoke-Stage 'Unit tests' {
         dotnet test $unitTests --configuration $Configuration --no-build

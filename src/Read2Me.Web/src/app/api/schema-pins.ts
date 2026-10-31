@@ -1,8 +1,8 @@
 /**
  * Compile-time pins between the hand-written shapes in `dtos.ts` and the generated OpenAPI schema.
  * Each entry asserts the hand-written type is assignable to the generated one, so a field the host
- * renames or drops fails `bun run typecheck` as soon as `bun run api:types` is re-run (and
- * `bun run api:check` fails `bun run check` while the checked-in schema is stale).
+ * renames or drops fails `bun run typecheck` once `pwsh scripts/api-types.ps1` regenerates the
+ * contract (the PR gate's API contract step always does).
  *
  * Only shapes the host's document actually declares can be pinned: request bodies, the settings
  * entities and the book overview. Other response DTOs have no OpenAPI counterpart (see `dtos.ts`).
