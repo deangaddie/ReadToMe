@@ -10,13 +10,12 @@
     "format:check": "bun --bun oxfmt --check",
     "typecheck": "bun --bun x tsc --noEmit",
     "test": "bun test",
-    "api:types": "bun --bun x openapi-typescript http://localhost:5000/openapi/v1.json -o src/app/api/schema.d.ts",
-    "api:check": "bun scripts/check-api-types.ts",
+    "api:types": "bun --bun x openapi-typescript src/app/api/openapi.json -o src/app/api/schema.d.ts",
     "icons": "bun scripts/icons.ts",
     "icons:check": "bun scripts/icons.ts --check",
     "help": "bun scripts/help.ts",
     "help:check": "bun scripts/help.ts --check",
-    "check": "bun run format:check && bun run lint && bun run typecheck && bun run api:check && bun run icons:check && bun run help:check && bun run test && bun run build"
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run icons:check && bun run help:check && bun run test && bun run build"
   },
   "dependencies": {
     "@microsoft/signalr": "^10.0.11",

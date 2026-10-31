@@ -4,6 +4,677 @@
  */
 
 export interface paths {
+    "/api/ai-services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catalog of the Docker-hosted AI services the watchdog manages. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai-services/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The managed service behind a config base URL (?baseUrl=, matched on scheme/host/port), 404 when the URL is not one the watchdog manages. */
+        get: {
+            parameters: {
+                query?: {
+                    baseUrl?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai-services/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live status of every managed service in one call (one health probe each, in parallel); each also goes out as a serviceStatus hub message. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai-services/{name}/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** docker restart → health poll → warm-up, in the background (202); outcome as serviceStatus { op: restart }. 404 / 409 as start. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    name: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai-services/{name}/shutdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** docker stop in the background (202), pausing a queue that still has work for it; outcome as serviceStatus { op: shutdown }. 404 / 409 as start. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    name: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai-services/{name}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** docker start → health poll → warm-up, in the background (202). The outcome arrives as serviceStatus { name, status, op: start, ok, error? } on /hubs/live. 404 unknown service, 409 while it already has an op in flight. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    name: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai-services/{name}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Live status of one AI service (single health probe): NotFound, Stopped, Starting, Ready, Recovering, Down or Unknown. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    name: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assembly/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel the running assembly. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assembly/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Assembly progress: phase (Gather/Silence/ProbeConcat/Encode/Finalize) and encode percent, the folder of the running or most recent job, and outputFileName once it completed. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/attribution/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel all queued attribution work. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/attribution/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dismiss the finished attribution run's throughput summary (the status dock's Dismiss). 200 whether or not one was showing. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/attribution/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Attribution queue snapshot: counts, ETA and the paragraph currently being attributed. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audio/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel all queued audio work. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audio/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Audio generation queue snapshot: counts, average seconds per item and ETA. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audio/samples/recent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The most recently generated paragraph items that still hold a Preview Source, newest first (?limit=20, max 50). The A/B preview picker's rows. */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number | string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audio/steps/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The post-process steps a scope offers, in chain order, each with its dials (settings-form fields) and defaults. Only scope=voice is served. */
+        get: {
+            parameters: {
+                query?: {
+                    scope?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/preflight/{taskKind}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What must happen before the task may run: { ready, toStart: [{ name, status }], conflicts: [{ name, reason }] }. ready = nothing to do. 409 "Setup check running" while the Setup check's Full check runs. 400 for an unknown task kind (CharacterAttribution, AudioGeneration, VoicePromptGeneration, CharacterDiscovery, VoiceDesignAudio, Transcription, BookEdit). */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    taskKind: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/preflight/{taskKind}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Plan again and carry it out in the background (202 { run }): conflicts stopped, then required services started one at a time. Progress goes to the connectionId in the body as preflight { kind: stage, run, name, stage, error? } then { kind: done, run, ok, reason? }. 409 while the Setup check's Full check runs. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    taskKind: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["PreflightRunRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/previews/{previewId}/{stepId}.wav": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The audio after one stage of a rendered preview. 404 once the preview has expired. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    previewId: string;
+                    stepId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects": {
         parameters: {
             query?: never;
@@ -181,7 +852,7 @@ export interface paths {
         };
         trace?: never;
     };
-    "/api/projects/{folder}/import": {
+    "/api/projects/{folder}/assembly": {
         parameters: {
             query?: never;
             header?: never;
@@ -190,7 +861,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
+        /** Start m4b assembly. 409 with audioRemainingCount when items still lack audio and allowPartial is false. Poll /api/assembly/status. */
         post: {
             parameters: {
                 query?: never;
@@ -202,7 +873,7 @@ export interface paths {
             };
             requestBody?: {
                 content: {
-                    "application/json": null | components["schemas"]["ImportRequest"];
+                    "application/json": null | components["schemas"]["AssemblyStartRequest"];
                 };
             };
             responses: {
@@ -223,100 +894,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{folder}/import/manual": {
+    "/api/projects/{folder}/assembly/outputs": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        /** Re-split the stored book file by hand-chosen rules (replaces existing content). Per level: mode Prefix (with prefix) | Arabic | Roman. 400 when a switched-on level lacks a valid rule. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": null | components["schemas"]["ManualImportRequest"];
-                };
-            };
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/narrator-only-mode": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Set the Book-wide narrator-only policy: only narration items get audio. */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": null | components["schemas"]["NarratorOnlyModeRequest"];
-                };
-            };
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/cover": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Replace the cover image (multipart 'file': jpg/jpeg/png/webp, at most 10 MB). Served from /workspace/{folder}/{coverImage}. */
-        put: {
+        /** Assembled audiobooks under the project's output folder, newest first. isPartial marks a build that skipped items without audio. */
+        get: {
             parameters: {
                 query?: never;
                 header?: never;
@@ -327,25 +913,62 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Conflict */
-                409: {
+                /** @description OK */
+                200: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
+                    content?: never;
                 };
             };
         };
+        put?: never;
         post?: never;
-        /** Remove the cover image; a project without one still answers 204. */
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/assembly/outputs/{fileName}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download one assembled audiobook (audio/mp4 attachment; Range requests supported). */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    fileName: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        /** Delete one assembled audiobook (204; 404 when it is not an existing output). */
         delete: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
                     folder: string;
+                    fileName: string;
                 };
                 cookie?: never;
             };
@@ -367,14 +990,644 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{folder}/status": {
+    "/api/projects/{folder}/attribution/enqueue": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Whole-project roll-up: content, cast and voice counts, item/attribution/audio/review remaining, per-node summaries, pause paragraphs, the confirmed or skipped Pipeline step checkpoints (step id → state, stale, at; only steps with a row) and the book revision they were read at. */
+        get?: never;
+        put?: never;
+        /** Queue LLM character attribution for the paragraphs under a node (level: volume|part|chapter). Poll /api/attribution/queue. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["NodeEnqueueRequest"];
+                };
+            };
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/attribution/enqueue-paragraphs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue LLM character attribution for an explicit list of paragraph ids (a selection). Ids without dialog are ignored; the count answers with what was queued. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ParagraphsEnqueueRequest"];
+                };
+            };
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/attribution/paragraphs/{paragraphId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Per-paragraph attribution queue state: queued/processing status and any failure/unknown outcome. Results are on the paragraph's items. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    paragraphId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/attribution/paragraphs/{paragraphId}/outcome": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Forget a paragraph's Failed/Unfinished attribution outcome (the chip goes away). 204 whether or not one was recorded. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    paragraphId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/audio/enqueue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue TTS audio generation for the items under a node (level: volume|part|chapter). Poll /api/audio/queue. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AudioEnqueueRequest"];
+                };
+            };
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/audio/enqueue-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue TTS audio generation for an explicit list of item ids (a selection, or one item to retry). Unknown ids are ignored; the count answers with what was queued. 409 when no paragraph TTS service is active. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ItemsEnqueueRequest"];
+                };
+            };
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/audio/items/{itemId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Per-item audio state: queued/processing status, failure outcome, or the audio version stamp once complete. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    itemId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/audio/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Items whose audio needs review or had it dismissed: { itemId: { state, normalizeOk, normalizeReason, verifyOk, wer, verifyReason, transcript, originalTextSnapshot } }. Sparse: an item with no entry passed both checks. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/book": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Book overview: volumes, characters and structure counts, the book revision they were read at, and the Structure rules (structureRules: per anchor kind, the placements it allows, the kind each creates, whether text is required, and the minimum count the book keeps). hasContent=false means import has not run. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BookOverviewDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/book-edits/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Turn a plain-language instruction into an edit plan: one LLM call, then the plan's scope is resolved against the book. Answers status Ok with an opaque program id (valid 2 h after its last use), a summary, the matched item count and, for Llm transforms, the LLM request count; NoLlmConfigured / Unsupported / ServiceUnavailable / Failed / NoTargets carry a reason instead. thinking=true lets the model think first. 409 "Project is restoring" while a Restore runs, or when one began after the plan was asked for (its targets would predate it). */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["PlanBookEditRequest"];
+                };
+            };
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/book-edits/{program}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The session's proposal run: status Idle | Running | Completed | Cancelled | Failed, progress and the rows landed so far (a cancelled run keeps the rows it computed). */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    program: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        /** Drop the session, cancelling any run in flight (204; 404 when unknown or expired). */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    program: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/book-edits/{program}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop the running proposal; the rows computed so far stay reviewable. 200 whether or not a run was in flight. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    program: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/book-edits/{program}/propose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start computing a proposed new value per matched item (202). Progress and the finished rows arrive on /hubs/live as bookEdit { kind: progress | done | failed } on the connectionId in the body; GET the session to read them back. Deterministic transforms finish at once; Llm ones send one request per 8 items. 409 while a run is already in flight. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    program: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["ProposeBookEditRequest"];
+                };
+            };
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/book-edits/{program}/propose-one": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask the AI again for one matched item, optionally steered by a hint; answers the new row. Llm plans only — a deterministic plan answers a Failed row. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    program: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["ProposeOneBookEditRequest"];
+                };
+            };
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/characters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** All characters with their aliases. */
         get: {
             parameters: {
                 query?: {
@@ -444,14 +1697,138 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{folder}/nodes/{level}/{id}/status": {
+    "/api/projects/{folder}/characters/bulk-assign-preview": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Roll-up for one volume/part/chapter: attribution/audio/review paragraphs remaining and attribution in flight. A node with no speech paragraphs answers zeros. */
+        get?: never;
+        put?: never;
+        /** What a bulk speaker assign over the paragraph ids would write: the dialog lines and the paragraphs holding them. Paragraphs without dialog count in neither. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["BulkAssignPreviewRequest"];
+                };
+            };
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/characters/discover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask the active LLM for the book's notable characters and aliases. Synchronous; takes seconds to a minute. Pass ?thinking=true to let the model think first — slower, better recall. Each row carries existingCharacterId when it resolves onto a roster character; collisions lists names two characters would share. */
+        post: {
+            parameters: {
+                query?: {
+                    thinking?: boolean;
+                };
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/characters/discover/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Persist discovered characters: one create per row (idempotent on name/alias match) plus its aliases. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ApplyDiscoveryRow"][];
+                };
+            };
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/characters/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every character as a cast-list row (narrator first, then by name): aliases, line count, planned vs ready voices, isNarrator (the seed row) and narratesBook (the linked narrator). */
         get: {
             parameters: {
                 query?: {
@@ -461,7 +1838,445 @@ export interface paths {
                 header?: never;
                 path: {
                     folder: string;
-                    level: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/characters/{characterId}/design-prompt/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask the LLM for a voice design prompt from a rendered prompt. Synchronous; publishes the LLM run on the live hub. Nothing is persisted — set it on a voice with SetVoiceDesignPrompt. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    characterId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["GenerateDesignPromptRequest"];
+                };
+            };
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/characters/{characterId}/design-prompt/render": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The voice-design prompt template rendered for this character (book, author, name). Nothing is persisted; edit it and send it to /generate. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    characterId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/characters/{characterId}/voices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A character's voices and its default voice id. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
+                header?: never;
+                path: {
+                    folder: string;
+                    characterId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/characters/{characterId}/voices/{voiceId}/generate-audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Synthesise reference audio for one generated voice from its design prompt. An optional body { designPrompt } designs from that prompt instead and stores it with the take, so an unsaved prompt edit and its audio land in one request (nothing is stored if synthesis fails). Synchronous; takes tens of seconds. 503 "TTS busy, try again" when the TTS runtime is generating with another model; 422 when the take is over the 30 s hard Reference Limit (nothing stored). referenceWarning is set over the 15 s soft limit. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                    characterId: string;
+                    voiceId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        designPrompt?: null | string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/characters/{id}/lines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The items a character speaks, in book order, with their paragraph and chapter ids. Empty for an unknown character. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
+                header?: never;
+                path: {
+                    folder: string;
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/characters/{id}/voice-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A character's voice rules in evaluation order (default first): voice, anchor levels/ids/titles, dangling flags. Empty for an unknown character. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
+                header?: never;
+                path: {
+                    folder: string;
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/characters/{id}/voice-rules/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The voice the character's rules pick at the start of every chapter, in book order (null voiceName = none resolves). Rules anchored inside a chapter are below this grain. */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    at?: string;
+                };
+                header?: never;
+                path: {
+                    folder: string;
                     id: string;
                 };
                 cookie?: never;
@@ -561,6 +2376,108 @@ export interface paths {
         };
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute a book command. Body: { "type": "<Name>", ...properties }. Type is the command record name without the Command suffix, e.g. CreateCharacter, SetParagraphCharacter. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. The request is one History step, labelled for the command (e.g. Edit with AI, Split chapter, Assign speaker). */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["JsonObject"];
+                };
+            };
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/cover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace the cover image (multipart 'file': jpg/jpeg/png/webp, at most 10 MB). Served from /workspace/{folder}/{coverImage}. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /** Remove the cover image; a project without one still answers 204. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -745,55 +2662,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{folder}/book": {
+    "/api/projects/{folder}/import": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Book overview: volumes, characters and structure counts, the book revision they were read at, and the Structure rules (structureRules: per anchor kind, the placements it allows, the kind each creates, whether text is required, and the minimum count the book keeps). hasContent=false means import has not run. */
-        get: {
+        get?: never;
+        put?: never;
+        /** Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
+        post: {
             parameters: {
-                query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
-                    at?: string;
-                };
+                query?: never;
                 header?: never;
                 path: {
                     folder: string;
                 };
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["ImportRequest"];
+                };
+            };
             responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["BookOverviewDto"];
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
                 /** @description Conflict */
                 409: {
                     headers: {
@@ -803,76 +2696,39 @@ export interface paths {
                         "application/problem+json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Unprocessable Entity */
-                422: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Service Unavailable */
-                503: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
             };
         };
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{folder}/nodes/{level}/{id}/children": {
+    "/api/projects/{folder}/import/manual": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Ordered children of a node. level=volume gives parts, part gives chapters, chapter gives paragraphs with their items. */
-        get: {
+        get?: never;
+        put?: never;
+        /** Re-split the stored book file by hand-chosen rules (replaces existing content). Per level: mode Prefix (with prefix) | Arabic | Roman. 400 when a switched-on level lacks a valid rule. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
+        post: {
             parameters: {
-                query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
-                    at?: string;
-                };
+                query?: never;
                 header?: never;
                 path: {
                     folder: string;
-                    level: string;
-                    id: string;
                 };
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["ManualImportRequest"];
+                };
+            };
             responses: {
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
                 /** @description Conflict */
                 409: {
                     headers: {
@@ -882,17 +2738,41 @@ export interface paths {
                         "application/problem+json": components["schemas"]["ProblemDetails"];
                     };
                 };
-                /** @description Unprocessable Entity */
-                422: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/narration/release-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What a ReleaseNarration command over the scope (Part|Chapter|Paragraph + nodeId) would write: the narration-only paragraphs it would release (for Part and Chapter, only those carrying a speech marker that repeats in at least 5 narration-only paragraphs of their chapter; a Paragraph is unfiltered), how many of their items have audio it would discard, and for Part and Chapter the speechMarkers that passed with the paragraphs each covers (count descending, then marker; empty for a Paragraph and when nothing passes). */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
                 };
-                /** @description Service Unavailable */
-                503: {
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["NarrationReleasePreviewRequest"];
+                };
+            };
+            responses: {
+                /** @description Conflict */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -902,7 +2782,47 @@ export interface paths {
                 };
             };
         };
-        put?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/narrator-only-mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the Book-wide narrator-only policy: only narration items get audio. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["NarratorOnlyModeRequest"];
+                };
+            };
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
         post?: never;
         delete?: never;
         options?: never;
@@ -988,18 +2908,17 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{folder}/nodes/{level}/{id}/paragraph-ids": {
+    "/api/projects/{folder}/nodes/{level}/{id}/children": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The Character paragraphs under a node (level: volume|part|chapter) with their chapter/part/volume ids; unprocessedOnly=true keeps those still holding an unattributed line. What 'Select unprocessed' selects. */
+        /** Ordered children of a node. level=volume gives parts, part gives chapters, chapter gives paragraphs with their items. */
         get: {
             parameters: {
                 query?: {
-                    unprocessedOnly?: boolean;
                     /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
                     at?: string;
                 };
@@ -1149,184 +3068,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{folder}/characters": {
+    "/api/projects/{folder}/nodes/{level}/{id}/paragraph-ids": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** All characters with their aliases. */
+        /** The Character paragraphs under a node (level: volume|part|chapter) with their chapter/part/volume ids; unprocessedOnly=true keeps those still holding an unattributed line. What 'Select unprocessed' selects. */
         get: {
             parameters: {
                 query?: {
+                    unprocessedOnly?: boolean;
                     /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
                     at?: string;
                 };
                 header?: never;
                 path: {
                     folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Unprocessable Entity */
-                422: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Service Unavailable */
-                503: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/characters/bulk-assign-preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** What a bulk speaker assign over the paragraph ids would write: the dialog lines and the paragraphs holding them. Paragraphs without dialog count in neither. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["BulkAssignPreviewRequest"];
-                };
-            };
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/narration/release-preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** What a ReleaseNarration command over the scope (Part|Chapter|Paragraph + nodeId) would write: the narration-only paragraphs it would release (for Part and Chapter, only those carrying a speech marker that repeats in at least 5 narration-only paragraphs of their chapter; a Paragraph is unfiltered), how many of their items have audio it would discard, and for Part and Chapter the speechMarkers that passed with the paragraphs each covers (count descending, then marker; empty for a Paragraph and when nothing passes). */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["NarrationReleasePreviewRequest"];
-                };
-            };
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/characters/{id}/voice-rules": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** A character's voice rules in evaluation order (default first): voice, anchor levels/ids/titles, dangling flags. Empty for an unknown character. */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
-                    at?: string;
-                };
-                header?: never;
-                path: {
-                    folder: string;
+                    level: string;
                     id: string;
                 };
                 cookie?: never;
@@ -1388,14 +3148,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{folder}/characters/{id}/voice-rules/preview": {
+    "/api/projects/{folder}/nodes/{level}/{id}/status": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The voice the character's rules pick at the start of every chapter, in book order (null voiceName = none resolves). Rules anchored inside a chapter are below this grain. */
+        /** Roll-up for one volume/part/chapter: attribution/audio/review paragraphs remaining and attribution in flight. A node with no speech paragraphs answers zeros. */
         get: {
             parameters: {
                 query?: {
@@ -1405,161 +3165,7 @@ export interface paths {
                 header?: never;
                 path: {
                     folder: string;
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Unprocessable Entity */
-                422: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Service Unavailable */
-                503: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/characters/summary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Every character as a cast-list row (narrator first, then by name): aliases, line count, planned vs ready voices, isNarrator (the seed row) and narratesBook (the linked narrator). */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
-                    at?: string;
-                };
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Unprocessable Entity */
-                422: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Service Unavailable */
-                503: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/characters/{id}/lines": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The items a character speaks, in book order, with their paragraph and chapter ids. Empty for an unknown character. */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
-                    at?: string;
-                };
-                header?: never;
-                path: {
-                    folder: string;
+                    level: string;
                     id: string;
                 };
                 cookie?: never;
@@ -1702,585 +3308,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{folder}/commands": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Execute a book command. Body: { "type": "<Name>", ...properties }. Type is the command record name without the Command suffix, e.g. CreateCharacter, SetParagraphCharacter. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. The request is one History step, labelled for the command (e.g. Edit with AI, Split chapter, Assign speaker). */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["JsonObject"];
-                };
-            };
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/attribution/enqueue": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Queue LLM character attribution for the paragraphs under a node (level: volume|part|chapter). Poll /api/attribution/queue. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["NodeEnqueueRequest"];
-                };
-            };
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/attribution/enqueue-paragraphs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Queue LLM character attribution for an explicit list of paragraph ids (a selection). Ids without dialog are ignored; the count answers with what was queued. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["ParagraphsEnqueueRequest"];
-                };
-            };
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/attribution/paragraphs/{paragraphId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Per-paragraph attribution queue state: queued/processing status and any failure/unknown outcome. Results are on the paragraph's items. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                    paragraphId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/attribution/paragraphs/{paragraphId}/outcome": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Forget a paragraph's Failed/Unfinished attribution outcome (the chip goes away). 204 whether or not one was recorded. */
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                    paragraphId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/attribution/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Cancel all queued attribution work. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/attribution/dismiss": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Dismiss the finished attribution run's throughput summary (the status dock's Dismiss). 200 whether or not one was showing. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/characters/discover": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Ask the active LLM for the book's notable characters and aliases. Synchronous; takes seconds to a minute. Pass ?thinking=true to let the model think first — slower, better recall. Each row carries existingCharacterId when it resolves onto a roster character; collisions lists names two characters would share. */
-        post: {
-            parameters: {
-                query?: {
-                    thinking?: boolean;
-                };
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/characters/discover/apply": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Persist discovered characters: one create per row (idempotent on name/alias match) plus its aliases. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["ApplyDiscoveryRow"][];
-                };
-            };
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/book-edits/plan": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Turn a plain-language instruction into an edit plan: one LLM call, then the plan's scope is resolved against the book. Answers status Ok with an opaque program id (valid 2 h after its last use), a summary, the matched item count and, for Llm transforms, the LLM request count; NoLlmConfigured / Unsupported / ServiceUnavailable / Failed / NoTargets carry a reason instead. thinking=true lets the model think first. 409 "Project is restoring" while a Restore runs, or when one began after the plan was asked for (its targets would predate it). */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": null | components["schemas"]["PlanBookEditRequest"];
-                };
-            };
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/book-edits/{program}/propose": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Start computing a proposed new value per matched item (202). Progress and the finished rows arrive on /hubs/live as bookEdit { kind: progress | done | failed } on the connectionId in the body; GET the session to read them back. Deterministic transforms finish at once; Llm ones send one request per 8 items. 409 while a run is already in flight. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                    program: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": null | components["schemas"]["ProposeBookEditRequest"];
-                };
-            };
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/book-edits/{program}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The session's proposal run: status Idle | Running | Completed | Cancelled | Failed, progress and the rows landed so far (a cancelled run keeps the rows it computed). */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                    program: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        /** Drop the session, cancelling any run in flight (204; 404 when unknown or expired). */
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                    program: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/book-edits/{program}/propose-one": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Ask the AI again for one matched item, optionally steered by a hint; answers the new row. Llm plans only — a deterministic plan answers a Failed row. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                    program: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": null | components["schemas"]["ProposeOneBookEditRequest"];
-                };
-            };
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/book-edits/{program}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Stop the running proposal; the rows computed so far stay reviewable. 200 whether or not a run was in flight. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                    program: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/projects/{folder}/pronunciations": {
         parameters: {
             query?: never;
@@ -2402,6 +3429,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{folder}/pronunciations/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What saving a draft { id?, writtenForm, spokenForm, delete? } would do, writing nothing: no id adds, an id edits that entry, delete: true deletes it (forms ignored). Answers matchCount, itemCount, withAudioCount (a delete's: the entry's reach now), audioDiscardCount (exactly what the save would discard), overlaps (entries whose written form holds the draft's as whole words or is held by it, draftWins when the draft's is the longer and so wins), duplicateOf (another entry with the written form, ignoring case: a save would be 409; the counts treat the draft as taking its place), and matches in book order: itemId, chapterId, chapterTitle, speaker, hasAudio, the sentence around it, sentenceStart (where it starts in the item's text, what a try-out names it by), matchStart and matchLength in that sentence, spokenSentence, the sentence with the drafted list applied, and spokenMatchStart and spokenMatchLength, where the match's spoken form (its case carried over) sits in spokenSentence. 400 invalid; 404 unknown id. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["PronunciationDraftRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PronunciationImpactReport"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{folder}/pronunciations/matches": {
         parameters: {
             query?: never;
@@ -2483,6 +3579,91 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/pronunciations/try": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Render one try-out sentence { itemId, sentenceStart, draft?, asWritten, voice }: the sentence of the item starting at sentenceStart (an impact match's), carried on over a match that runs past its end. The list, with draft { id?, writtenForm, spokenForm, delete? } in place of its entry, is applied unless asWritten. voice is { voiceId } or "item" (the item's own resolved voice, also when left out); the active TTS config and the item's delivery cue are used as for its take. Answers the WAV body (audio/wav); nothing is stored and no item's audio changes. 400 invalid draft, no sentence starts there or a bad voice; 404 unknown item, voice or entry; 409 while attribution, audio generation or a voice batch is queued or running anywhere (it holds the GPU); 422 no voice resolves, the voice has no audio or no TTS config is active; 503 TTS busy or down. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["TryPronunciationRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -2600,168 +3781,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{folder}/pronunciations/impact": {
+    "/api/projects/{folder}/status": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        /** What saving a draft { id?, writtenForm, spokenForm, delete? } would do, writing nothing: no id adds, an id edits that entry, delete: true deletes it (forms ignored). Answers matchCount, itemCount, withAudioCount (a delete's: the entry's reach now), audioDiscardCount (exactly what the save would discard), overlaps (entries whose written form holds the draft's as whole words or is held by it, draftWins when the draft's is the longer and so wins), duplicateOf (another entry with the written form, ignoring case: a save would be 409; the counts treat the draft as taking its place), and matches in book order: itemId, chapterId, chapterTitle, speaker, hasAudio, the sentence around it, sentenceStart (where it starts in the item's text, what a try-out names it by), matchStart and matchLength in that sentence, spokenSentence, the sentence with the drafted list applied, and spokenMatchStart and spokenMatchLength, where the match's spoken form (its case carried over) sits in spokenSentence. 400 invalid; 404 unknown id. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": null | components["schemas"]["PronunciationDraftRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["PronunciationImpactReport"];
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/pronunciations/try": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Render one try-out sentence { itemId, sentenceStart, draft?, asWritten, voice }: the sentence of the item starting at sentenceStart (an impact match's), carried on over a match that runs past its end. The list, with draft { id?, writtenForm, spokenForm, delete? } in place of its entry, is applied unless asWritten. voice is { voiceId } or "item" (the item's own resolved voice, also when left out); the active TTS config and the item's delivery cue are used as for its take. Answers the WAV body (audio/wav); nothing is stored and no item's audio changes. 400 invalid draft, no sentence starts there or a bad voice; 404 unknown item, voice or entry; 409 while attribution, audio generation or a voice batch is queued or running anywhere (it holds the GPU); 422 no voice resolves, the voice has no audio or no TTS config is active; 503 TTS busy or down. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": null | components["schemas"]["TryPronunciationRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Unprocessable Entity */
-                422: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Service Unavailable */
-                503: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/characters/{characterId}/voices": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** A character's voices and its default voice id. */
+        /** Whole-project roll-up: content, cast and voice counts, item/attribution/audio/review remaining, per-node summaries, pause paragraphs, the confirmed or skipped Pipeline step checkpoints (step id → state, stale, at; only steps with a row) and the book revision they were read at. */
         get: {
             parameters: {
                 query?: {
@@ -2771,7 +3798,6 @@ export interface paths {
                 header?: never;
                 path: {
                     folder: string;
-                    characterId: string;
                 };
                 cookie?: never;
             };
@@ -2826,6 +3852,86 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/voice-batch/audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start the voice-audio batch: synthesise every generated voice that has a design prompt but no audio. Poll /api/voice-batch/status. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{folder}/voice-batch/prompts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start the voice-plan batch: one LLM call per character without voices (regenerateAll replans every character). Poll /api/voice-batch/status. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["VoiceBatchStartRequest"];
+                };
+            };
+            responses: {
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -2949,7 +4055,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{folder}/voices/{voiceId}/transcribe": {
+    "/api/projects/{folder}/voices/{voiceId}/editor/apply": {
         parameters: {
             query?: never;
             header?: never;
@@ -2958,7 +4064,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Transcribe a voice's reference audio with the active transcription service and store the result as its transcript. 422 without audio or an active service. */
+        /** Write a rendered preview's final stage over the voice's audio, keeping the original for restore. 422 when the preview is unknown, expired or belongs to another voice. */
         post: {
             parameters: {
                 query?: never;
@@ -2969,87 +4075,9 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            requestBody?: never;
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/characters/{characterId}/design-prompt/render": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** The voice-design prompt template rendered for this character (book, author, name). Nothing is persisted; edit it and send it to /generate. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                    characterId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/characters/{characterId}/design-prompt/generate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Ask the LLM for a voice design prompt from a rendered prompt. Synchronous; publishes the LLM run on the live hub. Nothing is persisted — set it on a voice with SetVoiceDesignPrompt. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                    characterId: string;
-                };
-                cookie?: never;
-            };
             requestBody?: {
                 content: {
-                    "application/json": null | components["schemas"]["GenerateDesignPromptRequest"];
+                    "application/json": null | components["schemas"]["ApplyPreviewRequest"];
                 };
             };
             responses: {
@@ -3064,236 +4092,6 @@ export interface paths {
                 };
             };
         };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/characters/{characterId}/voices/{voiceId}/generate-audio": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Synthesise reference audio for one generated voice from its design prompt. An optional body { designPrompt } designs from that prompt instead and stores it with the take, so an unsaved prompt edit and its audio land in one request (nothing is stored if synthesis fails). Synchronous; takes tens of seconds. 503 "TTS busy, try again" when the TTS runtime is generating with another model; 422 when the take is over the 30 s hard Reference Limit (nothing stored). referenceWarning is set over the 15 s soft limit. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                    characterId: string;
-                    voiceId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": {
-                        designPrompt?: null | string;
-                    };
-                };
-            };
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/voice-batch/prompts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Start the voice-plan batch: one LLM call per character without voices (regenerateAll replans every character). Poll /api/voice-batch/status. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": null | components["schemas"]["VoiceBatchStartRequest"];
-                };
-            };
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/voice-batch/audio": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Start the voice-audio batch: synthesise every generated voice that has a design prompt but no audio. Poll /api/voice-batch/status. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/voice-batch/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Voice batch progress. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/voice-batch/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Cancel the running voice batch. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/audio/steps/catalog": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The post-process steps a scope offers, in chain order, each with its dials (settings-form fields) and defaults. Only scope=voice is served. */
-        get: {
-            parameters: {
-                query?: {
-                    scope?: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3323,86 +4121,6 @@ export interface paths {
             requestBody?: {
                 content: {
                     "application/json": null | components["schemas"]["PreviewRequest"];
-                };
-            };
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/previews/{previewId}/{stepId}.wav": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The audio after one stage of a rendered preview. 404 once the preview has expired. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    previewId: string;
-                    stepId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/voices/{voiceId}/editor/apply": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Write a rendered preview's final stage over the voice's audio, keeping the original for restore. 422 when the preview is unknown, expired or belongs to another voice. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                    voiceId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": null | components["schemas"]["ApplyPreviewRequest"];
                 };
             };
             responses: {
@@ -3540,7 +4258,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{folder}/assembly": {
+    "/api/projects/{folder}/voices/{voiceId}/transcribe": {
         parameters: {
             query?: never;
             header?: never;
@@ -3549,182 +4267,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start m4b assembly. 409 with audioRemainingCount when items still lack audio and allowPartial is false. Poll /api/assembly/status. */
+        /** Transcribe a voice's reference audio with the active transcription service and store the result as its transcript. 422 without audio or an active service. */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
                     folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": null | components["schemas"]["AssemblyStartRequest"];
-                };
-            };
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/assembly/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Assembly progress: phase (Gather/Silence/ProbeConcat/Encode/Finalize) and encode percent, the folder of the running or most recent job, and outputFileName once it completed. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/assembly/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Cancel the running assembly. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/assembly/outputs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Assembled audiobooks under the project's output folder, newest first. isPartial marks a build that skipped items without audio. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/assembly/outputs/{fileName}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Download one assembled audiobook (audio/mp4 attachment; Range requests supported). */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                    fileName: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        /** Delete one assembled audiobook (204; 404 when it is not an existing output). */
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                    fileName: string;
+                    voiceId: string;
                 };
                 cookie?: never;
             };
@@ -3741,382 +4291,7 @@ export interface paths {
                 };
             };
         };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/paragraph-tts/{id}/text-steps": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The text-processing steps a TTS config may enable (its enabledStepIds): the built-ins, then the config's own substitutions in order. Id 0 lists the built-ins for a config not yet saved. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: number;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/voice-design/sample-text": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The sentence voice design speaks: the stored override (null when none) and the built-in default. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        /** Override the voice-design sample sentence. Null, blank or the default text clears the override. 400 over maxLength (300) characters. */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["VoiceDesignSampleTextRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/voice-design/{id}/test": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Design a voice from a prompt with one config, speaking the sample text; answers the audio as base64. 60 s timeout. 422 with the reason when the provider fails. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: number;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["VoiceDesignTestRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/transcription/{id}/test": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Transcribe an uploaded audio file (multipart field 'file': wav, mp3 or aac, at most 50 MB) with one config. 422 with the reason when the provider fails. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: number;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/semantic-similarity/{id}/test": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Score two texts with one config against its pass threshold. 422 with the reason when the provider fails. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: number;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["SimilarityTestRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/prompts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Every prompt template, resolved (stored override or built-in default), keyed by kind. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/prompts/catalog": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Every prompt kind with its description, tokens, expected response, resolved and default templates, override flag and compatibility warnings. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/prompts/{kind}/preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Render a template (saved or not) with the kind's sample values. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    kind: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["PromptPreviewRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/prompts/{kind}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Override one prompt template. */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    kind: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["PromptTemplateRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        post?: never;
-        /** Reset one prompt template to its built-in default. */
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    kind: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
         options?: never;
         head?: never;
         patch?: never;
@@ -4172,6 +4347,44 @@ export interface paths {
             };
         };
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/audio-processing/ffmpeg/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Persist the given ffmpeg path (blank = rely on PATH), then probe it. Answers { success, message }. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["FfmpegTestRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -4290,44 +4503,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/settings/audio-processing/ffmpeg/test": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Persist the given ffmpeg path (blank = rely on PATH), then probe it. Answers { success, message }. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": null | components["schemas"]["FfmpegTestRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/settings/audio-processing/steps/{stepId}/preview": {
         parameters: {
             query?: never;
@@ -4368,194 +4543,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/audio/samples/recent": {
+    "/api/settings/llm": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The most recently generated paragraph items that still hold a Preview Source, newest first (?limit=20, max 50). The A/B preview picker's rows. */
-        get: {
-            parameters: {
-                query?: {
-                    limit?: number | string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/paragraph-tts/schema": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The editable fields of one TTS provider type (?type=VoxCpm2|Chatterbox|Qwen3Base|Breeze, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override. */
-        get: {
-            parameters: {
-                query?: {
-                    type?: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/voice-design/schema": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The editable fields of one voice-design provider type (?type=VoxCpm2|Qwen3|Breeze, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override. */
-        get: {
-            parameters: {
-                query?: {
-                    type?: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/transcription/schema": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The editable fields of one transcription provider type (?type=LocalWhisper, name or number) beyond its base URL — none today. */
-        get: {
-            parameters: {
-                query?: {
-                    type?: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/semantic-similarity/schema": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The editable fields of one semantic-similarity provider type (?type=MiniLmL6|MpnetBaseV2, name or number) beyond its base URL: the pass threshold. */
-        get: {
-            parameters: {
-                query?: {
-                    type?: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/ai-services": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Catalog of the Docker-hosted AI services the watchdog manages. */
+        /** List llm configs. */
         get: {
             parameters: {
                 query?: never;
@@ -4575,514 +4570,7 @@ export interface paths {
             };
         };
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/ai-services/resolve": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The managed service behind a config base URL (?baseUrl=, matched on scheme/host/port), 404 when the URL is not one the watchdog manages. */
-        get: {
-            parameters: {
-                query?: {
-                    baseUrl?: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/ai-services/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Live status of every managed service in one call (one health probe each, in parallel); each also goes out as a serviceStatus hub message. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/ai-services/{name}/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Live status of one AI service (single health probe): NotFound, Stopped, Starting, Ready, Recovering, Down or Unknown. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    name: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/ai-services/{name}/start": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** docker start → health poll → warm-up, in the background (202). The outcome arrives as serviceStatus { name, status, op: start, ok, error? } on /hubs/live. 404 unknown service, 409 while it already has an op in flight. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    name: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/ai-services/{name}/restart": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** docker restart → health poll → warm-up, in the background (202); outcome as serviceStatus { op: restart }. 404 / 409 as start. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    name: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/ai-services/{name}/shutdown": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** docker stop in the background (202), pausing a queue that still has work for it; outcome as serviceStatus { op: shutdown }. 404 / 409 as start. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    name: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/audio/enqueue": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Queue TTS audio generation for the items under a node (level: volume|part|chapter). Poll /api/audio/queue. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["AudioEnqueueRequest"];
-                };
-            };
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/audio/enqueue-items": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Queue TTS audio generation for an explicit list of item ids (a selection, or one item to retry). Unknown ids are ignored; the count answers with what was queued. 409 when no paragraph TTS service is active. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["ItemsEnqueueRequest"];
-                };
-            };
-            responses: {
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/audio/items/{itemId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Per-item audio state: queued/processing status, failure outcome, or the audio version stamp once complete. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                    itemId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/projects/{folder}/audio/reviews": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Items whose audio needs review or had it dismissed: { itemId: { state, normalizeOk, normalizeReason, verifyOk, wer, verifyReason, transcript, originalTextSnapshot } }. Sparse: an item with no entry passed both checks. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    folder: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/audio/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Cancel all queued audio work. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/attribution/queue": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Attribution queue snapshot: counts, ETA and the paragraph currently being attributed. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/audio/queue": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Audio generation queue snapshot: counts, average seconds per item and ETA. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/themes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List all themes, built-in first. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        /** Create a custom theme. Colours are #rgb or #rrggbb; optional colours may be null. */
+        /** Create a llm config. The first config auto-activates. */
         post: {
             parameters: {
                 query?: never;
@@ -5092,7 +4580,7 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["AppTheme"];
+                    "application/json": components["schemas"]["LlmServerConfig"];
                 };
             };
             responses: {
@@ -5111,74 +4599,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/settings/themes/{id}": {
+    "/api/settings/llm/active": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        /** Update a custom theme. 400 for built-in themes. */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: number;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["AppTheme"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        post?: never;
-        /** Delete a custom theme; clears the selection if it was active. 400 for built-in themes. */
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: number;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/themes/selection": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The selected theme id and the follow-system-preference flag. */
+        /** The active llm config, 404 when none. */
         get: {
             parameters: {
                 query?: never;
@@ -5197,7 +4625,7 @@ export interface paths {
                 };
             };
         };
-        /** Change the selected theme and/or the follow-system flag; both fields optional. */
+        /** Select the active llm config. */
         put: {
             parameters: {
                 query?: never;
@@ -5207,7 +4635,63 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["ThemeSelectionUpdateRequest"];
+                    "application/json": components["schemas"]["SetActiveRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/llm/attribution-chain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The attribution escalation chain: stored steps in order, the self-consistency flag, the chain as attribution resolves it (an empty chain falls back to the default config) and every config a step may name. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        /** Replace the attribution chain and the self-consistency flag. Exact duplicate steps collapse. 422 when a step names no config. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AttributionChainRequest"];
                 };
             };
             responses: {
@@ -5260,6 +4744,100 @@ export interface paths {
             };
         };
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/llm/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether a test send is in flight, for a client that missed its llmTest message. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/llm/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update a llm config by id. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["LlmServerConfig"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        /** Delete a llm config. Active selection reassigns or clears. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -5341,268 +4919,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/settings/llm/test": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Whether a test send is in flight, for a client that missed its llmTest message. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/llm/attribution-chain": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The attribution escalation chain: stored steps in order, the self-consistency flag, the chain as attribution resolves it (an empty chain falls back to the default config) and every config a step may name. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        /** Replace the attribution chain and the self-consistency flag. Exact duplicate steps collapse. 422 when a step names no config. */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["AttributionChainRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/llm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List llm configs. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        /** Create a llm config. The first config auto-activates. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["LlmServerConfig"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/llm/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Update a llm config by id. */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: number;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["LlmServerConfig"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        post?: never;
-        /** Delete a llm config. Active selection reassigns or clears. */
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: number;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/llm/active": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The active llm config, 404 when none. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        /** Select the active llm config. */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["SetActiveRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/settings/paragraph-tts": {
         parameters: {
             query?: never;
@@ -5653,6 +4969,98 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/paragraph-tts/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The active paragraph-tts config, 404 when none. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        /** Select the active paragraph-tts config. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SetActiveRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/paragraph-tts/schema": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The editable fields of one TTS provider type (?type=VoxCpm2|Chatterbox|Qwen3Base|Breeze, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override. */
+        get: {
+            parameters: {
+                query?: {
+                    type?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5719,19 +5127,21 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/settings/paragraph-tts/active": {
+    "/api/settings/paragraph-tts/{id}/text-steps": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The active paragraph-tts config, 404 when none. */
+        /** The text-processing steps a TTS config may enable (its enabledStepIds): the built-ins, then the config's own substitutions in order. Id 0 lists the built-ins for a config not yet saved. */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
-                path?: never;
+                path: {
+                    id: number;
+                };
                 cookie?: never;
             };
             requestBody?: never;
@@ -5745,29 +5155,7 @@ export interface paths {
                 };
             };
         };
-        /** Select the active paragraph-tts config. */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["SetActiveRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -5775,14 +5163,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/settings/voice-design": {
+    "/api/settings/prompts": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List voice-design configs. */
+        /** Every prompt template, resolved (stored override or built-in default), keyed by kind. */
         get: {
             parameters: {
                 query?: never;
@@ -5802,144 +5190,6 @@ export interface paths {
             };
         };
         put?: never;
-        /** Create a voice-design config. The first config auto-activates. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["VoiceDesignServiceConfig"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/voice-design/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Update a voice-design config by id. */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: number;
-                };
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["VoiceDesignServiceConfig"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        post?: never;
-        /** Delete a voice-design config. Active selection reassigns or clears. */
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: number;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/voice-design/active": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The active voice-design config, 404 when none. */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        /** Select the active voice-design config. */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["SetActiveRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
         post?: never;
         delete?: never;
         options?: never;
@@ -5947,14 +5197,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/settings/transcription": {
+    "/api/settings/prompts/catalog": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List transcription configs. */
+        /** Every prompt kind with its description, tokens, expected response, resolved and default templates, override flag and compatibility warnings. */
         get: {
             parameters: {
                 query?: never;
@@ -5974,36 +5224,14 @@ export interface paths {
             };
         };
         put?: never;
-        /** Create a transcription config. The first config auto-activates. */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["TranscriptionServiceConfig"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/settings/transcription/{id}": {
+    "/api/settings/prompts/{kind}": {
         parameters: {
             query?: never;
             header?: never;
@@ -6011,19 +5239,19 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Update a transcription config by id. */
+        /** Override one prompt template. */
         put: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    id: number;
+                    kind: string;
                 };
                 cookie?: never;
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["TranscriptionServiceConfig"];
+                    "application/json": components["schemas"]["PromptTemplateRequest"];
                 };
             };
             responses: {
@@ -6037,13 +5265,13 @@ export interface paths {
             };
         };
         post?: never;
-        /** Delete a transcription config. Active selection reassigns or clears. */
+        /** Reset one prompt template to its built-in default. */
         delete: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    id: number;
+                    kind: string;
                 };
                 cookie?: never;
             };
@@ -6063,43 +5291,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/settings/transcription/active": {
+    "/api/settings/prompts/{kind}/preview": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The active transcription config, 404 when none. */
-        get: {
+        get?: never;
+        put?: never;
+        /** Render a template (saved or not) with the kind's sample values. */
+        post: {
             parameters: {
                 query?: never;
                 header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
+                path: {
+                    kind: string;
                 };
-            };
-        };
-        /** Select the active transcription config. */
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
                 cookie?: never;
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["SetActiveRequest"];
+                    "application/json": components["schemas"]["PromptPreviewRequest"];
                 };
             };
             responses: {
@@ -6112,7 +5325,6 @@ export interface paths {
                 };
             };
         };
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6169,6 +5381,98 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/semantic-similarity/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The active semantic-similarity config, 404 when none. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        /** Select the active semantic-similarity config. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SetActiveRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/semantic-similarity/schema": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The editable fields of one semantic-similarity provider type (?type=MiniLmL6|MpnetBaseV2, name or number) beyond its base URL: the pass threshold. */
+        get: {
+            parameters: {
+                query?: {
+                    type?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6235,14 +5539,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/settings/semantic-similarity/active": {
+    "/api/settings/semantic-similarity/{id}/test": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The active semantic-similarity config, 404 when none. */
+        get?: never;
+        put?: never;
+        /** Score two texts with one config against its pass threshold. 422 with the reason when the provider fails. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SimilarityTestRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/themes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all themes, built-in first. */
         get: {
             parameters: {
                 query?: never;
@@ -6261,7 +5605,235 @@ export interface paths {
                 };
             };
         };
-        /** Select the active semantic-similarity config. */
+        put?: never;
+        /** Create a custom theme. Colours are #rgb or #rrggbb; optional colours may be null. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AppTheme"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/themes/selection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The selected theme id and the follow-system-preference flag. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        /** Change the selected theme and/or the follow-system flag; both fields optional. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ThemeSelectionUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/themes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update a custom theme. 400 for built-in themes. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AppTheme"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        /** Delete a custom theme; clears the selection if it was active. 400 for built-in themes. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/transcription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List transcription configs. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        /** Create a transcription config. The first config auto-activates. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TranscriptionServiceConfig"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/transcription/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The active transcription config, 404 when none. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        /** Select the active transcription config. */
         put: {
             parameters: {
                 query?: never;
@@ -6291,7 +5863,103 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/preflight/{taskKind}/plan": {
+    "/api/settings/transcription/schema": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The editable fields of one transcription provider type (?type=LocalWhisper, name or number) beyond its base URL — none today. */
+        get: {
+            parameters: {
+                query?: {
+                    type?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/transcription/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update a transcription config by id. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TranscriptionServiceConfig"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        /** Delete a transcription config. Active selection reassigns or clears. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/transcription/{id}/test": {
         parameters: {
             query?: never;
             header?: never;
@@ -6300,13 +5968,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** What must happen before the task may run: { ready, toStart: [{ name, status }], conflicts: [{ name, reason }] }. ready = nothing to do. 409 "Setup check running" while the Setup check's Full check runs. 400 for an unknown task kind (CharacterAttribution, AudioGeneration, VoicePromptGeneration, CharacterDiscovery, VoiceDesignAudio, Transcription, BookEdit). */
+        /** Transcribe an uploaded audio file (multipart field 'file': wav, mp3 or aac, at most 50 MB) with one config. 422 with the reason when the provider fails. */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    taskKind: string;
+                    id: number;
                 };
                 cookie?: never;
             };
@@ -6327,7 +5995,271 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/preflight/{taskKind}/run": {
+    "/api/settings/voice-design": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List voice-design configs. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        /** Create a voice-design config. The first config auto-activates. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["VoiceDesignServiceConfig"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/voice-design/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The active voice-design config, 404 when none. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        /** Select the active voice-design config. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SetActiveRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/voice-design/sample-text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The sentence voice design speaks: the stored override (null when none) and the built-in default. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        /** Override the voice-design sample sentence. Null, blank or the default text clears the override. 400 over maxLength (300) characters. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["VoiceDesignSampleTextRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/voice-design/schema": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The editable fields of one voice-design provider type (?type=VoxCpm2|Qwen3|Breeze, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override. */
+        get: {
+            parameters: {
+                query?: {
+                    type?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/voice-design/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update a voice-design config by id. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["VoiceDesignServiceConfig"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        /** Delete a voice-design config. Active selection reassigns or clears. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/voice-design/{id}/test": {
         parameters: {
             query?: never;
             header?: never;
@@ -6336,19 +6268,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Plan again and carry it out in the background (202 { run }): conflicts stopped, then required services started one at a time. Progress goes to the connectionId in the body as preflight { kind: stage, run, name, stage, error? } then { kind: done, run, ok, reason? }. 409 while the Setup check's Full check runs. */
+        /** Design a voice from a prompt with one config, speaking the sample text; answers the audio as base64. 60 s timeout. 422 with the reason when the provider fails. */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    taskKind: string;
+                    id: number;
                 };
                 cookie?: never;
             };
-            requestBody?: {
+            requestBody: {
                 content: {
-                    "application/json": null | components["schemas"]["PreflightRunRequest"];
+                    "application/json": components["schemas"]["VoiceDesignTestRequest"];
                 };
             };
             responses: {
@@ -6403,7 +6335,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/setup-check/quick": {
+    "/api/setup-check/checks/{id}/rerun": {
         parameters: {
             query?: never;
             header?: never;
@@ -6412,23 +6344,43 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Run the Quick check (Workspace, ffmpeg, docker CLI) and answer the new report. It never starts, stops or switches anything; it creates the Workspace folder when missing. While a Full check runs it answers the run's report instead. */
+        /** Re-run one Full-tier check (a row whose rerun isn't null) in the background: only the steps that judge it (similarity transcribes first, to score a real transcript), under the Full check's rules — queues wait, Preflight refuses new AI tasks, the containers it drives are put back, and progress goes out as setupCheck messages. rerun.gpu says it stops the running GPU container. The report's fullCheckedAt stays the last whole Full check's. 202 with the report (fullRun shows the re-run); 404 for an unknown or Quick-tier id; 409 while a Full check runs, while work is in flight (named, as for the Full check), before the start-up Quick check ends, when the check has no active config, or when its rerun.gpu is stale (the check now drives a GPU container: run the Quick check first). */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
-                path?: never;
+                path: {
+                    id: string;
+                };
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Accepted */
+                202: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": components["schemas"]["SetupCheckReport"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
                     };
                 };
             };
@@ -6529,7 +6481,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/setup-check/checks/{id}/rerun": {
+    "/api/setup-check/quick": {
         parameters: {
             query?: never;
             header?: never;
@@ -6538,43 +6490,23 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Re-run one Full-tier check (a row whose rerun isn't null) in the background: only the steps that judge it (similarity transcribes first, to score a real transcript), under the Full check's rules — queues wait, Preflight refuses new AI tasks, the containers it drives are put back, and progress goes out as setupCheck messages. rerun.gpu says it stops the running GPU container. The report's fullCheckedAt stays the last whole Full check's. 202 with the report (fullRun shows the re-run); 404 for an unknown or Quick-tier id; 409 while a Full check runs, while work is in flight (named, as for the Full check), before the start-up Quick check ends, when the check has no active config, or when its rerun.gpu is stale (the check now drives a GPU container: run the Quick check first). */
+        /** Run the Quick check (Workspace, ffmpeg, docker CLI) and answer the new report. It never starts, stops or switches anything; it creates the Workspace folder when missing. While a Full check runs it answers the run's report instead. */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
-                path: {
-                    id: string;
-                };
+                path?: never;
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description Accepted */
-                202: {
+                /** @description OK */
+                200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": components["schemas"]["SetupCheckReport"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
                     };
                 };
             };
@@ -6585,82 +6517,150 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/voice-batch/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel the running voice batch. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voice-batch/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Voice batch progress. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AppTheme: {
+            appbarBackground?: null | string;
+            background?: null | string;
+            drawerBackground?: null | string;
+            /** Format: int32 */
+            id?: number | string;
+            isBuiltIn?: boolean;
+            isDark?: boolean;
+            name?: string;
+            primary?: string;
+            secondary?: string;
+            surface?: null | string;
+            textPrimary?: null | string;
+            textSecondary?: null | string;
+        };
         ApplyDiscoveryRow: {
-            name: string;
             aliases: null | string[];
+            name: string;
         };
         ApplyPreviewRequest: {
             previewId: null | string;
-        };
-        AppTheme: {
-            /** Format: int32 */
-            id?: number | string;
-            name?: string;
-            isBuiltIn?: boolean;
-            isDark?: boolean;
-            primary?: string;
-            secondary?: string;
-            background?: null | string;
-            surface?: null | string;
-            appbarBackground?: null | string;
-            drawerBackground?: null | string;
-            textPrimary?: null | string;
-            textSecondary?: null | string;
         };
         AssemblyStartRequest: {
             /** @default false */
             allowPartial: boolean;
         };
         AttributionChainRequest: {
-            steps?: null | components["schemas"]["AttributionChainStepDto"][];
             /** @default false */
             selfConsistency: boolean;
+            steps?: null | components["schemas"]["AttributionChainStepDto"][];
         };
         AttributionChainStepDto: {
             /** Format: int32 */
             configId: number | string;
-            thinking: boolean;
             promptStyle?: null | components["schemas"]["AttributionPromptStyle"];
+            thinking: boolean;
         };
         AttributionPromptStyle: number;
         AudioEnqueueRequest: {
             level: string;
-            /** Format: uuid */
-            nodeId: string;
-            /** @default true */
-            needsAudioOnly: boolean;
             /** @default false */
             narratorOnlyMode: boolean;
+            /** @default true */
+            needsAudioOnly: boolean;
+            /** Format: uuid */
+            nodeId: string;
         };
         AudioPostProcessStepConfig: {
-            stepId: string;
             enabled: boolean;
             settings: null | components["schemas"]["JsonElement"];
+            stepId: string;
         };
         AudioProcessingUpdateRequest: {
-            ffmpegPath?: null | string;
-            /** Format: double */
-            werThreshold?: null | number | string;
             /** Format: int32 */
             audioMaxAttempts?: null | number | string;
             /** Format: int32 */
             chunkPauseMs?: null | number | string;
+            ffmpegPath?: null | string;
+            /** Format: double */
+            werThreshold?: null | number | string;
         };
         BookOverviewDto: {
-            hasContent: boolean;
-            volumes: components["schemas"]["NodeDto"][];
             characters: components["schemas"]["CharacterDto"][];
-            /** Format: int32 */
-            totalParts: number | string;
-            /** Format: int32 */
-            totalChapters: number | string;
+            hasContent: boolean;
             /** Format: int64 */
             revision: number | string;
             structureRules: components["schemas"]["StructureRuleDto"][];
+            /** Format: int32 */
+            totalChapters: number | string;
+            /** Format: int32 */
+            totalParts: number | string;
+            volumes: components["schemas"]["NodeDto"][];
         };
         BulkAssignPreviewRequest: {
             paragraphIds: string[];
@@ -6671,10 +6671,10 @@ export interface components {
             name: string;
         };
         CharacterDto: {
+            aliases: components["schemas"]["CharacterAliasDto"][];
             /** Format: uuid */
             id: string;
             name: string;
-            aliases: components["schemas"]["CharacterAliasDto"][];
         };
         /** @enum {unknown} */
         CheckpointRequestState: "confirmed" | "skipped" | "open" | null;
@@ -6688,57 +6688,57 @@ export interface components {
             reason: string;
         };
         HistoryDto: {
-            steps: components["schemas"]["HistoryStep"][];
+            busy: null | components["schemas"]["HistoryBusyDto"];
             /** Format: uuid */
             headStepId: null | string;
-            busy: null | components["schemas"]["HistoryBusyDto"];
             restoring: boolean;
+            steps: components["schemas"]["HistoryStep"][];
         };
         HistoryStep: {
-            /** Format: uuid */
-            stepId: string;
-            /** Format: uuid */
-            parentStepId: null | string;
-            /** Format: int32 */
-            sequence: number | string;
-            label: string;
-            summary: null | string;
-            author: string;
-            /** Format: date-time */
-            startedAt: string;
-            /** Format: date-time */
-            endedAt: null | string;
-            isOpen: boolean;
-            note: null | string;
-            kind: components["schemas"]["HistoryStepKind"];
             action: null | components["schemas"]["StepAction"];
-            /** Format: uuid */
-            restoredFromStepId?: null | string;
+            author: string;
             /** @default false */
             cantOpen: boolean;
-        };
-        HistoryStepDto: {
-            /** Format: uuid */
-            stepId: string;
-            /** Format: uuid */
-            parentStepId: null | string;
-            /** Format: int32 */
-            sequence: number | string;
-            label: string;
-            summary: null | string;
-            author: string;
-            /** Format: date-time */
-            startedAt: string;
             /** Format: date-time */
             endedAt: null | string;
             isOpen: boolean;
-            note: null | string;
             kind: components["schemas"]["HistoryStepKind"];
+            label: string;
+            note: null | string;
+            /** Format: uuid */
+            parentStepId: null | string;
+            /** Format: uuid */
+            restoredFromStepId?: null | string;
+            /** Format: int32 */
+            sequence: number | string;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: uuid */
+            stepId: string;
+            summary: null | string;
+        };
+        HistoryStepDto: {
             action: null | components["schemas"]["StepAction"];
+            author: string;
+            cantOpen: boolean;
+            /** Format: date-time */
+            endedAt: null | string;
+            isOpen: boolean;
+            kind: components["schemas"]["HistoryStepKind"];
+            label: string;
+            note: null | string;
+            /** Format: uuid */
+            parentStepId: null | string;
+            restorePreview: null | components["schemas"]["RestorePreviewDto"];
             /** Format: uuid */
             restoredFromStepId: null | string;
-            cantOpen: boolean;
-            restorePreview: null | components["schemas"]["RestorePreviewDto"];
+            /** Format: int32 */
+            sequence: number | string;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: uuid */
+            stepId: string;
+            summary: null | string;
         };
         /** @enum {unknown} */
         HistoryStepKind: "request" | "backgroundRun" | "restore" | "started" | "import";
@@ -6753,43 +6753,43 @@ export interface components {
         JsonObject: Record<string, never>;
         LlmApiType: number;
         LlmServerConfig: {
+            apiKey?: null | string;
+            apiType?: components["schemas"]["LlmApiType"];
+            /** Format: int32 */
+            attributionBatchSize?: number | string;
+            baseUrl?: string;
+            /** Format: double */
+            frequencyPenalty?: null | number | string;
             /** Format: int32 */
             id?: number | string;
-            name?: string;
-            apiType?: components["schemas"]["LlmApiType"];
-            baseUrl?: string;
-            apiKey?: null | string;
+            /** Format: int32 */
+            maxTokens?: null | number | string;
             model?: null | string;
+            name?: string;
+            /** Format: double */
+            presencePenalty?: null | number | string;
+            promptStyle?: components["schemas"]["AttributionPromptStyle"];
+            supportsModelSwitch?: boolean;
             /** Format: double */
             temperature?: null | number | string;
             /** Format: double */
             topP?: null | number | string;
-            /** Format: int32 */
-            maxTokens?: null | number | string;
-            /** Format: double */
-            frequencyPenalty?: null | number | string;
-            /** Format: double */
-            presencePenalty?: null | number | string;
-            /** Format: int32 */
-            attributionBatchSize?: number | string;
-            promptStyle?: components["schemas"]["AttributionPromptStyle"];
-            supportsModelSwitch?: boolean;
         };
         LlmTestRequest: {
-            prompt?: null | string;
             connectionId?: null | string;
+            prompt?: null | string;
         };
         ManualImportRequest: {
-            hasMultipleVolumes: boolean;
-            hasMultipleParts: boolean;
-            volume: null | components["schemas"]["SplitRuleRequest"];
-            part: null | components["schemas"]["SplitRuleRequest"];
             chapter: null | components["schemas"]["SplitRuleRequest"];
+            hasMultipleParts: boolean;
+            hasMultipleVolumes: boolean;
+            part: null | components["schemas"]["SplitRuleRequest"];
+            volume: null | components["schemas"]["SplitRuleRequest"];
         };
         NarrationReleasePreviewRequest: {
-            scope: components["schemas"]["NarrationReleaseScope"];
             /** Format: uuid */
             nodeId: string;
+            scope: components["schemas"]["NarrationReleaseScope"];
         };
         /** @enum {unknown} */
         NarrationReleaseScope: "Part" | "Chapter" | "Paragraph";
@@ -6810,31 +6810,31 @@ export interface components {
         };
         /** @enum {unknown} */
         NodeKind: "Volume" | "Part" | "Chapter" | "Paragraph" | "ParagraphItem";
-        ParagraphsEnqueueRequest: {
-            paragraphIds: string[];
-        };
         ParagraphTtsServiceConfig: {
+            enabledStepIds?: string[];
             /** Format: int32 */
             id?: number | string;
             name?: string;
-            type?: components["schemas"]["ParagraphTtsServiceType"];
             settingsJson?: string;
-            enabledStepIds?: string[];
             substitutionSteps?: components["schemas"]["TextSubstitutionStep"][];
             toSentenceCaseConfig?: null | components["schemas"]["ToSentenceCaseConfig"];
+            type?: components["schemas"]["ParagraphTtsServiceType"];
         };
         ParagraphTtsServiceType: number;
+        ParagraphsEnqueueRequest: {
+            paragraphIds: string[];
+        };
         PauseDurationsDto: {
-            /** Format: int32 */
-            volumeMs: number | string;
-            /** Format: int32 */
-            partMs: number | string;
             /** Format: int32 */
             chapterMs: number | string;
             /** Format: int32 */
             paragraphMs: number | string;
             /** Format: int32 */
+            partMs: number | string;
+            /** Format: int32 */
             pauseMs: number | string;
+            /** Format: int32 */
+            volumeMs: number | string;
         };
         /** @enum {unknown} */
         Placement: "Before" | "After" | "AtStart" | "AtEnd";
@@ -6855,16 +6855,16 @@ export interface components {
             itemId: string;
         };
         PreviewStepRequest: {
-            stepId: null | string;
             settings: null | components["schemas"]["JsonElement"];
+            stepId: null | string;
         };
         ProblemDetails: {
-            type?: null | string;
-            title?: null | string;
-            /** Format: int32 */
-            status?: null | number | string;
             detail?: null | string;
             instance?: null | string;
+            /** Format: int32 */
+            status?: null | number | string;
+            title?: null | string;
+            type?: null | string;
         };
         PromptPreviewRequest: {
             template: string;
@@ -6879,101 +6879,101 @@ export interface components {
             needsAudioCount: number | string;
         };
         PronunciationDraftRequest: {
-            /** Format: uuid */
-            id: null | string;
-            writtenForm: null | string;
-            spokenForm: null | string;
             /** @default false */
             delete: boolean;
+            /** Format: uuid */
+            id: null | string;
+            spokenForm: null | string;
+            writtenForm: null | string;
         };
         PronunciationImpactReport: {
             /** Format: int32 */
-            matchCount: number | string;
+            audioDiscardCount: number | string;
+            duplicateOf: null | components["schemas"]["PronunciationRef"];
             /** Format: int32 */
             itemCount: number | string;
             /** Format: int32 */
-            withAudioCount: number | string;
-            /** Format: int32 */
-            audioDiscardCount: number | string;
-            overlaps: components["schemas"]["PronunciationOverlap"][];
-            duplicateOf: null | components["schemas"]["PronunciationRef"];
+            matchCount: number | string;
             matches: components["schemas"]["PronunciationMatchInBook"][];
+            overlaps: components["schemas"]["PronunciationOverlap"][];
+            /** Format: int32 */
+            withAudioCount: number | string;
         };
         PronunciationMatchInBook: {
             /** Format: uuid */
-            itemId: string;
-            /** Format: uuid */
             chapterId: string;
             chapterTitle: null | string;
-            speaker: null | string;
             hasAudio: boolean;
+            /** Format: uuid */
+            itemId: string;
+            /** Format: int32 */
+            matchLength: number | string;
+            /** Format: int32 */
+            matchStart: number | string;
             sentence: string;
             /** Format: int32 */
             sentenceStart: number | string;
-            /** Format: int32 */
-            matchStart: number | string;
-            /** Format: int32 */
-            matchLength: number | string;
-            spokenSentence: string;
-            /** Format: int32 */
-            spokenMatchStart: number | string;
+            speaker: null | string;
             /** Format: int32 */
             spokenMatchLength: number | string;
+            /** Format: int32 */
+            spokenMatchStart: number | string;
+            spokenSentence: string;
         };
         PronunciationOverlap: {
+            draftWins: boolean;
             /** Format: uuid */
             id: string;
-            writtenForm: string;
             spokenForm: string;
-            draftWins: boolean;
+            writtenForm: string;
         };
         PronunciationRef: {
             /** Format: uuid */
             id: string;
-            writtenForm: string;
             spokenForm: string;
+            writtenForm: string;
         };
         PronunciationSaved: {
+            /** Format: int32 */
+            audioDiscardCount: number | string;
             /** Format: uuid */
             id: string;
-            writtenForm: string;
-            spokenForm: string;
-            /** Format: int32 */
-            matchCount: number | string;
             /** Format: int32 */
             itemCount: number | string;
             /** Format: int32 */
-            withAudioCount: number | string;
-            /** Format: int32 */
-            audioDiscardCount: number | string;
+            matchCount: number | string;
             /** Format: int32 */
             needsAudioCount: number | string;
+            spokenForm: string;
+            /** Format: int32 */
+            withAudioCount: number | string;
+            writtenForm: string;
         };
         PronunciationSpan: {
             /** Format: uuid */
             itemId: string;
-            /** Format: int32 */
-            start: number | string;
             /** Format: int32 */
             length: number | string;
             /** Format: uuid */
             pronunciationId: string;
             /** Format: int32 */
             sentenceStart: number | string;
+            /** Format: int32 */
+            start: number | string;
         };
         PronunciationSpanReport: {
             pronunciations: components["schemas"]["PronunciationRef"][];
             spans: components["schemas"]["PronunciationSpan"][];
         };
         ProposeBookEditRequest: {
+            connectionId?: null | string;
             /** @default false */
             thinking: boolean;
-            connectionId?: null | string;
         };
         ProposeOneBookEditRequest: {
+            hint?: null | string;
             /** Format: uuid */
             targetId: string;
-            hint?: null | string;
             /** @default false */
             thinking: boolean;
         };
@@ -6982,18 +6982,18 @@ export interface components {
             audioDiscardCount: number | string;
         };
         RestoreResultDto: {
-            step: null | components["schemas"]["HistoryStep"];
             /** Format: int32 */
             audioDiscardCount: number | string;
             /** Format: int32 */
             needsAudioCount: number | string;
+            step: null | components["schemas"]["HistoryStep"];
         };
         SemanticSimilarityServiceConfig: {
             /** Format: int32 */
             id?: number | string;
             name?: string;
-            type?: components["schemas"]["SemanticSimilarityServiceType"];
             settingsJson?: string;
+            type?: components["schemas"]["SemanticSimilarityServiceType"];
         };
         SemanticSimilarityServiceType: number;
         SetActiveRequest: {
@@ -7004,68 +7004,68 @@ export interface components {
             state: null | components["schemas"]["CheckpointRequestState"];
         };
         SetPronunciationRequest: {
-            writtenForm: null | string;
             spokenForm: null | string;
+            writtenForm: null | string;
         };
         /** @enum {unknown} */
         SetupCheckGroup: "workspaceAndTools" | "aiConfigs" | "dockerServices";
         /** @enum {unknown} */
         SetupCheckLane: "local" | "cpu" | "gpu";
         SetupCheckReport: {
-            rows: components["schemas"]["SetupCheckRow"][];
-            /** Format: date-time */
-            quickCheckedAt: null | string;
-            /** Format: date-time */
-            fullCheckedAt: null | string;
             firstRun: boolean;
-            /** Format: date-time */
-            startedAt: string;
-            noWorkspace: boolean;
-            fullRun?: null | components["schemas"]["SetupFullRun"];
             /**
              * Format: int32
              * @default 0
              */
             fullCheckEstimateSeconds: number | string;
+            /** Format: date-time */
+            fullCheckedAt: null | string;
+            fullRun?: null | components["schemas"]["SetupFullRun"];
+            noWorkspace: boolean;
             putBack?: null | string;
+            /** Format: date-time */
+            quickCheckedAt: null | string;
+            rows: components["schemas"]["SetupCheckRow"][];
+            /** Format: date-time */
+            startedAt: string;
         };
         /** @enum {unknown} */
         SetupCheckResult: "passed" | "failed" | "notConfirmed" | "notRun" | "notUsed" | "checking";
         SetupCheckRow: {
-            id: string;
-            group: components["schemas"]["SetupCheckGroup"];
-            name: string;
-            tier: components["schemas"]["SetupCheckTier"];
-            result: components["schemas"]["SetupCheckResult"];
             expected: string;
-            found: string;
-            note: null | string;
             fix: components["schemas"]["SetupFixHint"];
+            found: string;
+            group: components["schemas"]["SetupCheckGroup"];
+            id: string;
             managed: boolean;
+            name: string;
+            note: null | string;
             rerun?: null | components["schemas"]["SetupRerun"];
+            result: components["schemas"]["SetupCheckResult"];
+            tier: components["schemas"]["SetupCheckTier"];
         };
         /** @enum {unknown} */
         SetupCheckTier: "quick" | "full";
         SetupFixHint: {
-            text: string;
-            link?: null | components["schemas"]["SetupSettingsLink"];
             copy?: null | string;
+            link?: null | components["schemas"]["SetupSettingsLink"];
+            text: string;
         };
         SetupFullRun: {
+            cancelling: boolean;
+            label: string;
+            lane: components["schemas"]["SetupCheckLane"];
             /** Format: int32 */
             step: number | string;
             /** Format: int32 */
             total: number | string;
-            lane: components["schemas"]["SetupCheckLane"];
-            label: string;
-            cancelling: boolean;
         };
         SetupRerun: {
             gpu: boolean;
         };
         SetupSettingsLink: {
-            path: string;
             label: string;
+            path: string;
         };
         SimilarityTestRequest: {
             text1?: null | string;
@@ -7084,37 +7084,37 @@ export interface components {
         /** @enum {unknown} */
         StructureAnchor: "Volume" | "Part" | "Chapter" | "Paragraph" | "PauseParagraph" | "ParagraphItem";
         StructurePlacementDto: {
-            placement: components["schemas"]["Placement"];
             creates: components["schemas"]["NodeKind"];
+            placement: components["schemas"]["Placement"];
             textRequired: boolean;
         };
         StructureRuleDto: {
             anchor: components["schemas"]["StructureAnchor"];
-            nodeKind: components["schemas"]["NodeKind"];
-            placements: components["schemas"]["StructurePlacementDto"][];
             /** Format: int32 */
             minimumCount: number | string;
+            nodeKind: components["schemas"]["NodeKind"];
+            placements: components["schemas"]["StructurePlacementDto"][];
         };
         TextSubstitutionStep: {
+            fromText?: string;
             id?: string;
             /** Format: int32 */
-            paragraphTtsServiceConfigId?: number | string;
-            fromText?: string;
-            toText?: string;
-            /** Format: int32 */
             order?: number | string;
+            /** Format: int32 */
+            paragraphTtsServiceConfigId?: number | string;
+            toText?: string;
         };
         ThemeSelectionUpdateRequest: {
+            followSystemPreference?: null | boolean;
             /** Format: int32 */
             selectedThemeId?: null | number | string;
-            followSystemPreference?: null | boolean;
         };
         ToSentenceCaseConfig: {
             /** Format: int32 */
             id?: number | string;
+            paragraphEnabled?: boolean;
             /** Format: int32 */
             paragraphTtsServiceConfigId?: number | string;
-            paragraphEnabled?: boolean;
             wordEnabled?: boolean;
             /** Format: int32 */
             wordMinLength?: number | string;
@@ -7123,23 +7123,23 @@ export interface components {
             /** Format: int32 */
             id?: number | string;
             name?: string;
-            type?: components["schemas"]["TranscriptionServiceType"];
             settingsJson?: string;
+            type?: components["schemas"]["TranscriptionServiceType"];
         };
         TranscriptionServiceType: number;
         TryPronunciationRequest: {
+            asWritten: boolean;
+            draft: null | components["schemas"]["PronunciationDraftRequest"];
             /** Format: uuid */
             itemId: string;
             /** Format: int32 */
             sentenceStart: number | string;
-            draft: null | components["schemas"]["PronunciationDraftRequest"];
-            asWritten: boolean;
             voice: null | components["schemas"]["JsonElement"];
         };
         UpdateProjectRequest: {
-            title?: null | string;
-            bookTitle?: null | string;
             author?: null | string;
+            bookTitle?: null | string;
+            title?: null | string;
         };
         VoiceBatchStartRequest: {
             /** @default false */
@@ -7152,8 +7152,8 @@ export interface components {
             /** Format: int32 */
             id?: number | string;
             name?: string;
-            type?: components["schemas"]["VoiceDesignServiceType"];
             settingsJson?: string;
+            type?: components["schemas"]["VoiceDesignServiceType"];
         };
         VoiceDesignServiceType: number;
         VoiceDesignTestRequest: {

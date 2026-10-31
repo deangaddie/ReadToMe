@@ -1,6 +1,6 @@
 import { BOOK_COMMAND_TYPES } from './book-commands';
 
-// Same default as scripts/check-api-types.ts.
+// The dev host `bun run dev` proxies to.
 const HOST = 'http://localhost:5000';
 
 /**

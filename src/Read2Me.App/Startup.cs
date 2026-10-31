@@ -59,7 +59,7 @@ namespace Read2Me.App
                 app.UseHsts();
             }
 
-            // The web dev server's proxy, `bun run api:types` and the host-backed unit tests talk plain HTTP
+            // The web dev server's proxy and the host-backed unit tests talk plain HTTP
             // to :5000 (Node fetch cannot follow a 307 to the self-signed dev cert), so only redirect
             // outside Development.
             if (!env.IsDevelopment())
