@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
-import { ApiError, AudioApi } from '@app/api';
+import { AudioApi } from '@app/api';
 import { override, resetServices } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { Preflight } from '@app/shared/preflight';
@@ -68,19 +68,26 @@ describe('AudioGenerator', () => {
     });
   });
 
-  it('nothing queued is said so and answers false; a 409 becomes a problem toast', async () => {
-    enqueueItems.mockResolvedValue({ enqueued: 0 });
-    expect(await generator.enqueueItems(['i1'])).toBe(false);
-    expect(toasts).toEqual([{ kind: 'success', message: 'Nothing to queue' }]);
-
-    toasts = [];
-    enqueueItems.mockRejectedValue(
-      new ApiError(409, 'Conflict', 'No paragraph TTS service configured.'),
-    );
-    expect(await generator.enqueueItems(['i1'])).toBe(false);
-    expect(toasts[0]?.kind).toBe('problem');
-    expect((toasts[0]!.message as { detail?: string }).detail).toContain('No paragraph TTS');
+  it('is working while a request is in flight, and a second request then posts nothing', async () => {
+    let release!: (r: { enqueued: number }) => void;
+    enqueueItems.mockImplementation(() => new Promise((r) => (release = r)));
+    const first = generator.enqueueItems(['i1']);
+    await Promise.resolve();
+    expect(generator.working()).toBe(true);
+    expect(await generator.retry('i2')).toBe(false);
+    release({ enqueued: 1 });
+    expect(await first).toBe(true);
+    expect(enqueueItems).toHaveBeenCalledTimes(1);
     expect(generator.working()).toBe(false);
+  });
+
+  it('posts nothing without a project folder', async () => {
+    generator = new AudioGenerator(
+      { run } as unknown as BookEditor,
+      { folder: signal(null) } as unknown as BookStore,
+    );
+    expect(await generator.enqueueNode('chapter', 'c1', false)).toBe(false);
+    expect(ensureReady).not.toHaveBeenCalled();
   });
 
   it('dismissing a review posts the command through the editor', async () => {
