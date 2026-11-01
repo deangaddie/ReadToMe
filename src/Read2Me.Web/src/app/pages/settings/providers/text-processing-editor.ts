@@ -1,6 +1,6 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
-import type { TextStep } from '@app/api';
+import type { TextStepDto } from '@app/api';
 import { controlValue, field } from '@app/ui/field';
 import { icon } from '@app/ui/partials';
 import {
@@ -18,7 +18,7 @@ export type TextProcessingEdit = (text: TextProcessingForm) => TextProcessingFor
 export interface TextProcessingEditorOptions {
   text: TextProcessingForm;
   /** The host's step catalog; the config's substitutions in it are edited as rows instead. */
-  steps: TextStep[];
+  steps: TextStepDto[];
   onEdit: (edit: TextProcessingEdit) => void;
 }
 
@@ -61,7 +61,7 @@ export function textProcessingEditor(o: TextProcessingEditorOptions) {
     onEdit((t) => setStepEnabled(t, stepId, enabled));
   const setSentenceCase = (change: Partial<ToSentenceCaseForm>) =>
     onEdit((t) => ({ ...t, toSentenceCase: { ...t.toSentenceCase, ...change } }));
-  const optionLabel = (step: TextStep, key: string, fallback: string) =>
+  const optionLabel = (step: TextStepDto, key: string, fallback: string) =>
     step.options?.find((opt) => opt.key === key)?.label ?? fallback;
 
   return html`<div class="text-processing">

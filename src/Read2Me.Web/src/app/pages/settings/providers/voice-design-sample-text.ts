@@ -1,5 +1,5 @@
 import { html, nothing } from 'lit-html';
-import { type VoiceDesignSampleText, VoiceDesignSettingsApi, toApiError } from '@app/api';
+import { type VoiceDesignSampleTextResponse, VoiceDesignSettingsApi, toApiError } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
@@ -19,7 +19,7 @@ export class VoiceDesignSampleTextCard extends R2mElement {
   private readonly toast = use(ToastService);
 
   /** Null until the first load lands. */
-  readonly stored = signal<VoiceDesignSampleText | null>(null);
+  readonly stored = signal<VoiceDesignSampleTextResponse | null>(null);
   readonly draft = signal('');
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
@@ -115,7 +115,7 @@ export class VoiceDesignSampleTextCard extends R2mElement {
   }
 
   /** A reload never wipes a draft in progress. */
-  private accept(stored: VoiceDesignSampleText, replaceDraft = !this.dirty()): void {
+  private accept(stored: VoiceDesignSampleTextResponse, replaceDraft = !this.dirty()): void {
     this.stored.set(stored);
     if (replaceDraft) this.draft.set(stored.text ?? stored.default);
     this.error.set(null);

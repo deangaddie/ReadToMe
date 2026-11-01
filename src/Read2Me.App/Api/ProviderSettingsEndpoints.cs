@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Services;
@@ -71,43 +72,43 @@ namespace Read2Me.App.Api
                 .WithSummary("Score two texts with one config against its pass threshold. 422 with the reason when the provider fails.");
         }
 
-        private static async Task<IResult> GetTextStepsAsync(
+        private static async Task<Results<Ok<List<TextStepDto>>, NotFound>> GetTextStepsAsync(
             int id, ParagraphTtsSettingsService settings, ITextProcessingStepCatalog catalog)
         {
             if (id != 0 && (await settings.GetAllConfigsAsync()).All(c => c.Id != id))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var builtIns = catalog.GetAll(0).Select(s => s.Id).ToHashSet();
-            return Results.Ok(catalog.GetAll(id)
+            return TypedResults.Ok(catalog.GetAll(id)
                 .Select(s => new TextStepDto(s.Id, s.DisplayName, s.Description, builtIns.Contains(s.Id),
                     s.Id == ToSentenceCaseStepId ? ToSentenceCaseOptions : null))
                 .ToList());
         }
 
-        private static async Task<IResult> GetSampleTextAsync(VoiceDesignSettingsService settings) =>
-            Results.Ok(new VoiceDesignSampleTextResponse(
+        private static async Task<Ok<VoiceDesignSampleTextResponse>> GetSampleTextAsync(VoiceDesignSettingsService settings) =>
+            TypedResults.Ok(new VoiceDesignSampleTextResponse(
                 await settings.GetSampleTextAsync(), PromptTemplates.VoiceDesignSampleSentence,
                 VoiceDesignSettingsService.MaxSampleTextLength));
 
-        private static async Task<IResult> SetSampleTextAsync(
+        private static async Task<Results<Ok<VoiceDesignSampleTextResponse>, ProblemHttpResult>> SetSampleTextAsync(
             VoiceDesignSampleTextRequest request, VoiceDesignSettingsService settings)
         {
             var isOverride = !string.IsNullOrWhiteSpace(request.Text)
                 && request.Text != PromptTemplates.VoiceDesignSampleSentence;
             if (isOverride && VoiceDesignSettingsService.ValidateSampleText(request.Text) is { } error)
-                return Results.Problem(error, statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem(error, statusCode: StatusCodes.Status400BadRequest);
             await settings.SetSampleTextAsync(isOverride ? request.Text : null);
             return await GetSampleTextAsync(settings);
         }
 
-        private static async Task<IResult> TestVoiceDesignAsync(
+        private static async Task<Results<Ok<VoiceDesignTestResponse>, NotFound, ProblemHttpResult>> TestVoiceDesignAsync(
             int id, VoiceDesignTestRequest request, VoiceDesignSettingsService settings,
             IVoiceDesignClientResolver clients, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(request.Prompt))
-                return Results.Problem("A prompt is required.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("A prompt is required.", statusCode: StatusCodes.Status400BadRequest);
             if ((await settings.GetAllConfigsAsync()).FirstOrDefault(c => c.Id == id) is not { } config)
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(VoiceDesignTestTimeout);
@@ -120,7 +121,7 @@ namespace Read2Me.App.Api
                     null, timeout.Token);
                 using var buffer = new MemoryStream();
                 await audio.CopyToAsync(buffer, timeout.Token);
-                return Results.Ok(new VoiceDesignTestResponse(Convert.ToBase64String(buffer.ToArray()), "audio/wav"));
+                return TypedResults.Ok(new VoiceDesignTestResponse(Convert.ToBase64String(buffer.ToArray()), "audio/wav"));
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -132,7 +133,7 @@ namespace Read2Me.App.Api
             }
             catch (TtsBusyException)
             {
-                return Results.Problem(TtsBusyException.UserMessage, statusCode: StatusCodes.Status503ServiceUnavailable);
+                return TypedResults.Problem(TtsBusyException.UserMessage, statusCode: StatusCodes.Status503ServiceUnavailable);
             }
             catch (Exception ex)
             {
@@ -140,12 +141,12 @@ namespace Read2Me.App.Api
             }
         }
 
-        private static async Task<IResult> TestTranscriptionAsync(
+        private static async Task<Results<Ok<TranscriptionTestResponse>, NotFound, ProblemHttpResult>> TestTranscriptionAsync(
             int id, HttpRequest request, TranscriptionSettingsService settings,
             ITranscriptionClientResolver clients, CancellationToken ct)
         {
             if ((await settings.GetAllConfigsAsync()).FirstOrDefault(c => c.Id == id) is not { } config)
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             // Kestrel's default body cap is 30 MB; a test clip may be up to 50 MB.
             var sizeFeature = request.HttpContext.Features.Get<IHttpMaxRequestBodySizeFeature>();
@@ -160,7 +161,7 @@ namespace Read2Me.App.Api
             try
             {
                 await using var audio = file.File.OpenReadStream();
-                return Results.Ok(new TranscriptionTestResponse(
+                return TypedResults.Ok(new TranscriptionTestResponse(
                     await clients.Resolve(config.Type).TranscribeAsync(config, audio, file.FileName, ct)));
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -173,20 +174,20 @@ namespace Read2Me.App.Api
             }
         }
 
-        private static async Task<IResult> TestSimilarityAsync(
+        private static async Task<Results<Ok<SimilarityTestResponse>, NotFound, ProblemHttpResult>> TestSimilarityAsync(
             int id, SimilarityTestRequest request, SemanticSimilaritySettingsService settings,
             ISemanticSimilarityClientResolver clients, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(request.Text1) || string.IsNullOrWhiteSpace(request.Text2))
-                return Results.Problem("Both texts are required.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("Both texts are required.", statusCode: StatusCodes.Status400BadRequest);
             if ((await settings.GetAllConfigsAsync()).FirstOrDefault(c => c.Id == id) is not { } config)
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             try
             {
                 var score = await clients.Resolve(config.Type).ComputeAsync(config, request.Text1, request.Text2, ct);
                 var threshold = ProviderSettingsJson.ReadSimilarity(config).PassThreshold;
-                return Results.Ok(new SimilarityTestResponse(score, threshold, score >= threshold));
+                return TypedResults.Ok(new SimilarityTestResponse(score, threshold, score >= threshold));
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -198,7 +199,7 @@ namespace Read2Me.App.Api
             }
         }
 
-        private static IResult ProviderFailed(string reason) =>
-            Results.Problem(reason, statusCode: StatusCodes.Status422UnprocessableEntity);
+        private static ProblemHttpResult ProviderFailed(string reason) =>
+            TypedResults.Problem(reason, statusCode: StatusCodes.Status422UnprocessableEntity);
     }
 }

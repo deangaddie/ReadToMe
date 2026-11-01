@@ -1,6 +1,6 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
-import { type AttributionChainStep, toApiError } from '@app/api';
+import { type AttributionChainStepDto, toApiError } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
@@ -201,7 +201,7 @@ export class LlmChainCard extends R2mElement {
   }
 
   private async save(
-    steps: AttributionChainStep[],
+    steps: AttributionChainStepDto[],
     selfConsistency = this.store.selfConsistency(),
   ): Promise<void> {
     if (steps === this.store.steps() && selfConsistency === this.store.selfConsistency()) return;

@@ -1,4 +1,4 @@
-import type { AppTheme, ThemeSelection } from '@app/api';
+import type { AppTheme, ThemeSelectionDto } from '@app/api';
 
 /**
  * AppTheme → CSS custom properties (spec §5.1). Pure functions so the mapping table is unit tested
@@ -117,7 +117,7 @@ export function buildThemeStylesheet(theme: AppTheme): string {
  */
 export function resolveEffectiveTheme(
   themes: readonly AppTheme[],
-  selection: ThemeSelection | null,
+  selection: ThemeSelectionDto | null,
   prefersDark: boolean,
 ): AppTheme | null {
   if (themes.length === 0) return null;

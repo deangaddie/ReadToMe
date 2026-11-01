@@ -1,4 +1,4 @@
-import { type AppTheme, type ThemeSelection, ThemesApi } from '@app/api';
+import { type AppTheme, type ThemeSelectionDto, ThemesApi } from '@app/api';
 import { use } from '@app/core/services';
 import { computed, effect, signal } from '@app/core/signals';
 import { buildThemeStylesheet, resolveEffectiveTheme } from './theme-css';
@@ -18,7 +18,7 @@ export class ThemeService {
   private readonly api = use(ThemesApi);
 
   private readonly _themes = signal<AppTheme[]>([]);
-  private readonly _selection = signal<ThemeSelection | null>(null);
+  private readonly _selection = signal<ThemeSelectionDto | null>(null);
   private readonly _prefersDark = signal(false);
   private readonly _loaded = signal(false);
   private readonly _error = signal<string | null>(null);

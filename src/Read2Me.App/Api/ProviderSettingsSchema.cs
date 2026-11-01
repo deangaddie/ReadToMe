@@ -27,9 +27,20 @@ namespace Read2Me.App.Api
         string? Help = null,
         bool Nullable = false);
 
-    /// <summary>The fields a provider type exposes, with the recommended default per field.</summary>
-    public sealed record SettingsSchemaDto<TType>(TType Type, IReadOnlyList<SettingsFieldDto> Fields)
-        where TType : struct, Enum;
+    // The fields a provider type exposes, with the recommended default per field: one named record per
+    // area, so each document component reads as its area (a generic record would be SettingsSchemaDtoOfX).
+
+    /// <summary>The fields a TTS provider type exposes, with the recommended default per field.</summary>
+    public sealed record ParagraphTtsSettingsSchema(ParagraphTtsServiceType Type, IReadOnlyList<SettingsFieldDto> Fields);
+
+    /// <summary>The fields a voice-design provider type exposes, with the recommended default per field.</summary>
+    public sealed record VoiceDesignSettingsSchema(VoiceDesignServiceType Type, IReadOnlyList<SettingsFieldDto> Fields);
+
+    /// <summary>The fields a transcription provider type exposes beyond its base URL.</summary>
+    public sealed record TranscriptionSettingsSchema(TranscriptionServiceType Type, IReadOnlyList<SettingsFieldDto> Fields);
+
+    /// <summary>The fields a semantic-similarity provider type exposes beyond its base URL.</summary>
+    public sealed record SemanticSimilaritySettingsSchema(SemanticSimilarityServiceType Type, IReadOnlyList<SettingsFieldDto> Fields);
 
     /// <summary>
     /// One static descriptor per TTS / voice-design provider (Angular ticket 16): the tunable fields
@@ -43,7 +54,7 @@ namespace Read2Me.App.Api
             new[] { "auto", "en", "zh", "ja", "ko", "de", "fr", "ru", "pt", "es", "it" }
                 .Select(l => new SettingsOptionDto(l)).ToList();
 
-        public static SettingsSchemaDto<ParagraphTtsServiceType> ParagraphTts(ParagraphTtsServiceType type) => type switch
+        public static ParagraphTtsSettingsSchema ParagraphTts(ParagraphTtsServiceType type) => type switch
         {
             ParagraphTtsServiceType.VoxCpm2 => new(type, VoxCpm2Fields(
                 VoxCpm2ParagraphTtsSettings.Recommended.ModelId,
@@ -60,7 +71,7 @@ namespace Read2Me.App.Api
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, "No settings schema for this TTS provider."),
         };
 
-        public static SettingsSchemaDto<VoiceDesignServiceType> VoiceDesign(VoiceDesignServiceType type) => type switch
+        public static VoiceDesignSettingsSchema VoiceDesign(VoiceDesignServiceType type) => type switch
         {
             VoiceDesignServiceType.VoxCpm2 => new(type, VoxCpm2Fields(
                 VoxCpm2VoiceDesignSettings.Recommended.ModelId,
@@ -77,10 +88,10 @@ namespace Read2Me.App.Api
         };
 
         /// <summary>A Whisper server is its base URL and nothing else.</summary>
-        public static SettingsSchemaDto<TranscriptionServiceType> Transcription(TranscriptionServiceType type) => new(type, []);
+        public static TranscriptionSettingsSchema Transcription(TranscriptionServiceType type) => new(type, []);
 
         /// <summary>Both similarity models share one record; the key is its (unnamed, so PascalCase) JSON property.</summary>
-        public static SettingsSchemaDto<SemanticSimilarityServiceType> SemanticSimilarity(SemanticSimilarityServiceType type) => new(type,
+        public static SemanticSimilaritySettingsSchema SemanticSimilarity(SemanticSimilarityServiceType type) => new(type,
         [
             new(nameof(SemanticSimilaritySettings.PassThreshold), "Pass Threshold", "number", Min: 0.0, Max: 1.0, Step: 0.01,
                 Default: new SemanticSimilaritySettings().PassThreshold,

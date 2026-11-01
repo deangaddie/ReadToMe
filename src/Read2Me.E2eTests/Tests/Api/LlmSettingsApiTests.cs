@@ -119,14 +119,14 @@ public class LlmSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
             Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
 
             var cancel = await Http.PostAsync(Url($"/{id}/test/cancel"), null);
-            Assert.Equal(HttpStatusCode.OK, cancel.StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, cancel.StatusCode);
 
             await WaitForAsync(() => !test.IsEmpty);
             Assert.Equal("cancelled", test.Single().GetProperty("kind").GetString());
             Assert.False((await GetJsonAsync(Url("/test"))).GetProperty("running").GetBoolean());
 
             // Cancelling with nothing running is harmless.
-            Assert.Equal(HttpStatusCode.OK, (await Http.PostAsync(Url($"/{id}/test/cancel"), null)).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await Http.PostAsync(Url($"/{id}/test/cancel"), null)).StatusCode);
         }
         finally
         {

@@ -82,13 +82,17 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
     }
 
     /// <summary>
-    /// A computed property (get-only, no constructor parameter) is on every answer, so the document makes
-    /// it required (#175), not optional as it would be by default.
+    /// A property that isn't a constructor parameter is on every answer, so the document makes it required
+    /// (#175, #176), not optional as it would be by default: a computed get-only one, and every property of
+    /// a settable class such as a settings entity, nullable or not.
     /// </summary>
     [Theory]
     [InlineData("ProjectSummary", "audioPercent")]
     [InlineData("AttributionQueueSnapshot", "isBusy")]
-    public async Task A_computed_property_is_required(string component, string property)
+    [InlineData("LlmServerConfig", "baseUrl")]
+    [InlineData("LlmServerConfig", "temperature")]
+    [InlineData("AppTheme", "background")]
+    public async Task An_always_written_property_is_required(string component, string property)
     {
         var schema = (await DocumentAsync())["components"]!["schemas"]![component]!;
 
@@ -211,13 +215,6 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
         "DELETE /api/projects/{folder}/assembly/outputs/{fileName}",
         "DELETE /api/projects/{folder}/attribution/paragraphs/{paragraphId}/outcome",
         "DELETE /api/projects/{folder}/book-edits/{program}",
-        "DELETE /api/settings/llm/{id}",
-        "DELETE /api/settings/paragraph-tts/{id}",
-        "DELETE /api/settings/prompts/{kind}",
-        "DELETE /api/settings/semantic-similarity/{id}",
-        "DELETE /api/settings/themes/{id}",
-        "DELETE /api/settings/transcription/{id}",
-        "DELETE /api/settings/voice-design/{id}",
         "GET /api/ai-services",
         "GET /api/ai-services/resolve",
         "GET /api/ai-services/status",
@@ -248,28 +245,6 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
         "GET /api/projects/{folder}/voices/{voiceId}/original.wav",
         "GET /api/settings/audio-processing",
         "GET /api/settings/audio-processing/full",
-        "GET /api/settings/llm",
-        "GET /api/settings/llm/active",
-        "GET /api/settings/llm/attribution-chain",
-        "GET /api/settings/llm/test",
-        "GET /api/settings/paragraph-tts",
-        "GET /api/settings/paragraph-tts/active",
-        "GET /api/settings/paragraph-tts/schema",
-        "GET /api/settings/paragraph-tts/{id}/text-steps",
-        "GET /api/settings/prompts",
-        "GET /api/settings/prompts/catalog",
-        "GET /api/settings/semantic-similarity",
-        "GET /api/settings/semantic-similarity/active",
-        "GET /api/settings/semantic-similarity/schema",
-        "GET /api/settings/themes",
-        "GET /api/settings/themes/selection",
-        "GET /api/settings/transcription",
-        "GET /api/settings/transcription/active",
-        "GET /api/settings/transcription/schema",
-        "GET /api/settings/voice-design",
-        "GET /api/settings/voice-design/active",
-        "GET /api/settings/voice-design/sample-text",
-        "GET /api/settings/voice-design/schema",
         "GET /api/voice-batch/status",
         "POST /api/ai-services/{name}/restart",
         "POST /api/ai-services/{name}/shutdown",
@@ -306,38 +281,10 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
         "POST /api/projects/{folder}/voices/{voiceId}/transcribe",
         "POST /api/settings/audio-processing/ffmpeg/test",
         "POST /api/settings/audio-processing/steps/{stepId}/preview",
-        "POST /api/settings/llm",
-        "POST /api/settings/llm/models",
-        "POST /api/settings/llm/{id}/test",
-        "POST /api/settings/llm/{id}/test/cancel",
-        "POST /api/settings/paragraph-tts",
-        "POST /api/settings/prompts/{kind}/preview",
-        "POST /api/settings/semantic-similarity",
-        "POST /api/settings/semantic-similarity/{id}/test",
-        "POST /api/settings/themes",
-        "POST /api/settings/transcription",
-        "POST /api/settings/transcription/{id}/test",
-        "POST /api/settings/voice-design",
-        "POST /api/settings/voice-design/{id}/test",
         "POST /api/voice-batch/cancel",
         "PUT /api/projects/{folder}/voices/{voiceId}/audio",
         "PUT /api/settings/audio-processing",
         "PUT /api/settings/audio-processing/pauses",
         "PUT /api/settings/audio-processing/steps/{stepId}",
-        "PUT /api/settings/llm/active",
-        "PUT /api/settings/llm/attribution-chain",
-        "PUT /api/settings/llm/{id}",
-        "PUT /api/settings/paragraph-tts/active",
-        "PUT /api/settings/paragraph-tts/{id}",
-        "PUT /api/settings/prompts/{kind}",
-        "PUT /api/settings/semantic-similarity/active",
-        "PUT /api/settings/semantic-similarity/{id}",
-        "PUT /api/settings/themes/selection",
-        "PUT /api/settings/themes/{id}",
-        "PUT /api/settings/transcription/active",
-        "PUT /api/settings/transcription/{id}",
-        "PUT /api/settings/voice-design/active",
-        "PUT /api/settings/voice-design/sample-text",
-        "PUT /api/settings/voice-design/{id}",
     ];
 }

@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace Read2Me.App.Api
 {
@@ -58,15 +59,15 @@ namespace Read2Me.App.Api
             }
         }
 
-        private static IResult BadRequest(string detail) =>
-            Results.Problem(detail, statusCode: StatusCodes.Status400BadRequest);
+        private static ProblemHttpResult BadRequest(string detail) =>
+            TypedResults.Problem(detail, statusCode: StatusCodes.Status400BadRequest);
     }
 
     /// <summary>What <see cref="ApiJson.ReadBodyAsync{T}"/> read: the body, or the 400 to answer instead.</summary>
-    public readonly record struct BodyRead<T>(T? Body, IResult? Problem) where T : class
+    public readonly record struct BodyRead<T>(T? Body, ProblemHttpResult? Problem) where T : class
     {
         /// <summary>True with the 400 to answer; false with the body.</summary>
-        public bool Failed([NotNullWhen(false)] out T? body, [NotNullWhen(true)] out IResult? problem)
+        public bool Failed([NotNullWhen(false)] out T? body, [NotNullWhen(true)] out ProblemHttpResult? problem)
         {
             body = Body;
             problem = Problem;

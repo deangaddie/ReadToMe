@@ -59,6 +59,20 @@
             ]
           }
         },
+        "required": [
+          "id",
+          "name",
+          "isBuiltIn",
+          "isDark",
+          "primary",
+          "secondary",
+          "background",
+          "surface",
+          "appbarBackground",
+          "drawerBackground",
+          "textPrimary",
+          "textSecondary"
+        ],
         "type": "object"
       },
       "ApplyDiscoveryRow": {
@@ -121,6 +135,38 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "AttributionChainResponse": {
+        "properties": {
+          "available": {
+            "items": {
+              "$ref": "#/components/schemas/LlmServerConfig"
+            },
+            "type": "array"
+          },
+          "resolved": {
+            "items": {
+              "$ref": "#/components/schemas/ResolvedChainStepDto"
+            },
+            "type": "array"
+          },
+          "selfConsistency": {
+            "type": "boolean"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/AttributionChainStepDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "steps",
+          "selfConsistency",
+          "resolved",
+          "available"
+        ],
         "type": "object"
       },
       "AttributionChainStepDto": {
@@ -824,6 +870,20 @@
           "OpenAiCompatible"
         ]
       },
+      "LlmModelsResponse": {
+        "properties": {
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "models"
+        ],
+        "type": "object"
+      },
       "LlmServerConfig": {
         "properties": {
           "apiKey": {
@@ -897,6 +957,22 @@
             ]
           }
         },
+        "required": [
+          "id",
+          "name",
+          "apiType",
+          "baseUrl",
+          "apiKey",
+          "model",
+          "temperature",
+          "topP",
+          "maxTokens",
+          "frequencyPenalty",
+          "presencePenalty",
+          "attributionBatchSize",
+          "promptStyle",
+          "supportsModelSwitch"
+        ],
         "type": "object"
       },
       "LlmTestRequest": {
@@ -914,6 +990,25 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "LlmTestStatusResponse": {
+        "properties": {
+          "configId": {
+            "format": "int32",
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "running": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "running",
+          "configId"
+        ],
         "type": "object"
       },
       "ManualImportRequest": {
@@ -1139,6 +1234,15 @@
             "$ref": "#/components/schemas/ParagraphTtsServiceType"
           }
         },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "settingsJson",
+          "enabledStepIds",
+          "substitutionSteps",
+          "toSentenceCaseConfig"
+        ],
         "type": "object"
       },
       "ParagraphTtsServiceType": {
@@ -1148,6 +1252,24 @@
           "Qwen3Base",
           "Breeze"
         ]
+      },
+      "ParagraphTtsSettingsSchema": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/SettingsFieldDto"
+            },
+            "type": "array"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ParagraphTtsServiceType"
+          }
+        },
+        "required": [
+          "type",
+          "fields"
+        ],
+        "type": "object"
       },
       "ParagraphsEnqueueRequest": {
         "properties": {
@@ -1506,6 +1628,58 @@
         ],
         "type": "object"
       },
+      "PromptCatalogEntry": {
+        "properties": {
+          "defaultTemplate": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "expectedResponse": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isOverridden": {
+            "type": "boolean"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "template": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "tokens": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "description",
+          "tokens",
+          "expectedResponse",
+          "template",
+          "defaultTemplate",
+          "isOverridden",
+          "warnings"
+        ],
+        "type": "object"
+      },
       "PromptPreviewRequest": {
         "properties": {
           "template": {
@@ -1514,6 +1688,17 @@
         },
         "required": [
           "template"
+        ],
+        "type": "object"
+      },
+      "PromptPreviewResponse": {
+        "properties": {
+          "rendered": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "rendered"
         ],
         "type": "object"
       },
@@ -1877,6 +2062,25 @@
         ],
         "type": "object"
       },
+      "ResolvedChainStepDto": {
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/LlmServerConfig"
+          },
+          "promptStyle": {
+            "$ref": "#/components/schemas/AttributionPromptStyle"
+          },
+          "thinking": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "config",
+          "thinking",
+          "promptStyle"
+        ],
+        "type": "object"
+      },
       "RestorePreviewDto": {
         "properties": {
           "audioDiscardCount": {
@@ -1933,6 +2137,12 @@
             "$ref": "#/components/schemas/SemanticSimilarityServiceType"
           }
         },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "settingsJson"
+        ],
         "type": "object"
       },
       "SemanticSimilarityServiceType": {
@@ -1940,6 +2150,24 @@
           "MiniLmL6",
           "MpnetBaseV2"
         ]
+      },
+      "SemanticSimilaritySettingsSchema": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/SettingsFieldDto"
+            },
+            "type": "array"
+          },
+          "type": {
+            "$ref": "#/components/schemas/SemanticSimilarityServiceType"
+          }
+        },
+        "required": [
+          "type",
+          "fields"
+        ],
+        "type": "object"
       },
       "SetActiveRequest": {
         "properties": {
@@ -1989,6 +2217,83 @@
         "required": [
           "writtenForm",
           "spokenForm"
+        ],
+        "type": "object"
+      },
+      "SettingsFieldDto": {
+        "properties": {
+          "default": {},
+          "help": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "max": {
+            "format": "double",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "min": {
+            "format": "double",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "nullable": {
+            "default": false,
+            "type": "boolean"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/SettingsOptionDto"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "step": {
+            "format": "double",
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "SettingsOptionDto": {
+        "properties": {
+          "label": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
         ],
         "type": "object"
       },
@@ -2245,6 +2550,27 @@
         },
         "type": "object"
       },
+      "SimilarityTestResponse": {
+        "properties": {
+          "pass": {
+            "type": "boolean"
+          },
+          "score": {
+            "format": "double",
+            "type": "number"
+          },
+          "threshold": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "score",
+          "threshold",
+          "pass"
+        ],
+        "type": "object"
+      },
       "SplitRuleRequest": {
         "properties": {
           "mode": {
@@ -2386,6 +2712,38 @@
         ],
         "type": "object"
       },
+      "TextStepDto": {
+        "properties": {
+          "builtIn": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/SettingsFieldDto"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "stepId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "stepId",
+          "label",
+          "description",
+          "builtIn"
+        ],
+        "type": "object"
+      },
       "TextSubstitutionStep": {
         "properties": {
           "fromText": {
@@ -2406,6 +2764,32 @@
             "type": "string"
           }
         },
+        "required": [
+          "id",
+          "paragraphTtsServiceConfigId",
+          "fromText",
+          "toText",
+          "order"
+        ],
+        "type": "object"
+      },
+      "ThemeSelectionDto": {
+        "properties": {
+          "followSystemPreference": {
+            "type": "boolean"
+          },
+          "selectedThemeId": {
+            "format": "int32",
+            "type": [
+              "null",
+              "integer"
+            ]
+          }
+        },
+        "required": [
+          "selectedThemeId",
+          "followSystemPreference"
+        ],
         "type": "object"
       },
       "ThemeSelectionUpdateRequest": {
@@ -2447,6 +2831,13 @@
             "type": "integer"
           }
         },
+        "required": [
+          "id",
+          "paragraphTtsServiceConfigId",
+          "paragraphEnabled",
+          "wordEnabled",
+          "wordMinLength"
+        ],
         "type": "object"
       },
       "TranscriptionServiceConfig": {
@@ -2465,12 +2856,47 @@
             "$ref": "#/components/schemas/TranscriptionServiceType"
           }
         },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "settingsJson"
+        ],
         "type": "object"
       },
       "TranscriptionServiceType": {
         "enum": [
           "LocalWhisper"
         ]
+      },
+      "TranscriptionSettingsSchema": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/SettingsFieldDto"
+            },
+            "type": "array"
+          },
+          "type": {
+            "$ref": "#/components/schemas/TranscriptionServiceType"
+          }
+        },
+        "required": [
+          "type",
+          "fields"
+        ],
+        "type": "object"
+      },
+      "TranscriptionTestResponse": {
+        "properties": {
+          "transcript": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "transcript"
+        ],
+        "type": "object"
       },
       "TryPronunciationRequest": {
         "properties": {
@@ -2558,6 +2984,29 @@
         },
         "type": "object"
       },
+      "VoiceDesignSampleTextResponse": {
+        "properties": {
+          "default": {
+            "type": "string"
+          },
+          "maxLength": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "default",
+          "maxLength"
+        ],
+        "type": "object"
+      },
       "VoiceDesignServiceConfig": {
         "properties": {
           "id": {
@@ -2574,6 +3023,12 @@
             "$ref": "#/components/schemas/VoiceDesignServiceType"
           }
         },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "settingsJson"
+        ],
         "type": "object"
       },
       "VoiceDesignServiceType": {
@@ -2582,6 +3037,24 @@
           "Qwen3",
           "Breeze"
         ]
+      },
+      "VoiceDesignSettingsSchema": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/SettingsFieldDto"
+            },
+            "type": "array"
+          },
+          "type": {
+            "$ref": "#/components/schemas/VoiceDesignServiceType"
+          }
+        },
+        "required": [
+          "type",
+          "fields"
+        ],
+        "type": "object"
       },
       "VoiceDesignTestRequest": {
         "properties": {
@@ -2592,6 +3065,21 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "VoiceDesignTestResponse": {
+        "properties": {
+          "audioBase64": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "audioBase64",
+          "contentType"
+        ],
         "type": "object"
       }
     }
@@ -6957,6 +7445,16 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LlmServerConfig"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -6987,8 +7485,15 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmServerConfig"
+                }
+              }
+            },
+            "description": "Created"
           },
           "default": {
             "content": {
@@ -7011,7 +7516,17 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmServerConfig"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -7041,8 +7556,11 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -7055,7 +7573,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Select the active llm config.",
+        "summary": "Select the active llm config. 204 on success, 404 when no config has the id.",
         "tags": [
           "Read2Me.App"
         ]
@@ -7065,6 +7583,13 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttributionChainResponse"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -7096,6 +7621,13 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttributionChainResponse"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -7129,6 +7661,13 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmModelsResponse"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -7152,6 +7691,13 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmTestStatusResponse"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -7185,8 +7731,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -7228,7 +7774,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmServerConfig"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -7271,8 +7827,11 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "202": {
+            "description": "Accepted"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -7305,8 +7864,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -7319,7 +7878,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Stop the running test send (one runs at a time, whichever config it targets). Harmless when nothing is running.",
+        "summary": "Stop the running test send (one runs at a time, whichever config it targets). Harmless when nothing is running. 204.",
         "tags": [
           "Read2Me.App"
         ]
@@ -7329,6 +7888,16 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ParagraphTtsServiceConfig"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -7359,8 +7928,15 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParagraphTtsServiceConfig"
+                }
+              }
+            },
+            "description": "Created"
           },
           "default": {
             "content": {
@@ -7383,7 +7959,17 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParagraphTtsServiceConfig"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -7413,8 +7999,11 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -7427,7 +8016,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Select the active paragraph-tts config.",
+        "summary": "Select the active paragraph-tts config. 204 on success, 404 when no config has the id.",
         "tags": [
           "Read2Me.App"
         ]
@@ -7446,6 +8035,13 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParagraphTtsSettingsSchema"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -7479,8 +8075,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -7522,7 +8118,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParagraphTtsServiceConfig"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -7556,7 +8162,20 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TextStepDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -7579,6 +8198,16 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -7602,6 +8231,16 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PromptCatalogEntry"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -7634,8 +8273,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -7648,7 +8287,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Reset one prompt template to its built-in default.",
+        "summary": "Reset one prompt template to its built-in default. 204 on success.",
         "tags": [
           "SettingsEndpoints"
         ]
@@ -7675,8 +8314,8 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -7689,7 +8328,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Override one prompt template.",
+        "summary": "Override one prompt template. 204 on success.",
         "tags": [
           "SettingsEndpoints"
         ]
@@ -7719,6 +8358,13 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptPreviewResponse"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -7742,6 +8388,16 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SemanticSimilarityServiceConfig"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -7772,8 +8428,15 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticSimilarityServiceConfig"
+                }
+              }
+            },
+            "description": "Created"
           },
           "default": {
             "content": {
@@ -7796,7 +8459,17 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticSimilarityServiceConfig"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -7826,8 +8499,11 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -7840,7 +8516,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Select the active semantic-similarity config.",
+        "summary": "Select the active semantic-similarity config. 204 on success, 404 when no config has the id.",
         "tags": [
           "Read2Me.App"
         ]
@@ -7859,6 +8535,13 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticSimilaritySettingsSchema"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -7892,8 +8575,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -7935,7 +8618,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticSimilarityServiceConfig"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -7979,7 +8672,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimilarityTestResponse"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -8002,6 +8705,16 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AppTheme"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -8032,8 +8745,15 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppTheme"
+                }
+              }
+            },
+            "description": "Created"
           },
           "default": {
             "content": {
@@ -8056,6 +8776,13 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThemeSelectionDto"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -8087,7 +8814,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThemeSelectionDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -8120,8 +8857,11 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -8163,7 +8903,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppTheme"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -8186,6 +8936,16 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TranscriptionServiceConfig"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -8216,8 +8976,15 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionServiceConfig"
+                }
+              }
+            },
+            "description": "Created"
           },
           "default": {
             "content": {
@@ -8240,7 +9007,17 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionServiceConfig"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -8270,8 +9047,11 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -8284,7 +9064,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Select the active transcription config.",
+        "summary": "Select the active transcription config. 204 on success, 404 when no config has the id.",
         "tags": [
           "Read2Me.App"
         ]
@@ -8303,6 +9083,13 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionSettingsSchema"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -8336,8 +9123,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -8379,7 +9166,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionServiceConfig"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -8413,7 +9210,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionTestResponse"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -8436,6 +9243,16 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/VoiceDesignServiceConfig"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -8466,8 +9283,15 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceDesignServiceConfig"
+                }
+              }
+            },
+            "description": "Created"
           },
           "default": {
             "content": {
@@ -8490,7 +9314,17 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceDesignServiceConfig"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -8520,8 +9354,11 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -8534,7 +9371,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Select the active voice-design config.",
+        "summary": "Select the active voice-design config. 204 on success, 404 when no config has the id.",
         "tags": [
           "Read2Me.App"
         ]
@@ -8544,6 +9381,13 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceDesignSampleTextResponse"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -8575,6 +9419,13 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceDesignSampleTextResponse"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -8607,6 +9458,13 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceDesignSettingsSchema"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -8640,8 +9498,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -8683,7 +9541,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceDesignServiceConfig"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -8727,7 +9595,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceDesignTestResponse"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {

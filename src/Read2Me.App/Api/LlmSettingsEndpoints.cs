@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.App.Live;
 using Read2Me.AppData.Entities;
@@ -42,11 +43,11 @@ namespace Read2Me.App.Api
             group.MapPost("/{id:int}/test/cancel", (int id, LlmTestRunCoordinator runs) =>
                 {
                     runs.Cancel();
-                    return Results.Ok();
+                    return TypedResults.NoContent();
                 })
-                .WithSummary("Stop the running test send (one runs at a time, whichever config it targets). Harmless when nothing is running.");
+                .WithSummary("Stop the running test send (one runs at a time, whichever config it targets). Harmless when nothing is running. 204.");
             group.MapGet("/test", (LlmTestRunCoordinator runs) =>
-                    Results.Ok(new LlmTestStatusResponse(runs.RunningConfigId is not null, runs.RunningConfigId)))
+                    TypedResults.Ok(new LlmTestStatusResponse(runs.RunningConfigId is not null, runs.RunningConfigId)))
                 .WithSummary("Whether a test send is in flight, for a client that missed its llmTest message.");
 
             group.MapGet("/attribution-chain", GetChainAsync)
@@ -55,11 +56,11 @@ namespace Read2Me.App.Api
                 .WithSummary("Replace the attribution chain and the self-consistency flag. Exact duplicate steps collapse. 422 when a step names no config.");
         }
 
-        private static async Task<IResult> GetModelsAsync(LlmServerConfig config, ILlmClient client, CancellationToken ct)
+        private static async Task<Results<Ok<LlmModelsResponse>, ProblemHttpResult>> GetModelsAsync(LlmServerConfig config, ILlmClient client, CancellationToken ct)
         {
             try
             {
-                return Results.Ok(new LlmModelsResponse(await client.GetModelsAsync(config, ct)));
+                return TypedResults.Ok(new LlmModelsResponse(await client.GetModelsAsync(config, ct)));
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -67,32 +68,32 @@ namespace Read2Me.App.Api
             }
             catch (Exception ex)
             {
-                return Results.Problem(ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
+                return TypedResults.Problem(ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
             }
         }
 
-        private static async Task<IResult> StartTestAsync(
+        private static async Task<Results<Accepted, NotFound, ProblemHttpResult>> StartTestAsync(
             int id, LlmTestRequest request, LlmSettingsService settings, LlmTestRunCoordinator runs)
         {
             if (string.IsNullOrWhiteSpace(request.Prompt))
-                return Results.Problem("A prompt is required.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("A prompt is required.", statusCode: StatusCodes.Status400BadRequest);
             if ((await settings.GetAllConfigsAsync()).FirstOrDefault(c => c.Id == id) is not { } config)
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             return runs.TryStart(config, request.Prompt, request.ConnectionId)
-                ? Results.Accepted()
-                : Results.Problem("A test send is already running.", statusCode: StatusCodes.Status409Conflict);
+                ? TypedResults.Accepted((string?)null)
+                : TypedResults.Problem("A test send is already running.", statusCode: StatusCodes.Status409Conflict);
         }
 
-        private static async Task<IResult> GetChainAsync(LlmSettingsService settings) =>
-            Results.Ok(await ReadChainAsync(settings));
+        private static async Task<Ok<AttributionChainResponse>> GetChainAsync(LlmSettingsService settings) =>
+            TypedResults.Ok(await ReadChainAsync(settings));
 
-        private static async Task<IResult> SetChainAsync(AttributionChainRequest request, LlmSettingsService settings)
+        private static async Task<Results<Ok<AttributionChainResponse>, ProblemHttpResult>> SetChainAsync(AttributionChainRequest request, LlmSettingsService settings)
         {
             var steps = request.Steps ?? [];
             var known = (await settings.GetAllConfigsAsync()).Select(c => c.Id).ToHashSet();
             if (steps.FirstOrDefault(s => !known.Contains(s.ConfigId)) is { } orphan)
-                return Results.Problem($"No LLM config has id {orphan.ConfigId}.",
+                return TypedResults.Problem($"No LLM config has id {orphan.ConfigId}.",
                     statusCode: StatusCodes.Status422UnprocessableEntity);
 
             // The walk dedupes on the exact triple anyway, so a stored duplicate would be a row the
@@ -104,7 +105,7 @@ namespace Read2Me.App.Api
             await settings.SetAttributionChainEntriesAsync(entries);
             if (await settings.GetSelfConsistencyAsync() != request.SelfConsistency)
                 await settings.SetSelfConsistencyAsync(request.SelfConsistency);
-            return Results.Ok(await ReadChainAsync(settings));
+            return TypedResults.Ok(await ReadChainAsync(settings));
         }
 
         private static async Task<AttributionChainResponse> ReadChainAsync(LlmSettingsService settings)

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { AppTheme } from '@app/api';
+import { PALETTE_DEFAULTS } from '../../../../testing/themes';
 import { override, resetServices, use } from '@app/core/services';
 import { ThemeService } from '@app/theme/theme.service';
 import { ConfirmService, type ConfirmOptions } from '@app/ui/dialogs';
@@ -15,6 +16,7 @@ const THEMES = '/api/settings/themes';
 const SELECTION = `${THEMES}/selection`;
 
 const light: AppTheme = {
+  ...PALETTE_DEFAULTS,
   id: 1,
   name: 'Light',
   isBuiltIn: true,
@@ -23,6 +25,7 @@ const light: AppTheme = {
   secondary: '#FF4081',
 };
 const orange: AppTheme = {
+  ...PALETTE_DEFAULTS,
   id: 10,
   name: 'Orange',
   isBuiltIn: false,
@@ -154,7 +157,7 @@ describe('r2m-themes-page', () => {
     await flush(page);
 
     expect(opened).toEqual([{}]);
-    expect(api.calls('POST', THEMES)[0]?.body).toEqual(created);
+    expect(api.calls('POST', THEMES)[0]?.body).toEqual({ ...created, id: 0, isBuiltIn: false });
     expect(page.querySelectorAll('.themes__card').length).toBe(3);
     expect(toasts).toEqual(['Created Sunset']);
   });

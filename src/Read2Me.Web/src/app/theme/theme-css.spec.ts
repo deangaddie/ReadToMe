@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { AppTheme } from '@app/api';
+import { PALETTE_DEFAULTS } from '../../testing/themes';
 import {
   buildThemeStylesheet,
   contrastText,
@@ -9,6 +10,7 @@ import {
 } from './theme-css';
 
 const light: AppTheme = {
+  ...PALETTE_DEFAULTS,
   id: 1,
   name: 'Light',
   isBuiltIn: true,
@@ -18,6 +20,7 @@ const light: AppTheme = {
 };
 const dark: AppTheme = { ...light, id: 2, name: 'Dark', isDark: true, primary: '#7C5CBF' };
 const sunset: AppTheme = {
+  ...PALETTE_DEFAULTS,
   id: 5,
   name: 'Sunset',
   isBuiltIn: true,
@@ -30,6 +33,7 @@ const sunset: AppTheme = {
   textPrimary: '#4A4A4A',
 };
 const custom: AppTheme = {
+  ...PALETTE_DEFAULTS,
   id: 10,
   name: 'Orange',
   isBuiltIn: false,

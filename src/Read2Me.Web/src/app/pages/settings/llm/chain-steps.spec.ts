@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  type AttributionChainStep,
+  type AttributionChainStepDto,
   type AttributionPromptStyle,
   type LlmServerConfig,
 } from '@app/api';
@@ -37,7 +37,7 @@ const step = (
   configId: number,
   thinking = false,
   promptStyle: AttributionPromptStyle | null = Full,
-): AttributionChainStep => ({ configId, thinking, promptStyle });
+): AttributionChainStepDto => ({ configId, thinking, promptStyle });
 
 describe('attribution chain steps', () => {
   const small = config(1, 'small');

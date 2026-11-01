@@ -38,7 +38,8 @@ it.** Four decisions make it up; each issue's resolution comment holds the detai
 - **[An endpoint's return type is its declaration](https://github.com/deangaddie/ReadToMe/issues/168).** Handlers
   return `Results<>` unions built with `TypedResults`, over named positional records. One document transformer adds a
   `default` ProblemDetails response to every `/api/` operation. Mapped file endpoints declare a content type with no
-  schema. A computed get-only property is marked required, since every answer carries it. Numbers are strict
+  schema. A property that isn't a constructor parameter (a computed get-only one, or any property of a settable
+  class such as a settings entity) is marked required, since every answer carries it. Numbers are strict
   (`NumberHandling.Strict`). Document tests fail on an undeclared 2xx body, an integer or
   nullable enum, or a duplicate short schema name.
 - **[`dtos.ts` becomes aliases over the schema](https://github.com/deangaddie/ReadToMe/issues/169).** Every type with
