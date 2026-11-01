@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
@@ -71,70 +72,70 @@ namespace Read2Me.App.Api
                 .WithSummary("A paragraph with up to before/after neighbouring paragraphs of the same chapter (each 0..10, default 3/2) and the speaker name per item. 404 when the paragraph is not in the chapter.");
         }
 
-        private static async Task<IResult> GetSummaryAsync(
+        private static async Task<Results<Ok<List<CharacterSummaryDto>>, NotFound>> GetSummaryAsync(
             string folder, IFileSystem fs, ICharacterReader characters, IProjectCatalogReader catalog, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var rows = await characters.GetCharacterSummariesAsync(folderId);
             var narrator = await catalog.GetNarratorAsync(folderId, ct);
-            return Results.Ok(rows.Select(r => new CharacterSummaryDto(
+            return TypedResults.Ok(rows.Select(r => new CharacterSummaryDto(
                 r.Id, r.Name,
                 r.Aliases.Select(a => new CharacterAliasDto(a.Id, a.Name)).ToList(),
                 r.LineCount, r.VoiceCount, r.ReadyVoiceCount, r.IsNarrator,
                 narrator.IsLinkedTo(r.Id))).ToList());
         }
 
-        private static async Task<IResult> GetLinesAsync(string folder, Guid id, IFileSystem fs, ICharacterReader reader)
+        private static async Task<Results<Ok<List<CharacterLineDto>>, NotFound>> GetLinesAsync(string folder, Guid id, IFileSystem fs, ICharacterReader reader)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var lines = await reader.GetCharacterLinesAsync(folderId, id);
-            return Results.Ok(lines.Select(l => new CharacterLineDto(l.ItemId, l.ParagraphId, l.ChapterId, l.Text)).ToList());
+            return TypedResults.Ok(lines.Select(l => new CharacterLineDto(l.ItemId, l.ParagraphId, l.ChapterId, l.Text)).ToList());
         }
 
-        private static async Task<IResult> GetContextAsync(
+        private static async Task<Results<Ok<ParagraphContextDto>, NotFound>> GetContextAsync(
             string folder, Guid paragraphId, Guid chapterId, IFileSystem fs, IBookContentReader reader,
             int before = 3, int after = 2)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var context = await reader.GetParagraphContextAsync(
                 folderId, chapterId, paragraphId,
                 Math.Clamp(before, 0, MaxContextWindow), Math.Clamp(after, 0, MaxContextWindow));
             if (context is null)
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
-            return Results.Ok(new ParagraphContextDto(
+            return TypedResults.Ok(new ParagraphContextDto(
                 context.Preceding.Select(ToDto).ToList(),
                 ToDto(context.Query),
                 context.Following.Select(ToDto).ToList()));
         }
 
-        private static async Task<IResult> GetVoiceRulesAsync(string folder, Guid id, IFileSystem fs, ICharacterReader reader)
+        private static async Task<Results<Ok<List<VoiceRuleDto>>, NotFound>> GetVoiceRulesAsync(string folder, Guid id, IFileSystem fs, ICharacterReader reader)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var rules = await reader.GetCharacterVoiceRulesAsync(folderId, id);
-            return Results.Ok(rules.Select(r => new VoiceRuleDto(
+            return TypedResults.Ok(rules.Select(r => new VoiceRuleDto(
                 r.Id, r.VoiceId, r.VoiceName, r.IsDefault,
                 r.FromLevel, r.FromNodeId, r.FromDangling ? null : r.FromDisplayName, r.FromDangling,
                 r.ToLevel, r.ToNodeId, r.ToDangling ? null : r.ToDisplayName, r.ToDangling,
                 r.Rank)).ToList());
         }
 
-        private static async Task<IResult> GetVoiceRulePreviewAsync(
+        private static async Task<Results<Ok<List<ChapterVoicePreviewDto>>, NotFound>> GetVoiceRulePreviewAsync(
             string folder, Guid id, IFileSystem fs, IVoiceRulePreview preview, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var rows = await preview.PreviewChaptersAsync(folderId, id, ct);
-            return Results.Ok(rows.Select(r => new ChapterVoicePreviewDto(r.ChapterId, r.ChapterTitle, r.VoiceName)).ToList());
+            return TypedResults.Ok(rows.Select(r => new ChapterVoicePreviewDto(r.ChapterId, r.ChapterTitle, r.VoiceName)).ToList());
         }
 
         private static ContextParagraphDto ToDto(ContextParagraph p) => new(

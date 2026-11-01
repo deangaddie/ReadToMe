@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.App.Live;
 using Read2Me.App.Services.Preflight;
@@ -45,17 +46,17 @@ namespace Read2Me.App.Api
                 .WithSummary("Plan again and carry it out in the background (202 { run }): conflicts stopped, then required services started one at a time. Progress goes to the connectionId in the body as preflight { kind: stage, run, name, stage, error? } then { kind: done, run, ok, reason? }. 409 while the Setup check's Full check runs.");
         }
 
-        private static async Task<IResult> PlanAsync(
+        private static async Task<Results<Ok<PreflightPlanDto>, ProblemHttpResult>> PlanAsync(
             string taskKind, IAiPreflightPlanner planner, CancellationToken ct)
         {
             if (!ApiJson.TryParseName<AiTaskKind>(taskKind, out var task))
                 return UnknownTask(taskKind);
 
             var plan = await planner.BuildPlanAsync(task, ct);
-            return Results.Ok(ToDto(plan));
+            return TypedResults.Ok(ToDto(plan));
         }
 
-        private static async Task<IResult> RunAsync(
+        private static async Task<Results<Accepted<PreflightRunResponse>, ProblemHttpResult>> RunAsync(
             string taskKind, PreflightRunRequest? request, IAiPreflightPlanner planner, PreflightRunCoordinator runs, CancellationToken ct)
         {
             if (!ApiJson.TryParseName<AiTaskKind>(taskKind, out var task))
@@ -65,11 +66,11 @@ namespace Read2Me.App.Api
             // may have moved since, and the run must stop and start what is true now.
             var plan = await planner.BuildPlanAsync(task, ct);
             var run = runs.Start(plan, request?.ConnectionId);
-            return Results.Accepted(value: new PreflightRunResponse(run));
+            return TypedResults.Accepted((string?)null, new PreflightRunResponse(run));
         }
 
-        private static IResult UnknownTask(string taskKind) =>
-            Results.Problem(
+        private static ProblemHttpResult UnknownTask(string taskKind) =>
+            TypedResults.Problem(
                 $"Unknown task kind '{taskKind}'. Use one of: {string.Join(", ", Enum.GetNames<AiTaskKind>())}.",
                 statusCode: StatusCodes.Status400BadRequest);
 

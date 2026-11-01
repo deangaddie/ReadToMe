@@ -6,9 +6,7 @@ import type {
   Guid,
   NodeEnqueueRequest,
   ParagraphAttributionStatusDto,
-  ParagraphsEnqueueRequest,
 } from './dtos';
-import { projectUrl } from './projects-api';
 
 /** `AttributionEndpoints.cs` + the attribution half of `QueueStatusEndpoints.cs`. */
 export class AttributionApi {
@@ -16,32 +14,31 @@ export class AttributionApi {
 
   /** 202 with the number of paragraphs queued; 400 on an unknown level. */
   enqueue(folder: string, request: NodeEnqueueRequest): Promise<EnqueueResponse> {
-    return this.api.untypedPost<EnqueueResponse>(
-      `${projectUrl(folder)}/attribution/enqueue`,
-      request,
-    );
+    return this.api.post('/api/projects/{folder}/attribution/enqueue', {
+      path: { folder },
+      body: request,
+    });
   }
 
   /** A selection by id (ticket 12): 202 with how many were queued — ids without dialog are skipped. */
   enqueueParagraphs(folder: string, paragraphIds: Guid[]): Promise<EnqueueResponse> {
-    const request: ParagraphsEnqueueRequest = { paragraphIds };
-    return this.api.untypedPost<EnqueueResponse>(
-      `${projectUrl(folder)}/attribution/enqueue-paragraphs`,
-      request,
-    );
+    return this.api.post('/api/projects/{folder}/attribution/enqueue-paragraphs', {
+      path: { folder },
+      body: { paragraphIds },
+    });
   }
 
   paragraphStatus(folder: string, paragraphId: Guid): Promise<ParagraphAttributionStatusDto> {
-    return this.api.untypedGet<ParagraphAttributionStatusDto>(
-      `${projectUrl(folder)}/attribution/paragraphs/${paragraphId}`,
-    );
+    return this.api.get('/api/projects/{folder}/attribution/paragraphs/{paragraphId}', {
+      path: { folder, paragraphId },
+    });
   }
 
   /** Forgets a paragraph's Failed/Unfinished outcome; 204 whether or not one was recorded. */
   clearOutcome(folder: string, paragraphId: Guid): Promise<void> {
-    return this.api.untypedDelete(
-      `${projectUrl(folder)}/attribution/paragraphs/${paragraphId}/outcome`,
-    );
+    return this.api.delete('/api/projects/{folder}/attribution/paragraphs/{paragraphId}/outcome', {
+      path: { folder, paragraphId },
+    });
   }
 
   queue(): Promise<AttributionQueueSnapshot> {
@@ -50,11 +47,11 @@ export class AttributionApi {
 
   /** Global: drains every folder's queued attribution work. */
   cancel(): Promise<void> {
-    return this.api.untypedPost<void>('/api/attribution/cancel');
+    return this.api.post('/api/attribution/cancel');
   }
 
-  /** Retires the finished run's throughput summary on the host (ticket 14); 200 whether or not one was showing. */
+  /** Retires the finished run's throughput summary on the host (ticket 14); 204 whether or not one was showing. */
   dismiss(): Promise<void> {
-    return this.api.untypedPost<void>('/api/attribution/dismiss');
+    return this.api.post('/api/attribution/dismiss');
   }
 }

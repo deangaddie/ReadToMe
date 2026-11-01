@@ -11,7 +11,6 @@
  * labels or order keeps a `Record<Union, string>` or a `readonly Union[]` beside its own code.
  */
 import type { components, paths } from './schema';
-import type { VoiceAnchorLevel } from './book-commands';
 
 /** Component schemas the host's OpenAPI document declares: request bodies and typed responses. */
 export type Schema = components['schemas'];
@@ -37,9 +36,6 @@ export type ProviderType =
   | VoiceDesignServiceType
   | TranscriptionServiceType
   | SemanticSimilarityServiceType;
-
-/** `ParagraphOutcomeKind` / `AudioItemOutcomeKind`: same members. */
-export type OutcomeKind = 'Failed' | 'Unfinished';
 
 // ---- Projects (`ProjectEndpoints.cs`) -------------------------------------------------------------
 
@@ -216,9 +212,7 @@ export type NodeEnqueueRequest = Schema['NodeEnqueueRequest'];
 export type AudioEnqueueRequest = Schema['AudioEnqueueRequest'];
 
 /** `POST …/attribution/enqueue-paragraphs` body: an explicit selection; ids without dialog are ignored. */
-export interface ParagraphsEnqueueRequest {
-  paragraphIds: Guid[];
-}
+export type ParagraphsEnqueueRequest = Schema['ParagraphsEnqueueRequest'];
 
 /** `POST …/audio/enqueue-items` body: an explicit item selection, or one item to retry; unknown ids are ignored. */
 export type ItemsEnqueueRequest = Schema['ItemsEnqueueRequest'];
@@ -228,15 +222,7 @@ export type EnqueueResponse = Schema['EnqueueResponse'];
 /** `ParagraphQueueStatus` / `AudioItemQueueStatus` member names; null when not in the queue. */
 export type QueueItemStatus = 'Queued' | 'Processing';
 
-export interface QueueOutcome {
-  kind: OutcomeKind;
-  reason: string | null;
-}
-
-export interface ParagraphAttributionStatusDto {
-  status: QueueItemStatus | null;
-  outcome: QueueOutcome | null;
-}
+export type ParagraphAttributionStatusDto = Schema['ParagraphAttributionStatusDto'];
 
 export type AudioItemStatusDto = Schema['AudioItemStatusDto'];
 
@@ -248,29 +234,18 @@ export type AudioQueueSnapshot = Schema['AudioQueueSnapshot'];
 
 // ---- Character discovery (`DiscoveryEndpoints.cs`) -------------------------------------------------
 
-/** `DiscoveryStatus` minus `NoLlmConfigured`, which the endpoint turns into a 422. */
-export type DiscoveryStatus = 'Ok' | 'Failed' | 'ServiceUnavailable';
+/** Never `NoLlmConfigured` in an answer: the endpoint turns that into a 422. */
+export type DiscoveryStatus = Schema['DiscoveryStatus'];
 
-export interface DiscoveredCharacterDto {
-  name: string;
-  aliases: string[];
-  /** The roster character the row resolves onto by name or alias — the "Already exists" row. */
-  existingCharacterId: Guid | null;
-}
+/** `existingCharacterId`: the roster character the row resolves onto by name or alias — the "Already exists" row. */
+export type DiscoveredCharacterDto = Schema['DiscoveredCharacterDto'];
 
-export interface DiscoveryOutcomeDto {
-  status: DiscoveryStatus;
-  reason: string | null;
-  characters: DiscoveredCharacterDto[];
-  /** Names two characters would own once every row is applied; advisory, recomputed client-side as rows change. */
-  collisions: string[];
-}
+/** `collisions`: names two characters would own once every row is applied; advisory, recomputed client-side as rows change. */
+export type DiscoveryOutcomeDto = Schema['DiscoveryOutcomeDto'];
 
 export type ApplyDiscoveryRow = Schema['ApplyDiscoveryRow'];
 
-export interface ApplyDiscoveryResponse {
-  applied: number;
-}
+export type ApplyDiscoveryResponse = Schema['ApplyDiscoveryResponse'];
 
 // ---- Voices (`VoiceEndpoints.cs`) ------------------------------------------------------------------
 
@@ -293,28 +268,10 @@ export type TranscribeVoiceResponse = Schema['TranscribeVoiceResponse'];
  * wins). Levels are `VoiceAnchorLevel` names, null on the default rule and on an open "from here
  * on" end. A dangling anchor names a node that no longer exists, so its title is null.
  */
-export interface VoiceRuleDto {
-  ruleId: Guid;
-  voiceId: Guid;
-  voiceName: string;
-  isDefault: boolean;
-  fromLevel: VoiceAnchorLevel | null;
-  fromNodeId: Guid | null;
-  fromTitle: string | null;
-  fromDangling: boolean;
-  toLevel: VoiceAnchorLevel | null;
-  toNodeId: Guid | null;
-  toTitle: string | null;
-  toDangling: boolean;
-  order: string;
-}
+export type VoiceRuleDto = Schema['VoiceRuleDto'];
 
 /** `GET …/characters/{id}/voice-rules/preview` row: the voice the rules pick at the chapter's start (null = none). */
-export interface ChapterVoicePreviewDto {
-  chapterId: Guid;
-  chapterTitle: string;
-  voiceName: string | null;
-}
+export type ChapterVoicePreviewDto = Schema['ChapterVoicePreviewDto'];
 
 export type RenderedDesignPromptResponse = Schema['RenderedDesignPromptResponse'];
 export type GenerateDesignPromptRequest = Schema['GenerateDesignPromptRequest'];
@@ -588,14 +545,7 @@ export interface AiServiceDto {
   usesGpu: boolean;
 }
 
-export type AiServiceStatus =
-  | 'NotFound'
-  | 'Stopped'
-  | 'Starting'
-  | 'Ready'
-  | 'Recovering'
-  | 'Down'
-  | 'Unknown';
+export type AiServiceStatus = Schema['AiServiceStatus'];
 
 export interface AiServiceStatusDto {
   name: string;
@@ -615,19 +565,13 @@ export type AiTaskKind =
   | 'BookEdit';
 
 /** `ready` means nothing to start and nothing to stop: the task may run now. */
-export interface PreflightPlanDto {
-  ready: boolean;
-  toStart: { name: string; status: AiServiceStatus }[];
-  conflicts: { name: string; reason: string }[];
-}
+export type PreflightPlanDto = Schema['PreflightPlanDto'];
 
-export interface PreflightRunRequest {
-  connectionId?: string | null;
-}
+/** `connectionId`: the live hub connection that receives the run's `preflight` messages. */
+export type PreflightRunRequest = Schema['PreflightRunRequest'];
 
-export interface PreflightRunResponse {
-  run: string;
-}
+/** 202 with the run id; every message of the run carries it. */
+export type PreflightRunResponse = Schema['PreflightRunResponse'];
 
 // ---- Themes (`ThemeEndpoints.cs`, ticket 04) --------------------------------------------------------
 
@@ -645,44 +589,18 @@ export type ThemeSelectionUpdateRequest = Schema['ThemeSelectionUpdateRequest'];
  * A cast-list row. `isNarrator` marks the seed Narrator row; `narratesBook` the character the
  * narrator link points at. Aliases carry their ids so the detail can offer removal directly.
  */
-export interface CharacterSummaryDto {
-  id: Guid;
-  name: string;
-  aliases: CharacterAliasDto[];
-  lineCount: number;
-  voiceCount: number;
-  readyVoiceCount: number;
-  isNarrator: boolean;
-  narratesBook: boolean;
-}
+export type CharacterSummaryDto = Schema['CharacterSummaryDto'];
 
 /** One item a character speaks, with where it sits so the reader can open there. */
-export interface CharacterLineDto {
-  itemId: Guid;
-  paragraphId: Guid;
-  chapterId: Guid;
-  text: string;
-}
+export type CharacterLineDto = Schema['CharacterLineDto'];
 
 /** `speaker` is null on a dialog item whose speaker is not yet attributed, and on narration. */
-export interface ContextItemDto {
-  itemId: Guid;
-  text: string;
-  isDialog: boolean;
-  speaker: string | null;
-}
+export type ContextItemDto = Schema['ContextItemDto'];
 
-export interface ContextParagraphDto {
-  text: string;
-  items: ContextItemDto[];
-}
+export type ContextParagraphDto = Schema['ContextParagraphDto'];
 
 /** Nearest neighbour last in `before`, first in `after`. */
-export interface ParagraphContextDto {
-  before: ContextParagraphDto[];
-  paragraph: ContextParagraphDto;
-  after: ContextParagraphDto[];
-}
+export type ParagraphContextDto = Schema['ParagraphContextDto'];
 
 // ---- Voice audio editor (`VoiceEditorEndpoints.cs`) ------------------------------------------------
 

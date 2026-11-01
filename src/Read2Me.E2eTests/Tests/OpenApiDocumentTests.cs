@@ -231,27 +231,12 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
     /// </summary>
     private static readonly HashSet<string> NotYetTyped =
     [
-        "DELETE /api/projects/{folder}/attribution/paragraphs/{paragraphId}/outcome",
         "GET /api/ai-services",
         "GET /api/ai-services/resolve",
         "GET /api/ai-services/status",
         "GET /api/ai-services/{name}/status",
-        "GET /api/projects/{folder}/attribution/paragraphs/{paragraphId}",
-        "GET /api/projects/{folder}/characters/summary",
-        "GET /api/projects/{folder}/characters/{id}/lines",
-        "GET /api/projects/{folder}/characters/{id}/voice-rules",
-        "GET /api/projects/{folder}/characters/{id}/voice-rules/preview",
-        "GET /api/projects/{folder}/paragraphs/{paragraphId}/context",
         "POST /api/ai-services/{name}/restart",
         "POST /api/ai-services/{name}/shutdown",
         "POST /api/ai-services/{name}/start",
-        "POST /api/attribution/cancel",
-        "POST /api/attribution/dismiss",
-        "POST /api/preflight/{taskKind}/plan",
-        "POST /api/preflight/{taskKind}/run",
-        "POST /api/projects/{folder}/attribution/enqueue",
-        "POST /api/projects/{folder}/attribution/enqueue-paragraphs",
-        "POST /api/projects/{folder}/characters/discover",
-        "POST /api/projects/{folder}/characters/discover/apply",
     ];
 }
