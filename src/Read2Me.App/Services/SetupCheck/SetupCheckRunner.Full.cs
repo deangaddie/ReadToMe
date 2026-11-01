@@ -345,7 +345,7 @@ namespace Read2Me.App.Services.SetupCheck
                     SetupCheckIds.Ffmpeg, SetupCheckGroup.WorkspaceAndTools, "ffmpeg", SetupCheckTier.Full,
                     encode.Success ? SetupCheckResult.Passed : SetupCheckResult.Failed,
                     $"A 1 s tone through adynamicequalizer and alimiter, encoded to AAC .m4b by ffmpeg from {paths.Shown}",
-                    encode.Message, paths.Note, fix, Managed: false),
+                    encode.Message, paths.Note, fix, Managed: false, Rerun: null),
             ];
         }
     }

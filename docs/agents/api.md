@@ -4,17 +4,24 @@ HTTP API for driving the full audiobook production cycle without the UI. Minimal
 APIs inside the app process: start the app (`dotnet run --project src/Read2Me.App`)
 and talk to `http://localhost:5000/api/...`. Localhost only, no auth.
 
-**Shapes**: this guide names endpoints and order only. Request/response schemas live
+**Shapes**: this guide names endpoints and order only. Request and response schemas live
 in the OpenAPI document — fetch `GET /openapi/v1.json` first and treat it as the
-source of truth.
+source of truth (ADR 0017).
 
-**Wire form**: one for every endpoint and the hub. An enum is its C# member name
-(`"Chapter"`, `"Confirmed"`, `"VoxCpm2"`) in bodies, route segments, query values and
-dictionary keys; route and query names match exactly, so `nodes/Chapter/...` is a 400. An
-integer for an enum, or a string for a number (`"3"`), is a 400.
+**Responses**: every `/api/` operation declares what it answers. A 2xx carries a JSON
+schema, or a file's content type (`audio/wav`, `audio/mp4`, an image); only a `204`, or
+a bare `202` with nothing to report, has no body. Responses don't omit null fields: an
+empty value is written as `null`.
 
-**Errors**: RFC 7807 ProblemDetails, the `default` response of every operation in the
-document. 400 malformed input, 404 unknown folder/entity, 409 already-running or blocked
+**Wire form**: one for every endpoint and the hub. An enum is its C# member name in
+PascalCase (`"Chapter"`, `"Confirmed"`, `"VoxCpm2"`), in bodies, route segments, query
+values and dictionary keys, and the document lists the members. Names match exactly in
+both directions, so `nodes/chapter/...` is a 400. An integer for an enum, or a string for
+a number (`"3"`), is a 400 too.
+
+**Errors**: every non-2xx is an RFC 7807 ProblemDetails (`application/problem+json`),
+declared once as the `default` response of every operation in the document rather than
+per status. 400 malformed input, 404 unknown folder/entity, 409 already-running or blocked
 (assembly carries `audioRemainingCount`), 422 domain failure (message in `detail`).
 
 **Polling pattern**: the four long operations (attribution, audio, voice batch,
@@ -129,8 +136,8 @@ stops or switches anything; the one thing it writes is the Workspace folder, cre
 
 ```bash
 curl -s -X POST http://localhost:5000/api/setup-check/quick
-# → { rows: [{ id, group, name, tier, result, expected, found, note, fix: { text, link: { path, label }?, copy? }, managed }],
-#     quickCheckedAt, fullCheckedAt, firstRun, startedAt, noWorkspace, fullRun, fullCheckEstimateSeconds }
+# → { rows: [{ id, group, name, tier, result, expected, found, note, fix: { text, link: { path, label } | null, copy }, managed, rerun }],
+#     quickCheckedAt, fullCheckedAt, firstRun, startedAt, noWorkspace, fullRun, fullCheckEstimateSeconds, putBack }
 ```
 
 `id` is `workspace`, `ffmpeg` or `docker` (Workspace and tools); `llm`, `attribution-chain`,

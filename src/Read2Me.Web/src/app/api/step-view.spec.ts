@@ -39,29 +39,32 @@ describe('StepView', () => {
     use(StepView).view('dracula', 's8');
     const { api, urls } = client();
 
-    await api.untypedGet('/api/projects/dracula/book');
-    await api.untypedGet('/api/projects/dracula');
-    await api.untypedGet('/api/projects/dracula/characters/c1/voice-rules/preview', {
-      chapterId: 'ch',
+    const path = { folder: 'dracula' };
+    await api.get('/api/projects/{folder}/book', { path });
+    await api.get('/api/projects/{folder}', { path });
+    await api.get('/api/projects/{folder}/pronunciations/matches', {
+      path,
+      query: { chapterIds: ['ch'] },
     });
 
     expect(urls).toEqual([
       '/api/projects/dracula/book?at=s8',
       '/api/projects/dracula?at=s8',
-      '/api/projects/dracula/characters/c1/voice-rules/preview?chapterId=ch&at=s8',
+      '/api/projects/dracula/pronunciations/matches?chapterIds=ch&at=s8',
     ]);
   });
 
   it('leaves live reads, writes, other projects and the current project alone', async () => {
     const { api, urls } = client();
-    await api.untypedGet('/api/projects/dracula/book');
+    const dracula = { folder: 'dracula' };
+    await api.get('/api/projects/{folder}/book', { path: dracula });
     use(StepView).view('dracula', 's8');
 
-    await api.untypedGet('/api/projects/dracula/history');
-    await api.untypedGet('/api/projects/dracula/audio/reviews');
-    await api.untypedGet('/api/projects/emma/book');
-    await api.untypedGet('/api/projects');
-    await api.untypedPatch('/api/projects/dracula', {});
+    await api.get('/api/projects/{folder}/history', { path: dracula });
+    await api.get('/api/projects/{folder}/audio/reviews', { path: dracula });
+    await api.get('/api/projects/{folder}/book', { path: { folder: 'emma' } });
+    await api.get('/api/projects');
+    await api.patch('/api/projects/{folder}', { path: dracula, body: {} });
 
     expect(urls).toEqual([
       '/api/projects/dracula/book',

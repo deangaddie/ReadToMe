@@ -89,35 +89,38 @@ export class ApiClient {
     path: P,
     ...[init]: InitArg<Operation<P, 'get'>>
   ): Promise<SuccessBody<Operation<P, 'get'>>> {
-    return this.untypedGet(fillPath(path, init?.path), init?.query as QueryParams | undefined);
+    const url = fillPath(path, init?.path);
+    const query = init?.query as QueryParams | undefined;
+    const at = readsAtStep(url);
+    return this.send('GET', url, undefined, at === null ? query : { ...query, at });
   }
 
   post<P extends PathsFor<'post'>>(
     path: P,
     ...[init]: InitArg<Operation<P, 'post'>>
   ): Promise<SuccessBody<Operation<P, 'post'>>> {
-    return this.typedSend('POST', path, init);
+    return this.sendByPath('POST', path, init);
   }
 
   put<P extends PathsFor<'put'>>(
     path: P,
     ...[init]: InitArg<Operation<P, 'put'>>
   ): Promise<SuccessBody<Operation<P, 'put'>>> {
-    return this.typedSend('PUT', path, init);
+    return this.sendByPath('PUT', path, init);
   }
 
   patch<P extends PathsFor<'patch'>>(
     path: P,
     ...[init]: InitArg<Operation<P, 'patch'>>
   ): Promise<SuccessBody<Operation<P, 'patch'>>> {
-    return this.typedSend('PATCH', path, init);
+    return this.sendByPath('PATCH', path, init);
   }
 
   delete<P extends PathsFor<'delete'>>(
     path: P,
     ...[init]: InitArg<Operation<P, 'delete'>>
   ): Promise<SuccessBody<Operation<P, 'delete'>>> {
-    return this.typedSend('DELETE', path, init);
+    return this.sendByPath('DELETE', path, init);
   }
 
   /** A multipart upload: the route is typed by path; the form isn't in the document, so it goes as given. */
@@ -142,20 +145,25 @@ export class ApiClient {
     return this.send('PUT', fillPath(path, init.path), form, init.query as QueryParams | undefined);
   }
 
-  /** A JSON POST answered with bytes, typed by path for its route and body ({@link untypedPostForBlob}). */
+  /**
+   * A JSON POST answered with bytes (a rendered WAV, say), typed by path for its route and body.
+   * Aborting `signal` drops the request; the promise then rejects with the `AbortError`, not an
+   * {@link ApiError}, so callers can tell a stop from a failure. A non-2xx answer is an
+   * {@link ApiError} from its ProblemDetails body.
+   */
   postForBlob<P extends PathsFor<'post'>>(
     path: P,
     init: CallInit<Operation<P, 'post'>>,
     signal?: AbortSignal,
   ): Promise<Blob> {
-    return this.untypedPostForBlob(
+    return this.sendForBlob(
       withParams(fillPath(path, init.path), init.query as QueryParams | undefined),
       init.body ?? null,
       signal,
     );
   }
 
-  private typedSend<T>(method: string, path: string, init: unknown): Promise<T> {
+  private sendByPath<T>(method: string, path: string, init: unknown): Promise<T> {
     const {
       path: values,
       query,
@@ -169,42 +177,7 @@ export class ApiClient {
     );
   }
 
-  /** A Project state read of the project being viewed at a History step carries `?at=` ({@link readsAtStep}). */
-  untypedGet<T>(url: string, params?: QueryParams): Promise<T> {
-    const at = readsAtStep(url);
-    return this.send<T>('GET', url, undefined, at === null ? params : { ...params, at });
-  }
-
-  untypedPost<T>(url: string, body?: unknown, params?: QueryParams): Promise<T> {
-    return this.send<T>('POST', url, body ?? null, params);
-  }
-
-  untypedPut<T>(url: string, body?: unknown, params?: QueryParams): Promise<T> {
-    return this.send<T>('PUT', url, body ?? null, params);
-  }
-
-  untypedPatch<T>(url: string, body?: unknown, params?: QueryParams): Promise<T> {
-    return this.send<T>('PATCH', url, body ?? null, params);
-  }
-
-  untypedDelete<T = void>(url: string, params?: QueryParams): Promise<T> {
-    return this.send<T>('DELETE', url, undefined, params);
-  }
-
-  untypedPostForm<T>(url: string, form: FormData): Promise<T> {
-    return this.send<T>('POST', url, form);
-  }
-
-  untypedPutForm<T>(url: string, form: FormData): Promise<T> {
-    return this.send<T>('PUT', url, form);
-  }
-
-  /**
-   * A JSON POST answered with bytes (a rendered WAV, say). Aborting `signal` drops the request; the
-   * promise then rejects with the `AbortError`, not an {@link ApiError}, so callers can tell a stop
-   * from a failure. A non-2xx answer is an {@link ApiError} from its ProblemDetails body.
-   */
-  async untypedPostForBlob(url: string, body: unknown, signal?: AbortSignal): Promise<Blob> {
+  private async sendForBlob(url: string, body: unknown, signal?: AbortSignal): Promise<Blob> {
     const response = await this.fetchFn(url, {
       method: 'POST',
       headers: { 'X-Origin-Id': ORIGIN_ID, 'Content-Type': 'application/json' },

@@ -57,8 +57,7 @@ namespace Read2Me.App.Services.SetupCheck
                     .Resolve(config.Type).TranscribeAsync(config, clip, SampleClip.FileName)).Trim();
                 if (transcript.Length == 0)
                     return new CheckAnswer(false, "Transcribed the sample clip to empty text", new SetupFixHint(
-                        $"It answered with no words: check its model (ggml-base.en.bin in Infra/models/), or the config in {settings.Label}.",
-                        settings, "Infra/models/"));
+                        $"It answered with no words: check its model (ggml-base.en.bin in Infra/models/), or the config in {settings.Label}.", settings, "Infra/models/"));
                 context.Transcript = transcript;
                 return new CheckAnswer(true, $"Transcribed the sample clip: \"{transcript}\"");
             });
@@ -91,7 +90,7 @@ namespace Read2Me.App.Services.SetupCheck
                 return score >= threshold
                     ? new CheckAnswer(true, $"Scored {Score(score)} against the clip's text (pass threshold {Score(threshold)})")
                     : new CheckAnswer(false, $"Scored {Score(score)}, below the config's pass threshold {Score(threshold)}",
-                        new SetupFixHint($"Check the config's model, or its pass threshold, in {settings.Label}.", settings));
+                        new SetupFixHint($"Check the config's model, or its pass threshold, in {settings.Label}.", settings, null));
             });
         }
 
@@ -115,7 +114,7 @@ namespace Read2Me.App.Services.SetupCheck
             {
                 Result = answer.Passed ? SetupCheckResult.Passed : SetupCheckResult.Failed,
                 Found = answer.Found,
-                Fix = answer.Fix ?? new SetupFixHint($"Change it in {settings.Label}.", settings),
+                Fix = answer.Fix ?? new SetupFixHint($"Change it in {settings.Label}.", settings, null),
             };
             return containerRow is null ? [verdict] : [verdict, containerRow];
         }
@@ -141,7 +140,7 @@ namespace Read2Me.App.Services.SetupCheck
                 (containerRow, var ready, use) = await ReadyContainerAsync(context, service);
                 if (!ready)
                     return (new CheckAnswer(false, $"Not sent: {service.ContainerName} isn't ready",
-                        new SetupFixHint($"Fix the {service.ContainerName} row first, then run the Full check again.")), containerRow);
+                        new SetupFixHint($"Fix the {service.ContainerName} row first, then run the Full check again.", null, null)), containerRow);
             }
 
             try
@@ -155,7 +154,7 @@ namespace Read2Me.App.Services.SetupCheck
                 var modelFix = ModelLoadFix(service, model, cause.Message);
                 if (service is null)
                     return (new CheckAnswer(false, found, modelFix
-                        ?? new SetupFixHint($"Check the service where it runs, or correct the config in {settings.Label}.", settings)), null);
+                        ?? new SetupFixHint($"Check the service where it runs, or correct the config in {settings.Label}.", settings, null)), null);
 
                 var logs = ContainerVerdicts.LogsFix(service);
                 var configFix = modelFix

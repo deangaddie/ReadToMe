@@ -26,7 +26,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["AiServiceDto"][];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -68,6 +70,15 @@ export interface paths {
             responses: {
                 /** @description OK */
                 200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AiServiceDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -114,7 +125,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["AiServiceStatusDto"][];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -156,8 +169,15 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -201,8 +221,15 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -246,8 +273,15 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -291,6 +325,15 @@ export interface paths {
             responses: {
                 /** @description OK */
                 200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AiServiceStatusDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -7545,7 +7588,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The Setup check report: one row per check (id, group, name, tier, result, expected, found, note?, fix { text, link?, copy? }), the times of the last Quick and Full check, firstRun (this start created app.db), putBack (after a Full check, what it did with the containers it drove), startedAt (when this host started) and noWorkspace (this host started without a usable Workspace: every other API call answers 503 No Workspace until the app restarts). Empty rows until the start-up Quick check ends. */
+        /** The Setup check report: one row per check (id, group, name, tier, result, expected, found, note, fix { text, link, copy }, managed, rerun), the times of the last Quick and Full check, firstRun (this start created app.db), putBack (after a Full check, what it did with the containers it drove), startedAt (when this host started) and noWorkspace (this host started without a usable Workspace: every other API call answers 503 No Workspace until the app restarts). Empty rows until the start-up Quick check ends. */
         get: {
             parameters: {
                 query?: never;
@@ -7613,24 +7656,6 @@ export interface paths {
                         "application/json": components["schemas"]["SetupCheckReport"];
                     };
                 };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
                 /** @description A problem: any non-2xx answer. */
                 default: {
                     headers: {
@@ -7676,15 +7701,6 @@ export interface paths {
                         "application/json": components["schemas"]["SetupCheckReport"];
                     };
                 };
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
                 /** @description A problem: any non-2xx answer. */
                 default: {
                     headers: {
@@ -7728,15 +7744,6 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["SetupCheckReport"];
-                    };
-                };
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
                     };
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -7893,8 +7900,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AiServiceDto: {
+            baseUrl: string;
+            containerName: string;
+            name: string;
+            usesGpu: boolean;
+        };
         /** @enum {unknown} */
         AiServiceStatus: "NotFound" | "Stopped" | "Starting" | "Ready" | "Recovering" | "Down" | "Unknown";
+        AiServiceStatusDto: {
+            name: string;
+            status: components["schemas"]["AiServiceStatus"];
+        };
         /** @enum {unknown} */
         ApiItemType: "Narration" | "Character" | "Pause" | "ParagraphPause" | "ChapterPause" | "PartPause" | "VolumePause";
         AppTheme: {
@@ -8848,16 +8865,13 @@ export interface components {
         SetupCheckLane: "Local" | "Cpu" | "Gpu";
         SetupCheckReport: {
             firstRun: boolean;
-            /**
-             * Format: int32
-             * @default 0
-             */
+            /** Format: int32 */
             fullCheckEstimateSeconds: number;
             /** Format: date-time */
             fullCheckedAt: null | string;
-            fullRun?: null | components["schemas"]["SetupFullRun"];
+            fullRun: null | components["schemas"]["SetupFullRun"];
             noWorkspace: boolean;
-            putBack?: null | string;
+            putBack: null | string;
             /** Format: date-time */
             quickCheckedAt: null | string;
             rows: components["schemas"]["SetupCheckRow"][];
@@ -8875,15 +8889,15 @@ export interface components {
             managed: boolean;
             name: string;
             note: null | string;
-            rerun?: null | components["schemas"]["SetupRerun"];
+            rerun: null | components["schemas"]["SetupRerun"];
             result: components["schemas"]["SetupCheckResult"];
             tier: components["schemas"]["SetupCheckTier"];
         };
         /** @enum {unknown} */
         SetupCheckTier: "Quick" | "Full";
         SetupFixHint: {
-            copy?: null | string;
-            link?: null | components["schemas"]["SetupSettingsLink"];
+            copy: null | string;
+            link: null | components["schemas"]["SetupSettingsLink"];
             text: string;
         };
         SetupFullRun: {

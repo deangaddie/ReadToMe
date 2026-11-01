@@ -28,7 +28,7 @@ namespace Read2Me.App.Services.SetupCheck
             /// <summary>A row as the run found it; a bare one when no Quick check had made it yet.</summary>
             public SetupCheckRow Row(string id, SetupCheckGroup group, string name) =>
                 Before.TryGetValue(id, out var row) ? row
-                : new(id, group, name, SetupCheckTier.Full, SetupCheckResult.NotRun, "", "", null, new SetupFixHint(""), Managed: false);
+                : new(id, group, name, SetupCheckTier.Full, SetupCheckResult.NotRun, "", "", null, new SetupFixHint("", null, null), Managed: false, Rerun: null);
 
             /// <summary>The sample clip's transcript, once the transcription check has one.</summary>
             public string? Transcript { get; set; }
@@ -146,7 +146,7 @@ namespace Read2Me.App.Services.SetupCheck
                 return (failed, true, use);
             return (Verdict(SetupCheckResult.Passed,
                 use.Started ? "Started for the Full check, and answered" : "Running, and answered",
-                new SetupFixHint("Nothing to do.")), true, use);
+                new SetupFixHint("Nothing to do.", null, null)), true, use);
         }
 
         /// <summary>

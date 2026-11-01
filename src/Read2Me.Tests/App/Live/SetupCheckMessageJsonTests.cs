@@ -18,7 +18,7 @@ public class SetupCheckMessageJsonTests
         LiveServiceCollectionExtensions.ConfigurePayloadJson(options);
         var row = new SetupCheckRow(
             SetupCheckIds.Ffmpeg, SetupCheckGroup.WorkspaceAndTools, "ffmpeg", SetupCheckTier.Full,
-            SetupCheckResult.NotConfirmed, "e", "f", null, new SetupFixHint("Fix it."), Managed: false);
+            SetupCheckResult.NotConfirmed, "e", "f", null, new SetupFixHint("Fix it.", null, null), Managed: false, Rerun: null);
         var report = SetupCheckReport.Empty with
         {
             Rows = [row],

@@ -61,9 +61,9 @@ namespace Read2Me.App.Services.SetupCheck
 
     /// <summary>
     /// Where to go next: one sentence, plus a link to the Settings section that owns the value and/or
-    /// a command or file path to copy, for things outside the app.
+    /// a command or file path to copy, for things outside the app; null when there is none.
     /// </summary>
-    public sealed record SetupFixHint(string Text, SetupSettingsLink? Link = null, string? Copy = null);
+    public sealed record SetupFixHint(string Text, SetupSettingsLink? Link, string? Copy);
 
     /// <summary>
     /// One check: what the app expected and what it found. A <see cref="Note"/> never changes the
@@ -71,8 +71,7 @@ namespace Read2Me.App.Services.SetupCheck
     /// <see cref="Managed"/>: the app can start and restart what the row checks — a docker AI service,
     /// or a config whose every URL is one. False for the Workspace and tools, and for a config on a
     /// URL the app doesn't manage. <see cref="Rerun"/>: what re-running this one check takes, null
-    /// when it can't be (a Quick-tier row, or a config with no active one). The enum converters sit
-    /// on the properties too: the live hub's options would outrank the types' own.
+    /// when it can't be (a Quick-tier row, or a config with no active one).
     /// </summary>
     public sealed record SetupCheckRow(
         string Id,
@@ -85,7 +84,7 @@ namespace Read2Me.App.Services.SetupCheck
         string? Note,
         SetupFixHint Fix,
         bool Managed,
-        SetupRerun? Rerun = null);
+        SetupRerun? Rerun);
 
     /// <summary>
     /// Re-running one Full-tier check. <see cref="Gpu"/>: it drives a GPU container, so it stops the
@@ -110,11 +109,11 @@ namespace Read2Me.App.Services.SetupCheck
         bool FirstRun,
         DateTimeOffset StartedAt,
         bool NoWorkspace,
-        SetupFullRun? FullRun = null,
-        int FullCheckEstimateSeconds = 0,
-        string? PutBack = null)
+        SetupFullRun? FullRun,
+        int FullCheckEstimateSeconds,
+        string? PutBack)
     {
         /// <summary>No rows yet; the runner stamps the start's flags and time on as it answers.</summary>
-        public static readonly SetupCheckReport Empty = new([], null, null, false, default, false);
+        public static readonly SetupCheckReport Empty = new([], null, null, false, default, false, null, 0, null);
     }
 }

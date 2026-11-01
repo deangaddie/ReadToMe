@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.App.Live;
 using Read2Me.Services.Health;
@@ -20,12 +21,10 @@ namespace Read2Me.App.Api
         public static void MapAiServiceEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapGet("/api/ai-services",
-                    (DockerAiServiceRegistry registry) => Results.Ok(registry.All.Select(ToDto).ToList()))
+                    (DockerAiServiceRegistry registry) => TypedResults.Ok(registry.All.Select(ToDto).ToList()))
                 .WithSummary("Catalog of the Docker-hosted AI services the watchdog manages.");
 
-            endpoints.MapGet("/api/ai-services/resolve",
-                    (string? baseUrl, DockerAiServiceRegistry registry) =>
-                        registry.TryGetByBaseUrl(baseUrl ?? "", out var s) ? Results.Ok(ToDto(s)) : Results.NotFound())
+            endpoints.MapGet("/api/ai-services/resolve", Resolve)
                 .WithSummary("The managed service behind a config base URL (?baseUrl=, matched on scheme/host/port), 404 when the URL is not one the watchdog manages.");
 
             endpoints.MapGet("/api/ai-services/status", GetAllStatusAsync)
@@ -55,35 +54,39 @@ namespace Read2Me.App.Api
         private static DockerAiService? Find(DockerAiServiceRegistry registry, string name) =>
             registry.All.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
 
-        private static async Task<IResult> GetAllStatusAsync(
+        private static Results<Ok<AiServiceDto>, NotFound> Resolve(string? baseUrl, DockerAiServiceRegistry registry) =>
+            registry.TryGetByBaseUrl(baseUrl ?? "", out var s) ? TypedResults.Ok(ToDto(s)) : TypedResults.NotFound();
+
+        private static async Task<Ok<AiServiceStatusDto[]>> GetAllStatusAsync(
             DockerAiServiceRegistry registry, ObservedAiServiceControl control, CancellationToken ct)
         {
             var probes = registry.All
                 .Select(async s => new AiServiceStatusDto(s.Name, await control.GetStatusAsync(s, ct)))
                 .ToList();
-            return Results.Ok(await Task.WhenAll(probes));
+            return TypedResults.Ok(await Task.WhenAll(probes));
         }
 
-        private static async Task<IResult> GetStatusAsync(
+        private static async Task<Results<Ok<AiServiceStatusDto>, NotFound>> GetStatusAsync(
             string name, DockerAiServiceRegistry registry, ObservedAiServiceControl control, CancellationToken ct)
         {
             var service = Find(registry, name);
             if (service is null)
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var status = await control.GetStatusAsync(service, ct);
-            return Results.Ok(new AiServiceStatusDto(service.Name, status));
+            return TypedResults.Ok(new AiServiceStatusDto(service.Name, status));
         }
 
-        private static IResult StartOp(string name, string op, DockerAiServiceRegistry registry, AiServiceOpCoordinator ops)
+        private static Results<Accepted, NotFound, ProblemHttpResult> StartOp(
+            string name, string op, DockerAiServiceRegistry registry, AiServiceOpCoordinator ops)
         {
             var service = Find(registry, name);
             if (service is null)
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             return ops.TryStart(service, op)
-                ? Results.Accepted()
-                : Results.Problem($"{service.Name} already has a {ops.InFlight.GetValueOrDefault(service.Name, "lifecycle")} in progress.",
+                ? TypedResults.Accepted((string?)null)
+                : TypedResults.Problem($"{service.Name} already has a {ops.InFlight.GetValueOrDefault(service.Name, "lifecycle")} in progress.",
                     statusCode: StatusCodes.Status409Conflict);
         }
     }

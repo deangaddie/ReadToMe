@@ -7,12 +7,12 @@ export class SetupCheckApi {
   private readonly api = use(ApiClient);
 
   report(): Promise<SetupCheckReport> {
-    return this.api.untypedGet<SetupCheckReport>('/api/setup-check');
+    return this.api.get('/api/setup-check');
   }
 
   /** Runs the Quick check (it never starts, stops or switches anything) and answers the new report. */
   runQuick(): Promise<SetupCheckReport> {
-    return this.api.untypedPost<SetupCheckReport>('/api/setup-check/quick');
+    return this.api.post('/api/setup-check/quick');
   }
 
   /**
@@ -20,7 +20,7 @@ export class SetupCheckApi {
    * Rejects with a 409 problem naming the work in flight. Progress arrives on the hub as `setupCheck`.
    */
   startFull(): Promise<SetupCheckReport> {
-    return this.api.untypedPost<SetupCheckReport>('/api/setup-check/full');
+    return this.api.post('/api/setup-check/full');
   }
 
   /**
@@ -28,13 +28,11 @@ export class SetupCheckApi {
    * Rejects with a 409 problem while a run goes or work is in flight, a 404 for a Quick-tier id.
    */
   rerun(checkId: string): Promise<SetupCheckReport> {
-    return this.api.untypedPost<SetupCheckReport>(
-      `/api/setup-check/checks/${encodeURIComponent(checkId)}/rerun`,
-    );
+    return this.api.post('/api/setup-check/checks/{id}/rerun', { path: { id: checkId } });
   }
 
   /** Asks the Full check to stop once its current step ends; 409 when none is running. */
   cancelFull(): Promise<SetupCheckReport> {
-    return this.api.untypedPost<SetupCheckReport>('/api/setup-check/full/cancel');
+    return this.api.post('/api/setup-check/full/cancel');
   }
 }
