@@ -7,9 +7,7 @@ import type {
   AudioReviewsDto,
   EnqueueResponse,
   Guid,
-  ItemsEnqueueRequest,
 } from './dtos';
-import { projectUrl } from './projects-api';
 
 /** `AudioEndpoints.cs` + the audio half of `QueueStatusEndpoints.cs`. */
 export class AudioApi {
@@ -17,25 +15,29 @@ export class AudioApi {
 
   /** 202 with the number of items queued; 400 on an unknown level, 409 when no TTS config is active. */
   enqueue(folder: string, request: AudioEnqueueRequest): Promise<EnqueueResponse> {
-    return this.api.untypedPost<EnqueueResponse>(`${projectUrl(folder)}/audio/enqueue`, request);
+    return this.api.post('/api/projects/{folder}/audio/enqueue', {
+      path: { folder },
+      body: request,
+    });
   }
 
   /** A selection or a retry by item id (ticket 13): 202 with how many were queued; 409 when no TTS config is active. */
   enqueueItems(folder: string, itemIds: Guid[]): Promise<EnqueueResponse> {
-    const request: ItemsEnqueueRequest = { itemIds };
-    return this.api.untypedPost<EnqueueResponse>(
-      `${projectUrl(folder)}/audio/enqueue-items`,
-      request,
-    );
+    return this.api.post('/api/projects/{folder}/audio/enqueue-items', {
+      path: { folder },
+      body: { itemIds },
+    });
   }
 
   /** Sparse: only items whose audio needs review or had it dismissed. */
   reviews(folder: string): Promise<AudioReviewsDto> {
-    return this.api.untypedGet<AudioReviewsDto>(`${projectUrl(folder)}/audio/reviews`);
+    return this.api.get('/api/projects/{folder}/audio/reviews', { path: { folder } });
   }
 
   itemStatus(folder: string, itemId: Guid): Promise<AudioItemStatusDto> {
-    return this.api.untypedGet<AudioItemStatusDto>(`${projectUrl(folder)}/audio/items/${itemId}`);
+    return this.api.get('/api/projects/{folder}/audio/items/{itemId}', {
+      path: { folder, itemId },
+    });
   }
 
   queue(): Promise<AudioQueueSnapshot> {
@@ -44,6 +46,6 @@ export class AudioApi {
 
   /** Global: drains every folder's queued audio work. */
   cancel(): Promise<void> {
-    return this.api.untypedPost<void>('/api/audio/cancel');
+    return this.api.post('/api/audio/cancel');
   }
 }

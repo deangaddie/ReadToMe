@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { AudioProcessingFull, RecentAudioSample, StepPreviewResponse } from '@app/api';
+import type {
+  AudioProcessingFullResponse,
+  RecentAudioSampleDto,
+  StepPreviewResponse,
+} from '@app/api';
 import { override, resetServices } from '@app/core/services';
 import { ToastService } from '@app/ui/toast';
 import { FakeApi, problem } from '../../../../testing/fake-api';
@@ -14,7 +18,7 @@ import './audio-settings-page';
 const BASE = '/api/settings/audio-processing';
 const FULL = `${BASE}/full`;
 
-const SAMPLE: RecentAudioSample = {
+const SAMPLE: RecentAudioSampleDto = {
   itemId: 'item-1',
   folder: 'pride-and-prejudice',
   text: 'It is a truth universally acknowledged.',
@@ -23,7 +27,7 @@ const SAMPLE: RecentAudioSample = {
   projectTitle: 'Pride and Prejudice',
 };
 
-function full(overrides: Partial<AudioProcessingFull> = {}): AudioProcessingFull {
+function full(overrides: Partial<AudioProcessingFullResponse> = {}): AudioProcessingFullResponse {
   return {
     ffmpegPath: 'D:\\ffmpeg\\bin\\ffmpeg.exe',
     werThreshold: 0.15,
@@ -50,7 +54,7 @@ function full(overrides: Partial<AudioProcessingFull> = {}): AudioProcessingFull
 
 let api: FakeApi;
 let live: FakeLive;
-let nextSample: RecentAudioSample | null;
+let nextSample: RecentAudioSampleDto | null;
 let picks: number;
 let toasts: string[];
 

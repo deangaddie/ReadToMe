@@ -39,11 +39,11 @@ public class AssemblyApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     [Fact]
-    public async Task Cancel_when_idle_is_ok()
+    public async Task Cancel_when_idle_is_no_content()
     {
         var response = await Http.PostAsync($"{app.BaseUrl}/api/assembly/cancel", null);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
@@ -14,9 +15,14 @@ namespace Read2Me.App.Api
     public sealed record ParagraphsEnqueueRequest(Guid[] ParagraphIds);
     public sealed record EnqueueResponse(int Enqueued)
     {
-        /// <summary>202 with the count, or 409 with the gate's reason when the queue refused the enqueue.</summary>
-        internal static IResult For(EnqueueOutcome outcome) =>
-            outcome.Refusal is { } refusal ? StepReads.Refused(refusal) : Results.Accepted(value: new EnqueueResponse(outcome.Enqueued));
+        /// <summary>
+        /// 202 with the count, or 409 with the gate's reason when the queue refused the enqueue. The union is
+        /// the enqueue endpoints' own (their unknown-folder 404 included), so a handler returns it as is.
+        /// </summary>
+        internal static Results<Accepted<EnqueueResponse>, NotFound, ProblemHttpResult> For(EnqueueOutcome outcome) =>
+            outcome.Refusal is { } refusal
+                ? StepReads.Refused(refusal)
+                : TypedResults.Accepted((string?)null, new EnqueueResponse(outcome.Enqueued));
     }
     /// <summary>
     /// Queue state only. Attribution results are per item now — read them from the book endpoint's

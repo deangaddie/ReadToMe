@@ -6,7 +6,7 @@ import {
   type ConsonantSoftenPreset,
   type ConsonantSoftenSettings,
   type DeesserParams,
-  type PauseDurations,
+  type PauseDurationsDto,
   type SilenceTrimSettings,
 } from '@app/api';
 
@@ -317,7 +317,7 @@ export function validateAttempts(value: number): string | null {
     : 'Max audio attempts must be a whole number of 1 or more.';
 }
 
-const PAUSE_LABELS: Record<keyof PauseDurations, string> = {
+const PAUSE_LABELS: Record<keyof PauseDurationsDto, string> = {
   volumeMs: 'Volume pause',
   partMs: 'Part pause',
   chapterMs: 'Chapter pause',
@@ -325,8 +325,8 @@ const PAUSE_LABELS: Record<keyof PauseDurations, string> = {
   pauseMs: 'Pause',
 };
 
-export function validatePauses(pauses: PauseDurations): string | null {
-  for (const key of Object.keys(PAUSE_LABELS) as (keyof PauseDurations)[]) {
+export function validatePauses(pauses: PauseDurationsDto): string | null {
+  for (const key of Object.keys(PAUSE_LABELS) as (keyof PauseDurationsDto)[]) {
     const v = pauses[key];
     if (!Number.isFinite(v) || v < 0) return `${PAUSE_LABELS[key]} must be zero or greater.`;
   }

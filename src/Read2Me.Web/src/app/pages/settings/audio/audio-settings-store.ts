@@ -1,10 +1,10 @@
 import {
   type AudioPostProcessStepConfig,
   AudioProcessingApi,
-  type AudioProcessingFull,
+  type AudioProcessingFullResponse,
   type AudioProcessingUpdateRequest,
   type FfmpegProbeResult,
-  type PauseDurations,
+  type PauseDurationsDto,
   toApiError,
 } from '@app/api';
 import { use } from '@app/core/services';
@@ -23,7 +23,7 @@ export class AudioSettingsStore {
   private readonly live = use(LiveService);
   private subscription: Unsubscribe | null = null;
 
-  private readonly _full = signal<AudioProcessingFull | null>(null);
+  private readonly _full = signal<AudioProcessingFullResponse | null>(null);
   private readonly _error = signal<string | null>(null);
   private loadSeq = 0;
 
@@ -69,7 +69,7 @@ export class AudioSettingsStore {
     await this.load();
   }
 
-  async savePauses(pauses: PauseDurations): Promise<void> {
+  async savePauses(pauses: PauseDurationsDto): Promise<void> {
     await this.api.savePauses(pauses);
     await this.load();
   }

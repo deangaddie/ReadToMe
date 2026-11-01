@@ -557,7 +557,7 @@ curl -s http://localhost:5000/api/projects/{folder}/audio/reviews
 
 Enqueueing is idempotent (already-queued items dedupe) and `needsAudioOnly: true`
 skips items that already have audio — safe to re-run after failures.
-`POST /api/audio/cancel` clears the queue.
+`POST /api/audio/cancel` clears the queue (204).
 
 ### Pronunciation list
 
@@ -778,7 +778,7 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/assembly \
 # 409 with audioRemainingCount → items still need audio (or pass allowPartial:true)
 # poll /api/assembly/status (phases: Gather, Silence, ProbeConcat, Encode, Finalize);
 # it names the job's folder, and outputFileName once the job completed
-curl -s -X POST http://localhost:5000/api/assembly/cancel      # stop the running assembly (isRunning → false; the hub sends AssemblyCancelled)
+curl -s -X POST http://localhost:5000/api/assembly/cancel      # stop the running assembly: 204 (isRunning → false; the hub sends AssemblyCancelled)
 
 curl -s http://localhost:5000/api/projects/{folder}/assembly/outputs
 # → [{ fileName, sizeBytes, createdAt, isPartial }], newest first

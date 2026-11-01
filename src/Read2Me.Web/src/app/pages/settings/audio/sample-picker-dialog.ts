@@ -1,6 +1,6 @@
 import { html } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
-import { AudioProcessingApi, type RecentAudioSample, toApiError } from '@app/api';
+import { AudioProcessingApi, type RecentAudioSampleDto, toApiError } from '@app/api';
 import { openDialog } from '@app/core/dialog';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
@@ -19,7 +19,7 @@ export function snippet(text: string): string {
 }
 
 /** "Elizabeth · Elizabeth Voice · Pride and Prejudice" — character (or Narration), voice when known, project. */
-export function provenance(sample: RecentAudioSample): string {
+export function provenance(sample: RecentAudioSampleDto): string {
   return [sample.characterName ?? 'Narration', sample.voiceName, sample.projectTitle]
     .filter((part): part is string => !!part)
     .join(' · ');
@@ -32,7 +32,7 @@ export function provenance(sample: RecentAudioSample): string {
 export class SamplePickerDialog extends R2mElement {
   private readonly api = use(AudioProcessingApi);
 
-  readonly samples = signal<RecentAudioSample[]>([]);
+  readonly samples = signal<RecentAudioSampleDto[]>([]);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
 
@@ -103,9 +103,9 @@ define('r2m-sample-picker-dialog', SamplePickerDialog);
 /** Opens the picker; a spec overrides it to answer without a dialog. */
 export class SamplePicker {
   /** Resolves the picked sample, or null when dismissed. */
-  async pick(): Promise<RecentAudioSample | null> {
+  async pick(): Promise<RecentAudioSampleDto | null> {
     const dialog = document.createElement('r2m-sample-picker-dialog');
-    return (await openDialog<RecentAudioSample | null>(dialog)) ?? null;
+    return (await openDialog<RecentAudioSampleDto | null>(dialog)) ?? null;
   }
 }
 

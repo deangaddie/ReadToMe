@@ -148,19 +148,8 @@ export type ItemVoiceDto = Schema['ItemVoiceDto'];
 /** Keyed by speech item id. */
 export type ChapterVoicesDto = Record<Guid, ItemVoiceDto>;
 
-export type AudioReviewStateName = 'NeedsReview' | 'Dismissed';
-
 /** `AudioEndpoints.AudioReviewDto`: the hub's `AudioReviewInfo` with nulls sent explicitly. */
-export interface AudioReviewDto {
-  state: AudioReviewStateName;
-  normalizeOk: boolean;
-  normalizeReason: string | null;
-  verifyOk: boolean;
-  wer: number | null;
-  verifyReason: string | null;
-  transcript: string | null;
-  originalTextSnapshot: string | null;
-}
+export type AudioReviewDto = Schema['AudioReviewDto'];
 
 /** `GET …/audio/reviews`: sparse, keyed by item id. */
 export type AudioReviewsDto = Record<Guid, AudioReviewDto>;
@@ -232,13 +221,9 @@ export interface ParagraphsEnqueueRequest {
 }
 
 /** `POST …/audio/enqueue-items` body: an explicit item selection, or one item to retry; unknown ids are ignored. */
-export interface ItemsEnqueueRequest {
-  itemIds: Guid[];
-}
+export type ItemsEnqueueRequest = Schema['ItemsEnqueueRequest'];
 
-export interface EnqueueResponse {
-  enqueued: number;
-}
+export type EnqueueResponse = Schema['EnqueueResponse'];
 
 /** `ParagraphQueueStatus` / `AudioItemQueueStatus` member names; null when not in the queue. */
 export type QueueItemStatus = 'Queued' | 'Processing';
@@ -253,11 +238,7 @@ export interface ParagraphAttributionStatusDto {
   outcome: QueueOutcome | null;
 }
 
-export interface AudioItemStatusDto {
-  status: QueueItemStatus | null;
-  outcome: QueueOutcome | null;
-  audioVersion: number | null;
-}
+export type AudioItemStatusDto = Schema['AudioItemStatusDto'];
 
 /** `GET /api/attribution/queue`. */
 export type AttributionQueueSnapshot = Schema['AttributionQueueSnapshot'];
@@ -386,29 +367,19 @@ export type StartedResponse = Schema['StartedResponse'];
 
 export type AssemblyStartRequest = Schema['AssemblyStartRequest'];
 
-export type AssemblyPhase = 'Gather' | 'Silence' | 'ProbeConcat' | 'Encode' | 'Finalize';
+export type AssemblyPhase = Schema['AssemblyPhase'];
 
-export interface AssemblyStatusDto {
-  isRunning: boolean;
-  currentPhase: AssemblyPhase | null;
-  encodePercent: number;
-  lastError: string | null;
-  audioRemainingCount: number;
-  /** Project of the running (or most recent) job; null until the first start. */
-  folder: string | null;
-  /** Set once that job completed: a file name under its assembly outputs. */
-  outputFileName: string | null;
-}
+/**
+ * `folder` is the project of the running (or most recent) job, null until the first start;
+ * `outputFileName` is set once that job completed: a file name under its assembly outputs.
+ */
+export type AssemblyStatusDto = Schema['AssemblyStatusDto'];
 
-/** One assembled audiobook under `<workspace>/{folder}/output/`. */
-export interface AssemblyOutputDto {
-  fileName: string;
-  sizeBytes: number;
-  /** ISO 8601, UTC: when the file was last written. */
-  createdAt: string;
-  /** A build that skipped items without audio (`_partial_` in the name). */
-  isPartial: boolean;
-}
+/**
+ * One assembled audiobook under `<workspace>/{folder}/output/`. `createdAt` is ISO 8601, UTC: when
+ * the file was last written; `isPartial` marks a build that skipped items without audio.
+ */
+export type AssemblyOutputDto = Schema['AssemblyOutputDto'];
 
 // ---- Settings entities (`SettingsEndpoints.cs`, `Read2Me.AppData.Entities`) -----------------------
 
@@ -515,41 +486,18 @@ export type PromptPreviewResponse = Schema['PromptPreviewResponse'];
 export type PromptCatalogEntry = Omit<Schema['PromptCatalogEntry'], 'kind'> & { kind: PromptKind };
 
 /**
- * `AudioProcessingSettingsService.GetAsync()`; the PUT only accepts the four scalars below.
- * `ffmpegPath` is the ffmpeg the app runs: the saved path, else the configured one, else null (PATH).
+ * `AudioProcessingSettingsService.GetAsync()`; the PUT only accepts the four scalars of
+ * {@link AudioProcessingUpdateRequest}. `ffmpegPath` is the ffmpeg the app runs: the saved path,
+ * else the configured one, else null (PATH).
  */
-export interface AudioProcessingSettings {
-  ffmpegPath: string | null;
-  savedFfmpegPath: string | null;
-  configuredFfmpegPath: string | null;
-  werThreshold: number;
-  sentenceSplitEnabled: boolean;
-  chunkPauseMs: number;
-  volumePauseMs: number;
-  partPauseMs: number;
-  chapterPauseMs: number;
-  paragraphPauseMs: number;
-  pauseMs: number;
-  audioMaxAttempts: number;
-}
+export type AudioProcessingSettings = Schema['AudioProcessingSettings'];
 
-export interface AudioProcessingUpdateRequest {
-  ffmpegPath?: string;
-  werThreshold?: number;
-  audioMaxAttempts?: number;
-  chunkPauseMs?: number;
-}
+export type AudioProcessingUpdateRequest = Schema['AudioProcessingUpdateRequest'];
 
 // ---- Audio processing page (`AudioProcessingEndpoints.cs`, ticket 24) ------------------------------
 
 /** The assembler's per-kind silences; `PUT /api/settings/audio-processing/pauses` takes the same shape. */
-export interface PauseDurations {
-  volumeMs: number;
-  partMs: number;
-  chapterMs: number;
-  paragraphMs: number;
-  pauseMs: number;
-}
+export type PauseDurationsDto = Schema['PauseDurationsDto'];
 
 /** The two paragraph post-process steps, in pipeline order. */
 export const AUDIO_STEP_IDS = {
@@ -558,14 +506,11 @@ export const AUDIO_STEP_IDS = {
 } as const;
 
 /**
- * One step's stored config (`AudioPostProcessStepConfig`): its enabled flag and the step's own
- * settings payload — `SilenceTrimSettings` or `ConsonantSoftenSettings` below.
+ * One step's stored config: its enabled flag and the step's own settings payload —
+ * `SilenceTrimSettings` or `ConsonantSoftenSettings` below. The host stores the payload as raw
+ * JSON, so the document leaves `settings` unknown and the step's form narrows it.
  */
-export interface AudioPostProcessStepConfig {
-  stepId: string;
-  enabled: boolean;
-  settings: Record<string, unknown> | null;
-}
+export type AudioPostProcessStepConfig = Schema['AudioPostProcessStepConfig'];
 
 export interface SilenceTrimSettings {
   thresholdDb: number;
@@ -616,57 +561,23 @@ export interface ConsonantSoftenSettings {
  * the saved value the form edits; with none saved the app runs `configuredFfmpegPath` (the host's
  * `Ffmpeg:Path`), else ffmpeg on PATH.
  */
-export interface AudioProcessingFull {
-  ffmpegPath: string | null;
-  configuredFfmpegPath: string | null;
-  werThreshold: number;
-  sentenceSplitEnabled: boolean;
-  chunkPauseMs: number;
-  audioMaxAttempts: number;
-  pauses: PauseDurations;
-  steps: AudioPostProcessStepConfig[];
-}
+export type AudioProcessingFullResponse = Schema['AudioProcessingFullResponse'];
 
-export interface FfmpegTestRequest {
-  /** Persisted before the probe; blank means "rely on PATH". */
-  ffmpegPath?: string | null;
-}
+/** `ffmpegPath` is persisted before the probe; blank means "rely on PATH". */
+export type FfmpegTestRequest = Schema['FfmpegTestRequest'];
 
-export interface FfmpegProbeResult {
-  success: boolean;
-  message: string;
-}
+export type FfmpegProbeResult = Schema['FfmpegProbeResult'];
 
 /** One row of the A/B preview picker: a generated item that still holds a Preview Source. */
-export interface RecentAudioSample {
-  itemId: Guid;
-  folder: string;
-  text: string;
-  characterName: string | null;
-  voiceName: string | null;
-  projectTitle: string;
-}
+export type RecentAudioSampleDto = Schema['RecentAudioSampleDto'];
 
-export interface PreviewSampleRef {
-  folder: string;
-  itemId: Guid;
-}
+export type PreviewSampleRef = Schema['PreviewSampleRef'];
 
-export interface StepPreviewRequest {
-  sample: PreviewSampleRef;
-  /** The card's *unsaved* settings payload. */
-  settings: Record<string, unknown> | null;
-}
+/** `settings` is the card's *unsaved* settings payload. */
+export type StepPreviewRequest = Schema['StepPreviewRequest'];
 
 /** `appliedOk` false means the step fell back: `processedUrl` plays the unprocessed audio and `reason` says why. */
-export interface StepPreviewResponse {
-  previewId: string;
-  originalUrl: string;
-  processedUrl: string;
-  removedMs: number | null;
-  reason: string | null;
-  appliedOk: boolean;
-}
+export type StepPreviewResponse = Schema['StepPreviewResponse'];
 
 // ---- AI services (`AiServiceEndpoints.cs`) ----------------------------------------------------------
 

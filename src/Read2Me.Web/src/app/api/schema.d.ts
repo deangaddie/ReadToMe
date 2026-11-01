@@ -324,7 +324,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Cancel the running assembly. */
+        /** Cancel the running assembly. 204, also when none is running. */
         post: {
             parameters: {
                 query?: never;
@@ -334,8 +334,8 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -380,7 +380,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["AssemblyStatusDto"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -541,7 +543,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Cancel all queued audio work. */
+        /** Cancel all queued audio work. 204, also when nothing is queued. */
         post: {
             parameters: {
                 query?: never;
@@ -551,8 +553,8 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -644,7 +646,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["RecentAudioSampleDto"][];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -1095,8 +1099,17 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StartedResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1140,6 +1153,15 @@ export interface paths {
             responses: {
                 /** @description OK */
                 200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AssemblyOutputDto"][];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1189,6 +1211,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "audio/mp4": components["schemas"]["Stream"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -1217,8 +1248,15 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1455,8 +1493,17 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnqueueResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1504,8 +1551,17 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnqueueResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1553,6 +1609,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["AudioItemStatusDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -1595,6 +1660,17 @@ export interface paths {
             responses: {
                 /** @description OK */
                 200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            [key: string]: components["schemas"]["AudioReviewDto"];
+                        };
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -4537,7 +4613,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["AudioProcessingSettings"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -4569,7 +4647,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["AudioProcessingSettings"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -4617,7 +4697,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["FfmpegProbeResult"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -4658,7 +4740,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["AudioProcessingFullResponse"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -4706,7 +4790,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["PauseDurationsDto"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -4755,7 +4841,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["AudioPostProcessStepConfig"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -4802,6 +4890,15 @@ export interface paths {
             responses: {
                 /** @description OK */
                 200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StepPreviewResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -7719,9 +7816,30 @@ export interface components {
         ApplyPreviewRequest: {
             previewId: null | string;
         };
+        AssemblyOutputDto: {
+            /** Format: date-time */
+            createdAt: string;
+            fileName: string;
+            isPartial: boolean;
+            /** Format: int64 */
+            sizeBytes: number;
+        };
+        /** @enum {unknown} */
+        AssemblyPhase: "Gather" | "Silence" | "ProbeConcat" | "Encode" | "Finalize";
         AssemblyStartRequest: {
             /** @default false */
             allowPartial: boolean;
+        };
+        AssemblyStatusDto: {
+            /** Format: int32 */
+            audioRemainingCount: number;
+            currentPhase: null | components["schemas"]["AssemblyPhase"];
+            /** Format: double */
+            encodePercent: number;
+            folder: null | string;
+            isRunning: boolean;
+            lastError: null | string;
+            outputFileName: null | string;
         };
         AttributionChainRequest: {
             /** @default false */
@@ -7777,6 +7895,14 @@ export interface components {
             /** Format: uuid */
             nodeId: string;
         };
+        AudioItemOutcome: {
+            kind: components["schemas"]["AudioItemOutcomeKind"];
+            reason: null | string;
+        };
+        /** @enum {unknown} */
+        AudioItemOutcomeKind: "Failed" | "Unfinished";
+        /** @enum {unknown} */
+        AudioItemQueueStatus: "Queued" | "Processing";
         AudioItemRefDto: {
             /** Format: uuid */
             chapterId: string;
@@ -7789,10 +7915,51 @@ export interface components {
             /** Format: uuid */
             volumeId: string;
         };
+        AudioItemStatusDto: {
+            /** Format: int64 */
+            audioVersion: null | number;
+            outcome: null | components["schemas"]["AudioItemOutcome"];
+            status: null | components["schemas"]["AudioItemQueueStatus"];
+        };
         AudioPostProcessStepConfig: {
             enabled: boolean;
             settings: null | components["schemas"]["JsonElement"];
             stepId: string;
+        };
+        AudioProcessingFullResponse: {
+            /** Format: int32 */
+            audioMaxAttempts: number;
+            /** Format: int32 */
+            chunkPauseMs: number;
+            configuredFfmpegPath: null | string;
+            ffmpegPath: null | string;
+            pauses: components["schemas"]["PauseDurationsDto"];
+            sentenceSplitEnabled: boolean;
+            steps: components["schemas"]["AudioPostProcessStepConfig"][];
+            /** Format: double */
+            werThreshold: number;
+        };
+        AudioProcessingSettings: {
+            /** Format: int32 */
+            audioMaxAttempts: number;
+            /** Format: int32 */
+            chapterPauseMs: number;
+            /** Format: int32 */
+            chunkPauseMs: number;
+            configuredFfmpegPath: null | string;
+            ffmpegPath: null | string;
+            /** Format: int32 */
+            paragraphPauseMs: number;
+            /** Format: int32 */
+            partPauseMs: number;
+            /** Format: int32 */
+            pauseMs: number;
+            savedFfmpegPath: null | string;
+            sentenceSplitEnabled: boolean;
+            /** Format: int32 */
+            volumePauseMs: number;
+            /** Format: double */
+            werThreshold: number;
         };
         AudioProcessingUpdateRequest: {
             /** Format: int32 */
@@ -7817,6 +7984,19 @@ export interface components {
             /** Format: int32 */
             queuedCount: number;
         };
+        AudioReviewDto: {
+            normalizeOk: boolean;
+            normalizeReason: null | string;
+            originalTextSnapshot: null | string;
+            state: components["schemas"]["AudioReviewState"];
+            transcript: null | string;
+            verifyOk: boolean;
+            verifyReason: null | string;
+            /** Format: double */
+            wer: null | number;
+        };
+        /** @enum {unknown} */
+        AudioReviewState: "NeedsReview" | "Dismissed";
         BookEditRowDto: {
             displayPath: string;
             failureReason: null | string;
@@ -7897,6 +8077,14 @@ export interface components {
         };
         /** @enum {unknown} */
         EditPlanStatus: "Ok" | "NoLlmConfigured" | "Unsupported" | "Failed" | "ServiceUnavailable" | "NoTargets";
+        EnqueueResponse: {
+            /** Format: int32 */
+            enqueued: number;
+        };
+        FfmpegProbeResult: {
+            message: string;
+            success: boolean;
+        };
         FfmpegTestRequest: {
             ffmpegPath?: null | string;
         };
@@ -8389,6 +8577,15 @@ export interface components {
             /** @default false */
             thinking: boolean;
         };
+        RecentAudioSampleDto: {
+            characterName: null | string;
+            folder: string;
+            /** Format: uuid */
+            itemId: string;
+            projectTitle: string;
+            text: string;
+            voiceName: null | string;
+        };
         RenderedDesignPromptResponse: {
             prompt: string;
         };
@@ -8552,6 +8749,15 @@ export interface components {
         StepPreviewRequest: {
             sample: null | components["schemas"]["PreviewSampleRef"];
             settings: null | components["schemas"]["JsonElement"];
+        };
+        StepPreviewResponse: {
+            appliedOk: boolean;
+            originalUrl: string;
+            previewId: string;
+            processedUrl: string;
+            reason: null | string;
+            /** Format: double */
+            removedMs: null | number;
         };
         /** Format: binary */
         Stream: string;
