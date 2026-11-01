@@ -3,7 +3,7 @@ import {
   AUDIO_STEP_IDS,
   type ConsonantSoftenEngine,
   type ConsonantSoftenPreset,
-  type PauseDurations,
+  type PauseDurationsDto,
   toApiError,
 } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
@@ -148,7 +148,7 @@ const DEESSER_FIELDS: DeesserField[] = [
   { key: 'shelfGainDb', label: 'Shelf gain (dB)', step: 0.5 },
 ];
 
-const PAUSE_FIELDS: { key: keyof PauseDurations; label: string; step: number }[] = [
+const PAUSE_FIELDS: { key: keyof PauseDurationsDto; label: string; step: number }[] = [
   { key: 'volumeMs', label: 'Volume pause (ms)', step: 100 },
   { key: 'partMs', label: 'Part pause (ms)', step: 100 },
   { key: 'chapterMs', label: 'Chapter pause (ms)', step: 100 },
@@ -247,7 +247,7 @@ export class AudioSettingsPage extends R2mElement implements HasUnsavedChanges {
     computed(() => this.store.full()?.chunkPauseMs ?? 300),
     validateChunkPause,
   );
-  readonly pauses = new CardState<PauseDurations>(
+  readonly pauses = new CardState<PauseDurationsDto>(
     computed(
       () =>
         this.store.full()?.pauses ?? {

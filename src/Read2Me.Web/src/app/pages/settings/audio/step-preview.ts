@@ -1,7 +1,7 @@
 import { html, nothing } from 'lit-html';
 import {
   AudioProcessingApi,
-  type RecentAudioSample,
+  type RecentAudioSampleDto,
   type StepPreviewResponse,
   toApiError,
 } from '@app/api';
@@ -72,7 +72,7 @@ export class StepPreview extends R2mElement {
     this.#canRender.set(value);
   }
 
-  readonly sample = signal<RecentAudioSample | null>(null);
+  readonly sample = signal<RecentAudioSampleDto | null>(null);
   readonly result = signal<StepPreviewResponse | null>(null);
   readonly rendering = signal(false);
 

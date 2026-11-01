@@ -8,28 +8,16 @@
  * hasn't landed); a converted endpoint's shapes are `Schema` aliases in `dtos.ts`, with nothing to pin.
  */
 import type {
-  AudioPostProcessStepConfig,
-  AudioProcessingUpdateRequest,
-  FfmpegTestRequest,
-  ItemsEnqueueRequest,
   ParagraphsEnqueueRequest,
-  PauseDurations,
   PreflightRunRequest,
   Schema,
   SetupCheckReport,
-  StepPreviewRequest,
 } from './dtos';
 
 type Pin<THand extends TGenerated, TGenerated> = THand;
 
 export type SchemaPins = [
   Pin<PreflightRunRequest, Schema['PreflightRunRequest']>,
-  Pin<AudioProcessingUpdateRequest, Schema['AudioProcessingUpdateRequest']>,
-  Pin<AudioPostProcessStepConfig, Schema['AudioPostProcessStepConfig']>,
-  Pin<PauseDurations, Schema['PauseDurationsDto']>,
-  Pin<FfmpegTestRequest, Schema['FfmpegTestRequest']>,
-  Pin<StepPreviewRequest, Schema['StepPreviewRequest']>,
   Pin<ParagraphsEnqueueRequest, Schema['ParagraphsEnqueueRequest']>,
-  Pin<ItemsEnqueueRequest, Schema['ItemsEnqueueRequest']>,
   Pin<SetupCheckReport, Schema['SetupCheckReport']>,
 ];

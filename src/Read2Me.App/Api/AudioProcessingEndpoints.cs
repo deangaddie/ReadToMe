@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Core.IO;
 using Read2Me.Services;
@@ -76,10 +77,10 @@ namespace Read2Me.App.Api
                 .WithSummary("The most recently generated paragraph items that still hold a Preview Source, newest first (?limit=20, max 50). The A/B preview picker's rows.");
         }
 
-        private static async Task<IResult> GetAudioProcessingAsync(AudioProcessingSettingsService svc) =>
-            Results.Ok(await svc.GetAsync());
+        private static async Task<Ok<AudioProcessingSettings>> GetAudioProcessingAsync(AudioProcessingSettingsService svc) =>
+            TypedResults.Ok(await svc.GetAsync());
 
-        private static async Task<IResult> UpdateAudioProcessingAsync(
+        private static async Task<Ok<AudioProcessingSettings>> UpdateAudioProcessingAsync(
             AudioProcessingUpdateRequest request, AudioProcessingSettingsService svc)
         {
             if (request.FfmpegPath is not null)
@@ -90,11 +91,11 @@ namespace Read2Me.App.Api
                 await svc.SetAudioMaxAttemptsAsync(attempts);
             if (request.ChunkPauseMs is { } chunk)
                 await svc.SetChunkPauseAsync(chunk);
-            return Results.Ok(await svc.GetAsync());
+            return TypedResults.Ok(await svc.GetAsync());
         }
 
-        private static async Task<IResult> GetFullAsync(AudioProcessingSettingsService svc) =>
-            Results.Ok(await FullAsync(svc));
+        private static async Task<Ok<AudioProcessingFullResponse>> GetFullAsync(AudioProcessingSettingsService svc) =>
+            TypedResults.Ok(await FullAsync(svc));
 
         private static async Task<AudioProcessingFullResponse> FullAsync(AudioProcessingSettingsService svc)
         {
@@ -106,51 +107,51 @@ namespace Read2Me.App.Api
                 steps, s.ConfiguredFfmpegPath);
         }
 
-        private static async Task<IResult> SetPausesAsync(PauseDurationsDto request, AudioProcessingSettingsService svc)
+        private static async Task<Results<Ok<PauseDurationsDto>, ProblemHttpResult>> SetPausesAsync(PauseDurationsDto request, AudioProcessingSettingsService svc)
         {
             if (request.VolumeMs < 0 || request.PartMs < 0 || request.ChapterMs < 0 || request.ParagraphMs < 0 || request.PauseMs < 0)
-                return Results.Problem("Pause durations must be zero or greater.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("Pause durations must be zero or greater.", statusCode: StatusCodes.Status400BadRequest);
 
             await svc.SetPauseDurationsAsync(request.VolumeMs, request.PartMs, request.ChapterMs, request.ParagraphMs, request.PauseMs);
-            return Results.Ok(request);
+            return TypedResults.Ok(request);
         }
 
-        private static async Task<IResult> UpsertStepAsync(
+        private static async Task<Results<Ok<AudioPostProcessStepConfig>, ProblemHttpResult>> UpsertStepAsync(
             string stepId, AudioPostProcessStepConfig? request, AudioProcessingSettingsService svc)
         {
             if (UnknownStep(stepId) is { } refusal)
                 return refusal;
             if (request is null)
-                return Results.Problem("Missing step config body.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("Missing step config body.", statusCode: StatusCodes.Status400BadRequest);
             if (!string.Equals(request.StepId, stepId, StringComparison.Ordinal))
-                return Results.Problem($"Body stepId '{request.StepId}' does not match the route's '{stepId}'.",
+                return TypedResults.Problem($"Body stepId '{request.StepId}' does not match the route's '{stepId}'.",
                     statusCode: StatusCodes.Status400BadRequest);
 
             await svc.UpsertPostProcessStepAsync(request);
             var saved = (await svc.GetPostProcessStepsAsync()).First(s => s.StepId == stepId);
-            return Results.Ok(saved);
+            return TypedResults.Ok(saved);
         }
 
-        private static async Task<IResult> TestFfmpegAsync(
+        private static async Task<Ok<FfmpegProbeResult>> TestFfmpegAsync(
             FfmpegTestRequest? request, AudioProcessingSettingsService svc, CancellationToken ct)
         {
             // Probe the path the user typed, persisting it first: the probe reads the stored path,
             // so testing a typed path saves it.
             if (request?.FfmpegPath is not null)
                 await svc.SetFfmpegPathAsync(request.FfmpegPath);
-            return Results.Ok(await svc.TestFfmpegAsync(ct));
+            return TypedResults.Ok(await svc.TestFfmpegAsync(ct));
         }
 
-        private static async Task<IResult> PreviewStepAsync(
+        private static async Task<Results<Ok<StepPreviewResponse>, NotFound, ProblemHttpResult>> PreviewStepAsync(
             string stepId, StepPreviewRequest? request, IFileSystem fs,
             IAudioPostProcessPreviewRenderer renderer, CancellationToken ct)
         {
             if (UnknownStep(stepId) is { } refusal)
                 return refusal;
             if (request?.Sample?.Folder is null)
-                return Results.Problem("sample { folder, itemId } is required.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("sample { folder, itemId } is required.", statusCode: StatusCodes.Status400BadRequest);
             if (!ProjectEndpoints.TryResolve(request.Sample.Folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             // The draft's enabled flag is ignored by the renderer: auditioning an off step is the point.
             var draft = new AudioPostProcessStepConfig(stepId, true, request.Settings);
@@ -158,14 +159,14 @@ namespace Read2Me.App.Api
             var result = await renderer.RenderAsync(previewId, folderId, request.Sample.ItemId, draft, ct);
 
             if (!result.HasPreview)
-                return Results.Problem(result.Reason ?? "The preview could not be rendered.",
+                return TypedResults.Problem(result.Reason ?? "The preview could not be rendered.",
                     statusCode: StatusCodes.Status422UnprocessableEntity);
 
             var removedMs = result.Applied
                 ? CanonicalWav.RemovedMs(result.OriginalBytes, result.OutputBytes)
                 : (double?)null;
 
-            return Results.Ok(new StepPreviewResponse(
+            return TypedResults.Ok(new StepPreviewResponse(
                 previewId,
                 OriginalUrl: $"/preview-source/{Uri.EscapeDataString(folderId.Value)}/{request.Sample.ItemId:D}",
                 ProcessedUrl: $"/audio-preview/{previewId}",
@@ -174,21 +175,21 @@ namespace Read2Me.App.Api
                 result.Applied));
         }
 
-        private static async Task<IResult> GetRecentSamplesAsync(
+        private static async Task<Ok<List<RecentAudioSampleDto>>> GetRecentSamplesAsync(
             int? limit, IRecentAudioSampleFinder finder, CancellationToken ct)
         {
             var samples = await finder.FindAsync(Math.Clamp(limit ?? DefaultSampleLimit, 1, MaxSampleLimit), ct);
-            return Results.Ok(samples.Select(s => new RecentAudioSampleDto(
+            return TypedResults.Ok(samples.Select(s => new RecentAudioSampleDto(
                 s.ParagraphItemId, s.Folder.Value, s.Text, s.CharacterName, s.VoiceName, s.ProjectTitle)).ToList());
         }
 
         /// <summary>Only the paragraph pipeline's steps live on this settings row.</summary>
-        private static IResult? UnknownStep(string stepId)
+        private static ProblemHttpResult? UnknownStep(string stepId)
         {
             var known = AudioPostProcessStepDefaults.For(StepScope.Paragraph).Select(s => s.StepId).ToList();
             return known.Contains(stepId, StringComparer.Ordinal)
                 ? null
-                : Results.Problem($"'{stepId}' is not a paragraph post-process step. Known steps: {string.Join(", ", known)}.",
+                : TypedResults.Problem($"'{stepId}' is not a paragraph post-process step. Known steps: {string.Join(", ", known)}.",
                     statusCode: StatusCodes.Status400BadRequest);
         }
     }

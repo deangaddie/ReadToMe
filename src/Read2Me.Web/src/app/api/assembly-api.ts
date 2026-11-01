@@ -13,26 +13,29 @@ export class AssemblyApi {
    * how many.
    */
   start(folder: string, allowPartial = false): Promise<StartedResponse> {
-    return this.api.untypedPost<StartedResponse>(`${projectUrl(folder)}/assembly`, {
-      allowPartial,
+    return this.api.post('/api/projects/{folder}/assembly', {
+      path: { folder },
+      body: { allowPartial },
     });
   }
 
   status(): Promise<AssemblyStatusDto> {
-    return this.api.untypedGet<AssemblyStatusDto>('/api/assembly/status');
+    return this.api.get('/api/assembly/status');
   }
 
   cancel(): Promise<void> {
-    return this.api.untypedPost<void>('/api/assembly/cancel');
+    return this.api.post('/api/assembly/cancel');
   }
 
   /** The project's assembled audiobooks, newest first. */
   outputs(folder: string): Promise<AssemblyOutputDto[]> {
-    return this.api.untypedGet<AssemblyOutputDto[]>(`${projectUrl(folder)}/assembly/outputs`);
+    return this.api.get('/api/projects/{folder}/assembly/outputs', { path: { folder } });
   }
 
   deleteOutput(folder: string, fileName: string): Promise<void> {
-    return this.api.untypedDelete(assemblyOutputUrl(folder, fileName));
+    return this.api.delete('/api/projects/{folder}/assembly/outputs/{fileName}', {
+      path: { folder, fileName },
+    });
   }
 }
 

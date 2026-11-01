@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
@@ -37,16 +38,16 @@ namespace Read2Me.App.Api
                 .ReadsLive("audio reviews are results, which History doesn't record.")
                 .WithSummary("Items whose audio needs review or had it dismissed: { itemId: { state, normalizeOk, normalizeReason, verifyOk, wer, verifyReason, transcript, originalTextSnapshot } }. Sparse: an item with no entry passed both checks.");
             endpoints.MapPost("/api/audio/cancel",
-                    (AudioQueueService queue) => { queue.CancelAll(); return Results.Ok(); })
-                .WithSummary("Cancel all queued audio work.");
+                    (AudioQueueService queue) => { queue.CancelAll(); return TypedResults.NoContent(); })
+                .WithSummary("Cancel all queued audio work. 204, also when nothing is queued.");
         }
 
-        private static async Task<IResult> EnqueueAsync(
+        private static async Task<Results<Accepted<EnqueueResponse>, NotFound, ProblemHttpResult>> EnqueueAsync(
             string folder, AudioEnqueueRequest request, IFileSystem fs,
             EnqueueUseCases useCases, ParagraphTtsSettingsService ttsSettings)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             if (await NoActiveTtsAsync(ttsSettings) is { } refused)
                 return refused;
 
@@ -55,12 +56,12 @@ namespace Read2Me.App.Api
             return EnqueueResponse.For(enqueued);
         }
 
-        private static async Task<IResult> EnqueueItemsAsync(
+        private static async Task<Results<Accepted<EnqueueResponse>, NotFound, ProblemHttpResult>> EnqueueItemsAsync(
             string folder, ItemsEnqueueRequest request, IFileSystem fs,
             EnqueueUseCases useCases, ParagraphTtsSettingsService ttsSettings)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             if (await NoActiveTtsAsync(ttsSettings) is { } refused)
                 return refused;
@@ -70,32 +71,32 @@ namespace Read2Me.App.Api
         }
 
         /// <summary>The 409 every enqueue answers when no paragraph TTS service is active; null when one is.</summary>
-        private static async Task<IResult?> NoActiveTtsAsync(ParagraphTtsSettingsService ttsSettings) =>
+        private static async Task<ProblemHttpResult?> NoActiveTtsAsync(ParagraphTtsSettingsService ttsSettings) =>
             await ttsSettings.GetActiveConfigAsync() is null
-                ? Results.Problem("No paragraph TTS service configured. Create one via /api/settings/paragraph-tts.",
+                ? TypedResults.Problem("No paragraph TTS service configured. Create one via /api/settings/paragraph-tts.",
                     statusCode: StatusCodes.Status409Conflict)
                 : null;
 
-        private static async Task<IResult> GetReviewsAsync(string folder, IFileSystem fs, IAudioItemReader reader)
+        private static async Task<Results<Ok<Dictionary<string, AudioReviewDto>>, NotFound>> GetReviewsAsync(string folder, IFileSystem fs, IAudioItemReader reader)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var rows = await reader.GetAudioReviewsAsync(folderId);
-            return Results.Ok(rows.ToDictionary(
+            return TypedResults.Ok(rows.ToDictionary(
                 r => r.ParagraphItemId.ToString(),
                 r => new AudioReviewDto(
                     r.Info.State, r.Info.NormalizeOk, r.Info.NormalizeReason, r.Info.VerifyOk,
                     r.Info.Wer, r.Info.VerifyReason, r.Info.Transcript, r.Info.OriginalTextSnapshot)));
         }
 
-        private static IResult GetItemStatus(
+        private static Results<Ok<AudioItemStatusDto>, NotFound> GetItemStatus(
             string folder, Guid itemId, IFileSystem fs, AudioQueueService queue)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
-            return Results.Ok(new AudioItemStatusDto(
+            return TypedResults.Ok(new AudioItemStatusDto(
                 queue.StatusOf(folderId, itemId),
                 queue.OutcomeOf(folderId, itemId),
                 queue.AudioVersionOf(folderId, itemId)));

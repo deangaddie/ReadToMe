@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Read2Me.Data;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Core.IO;
 using Read2Me.Services;
@@ -32,49 +33,50 @@ namespace Read2Me.App.Api
                 .RecordsNoStep("Assembly writes an output file, not Project state.")
                 .WithSummary("Start m4b assembly. 409 with audioRemainingCount when items still lack audio and allowPartial is false. Poll /api/assembly/status.");
             endpoints.MapGet("/api/assembly/status",
-                    (AudiobookAssemblyService svc) => Results.Ok(new AssemblyStatusDto(
+                    (AudiobookAssemblyService svc) => TypedResults.Ok(new AssemblyStatusDto(
                         svc.IsRunning, svc.CurrentPhase, svc.EncodePercent,
                         svc.LastError, svc.AudioRemainingCount, svc.Folder, svc.OutputFileName)))
                 .WithSummary("Assembly progress: phase (Gather/Silence/ProbeConcat/Encode/Finalize) and encode percent, the folder of the running or most recent job, and outputFileName once it completed.");
             endpoints.MapPost("/api/assembly/cancel",
-                    (AudiobookAssemblyService svc) => { svc.Cancel(); return Results.Ok(); })
-                .WithSummary("Cancel the running assembly.");
+                    (AudiobookAssemblyService svc) => { svc.Cancel(); return TypedResults.NoContent(); })
+                .WithSummary("Cancel the running assembly. 204, also when none is running.");
 
             endpoints.MapGet("/api/projects/{folder}/assembly/outputs", ListOutputs)
                 .ReadsLive(OutputsAreNotState)
                 .WithSummary("Assembled audiobooks under the project's output folder, newest first. isPartial marks a build that skipped items without audio.");
             endpoints.MapGet("/api/projects/{folder}/assembly/outputs/{fileName}", DownloadOutput)
                 .ReadsLive(OutputsAreNotState)
+                .Produces<Stream>(contentType: "audio/mp4")
                 .WithSummary("Download one assembled audiobook (audio/mp4 attachment; Range requests supported).");
             endpoints.MapDelete("/api/projects/{folder}/assembly/outputs/{fileName}", DeleteOutput)
                 .RecordsNoStep("An output file is not Project state.")
                 .WithSummary("Delete one assembled audiobook (204; 404 when it is not an existing output).");
         }
 
-        private static IResult ListOutputs(string folder, IFileSystem fs)
+        private static Results<Ok<List<AssemblyOutputDto>>, NotFound> ListOutputs(string folder, IFileSystem fs)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
-            return Results.Ok(AssemblyOutputs.List(fs.GetProjectFolderPath(folderId.Value))
-                .Select(o => new AssemblyOutputDto(o.FileName, o.SizeBytes, o.CreatedAt, o.IsPartial)));
+            return TypedResults.Ok(AssemblyOutputs.List(fs.GetProjectFolderPath(folderId.Value))
+                .Select(o => new AssemblyOutputDto(o.FileName, o.SizeBytes, o.CreatedAt, o.IsPartial)).ToList());
         }
 
-        private static IResult DownloadOutput(string folder, string fileName, IFileSystem fs)
+        private static Results<PhysicalFileHttpResult, NotFound> DownloadOutput(string folder, string fileName, IFileSystem fs)
         {
             if (!TryResolveOutput(folder, fileName, fs, out var path))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
-            return Results.File(path, "audio/mp4", fileDownloadName: fileName, enableRangeProcessing: true);
+            return TypedResults.PhysicalFile(path, "audio/mp4", fileDownloadName: fileName, enableRangeProcessing: true);
         }
 
-        private static IResult DeleteOutput(string folder, string fileName, IFileSystem fs)
+        private static Results<NoContent, NotFound> DeleteOutput(string folder, string fileName, IFileSystem fs)
         {
             if (!TryResolveOutput(folder, fileName, fs, out var path))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             fs.DeleteFile(path);
-            return Results.NoContent();
+            return TypedResults.NoContent();
         }
 
         /// Folder and file name are both vetted before either reaches a path, so a traversal
@@ -90,12 +92,12 @@ namespace Read2Me.App.Api
             return true;
         }
 
-        private static async Task<IResult> StartAsync(
+        private static async Task<Results<Accepted<StartedResponse>, NotFound, ProblemHttpResult>> StartAsync(
             string folder, AssemblyStartRequest? body, IFileSystem fs,
             IAudioItemReader reader, AudiobookAssemblyService service, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var allowPartial = body?.AllowPartial ?? false;
 
@@ -107,15 +109,15 @@ namespace Read2Me.App.Api
                 var remaining = manifest.Count(e =>
                     !ParagraphItemKinds.IsPause(e.ItemType) && e.AudioRelativePath == null);
                 if (remaining > 0)
-                    return Results.Problem(
+                    return TypedResults.Problem(
                         $"{remaining} items still need audio. Generate audio first or pass allowPartial.",
                         statusCode: StatusCodes.Status409Conflict,
                         extensions: new Dictionary<string, object?> { ["audioRemainingCount"] = remaining });
             }
 
             return service.StartAsync(folderId, allowPartial)
-                ? Results.Accepted(value: new StartedResponse(true))
-                : Results.Problem("Assembly is already running.", statusCode: StatusCodes.Status409Conflict);
+                ? TypedResults.Accepted((string?)null, new StartedResponse(true))
+                : TypedResults.Problem("Assembly is already running.", statusCode: StatusCodes.Status409Conflict);
         }
     }
 }

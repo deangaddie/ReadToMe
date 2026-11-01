@@ -185,10 +185,10 @@ public class AudioApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     [Fact]
-    public async Task Cancel_returns_ok()
+    public async Task Cancel_returns_no_content()
     {
         var response = await Http.PostAsync($"{app.BaseUrl}/api/audio/cancel", null);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 }

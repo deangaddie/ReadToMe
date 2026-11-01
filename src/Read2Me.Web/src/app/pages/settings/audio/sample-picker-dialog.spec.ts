@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { RecentAudioSample } from '@app/api';
+import type { RecentAudioSampleDto } from '@app/api';
 import { resetServices } from '@app/core/services';
 import { FakeApi } from '../../../../testing/fake-api';
 import { settle } from '../../../../testing/fake-navigation';
@@ -7,7 +7,7 @@ import { SAMPLE_LIMIT, SamplePicker } from './sample-picker-dialog';
 
 const RECENT = '/api/audio/samples/recent';
 
-const alice: RecentAudioSample = {
+const alice: RecentAudioSampleDto = {
   itemId: 'item-1',
   folder: 'audio-book',
   text: 'Alice said hello.',
@@ -15,7 +15,7 @@ const alice: RecentAudioSample = {
   voiceName: 'Alice Voice',
   projectTitle: 'Audio Settings Book',
 };
-const narration: RecentAudioSample = {
+const narration: RecentAudioSampleDto = {
   itemId: 'item-2',
   folder: 'audio-book',
   text: 'The door opened.',
