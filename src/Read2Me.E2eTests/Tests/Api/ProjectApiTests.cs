@@ -43,7 +43,7 @@ public class ProjectApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 
         var import = await Http.PostAsJsonAsync(
             $"{app.BaseUrl}/api/projects/{folder}/import", new { reread = false });
-        Assert.Equal(HttpStatusCode.OK, import.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, import.StatusCode);
 
         var detail = await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}");
         Assert.Equal(HttpStatusCode.OK, detail.StatusCode);
@@ -68,7 +68,7 @@ public class ProjectApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             .RootElement.GetProperty("folderName").GetString();
 
         var auto = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/import", new { reread = false });
-        Assert.Equal(HttpStatusCode.OK, auto.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, auto.StatusCode);
         var before = await BookAsync(folder!);
         Assert.True(before.GetProperty("hasContent").GetBoolean());
 
@@ -78,7 +78,7 @@ public class ProjectApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             hasMultipleParts = false,
             chapter = new { mode = "Roman" },
         });
-        Assert.Equal(HttpStatusCode.OK, manual.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, manual.StatusCode);
 
         var after = await BookAsync(folder!);
         Assert.True(after.GetProperty("hasContent").GetBoolean());

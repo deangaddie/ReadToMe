@@ -1,6 +1,7 @@
 using System.Threading;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Core.IO;
 using Read2Me.Data.Entities;
@@ -32,14 +33,14 @@ namespace Read2Me.App.Api
                              "404 unknown step; 422 when the step does not take that state or the book has no content; 400 without a state.");
         }
 
-        private static async Task<IResult> SetAsync(
+        private static async Task<Results<NoContent, NotFound, ProblemHttpResult>> SetAsync(
             string folder, string step, SetCheckpointRequest? body, IFileSystem fs, ProjectUseCases useCases,
             CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId) || !ApiJson.TryParseName<PipelineStep>(step, out var pipelineStep))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             if (!TryReadState(body, out var state))
-                return Results.Problem("Expected a JSON body with 'state': Confirmed, Skipped or Open.",
+                return TypedResults.Problem("Expected a JSON body with 'state': Confirmed, Skipped or Open.",
                     statusCode: StatusCodes.Status400BadRequest);
 
             return ToResult(await useCases.SetCheckpointAsync(folderId.Value, pipelineStep, state), ct);
@@ -65,17 +66,17 @@ namespace Read2Me.App.Api
         /// The outcome table. A repeat changed nothing and still answers 204: the pill already shows
         /// that state. A write-lock conflict is 409, so a client can tell "try again" from "never".
         /// </summary>
-        internal static IResult ToResult(BookMutationOutcome outcome, CancellationToken ct) => outcome switch
+        internal static Results<NoContent, NotFound, ProblemHttpResult> ToResult(BookMutationOutcome outcome, CancellationToken ct) => outcome switch
         {
-            BookMutationOutcome.Committed or BookMutationOutcome.NoChange => Results.NoContent(),
+            BookMutationOutcome.Committed or BookMutationOutcome.NoChange => TypedResults.NoContent(),
             BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } cancelled
                 => throw new OperationCanceledException(cancelled.Message, ct),
             BookMutationOutcome.Rejected { Reason: BookMutationRejection.Conflict or BookMutationRejection.Stale or BookMutationRejection.Restoring } conflict
-                => Results.Problem(conflict.Message, statusCode: StatusCodes.Status409Conflict),
+                => TypedResults.Problem(conflict.Message, statusCode: StatusCodes.Status409Conflict),
             BookMutationOutcome.Rejected { Reason: BookMutationRejection.NotFound } missing
-                => Results.Problem(missing.Message, statusCode: StatusCodes.Status404NotFound),
+                => TypedResults.Problem(missing.Message, statusCode: StatusCodes.Status404NotFound),
             BookMutationOutcome.Rejected rejected
-                => Results.Problem(rejected.Message, statusCode: StatusCodes.Status422UnprocessableEntity),
+                => TypedResults.Problem(rejected.Message, statusCode: StatusCodes.Status422UnprocessableEntity),
             _ => throw new NotSupportedException($"Unhandled mutation outcome {outcome.GetType().Name}."),
         };
     }

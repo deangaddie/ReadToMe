@@ -43,17 +43,8 @@ export type OutcomeKind = 'Failed' | 'Unfinished';
 
 // ---- Projects (`ProjectEndpoints.cs`) -------------------------------------------------------------
 
-export interface ProjectSummary {
-  folderName: string;
-  title: string;
-  author: string | null;
-  coverImage: string | null;
-  audioItemTotal: number;
-  audioItemDone: number;
-  audioPercent: number;
-  /** `BookFileType` member name (`Epub` | `Text`); null for a folder whose DB could not be opened. */
-  fileType: string | null;
-}
+/** One row of `GET /api/projects`; `fileType` is null for a folder whose DB could not be opened. */
+export type ProjectSummary = Schema['ProjectSummary'];
 
 /** `PATCH /api/projects/{folder}`: every field optional, omitted/null fields are left as they are. */
 export type UpdateProjectRequest = Schema['UpdateProjectRequest'];
@@ -81,9 +72,7 @@ export type PipelineStepId = (typeof PIPELINE_STEP_IDS)[number];
 export type SetCheckpointRequest = Schema['SetCheckpointRequest'];
 export type CheckpointRequestState = NonNullable<SetCheckpointRequest['state']>;
 
-export interface CoverImageResponse {
-  coverImage: string;
-}
+export type CoverImageResponse = Schema['CoverImageResponse'];
 
 /** Multipart fields for `POST /api/projects`; `title` and `file` are required by the host. */
 export interface CreateProjectRequest {
@@ -93,92 +82,44 @@ export interface CreateProjectRequest {
   file: File;
 }
 
-export interface CreateProjectResponse {
-  folderName: string;
-}
+export type CreateProjectResponse = Schema['CreateProjectResponse'];
 
-export interface NarratorDto {
-  characterId: Guid;
-  displayName: string;
-  isLinked: boolean;
-}
+/** Who narrates the book; an unlinked narrator is the seed row ("Narrator", `isLinked` false). */
+export type NarratorDto = Schema['NarratorDto'];
 
-export interface ProjectDetailDto {
-  folderName: string;
-  title: string;
-  bookTitle: string;
-  author: string;
-  filename: string;
-  fileType: string;
-  coverImage: string | null;
-  narratorOnlyMode: boolean;
-  narrator: NarratorDto;
-}
+export type ProjectDetailDto = Schema['ProjectDetailDto'];
 
 export type ImportRequest = Schema['ImportRequest'];
 
-/** `SplitRuleRequest.mode`: how a level's headings are recognised (`ManualImportRequest.cs`). */
+/**
+ * `SplitRuleRequest.mode`'s names: how a level's headings are recognised (`ManualImportRequest.cs`).
+ * The host reads the mode as text, case-insensitively, so the schema types it `string`.
+ */
 export type SplitRuleMode = 'Prefix' | 'Arabic' | 'Roman';
 
-export interface SplitRuleRequest {
-  mode: SplitRuleMode;
-  /** Required (non-blank) when `mode` is `Prefix`; ignored otherwise. */
-  prefix?: string | null;
-}
+/** One level's rule; `prefix` is required (non-blank) when `mode` is `Prefix`, ignored otherwise. */
+export type SplitRuleRequest = Schema['SplitRuleRequest'];
 
 /**
  * `POST /api/projects/{folder}/import/manual`: `volume` is read only when `hasMultipleVolumes`,
  * `part` only when `hasMultipleParts`; `chapter` always. 400 when a switched-on level lacks a rule.
  */
-export interface ManualImportRequest {
-  hasMultipleVolumes: boolean;
-  hasMultipleParts: boolean;
-  volume: SplitRuleRequest | null;
-  part: SplitRuleRequest | null;
-  chapter: SplitRuleRequest;
-}
+export type ManualImportRequest = Schema['ManualImportRequest'];
 
 // ---- Project roll-ups (`ProjectStatusEndpoints.cs`) -----------------------------------------------
 
 /** `StepCheckpointDto`: a confirmed or skipped step; `at` is when, kept when the row goes stale. */
-export interface StepCheckpointDto {
-  state: Exclude<CheckpointRequestState, 'Open'>;
-  stale: boolean;
-  at: string;
-}
+export type StepCheckpointDto = Schema['StepCheckpointDto'];
 
-/** `NodeStatusService.NodeStatusSummary`: paragraph counts under one volume/part/chapter. */
-export interface NodeStatusSummaryDto {
-  attributionRemaining: number;
-  audioRemaining: number;
-  review: number;
-  attributionProcessing: boolean;
-  attributionQueued: number;
-  isDone: boolean;
-}
+/** Paragraph counts under one volume/part/chapter. */
+export type NodeStatusSummaryDto = Schema['NodeStatusSummaryDto'];
 
 /**
  * `GET /api/projects/{folder}/status`. Item counts are items; `attribution`, `audio` and `review`
- * count paragraphs, like the node summaries. `revision` is the book revision the reads started at.
+ * count paragraphs, like the node summaries. `revision` is the book revision the reads started at;
+ * `volumeIds` are in book order; `checkpoints` holds only the steps that have a row, keyed by step id.
  */
-export interface ProjectStatusDto {
-  hasContent: boolean;
-  characters: number;
-  charactersWithLines: number;
-  readyVoices: number;
-  items: { total: number; withAudio: number; unattributed: number };
-  attribution: { remaining: number; processing: boolean; queued: number };
-  audio: { remaining: number };
-  review: number;
-  /** Book order. */
-  volumeIds: Guid[];
-  nodes: Record<string, NodeStatusSummaryDto>;
-  /** Paragraphs that are pauses: no items, or one pause item. */
-  pauseParagraphs: number;
-  /** Only the steps that have a row. */
-  checkpoints: Partial<Record<PipelineStepId, StepCheckpointDto>>;
-  revision: number;
-}
+export type ProjectStatusDto = Schema['ProjectStatusDto'];
 
 // ---- Book reads (`BookEndpoints.cs`) ---------------------------------------------------------------
 
@@ -393,26 +334,11 @@ export interface AudioItemStatusDto {
   audioVersion: number | null;
 }
 
-/** `CharacterQueueService.QueueSnapshot`. */
-export interface AttributionQueueSnapshot {
-  queuedCount: number;
-  processingCount: number;
-  averageSecondsPerParagraph: number;
-  estimatedSecondsRemaining: number;
-  completedCount: number;
-  currentItemElapsedSeconds: number;
-  isBusy: boolean;
-}
+/** `GET /api/attribution/queue`. */
+export type AttributionQueueSnapshot = Schema['AttributionQueueSnapshot'];
 
-/** `AudioQueueService.AudioQueueSnapshot`. */
-export interface AudioQueueSnapshot {
-  queuedCount: number;
-  processingCount: number;
-  averageSecondsPerItem: number;
-  estimatedSecondsRemaining: number;
-  completedCount: number;
-  currentItemElapsedSeconds: number;
-}
+/** `GET /api/audio/queue`. */
+export type AudioQueueSnapshot = Schema['AudioQueueSnapshot'];
 
 // ---- Character discovery (`DiscoveryEndpoints.cs`) -------------------------------------------------
 

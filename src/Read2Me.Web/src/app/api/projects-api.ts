@@ -32,7 +32,7 @@ export class ProjectsApi {
   private readonly api = use(ApiClient);
 
   list(): Promise<ProjectSummary[]> {
-    return this.api.untypedGet<ProjectSummary[]>('/api/projects');
+    return this.api.get('/api/projects');
   }
 
   /** 201 with the new folder name; 400 when title/file are missing, 422 when the reader rejects the file. */
@@ -42,56 +42,62 @@ export class ProjectsApi {
     form.set('bookTitle', request.bookTitle ?? '');
     form.set('author', request.author ?? '');
     form.set('file', request.file, request.file.name);
-    return this.api.untypedPostForm<CreateProjectResponse>('/api/projects', form);
+    return this.api.postForm('/api/projects', {}, form);
   }
 
   get(folder: string): Promise<ProjectDetailDto> {
-    return this.api.untypedGet<ProjectDetailDto>(projectUrl(folder));
+    return this.api.get('/api/projects/{folder}', { path: { folder } });
   }
 
   delete(folder: string): Promise<void> {
-    return this.api.untypedDelete(projectUrl(folder));
+    return this.api.delete('/api/projects/{folder}', { path: { folder } });
   }
 
   /** Reads the stored book file into structure; `reread` clears existing content first. 422 on reader failure. */
   import(folder: string, reread = false): Promise<void> {
-    return this.api.untypedPost<void>(`${projectUrl(folder)}/import`, { reread });
+    return this.api.post('/api/projects/{folder}/import', { path: { folder }, body: { reread } });
   }
 
   /** Re-splits the stored file by hand-chosen rules, replacing existing content. 400 on a bad form, 422 on reader failure. */
   importManually(folder: string, request: ManualImportRequest): Promise<void> {
-    return this.api.untypedPost<void>(`${projectUrl(folder)}/import/manual`, request);
+    return this.api.post('/api/projects/{folder}/import/manual', {
+      path: { folder },
+      body: request,
+    });
   }
 
   /** Title / book title / author; 400 when a sent title is blank. Returns the updated detail. */
   update(folder: string, request: UpdateProjectRequest): Promise<ProjectDetailDto> {
-    return this.api.untypedPatch<ProjectDetailDto>(projectUrl(folder), request);
+    return this.api.patch('/api/projects/{folder}', { path: { folder }, body: request });
   }
 
   setNarratorOnlyMode(folder: string, enabled: boolean): Promise<void> {
-    return this.api.untypedPut<void>(`${projectUrl(folder)}/narrator-only-mode`, { enabled });
+    return this.api.put('/api/projects/{folder}/narrator-only-mode', {
+      path: { folder },
+      body: { enabled },
+    });
   }
 
   /** Multipart `file`; 400 for a type outside {@link COVER_ACCEPT} or over {@link COVER_MAX_BYTES}. */
   uploadCover(folder: string, file: File): Promise<CoverImageResponse> {
     const form = new FormData();
     form.set('file', file, file.name);
-    return this.api.untypedPutForm<CoverImageResponse>(`${projectUrl(folder)}/cover`, form);
+    return this.api.putForm('/api/projects/{folder}/cover', { path: { folder } }, form);
   }
 
   deleteCover(folder: string): Promise<void> {
-    return this.api.untypedDelete(`${projectUrl(folder)}/cover`);
+    return this.api.delete('/api/projects/{folder}/cover', { path: { folder } });
   }
 
   /** Whole-project roll-up (`ProjectStatusEndpoints.cs`); the hub's `nodeStatus` deltas keep `nodes` current. */
   status(folder: string): Promise<ProjectStatusDto> {
-    return this.api.untypedGet<ProjectStatusDto>(`${projectUrl(folder)}/status`);
+    return this.api.get('/api/projects/{folder}/status', { path: { folder } });
   }
 
   nodeStatus(folder: string, level: NodeLevel, id: Guid): Promise<NodeStatusSummaryDto> {
-    return this.api.untypedGet<NodeStatusSummaryDto>(
-      `${projectUrl(folder)}/nodes/${level}/${id}/status`,
-    );
+    return this.api.get('/api/projects/{folder}/nodes/{level}/{id}/status', {
+      path: { folder, level, id },
+    });
   }
 
   /**
@@ -104,7 +110,10 @@ export class ProjectsApi {
     step: PipelineStepId,
     state: CheckpointRequestState,
   ): Promise<void> {
-    return this.api.untypedPut<void>(`${projectUrl(folder)}/checkpoints/${step}`, { state });
+    return this.api.put('/api/projects/{folder}/checkpoints/{step}', {
+      path: { folder, step },
+      body: { state },
+    });
   }
 }
 

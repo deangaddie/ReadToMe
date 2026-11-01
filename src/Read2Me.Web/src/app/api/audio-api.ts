@@ -39,7 +39,7 @@ export class AudioApi {
   }
 
   queue(): Promise<AudioQueueSnapshot> {
-    return this.api.untypedGet<AudioQueueSnapshot>('/api/audio/queue');
+    return this.api.get('/api/audio/queue');
   }
 
   /** Global: drains every folder's queued audio work. */

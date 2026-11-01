@@ -6,12 +6,15 @@ namespace Read2Me.Services
     public record ProjectSummary(
         string FolderName,
         string Title,
-        string? Author = null,
-        string? CoverImage = null,
-        int AudioItemTotal = 0,
-        int AudioItemDone = 0,
-        BookFileType? FileType = null)
+        string? Author,
+        string? CoverImage,
+        int AudioItemTotal,
+        int AudioItemDone,
+        BookFileType? FileType)
     {
+        /// <summary>The row for a folder whose project can't be read: its name as the title, nothing counted.</summary>
+        public static ProjectSummary Unreadable(string folderName) => new(folderName, folderName, null, null, 0, 0, null);
+
         public int AudioPercent => AudioItemTotal == 0 ? 0 : (int)(100.0 * AudioItemDone / AudioItemTotal);
     }
 }

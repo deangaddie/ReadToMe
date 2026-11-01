@@ -509,7 +509,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["AttributionQueueSnapshot"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -595,7 +597,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["AudioQueueSnapshot"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -868,7 +872,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ProjectSummary"][];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -892,12 +898,14 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Created */
+                201: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["CreateProjectResponse"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -943,6 +951,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["ProjectDetailDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -970,8 +987,15 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1008,6 +1032,15 @@ export interface paths {
             responses: {
                 /** @description OK */
                 200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectDetailDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2507,8 +2540,15 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2606,6 +2646,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["CoverImageResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -2632,8 +2681,15 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2828,7 +2884,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
+        /** Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. 204 on success, An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
         post: {
             parameters: {
                 query?: never;
@@ -2844,8 +2900,15 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2893,8 +2956,15 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2990,8 +3060,15 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -3243,6 +3320,15 @@ export interface paths {
             responses: {
                 /** @description OK */
                 200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NodeStatusSummaryDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -3787,6 +3873,15 @@ export interface paths {
             responses: {
                 /** @description OK */
                 200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectStatusDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -7209,8 +7304,34 @@ export interface components {
             promptStyle?: null | components["schemas"]["AttributionPromptStyle"];
             thinking: boolean;
         };
+        AttributionCountsDto: {
+            processing: boolean;
+            /** Format: int32 */
+            queued: number;
+            /** Format: int32 */
+            remaining: number;
+        };
         /** @enum {unknown} */
         AttributionPromptStyle: "Full" | "Simple" | "Chapter";
+        AttributionQueueSnapshot: {
+            /** Format: double */
+            averageSecondsPerParagraph: number;
+            /** Format: int32 */
+            completedCount: number;
+            /** Format: double */
+            currentItemElapsedSeconds: number;
+            /** Format: double */
+            estimatedSecondsRemaining: number;
+            isBusy: boolean;
+            /** Format: int32 */
+            processingCount: number;
+            /** Format: int32 */
+            queuedCount: number;
+        };
+        AudioCountsDto: {
+            /** Format: int32 */
+            remaining: number;
+        };
         AudioEnqueueRequest: {
             level: components["schemas"]["BookNodeLevel"];
             /** @default false */
@@ -7234,6 +7355,22 @@ export interface components {
             /** Format: double */
             werThreshold?: null | number;
         };
+        AudioQueueSnapshot: {
+            /** Format: double */
+            averageSecondsPerItem: number;
+            /** Format: int32 */
+            completedCount: number;
+            /** Format: double */
+            currentItemElapsedSeconds: number;
+            /** Format: double */
+            estimatedSecondsRemaining: number;
+            /** Format: int32 */
+            processingCount: number;
+            /** Format: int32 */
+            queuedCount: number;
+        };
+        /** @enum {unknown} */
+        BookFileType: "Text" | "Epub";
         /** @enum {unknown} */
         BookNodeLevel: "Volume" | "Part" | "Chapter";
         BookOverviewDto: {
@@ -7264,6 +7401,14 @@ export interface components {
         };
         /** @enum {unknown} */
         CheckpointRequestState: "Confirmed" | "Skipped" | "Open";
+        /** @enum {unknown} */
+        CheckpointState: "Confirmed" | "Skipped";
+        CoverImageResponse: {
+            coverImage: string;
+        };
+        CreateProjectResponse: {
+            folderName: string;
+        };
         FfmpegTestRequest: {
             ffmpegPath?: null | string;
         };
@@ -7332,6 +7477,14 @@ export interface components {
             /** @default false */
             reread: boolean;
         };
+        ItemCountsDto: {
+            /** Format: int32 */
+            total: number;
+            /** Format: int32 */
+            unattributed: number;
+            /** Format: int32 */
+            withAudio: number;
+        };
         ItemsEnqueueRequest: {
             itemIds: string[];
         };
@@ -7380,6 +7533,12 @@ export interface components {
         };
         /** @enum {unknown} */
         NarrationReleaseScope: "Part" | "Chapter" | "Paragraph";
+        NarratorDto: {
+            /** Format: uuid */
+            characterId: string;
+            displayName: string;
+            isLinked: boolean;
+        };
         NarratorOnlyModeRequest: {
             enabled: boolean;
         };
@@ -7397,6 +7556,18 @@ export interface components {
         };
         /** @enum {unknown} */
         NodeKind: "Volume" | "Part" | "Chapter" | "Paragraph" | "ParagraphItem";
+        NodeStatusSummaryDto: {
+            attributionProcessing: boolean;
+            /** Format: int32 */
+            attributionQueued: number;
+            /** Format: int32 */
+            attributionRemaining: number;
+            /** Format: int32 */
+            audioRemaining: number;
+            isDone: boolean;
+            /** Format: int32 */
+            review: number;
+        };
         ParagraphTtsServiceConfig: {
             enabledStepIds?: string[];
             /** Format: int32 */
@@ -7453,6 +7624,55 @@ export interface components {
             status?: null | number;
             title?: null | string;
             type?: null | string;
+        };
+        ProjectDetailDto: {
+            author: string;
+            bookTitle: string;
+            coverImage: null | string;
+            fileType: components["schemas"]["BookFileType"];
+            filename: string;
+            folderName: string;
+            narrator: components["schemas"]["NarratorDto"];
+            narratorOnlyMode: boolean;
+            title: string;
+        };
+        ProjectStatusDto: {
+            attribution: components["schemas"]["AttributionCountsDto"];
+            audio: components["schemas"]["AudioCountsDto"];
+            /** Format: int32 */
+            characters: number;
+            /** Format: int32 */
+            charactersWithLines: number;
+            checkpoints: {
+                [key: string]: components["schemas"]["StepCheckpointDto"];
+            };
+            hasContent: boolean;
+            items: components["schemas"]["ItemCountsDto"];
+            nodes: {
+                [key: string]: components["schemas"]["NodeStatusSummaryDto"];
+            };
+            /** Format: int32 */
+            pauseParagraphs: number;
+            /** Format: int32 */
+            readyVoices: number;
+            /** Format: int32 */
+            review: number;
+            /** Format: int64 */
+            revision: number;
+            volumeIds: string[];
+        };
+        ProjectSummary: {
+            /** Format: int32 */
+            audioItemDone: number;
+            /** Format: int32 */
+            audioItemTotal: number;
+            /** Format: int32 */
+            audioPercent: number;
+            author: null | string;
+            coverImage: null | string;
+            fileType: null | components["schemas"]["BookFileType"];
+            folderName: string;
+            title: string;
         };
         PromptPreviewRequest: {
             template: string;
@@ -7666,6 +7886,12 @@ export interface components {
         };
         /** @enum {unknown} */
         StepAction: "Edit" | "EditWithAi" | "Insert" | "Split" | "Merge" | "Delete" | "Title" | "Pause" | "Character" | "Voice" | "Attribution" | "Pronunciation";
+        StepCheckpointDto: {
+            /** Format: date-time */
+            at: string;
+            stale: boolean;
+            state: components["schemas"]["CheckpointState"];
+        };
         StepPreviewRequest: {
             sample: null | components["schemas"]["PreviewSampleRef"];
             settings: null | components["schemas"]["JsonElement"];

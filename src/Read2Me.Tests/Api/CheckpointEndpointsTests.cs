@@ -44,8 +44,8 @@ namespace Read2Me.Tests.Api
             var receipt = new BookMutationReceipt(new ProjectFolderId("book"), "SetCheckpointMutation",
                 Guid.NewGuid(), 1, new BookMutationEffects { Scope = BookMutationScope.Exact, Facets = BookFacets.Checkpoints });
 
-            Assert.IsType<NoContent>(CheckpointEndpoints.ToResult(new BookMutationOutcome.Committed(receipt), default));
-            Assert.IsType<NoContent>(CheckpointEndpoints.ToResult(new BookMutationOutcome.NoChange(), default));
+            Assert.IsType<NoContent>(CheckpointEndpoints.ToResult(new BookMutationOutcome.Committed(receipt), default).Result);
+            Assert.IsType<NoContent>(CheckpointEndpoints.ToResult(new BookMutationOutcome.NoChange(), default).Result);
         }
 
         [Theory]
@@ -57,7 +57,7 @@ namespace Read2Me.Tests.Api
         {
             var result = CheckpointEndpoints.ToResult(new BookMutationOutcome.Rejected(reason, "Read the book first."), default);
 
-            var problem = Assert.IsType<ProblemHttpResult>(result);
+            var problem = Assert.IsType<ProblemHttpResult>(result.Result);
             Assert.Equal((status, "Read the book first."), (problem.StatusCode, problem.ProblemDetails.Detail));
         }
 

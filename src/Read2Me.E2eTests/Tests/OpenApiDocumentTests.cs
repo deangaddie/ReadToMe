@@ -82,6 +82,21 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
     }
 
     /// <summary>
+    /// A computed property (get-only, no constructor parameter) is on every answer, so the document makes
+    /// it required (#175), not optional as it would be by default.
+    /// </summary>
+    [Theory]
+    [InlineData("ProjectSummary", "audioPercent")]
+    [InlineData("AttributionQueueSnapshot", "isBusy")]
+    public async Task A_computed_property_is_required(string component, string property)
+    {
+        var schema = (await DocumentAsync())["components"]!["schemas"]![component]!;
+
+        Assert.NotNull(schema["properties"]?[property]);
+        Assert.Contains(property, schema["required"]!.AsArray().Select(r => r!.GetValue<string>()));
+    }
+
+    /// <summary>
     /// Every <c>/api/</c> operation states the failure rule: a <c>default</c> response of
     /// <c>ProblemDetails</c> as <c>application/problem+json</c> (#168).
     /// </summary>
@@ -193,11 +208,9 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
     /// </summary>
     private static readonly HashSet<string> NotYetTyped =
     [
-        "DELETE /api/projects/{folder}",
         "DELETE /api/projects/{folder}/assembly/outputs/{fileName}",
         "DELETE /api/projects/{folder}/attribution/paragraphs/{paragraphId}/outcome",
         "DELETE /api/projects/{folder}/book-edits/{program}",
-        "DELETE /api/projects/{folder}/cover",
         "DELETE /api/settings/llm/{id}",
         "DELETE /api/settings/paragraph-tts/{id}",
         "DELETE /api/settings/prompts/{kind}",
@@ -210,13 +223,9 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
         "GET /api/ai-services/status",
         "GET /api/ai-services/{name}/status",
         "GET /api/assembly/status",
-        "GET /api/attribution/queue",
-        "GET /api/audio/queue",
         "GET /api/audio/samples/recent",
         "GET /api/audio/steps/catalog",
         "GET /api/previews/{previewId}/{stepId}.wav",
-        "GET /api/projects",
-        "GET /api/projects/{folder}",
         "GET /api/projects/{folder}/assembly/outputs",
         "GET /api/projects/{folder}/assembly/outputs/{fileName}",
         "GET /api/projects/{folder}/attribution/paragraphs/{paragraphId}",
@@ -233,10 +242,8 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
         "GET /api/projects/{folder}/nodes/{level}/{id}/children",
         "GET /api/projects/{folder}/nodes/{level}/{id}/item-ids",
         "GET /api/projects/{folder}/nodes/{level}/{id}/paragraph-ids",
-        "GET /api/projects/{folder}/nodes/{level}/{id}/status",
         "GET /api/projects/{folder}/paragraphs/{paragraphId}/context",
         "GET /api/projects/{folder}/pronunciations",
-        "GET /api/projects/{folder}/status",
         "GET /api/projects/{folder}/voices/{voiceId}",
         "GET /api/projects/{folder}/voices/{voiceId}/original.wav",
         "GET /api/settings/audio-processing",
@@ -264,7 +271,6 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
         "GET /api/settings/voice-design/sample-text",
         "GET /api/settings/voice-design/schema",
         "GET /api/voice-batch/status",
-        "PATCH /api/projects/{folder}",
         "POST /api/ai-services/{name}/restart",
         "POST /api/ai-services/{name}/shutdown",
         "POST /api/ai-services/{name}/start",
@@ -274,7 +280,6 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
         "POST /api/audio/cancel",
         "POST /api/preflight/{taskKind}/plan",
         "POST /api/preflight/{taskKind}/run",
-        "POST /api/projects",
         "POST /api/projects/{folder}/assembly",
         "POST /api/projects/{folder}/attribution/enqueue",
         "POST /api/projects/{folder}/attribution/enqueue-paragraphs",
@@ -291,8 +296,6 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
         "POST /api/projects/{folder}/characters/{characterId}/design-prompt/render",
         "POST /api/projects/{folder}/characters/{characterId}/voices/{voiceId}/generate-audio",
         "POST /api/projects/{folder}/commands",
-        "POST /api/projects/{folder}/import",
-        "POST /api/projects/{folder}/import/manual",
         "POST /api/projects/{folder}/narration/release-preview",
         "POST /api/projects/{folder}/pronunciations/try",
         "POST /api/projects/{folder}/voice-batch/audio",
@@ -317,9 +320,6 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
         "POST /api/settings/voice-design",
         "POST /api/settings/voice-design/{id}/test",
         "POST /api/voice-batch/cancel",
-        "PUT /api/projects/{folder}/checkpoints/{step}",
-        "PUT /api/projects/{folder}/cover",
-        "PUT /api/projects/{folder}/narrator-only-mode",
         "PUT /api/projects/{folder}/voices/{voiceId}/audio",
         "PUT /api/settings/audio-processing",
         "PUT /api/settings/audio-processing/pauses",

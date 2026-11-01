@@ -237,7 +237,7 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/import \
   -H 'content-type: application/json' -d '{ "reread": false }'
 ```
 
-`reread: true` clears existing content first (safe way to re-import).
+Both imports answer 204. `reread: true` clears existing content first (safe way to re-import).
 
 A manual reread re-splits the stored file by hand-chosen rules instead of the automatic
 reader (the book page's "Manual reread" dialog on the wire). It also replaces existing content:

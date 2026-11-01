@@ -1,6 +1,7 @@
 using System.Threading;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
@@ -29,7 +30,7 @@ namespace Read2Me.App.Api
                 .WithSummary("Delete a project folder and everything in it.");
             endpoints.MapPost("/api/projects/{folder}/import", ImportAsync)
                 .RecordsOwnStep()
-                .WithSummary("Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. " +
+                .WithSummary("Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. 204 on success, " +
                              "An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes.");
             endpoints.MapPost("/api/projects/{folder}/import/manual", ImportManuallyAsync)
                 .RecordsStep("Re-split book", StepAction.Split)
@@ -53,18 +54,18 @@ namespace Read2Me.App.Api
         private static readonly HashSet<string> CoverExtensions = new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".webp" };
         private const long MaxCoverBytes = 10L * 1024 * 1024;
 
-        private static async Task<IResult> ListAsync(ProjectUseCases useCases)
+        private static async Task<Results<Ok<IReadOnlyList<ProjectSummary>>, ProblemHttpResult>> ListAsync(ProjectUseCases useCases)
         {
             var result = await useCases.GetSummariesAsync();
             return result.IsSuccess
-                ? Results.Ok(result.Value)
-                : Results.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+                ? TypedResults.Ok(result.Value)
+                : TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
         }
 
-        private static async Task<IResult> CreateAsync(HttpRequest request, ProjectUseCases useCases)
+        private static async Task<Results<Created<CreateProjectResponse>, ProblemHttpResult>> CreateAsync(HttpRequest request, ProjectUseCases useCases)
         {
             if (!request.HasFormContentType)
-                return Results.Problem("Expected multipart form data.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("Expected multipart form data.", statusCode: StatusCodes.Status400BadRequest);
 
             var form = await request.ReadFormAsync();
             var title = form["title"].ToString();
@@ -73,7 +74,7 @@ namespace Read2Me.App.Api
             var file = form.Files.GetFile("file");
 
             if (string.IsNullOrWhiteSpace(title) || file is null)
-                return Results.Problem("Fields 'title' and 'file' are required.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("Fields 'title' and 'file' are required.", statusCode: StatusCodes.Status400BadRequest);
 
             var fileType = Path.GetExtension(file.FileName).Equals(".epub", StringComparison.OrdinalIgnoreCase)
                 ? BookFileType.Epub
@@ -82,76 +83,76 @@ namespace Read2Me.App.Api
             await using var stream = file.OpenReadStream();
             var result = await useCases.CreateAsync(title, bookTitle, author, file.FileName, stream, fileType);
             return result.IsSuccess
-                ? Results.Created($"/api/projects/{result.Value}", new CreateProjectResponse(result.Value))
-                : Results.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+                ? TypedResults.Created($"/api/projects/{result.Value}", new CreateProjectResponse(result.Value))
+                : TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
         }
 
-        private static async Task<IResult> GetAsync(
+        private static async Task<Results<Ok<ProjectDetailDto>, NotFound, ProblemHttpResult>> GetAsync(
             string folder, IFileSystem fs, IProjectCatalogReader reader, ProjectHistory history, CancellationToken ct)
         {
             if (!TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             // Opening a project is when an existing one meets History: "History started" (ADR 0016).
             await history.StartAsync(folderId, ct);
             return await DetailAsync(folderId, reader, ct);
         }
 
-        private static IResult Delete(string folder, IFileSystem fs, ProjectUseCases useCases)
+        private static Results<NoContent, NotFound, ProblemHttpResult> Delete(string folder, IFileSystem fs, ProjectUseCases useCases)
         {
             if (!TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var result = useCases.DeleteProject(folderId.Value);
             return result.IsSuccess
-                ? Results.NoContent()
-                : Results.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+                ? TypedResults.NoContent()
+                : TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
         }
 
-        private static async Task<IResult> UpdateAsync(
+        private static async Task<Results<Ok<ProjectDetailDto>, NotFound, ProblemHttpResult>> UpdateAsync(
             string folder, UpdateProjectRequest? body, IFileSystem fs, IProjectCatalogReader reader,
             ProjectUseCases useCases, CancellationToken ct)
         {
             if (!TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             if (body is null)
-                return Results.Problem("Expected a JSON body.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("Expected a JSON body.", statusCode: StatusCodes.Status400BadRequest);
 
             // A provided-but-blank title or book title is a mistake, not a clear; author may be blank.
             var title = body.Title?.Trim();
             var bookTitle = body.BookTitle?.Trim();
             var author = body.Author?.Trim();
             if (title is not null && title.Length == 0)
-                return Results.Problem("Title cannot be blank.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("Title cannot be blank.", statusCode: StatusCodes.Status400BadRequest);
             if (bookTitle is not null && bookTitle.Length == 0)
-                return Results.Problem("Book title cannot be blank.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("Book title cannot be blank.", statusCode: StatusCodes.Status400BadRequest);
 
             var result = await useCases.UpdateMetadataAsync(folderId.Value, title, bookTitle, author);
             if (!result.IsSuccess)
-                return Results.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+                return TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
 
             return await DetailAsync(folderId, reader, ct);
         }
 
-        private static async Task<IResult> SetNarratorOnlyModeAsync(
+        private static async Task<Results<NoContent, NotFound, ProblemHttpResult>> SetNarratorOnlyModeAsync(
             string folder, NarratorOnlyModeRequest? body, IFileSystem fs, ProjectUseCases useCases)
         {
             if (!TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             if (body is null)
-                return Results.Problem("Expected a JSON body with 'enabled'.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("Expected a JSON body with 'enabled'.", statusCode: StatusCodes.Status400BadRequest);
 
             var result = await useCases.SetNarratorOnlyModeAsync(folderId.Value, body.Enabled);
             return result.IsSuccess
-                ? Results.NoContent()
-                : Results.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+                ? TypedResults.NoContent()
+                : TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
         }
 
-        private static async Task<IResult> SaveCoverAsync(
+        private static async Task<Results<Ok<CoverImageResponse>, NotFound, ProblemHttpResult>> SaveCoverAsync(
             string folder, HttpRequest request, IFileSystem fs, ProjectUseCases useCases)
         {
             if (!TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             // The stored name is the client's base name: it is what the detail DTO echoes and what
             // /workspace serves.
@@ -163,64 +164,64 @@ namespace Read2Me.App.Api
             await using var stream = upload.File.OpenReadStream();
             var result = await useCases.SaveCoverImageAsync(folderId.Value, upload.FileName, stream);
             return result.IsSuccess
-                ? Results.Ok(new CoverImageResponse(upload.FileName))
-                : Results.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+                ? TypedResults.Ok(new CoverImageResponse(upload.FileName))
+                : TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
         }
 
-        private static async Task<IResult> DeleteCoverAsync(string folder, IFileSystem fs, ProjectUseCases useCases)
+        private static async Task<Results<NoContent, NotFound, ProblemHttpResult>> DeleteCoverAsync(string folder, IFileSystem fs, ProjectUseCases useCases)
         {
             if (!TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var result = await useCases.DeleteCoverImageAsync(folderId.Value);
             return result.IsSuccess
-                ? Results.NoContent()
-                : Results.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+                ? TypedResults.NoContent()
+                : TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
         }
 
-        private static async Task<IResult> DetailAsync(ProjectFolderId folderId, IProjectCatalogReader reader, CancellationToken ct)
+        private static async Task<Results<Ok<ProjectDetailDto>, NotFound, ProblemHttpResult>> DetailAsync(ProjectFolderId folderId, IProjectCatalogReader reader, CancellationToken ct)
         {
             var project = await reader.GetProjectAsync(folderId);
-            if (project is null) return Results.NotFound();
+            if (project is null) return TypedResults.NotFound();
 
             var narrator = await reader.GetNarratorAsync(folderId, ct);
-            return Results.Ok(ProjectDetailDto.From(folderId.Value, project, narrator));
+            return TypedResults.Ok(ProjectDetailDto.From(folderId.Value, project, narrator));
         }
 
-        private static async Task<IResult> ImportAsync(
+        private static async Task<Results<NoContent, NotFound, ProblemHttpResult>> ImportAsync(
             string folder, ImportRequest? body, HttpRequest request, IFileSystem fs, BookUseCases useCases,
             MutationOrigin origin, HistoryStepScope steps, CancellationToken ct)
         {
             if (!TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             // An import that changed nothing is still a legal import, and the wire contract has one
-            // success: 200 for a Book that was replaced and for one there was nothing to replace.
+            // success: 204 for a Book that was replaced and for one there was nothing to replace.
             OriginHeader.Apply(request, origin);
             var reread = body?.Reread ?? false;
             await using (steps.OpenImport(folderId, reread ? "Reread book" : "Import book"))
                 return ImportResult(await useCases.ImportAsync(folderId, reread, ct));
         }
 
-        private static async Task<IResult> ImportManuallyAsync(
+        private static async Task<Results<NoContent, NotFound, ProblemHttpResult>> ImportManuallyAsync(
             string folder, ManualImportRequest? body, HttpRequest request, IFileSystem fs, BookUseCases useCases,
             MutationOrigin origin, CancellationToken ct)
         {
             if (!TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             if (body is null)
-                return Results.Problem("Expected a JSON body.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("Expected a JSON body.", statusCode: StatusCodes.Status400BadRequest);
             if (!body.TryToOptions(out var options, out var error))
-                return Results.Problem(error, statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem(error, statusCode: StatusCodes.Status400BadRequest);
 
             OriginHeader.Apply(request, origin);
             return ImportResult(await useCases.ImportManuallyAsync(folderId, options!, ct));
         }
 
-        private static IResult ImportResult(BookImportOutcome outcome) =>
+        private static Results<NoContent, NotFound, ProblemHttpResult> ImportResult(BookImportOutcome outcome) =>
             outcome is BookImportOutcome.Failed failed
-                ? Results.Problem(failed.Message, statusCode: StatusCodes.Status422UnprocessableEntity)
-                : Results.Ok();
+                ? TypedResults.Problem(failed.Message, statusCode: StatusCodes.Status422UnprocessableEntity)
+                : TypedResults.NoContent();
 
         /// Both gates in one place: the name must parse as a single path segment
         /// (traversal guard) and must exist on disk — anything else is a 404.
