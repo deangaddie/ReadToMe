@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Read2Me.AppData.Entities;
@@ -82,7 +81,7 @@ namespace Read2Me.Services.Llm
             // the load finishes, and aborting it mid-load would defeat the whole switch.
             var triggerHttp = CreateClient(config, budget + TimeSpan.FromSeconds(30));
             var url = OpenAiStreamParser.Combine(config.BaseUrl, "v1/chat/completions");
-            var body = LlamaModelStatus.OneTokenRequestBody(config.Model);
+            var body = OpenAiRequestBuilder.OneTokenBody(config.Model);
 
             // Detached autoload trigger, CT linked to the caller. We do NOT await its slow completion
             // (a valid switch blocks for ~a minute); we only observe it to surface an immediate hard
@@ -155,39 +154,8 @@ namespace Read2Me.Services.Llm
             }
         }
 
-        private async Task<bool> IsTargetLoadedAsync(LlmServerConfig config, CancellationToken ct)
-        {
-            var http = CreateClient(config);
-
-            HttpResponseMessage response;
-            try
-            {
-                response = await http.GetAsync(OpenAiStreamParser.Combine(config.BaseUrl, "v1/models"), ct);
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                throw new LlmProviderException($"Failed to connect to LLM provider at {config.BaseUrl}", ex);
-            }
-
-            using (response)
-            {
-                if (!response.IsSuccessStatusCode)
-                {
-                    var error = await response.Content.ReadAsStringAsync(ct);
-                    throw new LlmProviderException(
-                        $"LLM provider returned error ({response.StatusCode}): {error}", null!);
-                }
-
-                await using var stream = await response.Content.ReadAsStreamAsync(ct);
-                using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-
-                return LlamaModelStatus.IsLoaded(doc.RootElement, config.Model);
-            }
-        }
+        private async Task<bool> IsTargetLoadedAsync(LlmServerConfig config, CancellationToken ct) =>
+            (await LlmModelList.ReadAsync(CreateClient(config), config, ct)).IsLoaded(config.Model);
 
         private HttpClient CreateClient(LlmServerConfig config, TimeSpan? timeout = null)
         {

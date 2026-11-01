@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using Read2Me.Services.AiServers;
 using Read2Me.Services.Events;
 
 namespace Read2Me.Services.Audio.AudioCpp
@@ -61,17 +62,7 @@ namespace Read2Me.Services.Audio.AudioCpp
             await using var stream = await response.Content.ReadAsStreamAsync(ct);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
 
-            if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
-                return null;
-
-            foreach (var model in data.EnumerateArray())
-            {
-                if (model.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String
-                    && id.GetString() == modelId)
-                    return model.TryGetProperty("loaded", out var loaded) && loaded.ValueKind == JsonValueKind.True;
-            }
-
-            return null;
+            return ModelListing.Parse(doc.RootElement).Find(modelId)?.Loaded;
         }
     }
 }
