@@ -127,7 +127,7 @@ namespace Read2Me.App.Api
                 return Results.NotFound();
 
             return runs.TryStart(session, body?.Thinking ?? false, body?.ConnectionId)
-                ? Results.Accepted(value: new { started = true })
+                ? Results.Accepted(value: new StartedResponse(true))
                 : Results.Problem("A proposal run is already in flight for this plan.", statusCode: StatusCodes.Status409Conflict);
         }
 

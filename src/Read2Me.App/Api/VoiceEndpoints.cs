@@ -374,7 +374,7 @@ namespace Read2Me.App.Api
 
         private static IResult BatchStarted(VoiceBatchStart start) => start switch
         {
-            VoiceBatchStart.Started => Results.Accepted(value: new { started = true }),
+            VoiceBatchStart.Started => Results.Accepted(value: new StartedResponse(true)),
             VoiceBatchStart.AlreadyRunning => Results.Problem("A voice batch is already running.", statusCode: StatusCodes.Status409Conflict),
             VoiceBatchStart.Refused(var refusal) => StepReads.Refused(refusal),
             var other => throw new InvalidOperationException($"Unhandled {other}."),

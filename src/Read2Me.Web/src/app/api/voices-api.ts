@@ -27,14 +27,14 @@ export class VoicesApi {
   private readonly api = use(ApiClient);
 
   list(folder: string, characterId: Guid): Promise<CharacterVoicesDto> {
-    return this.api.get<CharacterVoicesDto>(
+    return this.api.untypedGet<CharacterVoicesDto>(
       `${projectUrl(folder)}/characters/${characterId}/voices`,
     );
   }
 
   /** 404 for an unknown voice. */
   get(folder: string, voiceId: Guid): Promise<VoiceDto> {
-    return this.api.get<VoiceDto>(`${projectUrl(folder)}/voices/${voiceId}`);
+    return this.api.untypedGet<VoiceDto>(`${projectUrl(folder)}/voices/${voiceId}`);
   }
 
   /**
@@ -44,19 +44,19 @@ export class VoicesApi {
   uploadAudio(folder: string, voiceId: Guid, file: File): Promise<VoiceDto> {
     const form = new FormData();
     form.append('file', file, file.name);
-    return this.api.putForm<VoiceDto>(`${projectUrl(folder)}/voices/${voiceId}/audio`, form);
+    return this.api.untypedPutForm<VoiceDto>(`${projectUrl(folder)}/voices/${voiceId}/audio`, form);
   }
 
   /** Transcribe the voice's audio with the active transcription service and persist it. 422 without audio. */
   transcribe(folder: string, voiceId: Guid): Promise<TranscribeVoiceResponse> {
-    return this.api.post<TranscribeVoiceResponse>(
+    return this.api.untypedPost<TranscribeVoiceResponse>(
       `${projectUrl(folder)}/voices/${voiceId}/transcribe`,
     );
   }
 
   /** The voice-design prompt template rendered for the character; nothing persisted. */
   renderDesignPrompt(folder: string, characterId: Guid): Promise<RenderedDesignPromptResponse> {
-    return this.api.post<RenderedDesignPromptResponse>(
+    return this.api.untypedPost<RenderedDesignPromptResponse>(
       `${projectUrl(folder)}/characters/${characterId}/design-prompt/render`,
     );
   }
@@ -68,7 +68,7 @@ export class VoicesApi {
     prompt: string,
   ): Promise<GenerateDesignPromptResponse> {
     const request: GenerateDesignPromptRequest = { prompt };
-    return this.api.post<GenerateDesignPromptResponse>(
+    return this.api.untypedPost<GenerateDesignPromptResponse>(
       `${projectUrl(folder)}/characters/${characterId}/design-prompt/generate`,
       request,
     );
@@ -87,7 +87,7 @@ export class VoicesApi {
   ): Promise<GenerateVoiceAudioResponse> {
     const body: GenerateVoiceAudioRequest | undefined =
       designPrompt === undefined ? undefined : { designPrompt };
-    return this.api.post<GenerateVoiceAudioResponse>(
+    return this.api.untypedPost<GenerateVoiceAudioResponse>(
       `${projectUrl(folder)}/characters/${characterId}/voices/${voiceId}/generate-audio`,
       body,
     );
@@ -95,21 +95,21 @@ export class VoicesApi {
 
   /** One LLM voice-plan call per character without voices. 409 while a batch is running. */
   startPromptBatch(folder: string, regenerateAll = false): Promise<StartedResponse> {
-    return this.api.post<StartedResponse>(`${projectUrl(folder)}/voice-batch/prompts`, {
+    return this.api.untypedPost<StartedResponse>(`${projectUrl(folder)}/voice-batch/prompts`, {
       regenerateAll,
     });
   }
 
   /** Synthesise every generated voice that has a prompt but no audio. 409 while a batch is running. */
   startAudioBatch(folder: string): Promise<StartedResponse> {
-    return this.api.post<StartedResponse>(`${projectUrl(folder)}/voice-batch/audio`);
+    return this.api.untypedPost<StartedResponse>(`${projectUrl(folder)}/voice-batch/audio`);
   }
 
   batchStatus(): Promise<VoiceBatchStatusDto> {
-    return this.api.get<VoiceBatchStatusDto>('/api/voice-batch/status');
+    return this.api.untypedGet<VoiceBatchStatusDto>('/api/voice-batch/status');
   }
 
   cancelBatch(): Promise<void> {
-    return this.api.post<void>('/api/voice-batch/cancel');
+    return this.api.untypedPost<void>('/api/voice-batch/cancel');
   }
 }

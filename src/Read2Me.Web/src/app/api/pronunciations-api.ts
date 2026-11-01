@@ -23,32 +23,43 @@ export class PronunciationsApi {
 
   /** The list sorted by written form, each entry with its reach. Read at the viewed step. */
   list(folder: string): Promise<PronunciationDto[]> {
-    return this.api.get<PronunciationDto[]>(`${projectUrl(folder)}/pronunciations`);
+    return this.api.untypedGet<PronunciationDto[]>(`${projectUrl(folder)}/pronunciations`);
   }
 
   /** Where the list matches in these chapters (the Book view's marks). Read at the viewed step. */
   matches(folder: string, chapterIds: readonly Guid[]): Promise<PronunciationSpanReport> {
-    return this.api.get<PronunciationSpanReport>(`${projectUrl(folder)}/pronunciations/matches`, {
-      chapterIds,
-    });
+    return this.api.untypedGet<PronunciationSpanReport>(
+      `${projectUrl(folder)}/pronunciations/matches`,
+      {
+        chapterIds,
+      },
+    );
   }
 
   add(folder: string, body: SetPronunciationRequest): Promise<PronunciationSavedDto> {
-    return this.api.post<PronunciationSavedDto>(`${projectUrl(folder)}/pronunciations`, body);
+    return this.api.untypedPost<PronunciationSavedDto>(
+      `${projectUrl(folder)}/pronunciations`,
+      body,
+    );
   }
 
   /** Saving an unchanged entry writes nothing and lands no step. */
   edit(folder: string, id: Guid, body: SetPronunciationRequest): Promise<PronunciationSavedDto> {
-    return this.api.put<PronunciationSavedDto>(`${projectUrl(folder)}/pronunciations/${id}`, body);
+    return this.api.untypedPut<PronunciationSavedDto>(
+      `${projectUrl(folder)}/pronunciations/${id}`,
+      body,
+    );
   }
 
   remove(folder: string, id: Guid): Promise<PronunciationDeletedDto> {
-    return this.api.delete<PronunciationDeletedDto>(`${projectUrl(folder)}/pronunciations/${id}`);
+    return this.api.untypedDelete<PronunciationDeletedDto>(
+      `${projectUrl(folder)}/pronunciations/${id}`,
+    );
   }
 
   /** A dry run of a draft: its reach, the audio a save would discard, overlaps and the duplicate. */
   impact(folder: string, draft: PronunciationDraftRequest): Promise<PronunciationImpactDto> {
-    return this.api.post<PronunciationImpactDto>(
+    return this.api.untypedPost<PronunciationImpactDto>(
       `${projectUrl(folder)}/pronunciations/impact`,
       draft,
     );
@@ -59,6 +70,6 @@ export class PronunciationsApi {
    * request. 409 while attribution, audio generation or a voice batch has the GPU.
    */
   tryOut(folder: string, request: TryPronunciationRequest, signal?: AbortSignal): Promise<Blob> {
-    return this.api.postForBlob(`${projectUrl(folder)}/pronunciations/try`, request, signal);
+    return this.api.untypedPostForBlob(`${projectUrl(folder)}/pronunciations/try`, request, signal);
   }
 }

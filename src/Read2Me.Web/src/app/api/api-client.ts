@@ -1,5 +1,62 @@
 import { ApiError } from './api-error';
+import type { paths } from './schema';
 import { readsAtStep } from './step-view';
+
+/** The HTTP methods the host maps. */
+export type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete';
+
+/** The paths the host serves `M` on: a route renamed, removed or not taking `M` isn't one. */
+export type PathsFor<M extends HttpMethod> = {
+  [P in keyof paths]: [NonNullable<paths[P][M]>] extends [never] ? never : P;
+}[keyof paths];
+
+/** The operation the host serves at `P` for `M`. */
+export type Operation<P extends keyof paths, M extends HttpMethod> = NonNullable<paths[P][M]>;
+
+type SuccessStatus = 200 | 201 | 202 | 203 | 204 | 206;
+
+/** A response's JSON body, or `void` for one with no content (a 204, a bare 202). */
+type BodyOf<R> = R extends { content: { 'application/json': infer B } } ? B : void;
+
+/**
+ * What an operation answers on success: the union of its 2xx JSON bodies (`Ok<T>` + `Accepted<U>`
+ * → `T | U`), `void` when it has none. Non-2xx answers are an {@link ApiError}, never a value.
+ */
+export type SuccessBody<O> = O extends { responses: infer R }
+  ? { [S in keyof R & SuccessStatus]: BodyOf<R[S]> }[keyof R & SuccessStatus]
+  : never;
+
+type Parameters_<O> = O extends { parameters: infer P } ? P : never;
+
+type PathPart<O> = Parameters_<O> extends { path: infer V } ? { path: V } : { path?: never };
+
+type QueryPart<O> =
+  Parameters_<O> extends { query: infer Q }
+    ? { query: Q }
+    : Parameters_<O> extends { query?: infer Q }
+      ? [NonNullable<Q>] extends [never]
+        ? { query?: never }
+        : { query?: NonNullable<Q> }
+      : { query?: never };
+
+type RequestBodyOf<O> = O extends { requestBody?: infer B } ? NonNullable<B> : never;
+
+type BodyPart<O> = [RequestBodyOf<O>] extends [never]
+  ? { body?: never }
+  : O extends { requestBody: { content: { 'application/json': infer B } } }
+    ? { body: B }
+    : O extends { requestBody?: { content: { 'application/json': infer B } } }
+      ? { body?: B }
+      : { body?: never };
+
+/** A call's `{ path, query, body }`, typed by its operation. */
+export type CallInit<O> = PathPart<O> & QueryPart<O> & BodyPart<O>;
+
+/** The init argument: optional when nothing in it is required. */
+type InitArg<O> = object extends CallInit<O> ? [init?: CallInit<O>] : [init: CallInit<O>];
+
+/** The init of a form upload or blob read: the route's values; the body is the form or JSON as given. */
+type RouteInit<O> = PathPart<O> & QueryPart<O>;
 
 /**
  * Stable per-tab origin id (ticket 05 / spec D6): sent as `X-Origin-Id` on every call so the hub
@@ -23,33 +80,122 @@ export type QueryParams = Record<
 export class ApiClient {
   constructor(private readonly fetchFn: FetchFn = (input, init) => fetch(input, init)) {}
 
+  /**
+   * A typed read: `path` is a route template the host serves (`'/api/projects/{folder}/history'`),
+   * `init` its `{ path, query }` values, and the answer is typed by the document. A Project state
+   * read of the project being viewed at a History step carries `?at=` ({@link readsAtStep}).
+   */
+  get<P extends PathsFor<'get'>>(
+    path: P,
+    ...[init]: InitArg<Operation<P, 'get'>>
+  ): Promise<SuccessBody<Operation<P, 'get'>>> {
+    return this.untypedGet(fillPath(path, init?.path), init?.query as QueryParams | undefined);
+  }
+
+  post<P extends PathsFor<'post'>>(
+    path: P,
+    ...[init]: InitArg<Operation<P, 'post'>>
+  ): Promise<SuccessBody<Operation<P, 'post'>>> {
+    return this.typedSend('POST', path, init);
+  }
+
+  put<P extends PathsFor<'put'>>(
+    path: P,
+    ...[init]: InitArg<Operation<P, 'put'>>
+  ): Promise<SuccessBody<Operation<P, 'put'>>> {
+    return this.typedSend('PUT', path, init);
+  }
+
+  patch<P extends PathsFor<'patch'>>(
+    path: P,
+    ...[init]: InitArg<Operation<P, 'patch'>>
+  ): Promise<SuccessBody<Operation<P, 'patch'>>> {
+    return this.typedSend('PATCH', path, init);
+  }
+
+  delete<P extends PathsFor<'delete'>>(
+    path: P,
+    ...[init]: InitArg<Operation<P, 'delete'>>
+  ): Promise<SuccessBody<Operation<P, 'delete'>>> {
+    return this.typedSend('DELETE', path, init);
+  }
+
+  /** A multipart upload: the route is typed by path; the form isn't in the document, so it goes as given. */
+  postForm<P extends PathsFor<'post'>>(
+    path: P,
+    init: RouteInit<Operation<P, 'post'>>,
+    form: FormData,
+  ): Promise<SuccessBody<Operation<P, 'post'>>> {
+    return this.send(
+      'POST',
+      fillPath(path, init.path),
+      form,
+      init.query as QueryParams | undefined,
+    );
+  }
+
+  putForm<P extends PathsFor<'put'>>(
+    path: P,
+    init: RouteInit<Operation<P, 'put'>>,
+    form: FormData,
+  ): Promise<SuccessBody<Operation<P, 'put'>>> {
+    return this.send('PUT', fillPath(path, init.path), form, init.query as QueryParams | undefined);
+  }
+
+  /** A JSON POST answered with bytes, typed by path for its route and body ({@link untypedPostForBlob}). */
+  postForBlob<P extends PathsFor<'post'>>(
+    path: P,
+    init: CallInit<Operation<P, 'post'>>,
+    signal?: AbortSignal,
+  ): Promise<Blob> {
+    return this.untypedPostForBlob(
+      withParams(fillPath(path, init.path), init.query as QueryParams | undefined),
+      init.body ?? null,
+      signal,
+    );
+  }
+
+  private typedSend<T>(method: string, path: string, init: unknown): Promise<T> {
+    const {
+      path: values,
+      query,
+      body,
+    } = (init ?? {}) as { path?: object; query?: object; body?: unknown };
+    return this.send<T>(
+      method,
+      fillPath(path, values),
+      body ?? null,
+      query as QueryParams | undefined,
+    );
+  }
+
   /** A Project state read of the project being viewed at a History step carries `?at=` ({@link readsAtStep}). */
-  get<T>(url: string, params?: QueryParams): Promise<T> {
+  untypedGet<T>(url: string, params?: QueryParams): Promise<T> {
     const at = readsAtStep(url);
     return this.send<T>('GET', url, undefined, at === null ? params : { ...params, at });
   }
 
-  post<T>(url: string, body?: unknown, params?: QueryParams): Promise<T> {
+  untypedPost<T>(url: string, body?: unknown, params?: QueryParams): Promise<T> {
     return this.send<T>('POST', url, body ?? null, params);
   }
 
-  put<T>(url: string, body?: unknown, params?: QueryParams): Promise<T> {
+  untypedPut<T>(url: string, body?: unknown, params?: QueryParams): Promise<T> {
     return this.send<T>('PUT', url, body ?? null, params);
   }
 
-  patch<T>(url: string, body?: unknown, params?: QueryParams): Promise<T> {
+  untypedPatch<T>(url: string, body?: unknown, params?: QueryParams): Promise<T> {
     return this.send<T>('PATCH', url, body ?? null, params);
   }
 
-  delete<T = void>(url: string, params?: QueryParams): Promise<T> {
+  untypedDelete<T = void>(url: string, params?: QueryParams): Promise<T> {
     return this.send<T>('DELETE', url, undefined, params);
   }
 
-  postForm<T>(url: string, form: FormData): Promise<T> {
+  untypedPostForm<T>(url: string, form: FormData): Promise<T> {
     return this.send<T>('POST', url, form);
   }
 
-  putForm<T>(url: string, form: FormData): Promise<T> {
+  untypedPutForm<T>(url: string, form: FormData): Promise<T> {
     return this.send<T>('PUT', url, form);
   }
 
@@ -58,7 +204,7 @@ export class ApiClient {
    * promise then rejects with the `AbortError`, not an {@link ApiError}, so callers can tell a stop
    * from a failure. A non-2xx answer is an {@link ApiError} from its ProblemDetails body.
    */
-  async postForBlob(url: string, body: unknown, signal?: AbortSignal): Promise<Blob> {
+  async untypedPostForBlob(url: string, body: unknown, signal?: AbortSignal): Promise<Blob> {
     const response = await this.fetchFn(url, {
       method: 'POST',
       headers: { 'X-Origin-Id': ORIGIN_ID, 'Content-Type': 'application/json' },
@@ -143,4 +289,14 @@ function safeJson(text: string): unknown {
   } catch {
     return text;
   }
+}
+
+/** The route template with each `{name}` replaced by its value, URI-encoded. */
+function fillPath(template: string, values: unknown): string {
+  const byName = (values ?? {}) as Record<string, string | number>;
+  return template.replace(/\{([^}]+)\}/g, (_, name: string) => {
+    const value = byName[name];
+    if (value === undefined) throw new Error(`No value for {${name}} in ${template}.`);
+    return encodeURIComponent(String(value));
+  });
 }

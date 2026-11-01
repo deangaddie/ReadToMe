@@ -22,7 +22,7 @@ export class BookEditsApi {
   /** One LLM call plus scope resolution. Every non-`Ok` status is an answer, not an error. */
   plan(folder: string, instruction: string, thinking: boolean): Promise<PlanBookEditResponse> {
     const request: PlanBookEditRequest = { instruction, thinking };
-    return this.api.post<PlanBookEditResponse>(`${this.base(folder)}/plan`, request);
+    return this.api.untypedPost<PlanBookEditResponse>(`${this.base(folder)}/plan`, request);
   }
 
   /**
@@ -36,12 +36,12 @@ export class BookEditsApi {
     connectionId: string | null,
   ): Promise<void> {
     const request: ProposeBookEditRequest = { thinking, connectionId };
-    return this.api.post<void>(`${this.base(folder)}/${program}/propose`, request);
+    return this.api.untypedPost<void>(`${this.base(folder)}/${program}/propose`, request);
   }
 
   /** The run's status, progress and the rows it has landed. */
   run(folder: string, program: string): Promise<BookEditRunDto> {
-    return this.api.get<BookEditRunDto>(`${this.base(folder)}/${program}`);
+    return this.api.untypedGet<BookEditRunDto>(`${this.base(folder)}/${program}`);
   }
 
   /** Re-asks the AI for one row, optionally steered by a hint. */
@@ -53,17 +53,20 @@ export class BookEditsApi {
     thinking: boolean,
   ): Promise<BookEditRow> {
     const request: ProposeOneBookEditRequest = { targetId, hint, thinking };
-    return this.api.post<BookEditRow>(`${this.base(folder)}/${program}/propose-one`, request);
+    return this.api.untypedPost<BookEditRow>(
+      `${this.base(folder)}/${program}/propose-one`,
+      request,
+    );
   }
 
   /** Stops the running proposal; the rows computed so far stay reviewable. */
   cancel(folder: string, program: string): Promise<void> {
-    return this.api.post<void>(`${this.base(folder)}/${program}/cancel`);
+    return this.api.untypedPost<void>(`${this.base(folder)}/${program}/cancel`);
   }
 
   /** Drops the session, cancelling any run in flight. */
   discard(folder: string, program: string): Promise<void> {
-    return this.api.delete(`${this.base(folder)}/${program}`);
+    return this.api.untypedDelete(`${this.base(folder)}/${program}`);
   }
 
   private base(folder: string): string {

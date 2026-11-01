@@ -16,11 +16,11 @@ export class PreflightApi {
   private readonly api = use(ApiClient);
 
   plan(task: AiTaskKind): Promise<PreflightPlanDto> {
-    return this.api.post<PreflightPlanDto>(`/api/preflight/${task}/plan`);
+    return this.api.untypedPost<PreflightPlanDto>(`/api/preflight/${task}/plan`);
   }
 
   /** 202 with the run id; every message of the run carries it. */
   run(task: AiTaskKind, request: PreflightRunRequest): Promise<PreflightRunResponse> {
-    return this.api.post<PreflightRunResponse>(`/api/preflight/${task}/run`, request);
+    return this.api.untypedPost<PreflightRunResponse>(`/api/preflight/${task}/run`, request);
   }
 }

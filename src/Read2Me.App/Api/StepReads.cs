@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi;
@@ -41,11 +42,6 @@ namespace Read2Me.App.Api
         public static RouteHandlerBuilder ReadsAt(this RouteHandlerBuilder builder) =>
             builder
                 .WithMetadata(new ReadsAtHistoryStep())
-                .ProducesProblem(StatusCodes.Status400BadRequest)
-                .ProducesProblem(StatusCodes.Status404NotFound)
-                .ProducesProblem(StatusCodes.Status409Conflict)
-                .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
-                .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
                 .AddOpenApiOperationTransformer((operation, _, _) =>
                 {
                     operation.Parameters ??= [];
@@ -99,25 +95,25 @@ namespace Read2Me.App.Api
         /// caller then answers <see cref="UnknownStep"/> for a step the project's History doesn't have.
         /// A null <paramref name="folder"/> is a project that doesn't exist: only the step id is checked.
         /// </summary>
-        internal static IResult? RefuseReadAt(HttpContext http, ProjectFolderId? folder, string at, out Guid stepId)
+        internal static ProblemHttpResult? RefuseReadAt(HttpContext http, ProjectFolderId? folder, string at, out Guid stepId)
         {
             if (!Guid.TryParse(at, out stepId))
-                return Results.Problem($"'{at}' is not a History step id.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem($"'{at}' is not a History step id.", statusCode: StatusCodes.Status400BadRequest);
             return folder is { } project && http.RequestServices.GetRequiredService<ProjectActivity>().MayViewStep(project) is { } refusal
                 ? Refused(refusal)
                 : null;
         }
 
         /// <summary>409: the <see cref="ProjectActivity"/> gate refused, and <c>detail</c> says why.</summary>
-        internal static IResult Refused(ActivityRefusal refusal) =>
-            Results.Problem(refusal.Reason, statusCode: StatusCodes.Status409Conflict);
+        internal static ProblemHttpResult Refused(ActivityRefusal refusal) =>
+            TypedResults.Problem(refusal.Reason, statusCode: StatusCodes.Status409Conflict);
 
-        internal static IResult UnknownStep(Guid stepId) =>
-            Results.Problem($"The project's History has no step {stepId}.", statusCode: StatusCodes.Status404NotFound);
+        internal static ProblemHttpResult UnknownStep(Guid stepId) =>
+            TypedResults.Problem($"The project's History has no step {stepId}.", statusCode: StatusCodes.Status404NotFound);
 
         /// <summary>503: opening the step failed for a reason that passes (an IO error, a full disk, a busy database).</summary>
-        internal static IResult TryAgain(Guid stepId) =>
-            Results.Problem($"History step {stepId} couldn't be opened just now. Try again.", statusCode: StatusCodes.Status503ServiceUnavailable);
+        internal static ProblemHttpResult TryAgain(Guid stepId) =>
+            TypedResults.Problem($"History step {stepId} couldn't be opened just now. Try again.", statusCode: StatusCodes.Status503ServiceUnavailable);
 
         /// <summary>A project read of live results, progress or files: refuses <c>?at=</c> with 400.</summary>
         public static RouteHandlerBuilder ReadsLive(this RouteHandlerBuilder builder, string why) =>

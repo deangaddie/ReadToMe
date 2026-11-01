@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Threading;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Read2Me.App.Characters;
@@ -330,18 +331,18 @@ namespace Read2Me.App.Api
             await (await session.OpenAsync(folderId)).ParagraphItems.AsNoTracking()
                 .CountAsync(i => i.ItemType == ParagraphItemType.Speech && (i.AudioFileName == null || i.AudioFileName == ""), ct);
 
-        private static IResult Refusal(BookMutationOutcome outcome, CancellationToken ct) => outcome switch
+        private static ProblemHttpResult Refusal(BookMutationOutcome outcome, CancellationToken ct) => outcome switch
         {
             BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } cancelled =>
                 throw new OperationCanceledException(cancelled.Message, ct),
             BookMutationOutcome.Rejected { Reason: BookMutationRejection.Validation } invalid =>
-                Results.Problem(invalid.Message, statusCode: StatusCodes.Status400BadRequest),
+                TypedResults.Problem(invalid.Message, statusCode: StatusCodes.Status400BadRequest),
             BookMutationOutcome.Rejected { Reason: BookMutationRejection.NotFound } missing =>
-                Results.Problem(missing.Message, statusCode: StatusCodes.Status404NotFound),
+                TypedResults.Problem(missing.Message, statusCode: StatusCodes.Status404NotFound),
             BookMutationOutcome.Rejected { Reason: BookMutationRejection.Conflict or BookMutationRejection.Restoring } conflict =>
-                Results.Problem(conflict.Message, statusCode: StatusCodes.Status409Conflict),
+                TypedResults.Problem(conflict.Message, statusCode: StatusCodes.Status409Conflict),
             BookMutationOutcome.Rejected rejected =>
-                Results.Problem(rejected.Message, statusCode: StatusCodes.Status422UnprocessableEntity),
+                TypedResults.Problem(rejected.Message, statusCode: StatusCodes.Status422UnprocessableEntity),
             _ => throw new NotSupportedException($"Unhandled mutation outcome {outcome.GetType().Name}."),
         };
     }

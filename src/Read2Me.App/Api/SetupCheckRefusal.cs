@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.DependencyInjection;
 using Read2Me.App.Services.SetupCheck;
 
@@ -12,8 +13,8 @@ namespace Read2Me.App.Api
     public static class SetupCheckRefusal
     {
         /// <summary>The Full check is driving the AI services: no new AI task may start until it ends.</summary>
-        public static IResult Problem() =>
-            Results.Problem(
+        public static ProblemHttpResult Problem() =>
+            TypedResults.Problem(
                 $"{SetupCheckBusy.Reason}: wait for it to finish, or cancel it in Settings → Setup check.",
                 statusCode: StatusCodes.Status409Conflict, title: SetupCheckBusy.Reason);
 

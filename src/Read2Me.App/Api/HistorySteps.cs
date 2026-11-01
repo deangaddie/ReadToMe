@@ -62,7 +62,6 @@ namespace Read2Me.App.Api
         /// </summary>
         private static RouteHandlerBuilder RefusesWhileRestoring(this RouteHandlerBuilder builder) =>
             builder
-                .ProducesProblem(StatusCodes.Status409Conflict)
                 .AddEndpointFilter(async (context, next) =>
                 {
                     var http = context.HttpContext;

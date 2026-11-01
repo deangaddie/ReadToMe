@@ -2189,6 +2189,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Catalog of the Docker-hosted AI services the watchdog manages.",
@@ -2211,6 +2221,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The managed service behind a config base URL (?baseUrl=, matched on scheme/host/port), 404 when the URL is not one the watchdog manages.",
@@ -2224,6 +2244,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Live status of every managed service in one call (one health probe each, in parallel); each also goes out as a serviceStatus hub message.",
@@ -2247,6 +2277,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "docker restart → health poll → warm-up, in the background (202); outcome as serviceStatus { op: restart }. 404 / 409 as start.",
@@ -2270,6 +2310,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "docker stop in the background (202), pausing a queue that still has work for it; outcome as serviceStatus { op: shutdown }. 404 / 409 as start.",
@@ -2293,6 +2343,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "docker start → health poll → warm-up, in the background (202). The outcome arrives as serviceStatus { name, status, op: start, ok, error? } on /hubs/live. 404 unknown service, 409 while it already has an op in flight.",
@@ -2316,6 +2376,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Live status of one AI service (single health probe): NotFound, Stopped, Starting, Ready, Recovering, Down or Unknown.",
@@ -2329,6 +2399,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Cancel the running assembly.",
@@ -2342,6 +2422,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Assembly progress: phase (Gather/Silence/ProbeConcat/Encode/Finalize) and encode percent, the folder of the running or most recent job, and outputFileName once it completed.",
@@ -2355,6 +2445,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Cancel all queued attribution work.",
@@ -2368,6 +2468,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Dismiss the finished attribution run's throughput summary (the status dock's Dismiss). 200 whether or not one was showing.",
@@ -2381,6 +2491,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Attribution queue snapshot: counts, ETA and the paragraph currently being attributed.",
@@ -2394,6 +2514,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Cancel all queued audio work.",
@@ -2407,6 +2537,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Audio generation queue snapshot: counts, average seconds per item and ETA.",
@@ -2430,6 +2570,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The most recently generated paragraph items that still hold a Preview Source, newest first (?limit=20, max 50). The A/B preview picker's rows.",
@@ -2452,6 +2602,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The post-process steps a scope offers, in chain order, each with its dials (settings-form fields) and defaults. Only scope=voice is served.",
@@ -2475,6 +2635,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "What must happen before the task may run: { ready, toStart: [{ name, status }], conflicts: [{ name, reason }] }. ready = nothing to do. 409 \"Setup check running\" while the Setup check's Full check runs. 400 for an unknown task kind (CharacterAttribution, AudioGeneration, VoicePromptGeneration, CharacterDiscovery, VoiceDesignAudio, Transcription, BookEdit).",
@@ -2514,6 +2684,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Plan again and carry it out in the background (202 { run }): conflicts stopped, then required services started one at a time. Progress goes to the connectionId in the body as preflight { kind: stage, run, name, stage, error? } then { kind: done, run, ok, reason? }. 409 while the Setup check's Full check runs.",
@@ -2545,6 +2725,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The audio after one stage of a rendered preview. 404 once the preview has expired.",
@@ -2558,6 +2748,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "List all projects with audio progress counters.",
@@ -2569,6 +2769,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Create a project from an uploaded book file (multipart: title, bookTitle, author, file).",
@@ -2590,7 +2800,10 @@
           }
         ],
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2598,7 +2811,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Delete a project folder and everything in it.",
@@ -2627,17 +2840,10 @@
           }
         ],
         "responses": {
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
+          "200": {
+            "description": "OK"
           },
-          "404": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2645,37 +2851,7 @@
                 }
               }
             },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Project metadata for one folder.",
@@ -2711,7 +2887,10 @@
           }
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2719,7 +2898,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Update title, book title and/or author. Omitted fields are unchanged; the folder name never changes.",
@@ -2757,7 +2936,10 @@
           }
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2765,7 +2947,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Start m4b assembly. 409 with audioRemainingCount when items still lack audio and allowPartial is false. Poll /api/assembly/status.",
@@ -2789,6 +2971,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Assembled audiobooks under the project's output folder, newest first. isPartial marks a build that skipped items without audio.",
@@ -2818,7 +3010,10 @@
           }
         ],
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2826,7 +3021,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Delete one assembled audiobook (204; 404 when it is not an existing output).",
@@ -2856,6 +3051,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Download one assembled audiobook (audio/mp4 attachment; Range requests supported).",
@@ -2887,7 +3092,10 @@
           "required": true
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2895,7 +3103,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Queue LLM character attribution for the paragraphs under a node (level: Volume|Part|Chapter). Poll /api/attribution/queue.",
@@ -2927,7 +3135,10 @@
           "required": true
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2935,7 +3146,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Queue LLM character attribution for an explicit list of paragraph ids (a selection). Ids without dialog are ignored; the count answers with what was queued.",
@@ -2968,6 +3179,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Per-paragraph attribution queue state: queued/processing status and any failure/unknown outcome. Results are on the paragraph's items.",
@@ -2998,7 +3219,10 @@
           }
         ],
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3006,7 +3230,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Forget a paragraph's Failed/Unfinished attribution outcome (the chip goes away). 204 whether or not one was recorded.",
@@ -3038,7 +3262,10 @@
           "required": true
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3046,7 +3273,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Queue TTS audio generation for the items under a node (level: Volume|Part|Chapter). Poll /api/audio/queue.",
@@ -3078,7 +3305,10 @@
           "required": true
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3086,7 +3316,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Queue TTS audio generation for an explicit list of item ids (a selection, or one item to retry). Unknown ids are ignored; the count answers with what was queued. 409 when no paragraph TTS service is active.",
@@ -3119,6 +3349,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Per-item audio state: queued/processing status, failure outcome, or the audio version stamp once complete.",
@@ -3142,6 +3382,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Items whose audio needs review or had it dismissed: { itemId: { state, normalizeOk, normalizeReason, verifyOk, wer, verifyReason, transcript, originalTextSnapshot } }. Sparse: an item with no entry passed both checks.",
@@ -3182,7 +3432,7 @@
             },
             "description": "OK"
           },
-          "400": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3190,47 +3440,7 @@
                 }
               }
             },
-            "description": "Bad Request"
-          },
-          "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Book overview: volumes, characters and structure counts, the book revision they were read at, and the Structure rules (structureRules: per anchor kind, the placements it allows, the kind each creates, whether text is required, and the minimum count the book keeps). hasContent=false means import has not run.",
@@ -3268,7 +3478,10 @@
           }
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3276,7 +3489,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Turn a plain-language instruction into an edit plan: one LLM call, then the plan's scope is resolved against the book. Answers status Ok with an opaque program id (valid 2 h after its last use), a summary, the matched item count and, for Llm transforms, the LLM request count; NoLlmConfigured / Unsupported / ServiceUnavailable / Failed / NoTargets carry a reason instead. thinking=true lets the model think first. 409 \"Project is restoring\" while a Restore runs, or when one began after the plan was asked for (its targets would predate it).",
@@ -3306,7 +3519,10 @@
           }
         ],
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3314,7 +3530,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Drop the session, cancelling any run in flight (204; 404 when unknown or expired).",
@@ -3344,6 +3560,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The session's proposal run: status Idle | Running | Completed | Cancelled | Failed, progress and the rows landed so far (a cancelled run keeps the rows it computed).",
@@ -3373,7 +3599,10 @@
           }
         ],
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3381,7 +3610,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Stop the running proposal; the rows computed so far stay reviewable. 200 whether or not a run was in flight.",
@@ -3427,7 +3656,10 @@
           }
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3435,7 +3667,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Start computing a proposed new value per matched item (202). Progress and the finished rows arrive on /hubs/live as bookEdit { kind: progress | done | failed } on the connectionId in the body; GET the session to read them back. Deterministic transforms finish at once; Llm ones send one request per 8 items. 409 while a run is already in flight.",
@@ -3481,7 +3713,10 @@
           }
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3489,7 +3724,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Ask the AI again for one matched item, optionally steered by a hint; answers the new row. Llm plans only — a deterministic plan answers a Failed row.",
@@ -3520,17 +3755,10 @@
           }
         ],
         "responses": {
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
+          "200": {
+            "description": "OK"
           },
-          "404": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3538,37 +3766,7 @@
                 }
               }
             },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "All characters with their aliases.",
@@ -3600,7 +3798,10 @@
           "required": true
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3608,7 +3809,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "What a bulk speaker assign over the paragraph ids would write: the dialog lines and the paragraphs holding them. Paragraphs without dialog count in neither.",
@@ -3637,7 +3838,10 @@
           }
         ],
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3645,7 +3849,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Ask the active LLM for the book's notable characters and aliases. Synchronous; takes seconds to a minute. Pass ?thinking=true to let the model think first — slower, better recall. Each row carries existingCharacterId when it resolves onto a roster character; collisions lists names two characters would share.",
@@ -3680,7 +3884,10 @@
           "required": true
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3688,7 +3895,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Persist discovered characters: one create per row (idempotent on name/alias match) plus its aliases.",
@@ -3719,17 +3926,10 @@
           }
         ],
         "responses": {
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
+          "200": {
+            "description": "OK"
           },
-          "404": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3737,37 +3937,7 @@
                 }
               }
             },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Every character as a cast-list row (narrator first, then by name): aliases, line count, planned vs ready voices, isNarrator (the seed row) and narratesBook (the linked narrator).",
@@ -3814,7 +3984,10 @@
           }
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3822,7 +3995,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Ask the LLM for a voice design prompt from a rendered prompt. Synchronous; publishes the LLM run on the live hub. Nothing is persisted — set it on a voice with SetVoiceDesignPrompt.",
@@ -3853,7 +4026,10 @@
           }
         ],
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3861,7 +4037,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The voice-design prompt template rendered for this character (book, author, name). Nothing is persisted; edit it and send it to /generate.",
@@ -3901,17 +4077,10 @@
           }
         ],
         "responses": {
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
+          "200": {
+            "description": "OK"
           },
-          "404": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3919,37 +4088,7 @@
                 }
               }
             },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "A character's voices and its default voice id.",
@@ -4006,7 +4145,10 @@
           }
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4014,7 +4156,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Synthesise reference audio for one generated voice from its design prompt. An optional body { designPrompt } designs from that prompt instead and stores it with the take, so an unsaved prompt edit and its audio land in one request (nothing is stored if synthesis fails). Synchronous; takes tens of seconds. 503 \"TTS busy, try again\" when the TTS runtime is generating with another model; 422 when the take is over the 30 s hard Reference Limit (nothing stored). referenceWarning is set over the 15 s soft limit.",
@@ -4054,17 +4196,10 @@
           }
         ],
         "responses": {
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
+          "200": {
+            "description": "OK"
           },
-          "404": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4072,37 +4207,7 @@
                 }
               }
             },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The items a character speaks, in book order, with their paragraph and chapter ids. Empty for an unknown character.",
@@ -4142,17 +4247,10 @@
           }
         ],
         "responses": {
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
+          "200": {
+            "description": "OK"
           },
-          "404": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4160,37 +4258,7 @@
                 }
               }
             },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "A character's voice rules in evaluation order (default first): voice, anchor levels/ids/titles, dangling flags. Empty for an unknown character.",
@@ -4230,17 +4298,10 @@
           }
         ],
         "responses": {
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
+          "200": {
+            "description": "OK"
           },
-          "404": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4248,37 +4309,7 @@
                 }
               }
             },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The voice the character's rules pick at the start of every chapter, in book order (null voiceName = none resolves). Rules anchored inside a chapter are below this grain.",
@@ -4324,7 +4355,10 @@
           }
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4332,7 +4366,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Confirm, skip or reopen a Pipeline step (state: Confirmed | Skipped | Open). 204 on success, including a repeat that changed nothing; the refreshed /status arrives through the Checkpoints receipt. 404 unknown step; 422 when the step does not take that state or the book has no content; 400 without a state.",
@@ -4364,7 +4398,10 @@
           "required": true
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4372,7 +4409,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Execute a book command. Body: { \"type\": \"<Name>\", ...properties }. Type is the command record name without the Command suffix, e.g. CreateCharacter, SetParagraphCharacter. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. The request is one History step, labelled for the command (e.g. Edit with AI, Split chapter, Assign speaker).",
@@ -4394,7 +4431,10 @@
           }
         ],
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4402,7 +4442,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Remove the cover image; a project without one still answers 204.",
@@ -4422,7 +4462,10 @@
           }
         ],
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4430,7 +4473,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Replace the cover image (multipart 'file': jpg/jpeg/png/webp, at most 10 MB). Served from /workspace/{folder}/{coverImage}.",
@@ -4461,6 +4504,19 @@
               }
             },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The project's History: steps newest first (stepId, parentStepId, display sequence, label, summary — what changed, in user terms, or null — author, startedAt, endedAt — its close, or its last change while open — isOpen while its request or Background run runs, note — \"part 2\", \"212 of 340 paragraphs, cancelled\", \"interrupted\", without brackets — or null, kind — request | backgroundRun | restore | started | import, action — what a request's or Background run's step does: edit | editWithAi | insert | split | merge | delete | title | pause | character | voice | attribution, null on the other kinds — restoredFromStepId — the step a Restore brought back, else null — and cantOpen), headStepId (the tip; null before the first step), busy ({ reason } while anything is queued or running for the project, else null) and restoring (a Restore of the project is running). The first call on a project starts its History. 404 unknown project.",
@@ -4502,16 +4558,9 @@
             "description": "OK"
           },
           "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
             "description": "Not Found"
           },
-          "409": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4519,17 +4568,7 @@
                 }
               }
             },
-            "description": "Conflict"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "One History step, in the shape GET /history lists it, plus restorePreview: { audioDiscardCount } — how many items would lose their audio if the project were restored to it now (their text, speaker or delivery cue differs there, or the step doesn't have them) — or null for a step that can't be opened. 404 unknown project or step; 409 while anything is queued or running for the project, or it is restoring (detail says what), since a busy project can't be viewed at a step; 503 when opening the step failed for a reason that passes (try again).",
@@ -4571,16 +4610,9 @@
             "description": "OK"
           },
           "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
             "description": "Not Found"
           },
-          "409": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4588,27 +4620,7 @@
                 }
               }
             },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Restore: make the project as it stood after the step current, as a new step (\"Restore to 'Split chapter' (14:02)\", restoredFromStepId set) — every later step stays in History. Records keep their ids; items whose text, speaker or delivery cue changes lose their audio and its review, items brought back return without audio, the Pipeline checkpoints it disturbs go stale, and voices, voice reference audio, the cover and the source file come back too; app-wide LLM and TTS settings are untouched. Open Edit with AI sessions for the project are dropped. Answers { step, audioDiscardCount, needsAudioCount } — needsAudioCount is the items without audio after it, the brought-back ones included; step is null when the project already was that state. While it runs every other write and enqueue for the project is 409 \"Project is restoring\". 404 unknown project or step; 409 while anything is queued or running for the project, or it is already restoring (detail says why); 422 a step that can't be opened; 503 when opening it failed for a reason that passes (try again).",
@@ -4646,7 +4658,10 @@
           }
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4654,7 +4669,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes.",
@@ -4692,7 +4707,10 @@
           }
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4700,7 +4718,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Re-split the stored book file by hand-chosen rules (replaces existing content). Per level: mode Prefix (with prefix) | Arabic | Roman. 400 when a switched-on level lacks a valid rule. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes.",
@@ -4732,7 +4750,10 @@
           "required": true
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4740,7 +4761,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "What a ReleaseNarration command over the scope (Part|Chapter|Paragraph + nodeId) would write: the narration-only paragraphs it would release (for Part and Chapter, only those carrying a speech marker that repeats in at least 5 narration-only paragraphs of their chapter; a Paragraph is unfiltered), how many of their items have audio it would discard, and for Part and Chapter the speechMarkers that passed with the paragraphs each covers (count descending, then marker; empty for a Paragraph and when nothing passes).",
@@ -4778,7 +4799,10 @@
           }
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4786,7 +4810,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Set the Book-wide narrator-only policy: only narration items get audio.",
@@ -4826,17 +4850,10 @@
           }
         ],
         "responses": {
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
+          "200": {
+            "description": "OK"
           },
-          "404": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4844,37 +4861,7 @@
                 }
               }
             },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Resolved voice per speech item of a chapter: { itemId: { voiceName, narratedBy } }. voiceName null = no voice resolves; narratedBy = the linked narrator's name on narration items.",
@@ -4922,17 +4909,10 @@
           }
         ],
         "responses": {
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
+          "200": {
+            "description": "OK"
           },
-          "404": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4940,37 +4920,7 @@
                 }
               }
             },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Ordered children of a node. Volume gives parts, Part gives chapters, Chapter gives paragraphs with their items.",
@@ -5034,17 +4984,10 @@
           }
         ],
         "responses": {
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
+          "200": {
+            "description": "OK"
           },
-          "404": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5052,37 +4995,7 @@
                 }
               }
             },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The speech items under a node (level: Volume|Part|Chapter) that have a speaker to read them, with their paragraph/chapter/part/volume ids; needsAudioOnly=true keeps those still missing a WAV; narratorOnlyMode=true counts unattributed lines as readable. What an audio tree checkbox or 'Select needs audio' selects.",
@@ -5138,17 +5051,10 @@
           }
         ],
         "responses": {
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
+          "200": {
+            "description": "OK"
           },
-          "404": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5156,37 +5062,7 @@
                 }
               }
             },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The Character paragraphs under a node (level: Volume|Part|Chapter) with their chapter/part/volume ids; unprocessedOnly=true keeps those still holding an unattributed line. What 'Select unprocessed' selects.",
@@ -5234,17 +5110,10 @@
           }
         ],
         "responses": {
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
+          "200": {
+            "description": "OK"
           },
-          "404": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5252,37 +5121,7 @@
                 }
               }
             },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Roll-up for one volume/part/chapter: attribution/audio/review paragraphs remaining and attribution in flight. A node with no speech paragraphs answers zeros.",
@@ -5349,17 +5188,10 @@
           }
         ],
         "responses": {
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
+          "200": {
+            "description": "OK"
           },
-          "404": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5367,37 +5199,7 @@
                 }
               }
             },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "A paragraph with up to before/after neighbouring paragraphs of the same chapter (each 0..10, default 3/2) and the speaker name per item. 404 when the paragraph is not in the chapter.",
@@ -5428,17 +5230,10 @@
           }
         ],
         "responses": {
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
+          "200": {
+            "description": "OK"
           },
-          "404": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5446,37 +5241,7 @@
                 }
               }
             },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The Pronunciation list, sorted by written form: id, writtenForm, spokenForm, and its reach in the book — matchCount (matched spans), itemCount (items holding one) and withAudioCount (those items that have audio).",
@@ -5541,6 +5306,16 @@
               }
             },
             "description": "Conflict"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Add a Pronunciation { writtenForm, spokenForm }. Both are trimmed and inner whitespace collapsed to one space. Written form: 1–100 characters, starting and ending with a letter or digit; spoken form: 1–200 characters. 201 with the entry, its reach and what it cost; 400 invalid; 409 when another entry has the written form, ignoring case. One History step, labelled Pronunciation: add \"<written>\". Items with audio whose Spoken text the change alters lose it (WAV reference and audio review), as a text edit does; audioDiscardCount counts them, needsAudioCount the spoken items without audio after it. 409 while audio generation is queued or running for the project, or a Restore runs. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes.",
@@ -5608,7 +5383,7 @@
             },
             "description": "Not Found"
           },
-          "409": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5616,7 +5391,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "What saving a draft { id?, writtenForm, spokenForm, delete? } would do, writing nothing: no id adds, an id edits that entry, delete: true deletes it (forms ignored). Answers matchCount, itemCount, withAudioCount (a delete's: the entry's reach now), audioDiscardCount (exactly what the save would discard), overlaps (entries whose written form holds the draft's as whole words or is held by it, draftWins when the draft's is the longer and so wins), duplicateOf (another entry with the written form, ignoring case: a save would be 409; the counts treat the draft as taking its place), and matches in book order: itemId, chapterId, chapterTitle, speaker, hasAudio, the sentence around it, sentenceStart (where it starts in the item's text, what a try-out names it by), matchStart and matchLength in that sentence, spokenSentence, the sentence with the drafted list applied, and spokenMatchStart and spokenMatchLength, where the match's spoken form (its case carried over) sits in spokenSentence. 400 invalid; 404 unknown id.",
@@ -5668,7 +5443,7 @@
             },
             "description": "OK"
           },
-          "400": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5676,47 +5451,7 @@
                 }
               }
             },
-            "description": "Bad Request"
-          },
-          "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Where the list matches in the chapters named by repeated chapterIds (the Book view's marks): spans in book order — itemId, start and length in the item's text, pronunciationId, and sentenceStart (where the sentence around it starts, what a try-out names it by) — and pronunciations, the entries they name { id, writtenForm, spokenForm }, sorted by written form. Unknown chapters match nothing.",
@@ -5806,6 +5541,16 @@
               }
             },
             "description": "Service Unavailable"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Render one try-out sentence { itemId, sentenceStart, draft?, asWritten, voice }: the sentence of the item starting at sentenceStart (an impact match's), carried on over a match that runs past its end. The list, with draft { id?, writtenForm, spokenForm, delete? } in place of its entry, is applied unless asWritten. voice is { voiceId } or \"item\" (the item's own resolved voice, also when left out); the active TTS config and the item's delivery cue are used as for its take. Answers the WAV body (audio/wav); nothing is stored and no item's audio changes. 400 invalid draft, no sentence starts there or a bad voice; 404 unknown item, voice or entry; 409 while attribution, audio generation or a voice batch is queued or running anywhere (it holds the GPU); 422 no voice resolves, the voice has no audio or no TTS config is active; 503 TTS busy or down.",
@@ -5865,6 +5610,16 @@
               }
             },
             "description": "Conflict"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Delete a Pronunciation: its word goes back to how the provider reads it. 404 unknown id. One History step, labelled Pronunciation: delete \"<written>\". Items with audio whose Spoken text the change alters lose it (WAV reference and audio review), as a text edit does; audioDiscardCount counts them, needsAudioCount the spoken items without audio after it. 409 while audio generation is queued or running for the project, or a Restore runs. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes.",
@@ -5948,6 +5703,16 @@
               }
             },
             "description": "Conflict"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Edit a Pronunciation's { writtenForm, spokenForm }, checked as an add. 200 with the entry, its reach and what it cost; 400 invalid; 404 unknown id; 409 when another entry has the written form. Saving it unchanged writes nothing and lands no step; otherwise one History step, labelled Pronunciation: edit \"<written>\". Items with audio whose Spoken text the change alters lose it (WAV reference and audio review), as a text edit does; audioDiscardCount counts them, needsAudioCount the spoken items without audio after it. 409 while audio generation is queued or running for the project, or a Restore runs. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes.",
@@ -5978,17 +5743,10 @@
           }
         ],
         "responses": {
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
+          "200": {
+            "description": "OK"
           },
-          "404": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5996,37 +5754,7 @@
                 }
               }
             },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Whole-project roll-up: content, cast and voice counts, item/attribution/audio/review remaining, per-node summaries, pause paragraphs, the confirmed or skipped Pipeline step checkpoints (step id → state, stale, at; only steps with a row) and the book revision they were read at.",
@@ -6048,7 +5776,10 @@
           }
         ],
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6056,7 +5787,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Start the voice-audio batch: synthesise every generated voice that has a design prompt but no audio. Poll /api/voice-batch/status.",
@@ -6094,7 +5825,10 @@
           }
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6102,7 +5836,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Start the voice-plan batch: one LLM call per character without voices (regenerateAll replans every character). Poll /api/voice-batch/status.",
@@ -6142,17 +5876,10 @@
           }
         ],
         "responses": {
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
+          "200": {
+            "description": "OK"
           },
-          "404": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6160,37 +5887,7 @@
                 }
               }
             },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "One voice by id, with isEdited (its audio has been through the voice editor), both settings overrides, and referenceSeconds / referenceWarning (set over the 15 s soft Reference Limit), read from the stored WAV.",
@@ -6221,7 +5918,10 @@
           }
         ],
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6229,7 +5929,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Upload or replace a voice's reference audio: multipart field 'file' (audio, 200 MB max). Normalises, stores and commits in one step; answers the updated voice. Any earlier voice-editor edit is discarded. 422 when the normalised reference is over the Reference Limit's hard limit (30 s / 5 MiB), with nothing stored; over the soft limit (15 s) it is stored and the voice's referenceWarning is set.",
@@ -6276,7 +5976,10 @@
           }
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6284,7 +5987,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Write a rendered preview's final stage over the voice's audio, keeping the original for restore. 422 when the preview is unknown, expired or belongs to another voice.",
@@ -6331,7 +6034,10 @@
           }
         },
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6339,7 +6045,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Render a chain of steps over the voice's original audio. Steps run in catalog order whatever order they are sent; settings are dial values merged over the step's defaults. Answers a previewId (valid 30 minutes) and one playable stage per step.",
@@ -6370,7 +6076,10 @@
           }
         ],
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6378,7 +6087,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Put the voice's original audio back and forget the edit. A no-op for a voice that was never edited.",
@@ -6418,17 +6127,10 @@
           }
         ],
         "responses": {
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
+          "200": {
+            "description": "OK"
           },
-          "404": {
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6436,37 +6138,7 @@
                 }
               }
             },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The voice's audio as it was before the editor touched it. 404 while the voice is unedited — the live WAV is the original then.",
@@ -6497,7 +6169,10 @@
           }
         ],
         "responses": {
-          "409": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6505,7 +6180,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Transcribe a voice's reference audio with the active transcription service and store the result as its transcript. 422 without audio or an active service.",
@@ -6519,6 +6194,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Audio post-processing scalars: ffmpeg path, WER threshold, retry count, pause durations. ffmpegPath is the ffmpeg the app runs: savedFfmpegPath (Settings), else configuredFfmpegPath (the host's Ffmpeg:Path), else null (PATH).",
@@ -6540,6 +6225,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Update audio post-processing scalars; only supplied fields change.",
@@ -6569,6 +6264,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Persist the given ffmpeg path (blank = rely on PATH), then probe it. Answers { success, message }.",
@@ -6582,6 +6287,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The scalars plus the assembler pause durations and the paragraph post-process step configs (silence-trim, consonant-soften), in pipeline order. Here ffmpegPath is the saved Settings value the form edits (null: none saved), and configuredFfmpegPath the host's Ffmpeg:Path the app uses when none is saved (null: PATH).",
@@ -6605,6 +6320,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Save the five assembler pause durations together. 400 on a negative value.",
@@ -6644,6 +6369,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Save one paragraph post-process step's enabled flag and settings; the other step keeps its config. 400 for a step outside the paragraph pipeline or a body whose stepId differs from the route.",
@@ -6683,6 +6418,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Render one step with unsaved settings over a recent sample's Preview Source. Answers the unprocessed and processed WAV URLs; appliedOk false means the step fell back and reason says why. 404 unknown folder, 422 when the sample's preview source has been evicted.",
@@ -6696,6 +6441,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "List llm configs.",
@@ -6717,6 +6472,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Create a llm config. The first config auto-activates.",
@@ -6730,6 +6495,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The active llm config, 404 when none.",
@@ -6751,6 +6526,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Select the active llm config.",
@@ -6764,6 +6549,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The attribution escalation chain: stored steps in order, the self-consistency flag, the chain as attribution resolves it (an empty chain falls back to the default config) and every config a step may name.",
@@ -6785,6 +6580,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Replace the attribution chain and the self-consistency flag. Exact duplicate steps collapse. 422 when a step names no config.",
@@ -6808,6 +6613,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Model ids the server behind a config offers. The body is an LLM config and need not be saved. 422 with the reason when the server cannot be asked.",
@@ -6821,6 +6636,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Whether a test send is in flight, for a client that missed its llmTest message.",
@@ -6845,6 +6670,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Delete a llm config. Active selection reassigns or clears.",
@@ -6877,6 +6712,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Update a llm config by id.",
@@ -6911,6 +6756,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Send a free-text test prompt to one config (202). Tokens stream on /hubs/live group stream:llm, wrapped in runStarted/runEnded; llmTest { kind: done | failed | cancelled } goes to the connectionId in the body. 409 while a test is already running.",
@@ -6935,6 +6790,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Stop the running test send (one runs at a time, whichever config it targets). Harmless when nothing is running.",
@@ -6948,6 +6813,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "List paragraph-tts configs.",
@@ -6969,6 +6844,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Create a paragraph-tts config. The first config auto-activates.",
@@ -6982,6 +6867,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The active paragraph-tts config, 404 when none.",
@@ -7003,6 +6898,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Select the active paragraph-tts config.",
@@ -7025,6 +6930,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The editable fields of one TTS provider type (?type=VoxCpm2|Chatterbox|Qwen3Base|Breeze, member name) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override.",
@@ -7049,6 +6964,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Delete a paragraph-tts config. Active selection reassigns or clears.",
@@ -7081,6 +7006,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Update a paragraph-tts config by id.",
@@ -7105,6 +7040,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The text-processing steps a TTS config may enable (its enabledStepIds): the built-ins, then the config's own substitutions in order. Id 0 lists the built-ins for a config not yet saved.",
@@ -7118,6 +7063,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Every prompt template, resolved (stored override or built-in default), keyed by kind.",
@@ -7131,6 +7086,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Every prompt kind with its description, tokens, expected response, resolved and default templates, override flag and compatibility warnings.",
@@ -7154,6 +7119,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Reset one prompt template to its built-in default.",
@@ -7185,6 +7160,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Override one prompt template.",
@@ -7218,6 +7203,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Render a template (saved or not) with the kind's sample values.",
@@ -7231,6 +7226,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "List semantic-similarity configs.",
@@ -7252,6 +7257,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Create a semantic-similarity config. The first config auto-activates.",
@@ -7265,6 +7280,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The active semantic-similarity config, 404 when none.",
@@ -7286,6 +7311,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Select the active semantic-similarity config.",
@@ -7308,6 +7343,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The editable fields of one semantic-similarity provider type (?type=MiniLmL6|MpnetBaseV2, member name) beyond its base URL: the pass threshold.",
@@ -7332,6 +7377,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Delete a semantic-similarity config. Active selection reassigns or clears.",
@@ -7364,6 +7419,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Update a semantic-similarity config by id.",
@@ -7398,6 +7463,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Score two texts with one config against its pass threshold. 422 with the reason when the provider fails.",
@@ -7411,6 +7486,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "List all themes, built-in first.",
@@ -7432,6 +7517,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Create a custom theme. Colours are #rgb or #rrggbb; optional colours may be null.",
@@ -7445,6 +7540,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The selected theme id and the follow-system-preference flag.",
@@ -7466,6 +7571,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Change the selected theme and/or the follow-system flag; both fields optional.",
@@ -7490,6 +7605,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Delete a custom theme; clears the selection if it was active. 400 for built-in themes.",
@@ -7522,6 +7647,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Update a custom theme. 400 for built-in themes.",
@@ -7535,6 +7670,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "List transcription configs.",
@@ -7556,6 +7701,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Create a transcription config. The first config auto-activates.",
@@ -7569,6 +7724,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The active transcription config, 404 when none.",
@@ -7590,6 +7755,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Select the active transcription config.",
@@ -7612,6 +7787,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The editable fields of one transcription provider type (?type=LocalWhisper, member name) beyond its base URL — none today.",
@@ -7636,6 +7821,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Delete a transcription config. Active selection reassigns or clears.",
@@ -7668,6 +7863,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Update a transcription config by id.",
@@ -7692,6 +7897,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Transcribe an uploaded audio file (multipart field 'file': wav, mp3 or aac, at most 50 MB) with one config. 422 with the reason when the provider fails.",
@@ -7705,6 +7920,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "List voice-design configs.",
@@ -7726,6 +7951,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Create a voice-design config. The first config auto-activates.",
@@ -7739,6 +7974,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The active voice-design config, 404 when none.",
@@ -7760,6 +8005,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Select the active voice-design config.",
@@ -7773,6 +8028,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The sentence voice design speaks: the stored override (null when none) and the built-in default.",
@@ -7794,6 +8059,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Override the voice-design sample sentence. Null, blank or the default text clears the override. 400 over maxLength (300) characters.",
@@ -7816,6 +8091,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The editable fields of one voice-design provider type (?type=VoxCpm2|Qwen3|Breeze, member name) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override.",
@@ -7840,6 +8125,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Delete a voice-design config. Active selection reassigns or clears.",
@@ -7872,6 +8167,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Update a voice-design config by id.",
@@ -7906,6 +8211,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Design a voice from a prompt with one config, speaking the sample text; answers the audio as base64. 60 s timeout. 422 with the reason when the provider fails.",
@@ -7926,6 +8241,16 @@
               }
             },
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "The Setup check report: one row per check (id, group, name, tier, result, expected, found, note?, fix { text, link?, copy? }), the times of the last Quick and Full check, firstRun (this start created app.db), putBack (after a Full check, what it did with the containers it drove), startedAt (when this host started) and noWorkspace (this host started without a usable Workspace: every other API call answers 503 No Workspace until the app restarts). Empty rows until the start-up Quick check ends.",
@@ -7976,6 +8301,16 @@
               }
             },
             "description": "Conflict"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Re-run one Full-tier check (a row whose rerun isn't null) in the background: only the steps that judge it (similarity transcribes first, to score a real transcript), under the Full check's rules — queues wait, Preflight refuses new AI tasks, the containers it drives are put back, and progress goes out as setupCheck messages. rerun.gpu says it stops the running GPU container. The report's fullCheckedAt stays the last whole Full check's. 202 with the report (fullRun shows the re-run); 404 for an unknown or Quick-tier id; 409 while a Full check runs, while work is in flight (named, as for the Full check), before the start-up Quick check ends, when the check has no active config, or when its rerun.gpu is stale (the check now drives a GPU container: run the Quick check first).",
@@ -8006,6 +8341,16 @@
               }
             },
             "description": "Conflict"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Start the Full check in the background, or join the Full check already going (one per host): 202 with the report, whose fullRun { step, total, lane: local|cpu|gpu, label, cancelling } shows the run. While it runs every queue waits and Preflight refuses new AI tasks with \"Setup check running\". Progress and the final report go to every live hub client as setupCheck { kind: progress|done, report }. 409 naming the work in flight while the Audio or Character queue holds items, or a voice batch, discovery or assembly runs, and while one check re-runs.",
@@ -8036,6 +8381,16 @@
               }
             },
             "description": "Conflict"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Cancel the Full check: it stops once the current step ends, and the checks it hadn't reached read Not run. 202 with the report (fullRun.cancelling true); 409 when none is running.",
@@ -8056,6 +8411,16 @@
               }
             },
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Run the Quick check (Workspace, ffmpeg, docker CLI) and answer the new report. It never starts, stops or switches anything; it creates the Workspace folder when missing. While a Full check runs it answers the run's report instead.",
@@ -8069,6 +8434,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Cancel the running voice batch.",
@@ -8082,6 +8457,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
           }
         },
         "summary": "Voice batch progress.",
