@@ -1,4 +1,5 @@
 import { html } from 'lit-html';
+import { guidePage } from '@app/help/guide-page';
 import { helpText } from '@app/help/help';
 import type { IconName } from '@app/ui/icons';
 import { icon } from '@app/ui/partials';
@@ -33,7 +34,7 @@ export function helpPanel(
     <p class="overview__help-foot">
       <a
         class="overview__help-guide"
-        href="${GUIDE_URL}/${step.id.toLowerCase()}.md"
+        href="${GUIDE_URL}/${guidePage(step.id)}"
         target="_blank"
         rel="noopener"
         >${icon('open_in_new')} Open the guide</a

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -38,20 +39,38 @@ namespace Read2Me.App.Api
         }
 
         /// <summary>
-        /// A body read by hand, with the same strictness a bound parameter gets: JSON that breaks the wire
-        /// form (an enum as a number, a number as a string) comes back as an error to answer with a 400,
-        /// rather than an exception that would be a 500. Both null: no body.
+        /// A body read by hand, with the same strictness a bound parameter gets. JSON that breaks the
+        /// wire form (an enum as a number, a number as a string) is a 400 "Invalid body", not an
+        /// exception that would be a 500. No body is a 400 with <paramref name="missing"/>.
         /// </summary>
-        public static async Task<(T? Body, string? Error)> ReadBodyAsync<T>(HttpRequest request, CancellationToken ct = default)
+        public static async Task<BodyRead<T>> ReadBodyAsync<T>(HttpRequest request, string missing, CancellationToken ct = default)
+            where T : class
         {
             try
             {
-                return (await request.ReadFromJsonAsync<T>(ct), null);
+                return await request.ReadFromJsonAsync<T>(ct) is { } body
+                    ? new BodyRead<T>(body, null)
+                    : new BodyRead<T>(null, BadRequest(missing));
             }
             catch (JsonException ex)
             {
-                return (default, $"Invalid body: {ex.Message}");
+                return new BodyRead<T>(null, BadRequest($"Invalid body: {ex.Message}"));
             }
+        }
+
+        private static IResult BadRequest(string detail) =>
+            Results.Problem(detail, statusCode: StatusCodes.Status400BadRequest);
+    }
+
+    /// <summary>What <see cref="ApiJson.ReadBodyAsync{T}"/> read: the body, or the 400 to answer instead.</summary>
+    public readonly record struct BodyRead<T>(T? Body, IResult? Problem) where T : class
+    {
+        /// <summary>True with the 400 to answer; false with the body.</summary>
+        public bool Failed([NotNullWhen(false)] out T? body, [NotNullWhen(true)] out IResult? problem)
+        {
+            body = Body;
+            problem = Problem;
+            return Problem is not null;
         }
     }
 }

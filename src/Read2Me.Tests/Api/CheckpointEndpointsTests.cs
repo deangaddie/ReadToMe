@@ -22,7 +22,7 @@ namespace Read2Me.Tests.Api
         [InlineData("Export", PipelineStep.Export)]
         public void TheStepSegment_isTheStepsMemberName(string segment, PipelineStep expected)
         {
-            Assert.True(CheckpointEndpoints.TryParseStep(segment, out var step));
+            Assert.True(ApiJson.TryParseName<PipelineStep>(segment, out var step));
             Assert.Equal(expected, step);
         }
 
@@ -35,7 +35,7 @@ namespace Read2Me.Tests.Api
         [InlineData("")]
         public void AnUnknownStepSegment_isRejected(string segment)
         {
-            Assert.False(CheckpointEndpoints.TryParseStep(segment, out _));
+            Assert.False(ApiJson.TryParseName<PipelineStep>(segment, out _));
         }
 
         [Fact]

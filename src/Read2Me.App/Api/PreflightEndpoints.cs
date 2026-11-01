@@ -48,7 +48,7 @@ namespace Read2Me.App.Api
         private static async Task<IResult> PlanAsync(
             string taskKind, IAiPreflightPlanner planner, CancellationToken ct)
         {
-            if (!TryParse(taskKind, out var task))
+            if (!ApiJson.TryParseName<AiTaskKind>(taskKind, out var task))
                 return UnknownTask(taskKind);
 
             var plan = await planner.BuildPlanAsync(task, ct);
@@ -58,7 +58,7 @@ namespace Read2Me.App.Api
         private static async Task<IResult> RunAsync(
             string taskKind, PreflightRunRequest? request, IAiPreflightPlanner planner, PreflightRunCoordinator runs, CancellationToken ct)
         {
-            if (!TryParse(taskKind, out var task))
+            if (!ApiJson.TryParseName<AiTaskKind>(taskKind, out var task))
                 return UnknownTask(taskKind);
 
             // Re-planned here rather than trusting a plan the client read a moment ago: a container
@@ -67,9 +67,6 @@ namespace Read2Me.App.Api
             var run = runs.Start(plan, request?.ConnectionId);
             return Results.Accepted(value: new PreflightRunResponse(run));
         }
-
-        private static bool TryParse(string taskKind, out AiTaskKind task) =>
-            ApiJson.TryParseName(taskKind, out task);
 
         private static IResult UnknownTask(string taskKind) =>
             Results.Problem(

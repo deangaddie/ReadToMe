@@ -4,7 +4,11 @@ using Read2Me.Services.Llm;
 
 namespace Read2Me.Services.BookEdits
 {
-    public enum EditPlanStatus { Ok, NoLlmConfigured, Unsupported, Failed, ServiceUnavailable }
+    /// <summary>
+    /// How planning an AI book edit ended. The planner answers all but <see cref="NoTargets"/>,
+    /// which the caller sets when the plan parsed but its scope matched no items.
+    /// </summary>
+    public enum EditPlanStatus { Ok, NoLlmConfigured, Unsupported, Failed, ServiceUnavailable, NoTargets }
 
     public sealed record EditPlanOutcome(EditPlanStatus Status, EditProgram? Program, string? Reason);
 

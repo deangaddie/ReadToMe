@@ -191,7 +191,7 @@ export interface NodeDto {
 
 export type PauseKind = 'Pause' | 'ParagraphPause' | 'ChapterPause' | 'PartPause' | 'VolumePause';
 
-/** `BookEndpoints.ItemTypeWord`: narration when the speaker is the narrator, dialog otherwise. */
+/** `ApiItemType`: narration when the speaker is the narrator, dialog otherwise. */
 export type ParagraphItemType = 'Narration' | 'Character' | PauseKind;
 
 export interface ParagraphItemDto {
@@ -1128,8 +1128,8 @@ export interface ApplyPreviewRequest {
 
 // ---- AI book edits (`BookEditEndpoints.cs`) --------------------------------------------------------
 
-/** `Ok` is the only status that carries a program; the rest explain why there is nothing to do. */
-export type BookEditPlanStatus =
+/** `EditPlanStatus`: `Ok` is the only status that carries a program; the rest explain why there is nothing to do. */
+export type EditPlanStatus =
   | 'Ok'
   | 'NoLlmConfigured'
   | 'Unsupported'
@@ -1151,7 +1151,7 @@ export interface PlanBookEditRequest {
 
 /** `program` is the opaque session id every later call names; null unless `status` is `Ok`. */
 export interface PlanBookEditResponse {
-  status: BookEditPlanStatus;
+  status: EditPlanStatus;
   reason: string | null;
   summary: string | null;
   program: string | null;
