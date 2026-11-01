@@ -36,8 +36,9 @@ done
 Config areas: `llm`, `paragraph-tts`, `voice-design`, `transcription`,
 `semantic-similarity` — same CRUD per area (`GET` list, `POST` create, `PUT /{id}`
 update, `DELETE /{id}` delete — deleting the active one reassigns or clears the
-selection), `PUT /active` selects and `GET /active` answers the active config (404
-when none). The first config created in an area auto-activates.
+selection), `PUT /active` selects (204) and `GET /active` answers the active config (404
+when none). The first config created in an area auto-activates. The document marks every
+config field required: answers carry them all, and a body that leaves one out gets its default.
 
 ```bash
 curl -s http://localhost:5000/api/settings/llm                       # list
@@ -51,13 +52,13 @@ curl -s -X PUT http://localhost:5000/api/settings/llm/active \
 LLM extras: `POST /api/settings/llm/models` takes an LLM config (saved or not) and answers
 `{ models }`, or 422 with the reason when the server cannot be asked.
 `GET/PUT /api/settings/llm/attribution-chain` reads and replaces the attribution escalation chain —
-`{ steps: [{ configId, thinking, promptStyle }], selfConsistency }` (`promptStyle` 0 = Full,
-1 = Simple, null = inherit the config's; exact duplicate steps collapse; 422 when a step names no
+`{ steps: [{ configId, thinking, promptStyle }], selfConsistency }` (`promptStyle` `Full`,
+`Simple` or `Chapter`, null = inherit the config's; exact duplicate steps collapse; 422 when a step names no
 config). GET adds `resolved` (the chain as attribution runs it — an empty chain falls back to the
 default config) and `available` (every config). Deleting a config removes its steps.
 `POST /api/settings/llm/{id}/test` with `{ prompt, connectionId }` sends a free-text test prompt
 (202; 409 while one is running): tokens stream on hub group `stream:llm`, the ending arrives as
-`llmTest` on `connectionId`. `POST …/{id}/test/cancel` stops it; `GET /api/settings/llm/test`
+`llmTest` on `connectionId`. `POST …/{id}/test/cancel` stops it (204); `GET /api/settings/llm/test`
 answers `{ running, configId }`.
 
 Provider extras (`paragraph-tts`, `voice-design`, `transcription`, `semantic-similarity`): a config's
@@ -75,7 +76,7 @@ Test one stored config — a provider that is down answers 422 with its reason:
 `POST /api/settings/semantic-similarity/{id}/test` `{ text1, text2 }` → `{ score, threshold, pass }`.
 
 Prompt templates: `GET /api/settings/prompts` (all kinds, resolved),
-`PUT /api/settings/prompts/{kind}` to override, `DELETE` to reset.
+`PUT /api/settings/prompts/{kind}` to override, `DELETE` to reset (both 204).
 `GET /api/settings/prompts/catalog` describes every kind —
 `{ kind, title, description, tokens[], expectedResponse, template, defaultTemplate, isOverridden, warnings[] }`
 (`template` is the resolved text, `isOverridden` says it differs from the built-in default,

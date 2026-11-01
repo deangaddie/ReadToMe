@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,10 +45,10 @@ namespace Read2Me.App.Api
                 .WithSummary("Change the selected theme and/or the follow-system flag; both fields optional.");
         }
 
-        private static async Task<IResult> ListAsync(ThemeService svc) =>
-            Results.Ok(await svc.GetAllThemesAsync());
+        private static async Task<Ok<List<AppTheme>>> ListAsync(ThemeService svc) =>
+            TypedResults.Ok(await svc.GetAllThemesAsync());
 
-        private static async Task<IResult> CreateAsync(HttpContext ctx, ThemeService svc)
+        private static async Task<Results<Created<AppTheme>, ProblemHttpResult>> CreateAsync(HttpContext ctx, ThemeService svc)
         {
             if ((await ApiJson.ReadBodyAsync<AppTheme>(ctx.Request, "Missing theme body.")).Failed(out var theme, out var refused))
                 return refused;
@@ -56,10 +57,10 @@ namespace Read2Me.App.Api
 
             theme.Id = 0;
             var created = await svc.CreateThemeAsync(theme);
-            return Results.Created($"/api/settings/themes/{created.Id}", created);
+            return TypedResults.Created($"/api/settings/themes/{created.Id}", created);
         }
 
-        private static async Task<IResult> UpdateAsync(HttpContext ctx, int id, ThemeService svc)
+        private static async Task<Results<Ok<AppTheme>, NotFound, ProblemHttpResult>> UpdateAsync(HttpContext ctx, int id, ThemeService svc)
         {
             if ((await ApiJson.ReadBodyAsync<AppTheme>(ctx.Request, "Missing theme body.")).Failed(out var theme, out var refused))
                 return refused;
@@ -68,37 +69,37 @@ namespace Read2Me.App.Api
 
             var existing = (await svc.GetAllThemesAsync()).FirstOrDefault(t => t.Id == id);
             if (existing is null)
-                return Results.NotFound();
+                return TypedResults.NotFound();
             if (existing.IsBuiltIn)
-                return Results.Problem($"Theme '{existing.Name}' is built-in and cannot be edited.",
+                return TypedResults.Problem($"Theme '{existing.Name}' is built-in and cannot be edited.",
                     statusCode: StatusCodes.Status400BadRequest);
 
             theme.Id = id;
             await svc.UpdateThemeAsync(theme);
-            return Results.Ok(theme);
+            return TypedResults.Ok(theme);
         }
 
-        private static async Task<IResult> DeleteAsync(int id, ThemeService svc)
+        private static async Task<Results<NoContent, NotFound, ProblemHttpResult>> DeleteAsync(int id, ThemeService svc)
         {
             var existing = (await svc.GetAllThemesAsync()).FirstOrDefault(t => t.Id == id);
             if (existing is null)
-                return Results.NotFound();
+                return TypedResults.NotFound();
             if (existing.IsBuiltIn)
-                return Results.Problem($"Theme '{existing.Name}' is built-in and cannot be deleted.",
+                return TypedResults.Problem($"Theme '{existing.Name}' is built-in and cannot be deleted.",
                     statusCode: StatusCodes.Status400BadRequest);
 
             await svc.DeleteThemeAsync(id);
-            return Results.NoContent();
+            return TypedResults.NoContent();
         }
 
-        private static async Task<IResult> GetSelectionAsync(ThemeService svc)
+        private static async Task<Ok<ThemeSelectionDto>> GetSelectionAsync(ThemeService svc)
         {
-            return Results.Ok(new ThemeSelectionDto(
+            return TypedResults.Ok(new ThemeSelectionDto(
                 await svc.GetSelectedThemeIdAsync(),
                 await svc.GetFollowSystemPreferenceAsync()));
         }
 
-        private static async Task<IResult> SetSelectionAsync(HttpContext ctx, ThemeService svc)
+        private static async Task<Results<Ok<ThemeSelectionDto>, NotFound, ProblemHttpResult>> SetSelectionAsync(HttpContext ctx, ThemeService svc)
         {
             if ((await ApiJson.ReadBodyAsync<ThemeSelectionUpdateRequest>(ctx.Request, "Missing body.")).Failed(out var request, out var refused))
                 return refused;
@@ -106,21 +107,21 @@ namespace Read2Me.App.Api
             if (request.SelectedThemeId is { } themeId)
             {
                 if ((await svc.GetAllThemesAsync()).All(t => t.Id != themeId))
-                    return Results.NotFound();
+                    return TypedResults.NotFound();
                 await svc.SetSelectedThemeAsync(themeId);
             }
             if (request.FollowSystemPreference is { } follow)
                 await svc.SetFollowSystemPreferenceAsync(follow);
 
-            return Results.Ok(new ThemeSelectionDto(
+            return TypedResults.Ok(new ThemeSelectionDto(
                 await svc.GetSelectedThemeIdAsync(),
                 await svc.GetFollowSystemPreferenceAsync()));
         }
 
-        private static IResult? Validate(AppTheme theme)
+        private static ProblemHttpResult? Validate(AppTheme theme)
         {
             if (string.IsNullOrWhiteSpace(theme.Name))
-                return Results.Problem("Theme name is required.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("Theme name is required.", statusCode: StatusCodes.Status400BadRequest);
 
             var colours = new (string Field, string? Value, bool Required)[]
             {
@@ -139,11 +140,11 @@ namespace Read2Me.App.Api
                 if (string.IsNullOrWhiteSpace(value))
                 {
                     if (required)
-                        return Results.Problem($"Colour '{field}' is required.", statusCode: StatusCodes.Status400BadRequest);
+                        return TypedResults.Problem($"Colour '{field}' is required.", statusCode: StatusCodes.Status400BadRequest);
                     continue;
                 }
                 if (!HexColour.IsMatch(value))
-                    return Results.Problem($"Colour '{field}' must be #rgb or #rrggbb, got '{value}'.",
+                    return TypedResults.Problem($"Colour '{field}' must be #rgb or #rrggbb, got '{value}'.",
                         statusCode: StatusCodes.Status400BadRequest);
             }
 

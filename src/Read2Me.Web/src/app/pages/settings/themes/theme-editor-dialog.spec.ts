@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { AppTheme } from '@app/api';
+import { PALETTE_DEFAULTS } from '../../../../testing/themes';
 import { resetServices } from '@app/core/services';
 import type { ThemeEditorDialog, ThemeEditorResult } from './theme-editor-dialog';
 import './theme-editor-dialog';
 
 /** The editor's content element on its own: the dialog chrome is the browser's and E2E's. */
 const orange: AppTheme = {
+  ...PALETTE_DEFAULTS,
   id: 10,
   name: 'Orange',
   isBuiltIn: false,

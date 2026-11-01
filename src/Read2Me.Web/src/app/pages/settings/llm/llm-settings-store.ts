@@ -1,6 +1,6 @@
 import {
   type AttributionChainResponse,
-  type AttributionChainStep,
+  type AttributionChainStepDto,
   type LlmServerConfig,
   LlmSettingsApi,
   toApiError,
@@ -104,7 +104,7 @@ export class LlmSettingsStore {
     await this.load();
   }
 
-  async saveChain(steps: AttributionChainStep[], selfConsistency: boolean): Promise<void> {
+  async saveChain(steps: AttributionChainStepDto[], selfConsistency: boolean): Promise<void> {
     // Holds off any reload already in flight: it read the chain before this write.
     this.loadSeq++;
     this._chain.set(await this.api.setAttributionChain({ steps, selfConsistency }));

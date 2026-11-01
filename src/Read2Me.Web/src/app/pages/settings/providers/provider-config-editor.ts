@@ -1,5 +1,5 @@
 import { html, nothing } from 'lit-html';
-import { ParagraphTtsSettingsApi, type ProviderType, type TextStep, toApiError } from '@app/api';
+import { ParagraphTtsSettingsApi, type ProviderType, type TextStepDto, toApiError } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { computed, signal, untracked } from '@app/core/signals';
@@ -67,7 +67,7 @@ export class ProviderConfigEditor extends R2mElement {
   readonly error = signal<string | null>(null);
   readonly schemaError = signal<string | null>(null);
   readonly saving = signal(false);
-  readonly steps = signal<TextStep[]>([]);
+  readonly steps = signal<TextStepDto[]>([]);
 
   readonly type = computed(() => {
     const area = this.#area();

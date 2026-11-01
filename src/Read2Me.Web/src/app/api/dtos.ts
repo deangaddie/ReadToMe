@@ -440,32 +440,27 @@ export interface GenerateDesignPromptResponse {
 
 // ---- Provider settings schemas (`ProviderSettingsSchema.cs`) ----------------------------------------
 
-export type ProviderSettingsFieldKind = 'number' | 'boolean' | 'enum' | 'string' | 'text';
+/** One choice of an `enum` field. */
+export type SettingsOptionDto = Schema['SettingsOptionDto'];
 
-export interface ProviderSettingsOption {
-  value: string;
-  label?: string | null;
-}
+/**
+ * One editable field of a provider's settings; `key` is the settingsJson property name. `kind` is
+ * one of `number` | `boolean` | `enum` | `string` | `text` (a string on the host, not an enum); a
+ * `nullable` number may be left blank, meaning "use the server's default".
+ */
+export type SettingsFieldDto = Schema['SettingsFieldDto'];
 
-/** One editable field of a provider's settings; `key` is the settingsJson property name. */
-export interface ProviderSettingsField {
-  key: string;
-  label: string;
-  kind: ProviderSettingsFieldKind;
-  min?: number | null;
-  max?: number | null;
-  step?: number | null;
-  options?: ProviderSettingsOption[] | null;
-  default: unknown;
-  help?: string | null;
-  /** A number that may be left blank, meaning "use the server's default". */
-  nullable: boolean;
-}
+export type ParagraphTtsSettingsSchema = Schema['ParagraphTtsSettingsSchema'];
+export type VoiceDesignSettingsSchema = Schema['VoiceDesignSettingsSchema'];
+export type TranscriptionSettingsSchema = Schema['TranscriptionSettingsSchema'];
+export type SemanticSimilaritySettingsSchema = Schema['SemanticSimilaritySettingsSchema'];
 
-export interface ProviderSettingsSchema {
-  type: string;
-  fields: ProviderSettingsField[];
-}
+/** Any provider area's settings schema: what the shared provider page, store and editor carry. */
+export type ProviderSettingsSchema =
+  | ParagraphTtsSettingsSchema
+  | VoiceDesignSettingsSchema
+  | TranscriptionSettingsSchema
+  | SemanticSimilaritySettingsSchema;
 
 export interface CharacterVoicesDto {
   defaultVoiceId: Guid | null;
@@ -533,111 +528,42 @@ export interface AssemblyOutputDto {
 
 // ---- Settings entities (`SettingsEndpoints.cs`, `Read2Me.AppData.Entities`) -----------------------
 
-export interface LlmServerConfig {
-  id: number;
-  name: string;
-  apiType: LlmApiType;
-  baseUrl: string;
-  apiKey: string | null;
-  model: string | null;
-  temperature: number | null;
-  topP: number | null;
-  maxTokens: number | null;
-  frequencyPenalty: number | null;
-  presencePenalty: number | null;
-  attributionBatchSize: number;
-  promptStyle: AttributionPromptStyle;
-  supportsModelSwitch: boolean;
-}
+export type LlmServerConfig = Schema['LlmServerConfig'];
 
 // ---- LLM settings page (`LlmSettingsEndpoints.cs`, ticket 21) -------------------------------------
 
-export interface LlmModelsResponse {
-  models: string[];
-}
+export type LlmModelsResponse = Schema['LlmModelsResponse'];
 
-export interface LlmTestRequest {
-  prompt: string;
-  /** The live hub connection that receives the run's `llmTest` message. */
-  connectionId?: string | null;
-}
+/** `connectionId` is the live hub connection that receives the run's `llmTest` message. */
+export type LlmTestRequest = Schema['LlmTestRequest'];
 
-export interface LlmTestStatusResponse {
-  running: boolean;
-  configId: number | null;
-}
+export type LlmTestStatusResponse = Schema['LlmTestStatusResponse'];
 
-/** One stored chain rung. A null `promptStyle` inherits the config's own. */
-export interface AttributionChainStep {
-  configId: number;
-  thinking: boolean;
-  promptStyle: AttributionPromptStyle | null;
-}
+/** One stored chain rung. A null or absent `promptStyle` inherits the config's own. */
+export type AttributionChainStepDto = Schema['AttributionChainStepDto'];
 
-export interface AttributionChainRequest {
-  steps: AttributionChainStep[];
-  selfConsistency: boolean;
-}
+export type AttributionChainRequest = Schema['AttributionChainRequest'];
 
 /** A rung as attribution runs it; `promptStyle` is the effective style. */
-export interface ResolvedChainStep {
-  config: LlmServerConfig;
-  thinking: boolean;
-  promptStyle: AttributionPromptStyle;
-}
+export type ResolvedChainStepDto = Schema['ResolvedChainStepDto'];
 
-export interface AttributionChainResponse extends AttributionChainRequest {
-  /** The chain attribution resolves: deduped, and the default config alone when `steps` is empty. */
-  resolved: ResolvedChainStep[];
-  available: LlmServerConfig[];
-}
+/**
+ * The stored chain, plus `resolved` (the chain attribution runs: deduped, and the default config
+ * alone when `steps` is empty) and every config a step may name.
+ */
+export type AttributionChainResponse = Schema['AttributionChainResponse'];
 
-export interface TextSubstitutionStep {
-  id: string;
-  paragraphTtsServiceConfigId: number;
-  fromText: string;
-  toText: string;
-  order: number;
-}
+export type TextSubstitutionStep = Schema['TextSubstitutionStep'];
 
-export interface ToSentenceCaseConfig {
-  id: number;
-  paragraphTtsServiceConfigId: number;
-  paragraphEnabled: boolean;
-  wordEnabled: boolean;
-  wordMinLength: number;
-}
+export type ToSentenceCaseConfig = Schema['ToSentenceCaseConfig'];
 
-export interface ParagraphTtsServiceConfig {
-  id: number;
-  name: string;
-  type: ParagraphTtsServiceType;
-  settingsJson: string;
-  enabledStepIds: string[];
-  substitutionSteps: TextSubstitutionStep[];
-  toSentenceCaseConfig: ToSentenceCaseConfig | null;
-}
+export type ParagraphTtsServiceConfig = Schema['ParagraphTtsServiceConfig'];
 
-export interface VoiceDesignServiceConfig {
-  id: number;
-  name: string;
-  type: VoiceDesignServiceType;
-  settingsJson: string;
-}
+export type VoiceDesignServiceConfig = Schema['VoiceDesignServiceConfig'];
 
-export interface TranscriptionServiceConfig {
-  id: number;
-  name: string;
-  type: TranscriptionServiceType;
-  settingsJson: string;
-}
+export type TranscriptionServiceConfig = Schema['TranscriptionServiceConfig'];
 
-export interface SemanticSimilarityServiceConfig {
-  id: number;
-  name: string;
-  type: SemanticSimilarityServiceType;
-  settingsJson: string;
-}
+export type SemanticSimilarityServiceConfig = Schema['SemanticSimilarityServiceConfig'];
 
 /** What every config entity the generic settings areas serve has in common; routes key on `id`. */
 export interface SettingsConfig {
@@ -645,58 +571,34 @@ export interface SettingsConfig {
   name: string;
 }
 
-export interface SetActiveRequest {
-  id: number;
-}
+export type SetActiveRequest = Schema['SetActiveRequest'];
 
 // ---- Provider settings pages (`ProviderSettingsEndpoints.cs`, ticket 22) ---------------------------
 
-/** One text-processing step a TTS config may enable; `options` are the step's own switches. */
-export interface TextStep {
-  stepId: string;
-  label: string;
-  description: string;
-  /** False for one of the config's own substitutions. */
-  builtIn: boolean;
-  options?: ProviderSettingsField[] | null;
-}
+/**
+ * One text-processing step a TTS config may enable; `builtIn` is false for one of the config's own
+ * substitutions, and `options` are the step's own switches.
+ */
+export type TextStepDto = Schema['TextStepDto'];
 
-export interface VoiceDesignSampleText {
-  /** The stored override; null while the built-in `default` is in use. */
-  text: string | null;
-  default: string;
-  /** The longest override a save accepts (every designed voice speaks this text). */
-  maxLength: number;
-}
+/**
+ * `text` is the stored override, null while the built-in `default` is in use; `maxLength` is the
+ * longest override a save accepts (every designed voice speaks this text).
+ */
+export type VoiceDesignSampleTextResponse = Schema['VoiceDesignSampleTextResponse'];
 
-export interface VoiceDesignSampleTextRequest {
-  /** Null, blank or the default text clears the override. */
-  text: string | null;
-}
+/** Null, blank or the default text clears the override. */
+export type VoiceDesignSampleTextRequest = Schema['VoiceDesignSampleTextRequest'];
 
-export interface VoiceDesignTestRequest {
-  prompt: string;
-}
+export type VoiceDesignTestRequest = Schema['VoiceDesignTestRequest'];
 
-export interface SimilarityTestRequest {
-  text1: string;
-  text2: string;
-}
+export type SimilarityTestRequest = Schema['SimilarityTestRequest'];
 
-export interface VoiceDesignTestResponse {
-  audioBase64: string;
-  contentType: string;
-}
+export type VoiceDesignTestResponse = Schema['VoiceDesignTestResponse'];
 
-export interface TranscriptionTestResponse {
-  transcript: string;
-}
+export type TranscriptionTestResponse = Schema['TranscriptionTestResponse'];
 
-export interface SimilarityTestResponse {
-  score: number;
-  threshold: number;
-  pass: boolean;
-}
+export type SimilarityTestResponse = Schema['SimilarityTestResponse'];
 
 // ---- Prompts + audio processing (`SettingsEndpoints.cs`) -------------------------------------------
 
@@ -716,26 +618,17 @@ export type PromptTemplateRequest = Schema['PromptTemplateRequest'];
 
 export type PromptPreviewRequest = Schema['PromptPreviewRequest'];
 
-export interface PromptPreviewResponse {
-  rendered: string;
-}
+export type PromptPreviewResponse = Schema['PromptPreviewResponse'];
 
-/** `GET /api/settings/prompts/catalog`: one prompt kind as the settings page shows it. */
-export interface PromptCatalogEntry {
-  kind: PromptKind;
-  title: string;
-  description: string;
-  /** Token names without braces, e.g. `book_title`. */
-  tokens: string[];
-  /** The JSON shape the LLM must answer with; null for a plain-text prompt (voice). */
-  expectedResponse: string | null;
-  /** The resolved template: the stored override, else `defaultTemplate`. */
-  template: string;
-  defaultTemplate: string;
-  isOverridden: boolean;
-  /** Compatibility warnings, e.g. "Stored override missing {{narrator_identity}}". */
-  warnings: string[];
-}
+/**
+ * `GET /api/settings/prompts/catalog`: one prompt kind as the settings page shows it. `tokens` are
+ * names without braces (`book_title`); `expectedResponse` is the JSON shape the LLM must answer
+ * with, null for a plain-text prompt (voice); `template` is the stored override, else
+ * `defaultTemplate`; `warnings` are compatibility warnings ("Stored override missing …").
+ * The host sends `kind` as a string (kinds are kebab-case route segments, not enum members);
+ * it is always one of {@link PROMPT_KINDS}, so the client narrows it.
+ */
+export type PromptCatalogEntry = Omit<Schema['PromptCatalogEntry'], 'kind'> & { kind: PromptKind };
 
 /**
  * `AudioProcessingSettingsService.GetAsync()`; the PUT only accepts the four scalars below.
@@ -943,27 +836,13 @@ export interface PreflightRunResponse {
 
 // ---- Themes (`ThemeEndpoints.cs`, ticket 04) --------------------------------------------------------
 
-export interface AppTheme {
-  id: number;
-  name: string;
-  isBuiltIn: boolean;
-  isDark: boolean;
-  primary: string;
-  secondary: string;
-  background?: string | null;
-  surface?: string | null;
-  appbarBackground?: string | null;
-  drawerBackground?: string | null;
-  textPrimary?: string | null;
-  textSecondary?: string | null;
-}
+/** A theme row; the optional colours are null where the palette default applies. */
+export type AppTheme = Schema['AppTheme'];
 
-export interface ThemeSelection {
-  selectedThemeId: number | null;
-  followSystemPreference: boolean;
-}
+export type ThemeSelectionDto = Schema['ThemeSelectionDto'];
 
-export type ThemeSelectionUpdate = Partial<ThemeSelection>;
+/** Both fields optional, so a client can flip one without knowing the other. */
+export type ThemeSelectionUpdateRequest = Schema['ThemeSelectionUpdateRequest'];
 
 // ---- Cast (`CharacterEndpoints.cs`, ticket 15) ---------------------------------------------------
 
@@ -1013,14 +892,14 @@ export interface ParagraphContextDto {
 // ---- Voice audio editor (`VoiceEditorEndpoints.cs`) ------------------------------------------------
 
 /**
- * One step of the voice editor's checklist: its dials share `ProviderSettingsField`'s shape so
+ * One step of the voice editor's checklist: its dials are `SettingsFieldDto`s so
  * `r2m-settings-form` renders them; `defaults` holds the dial keys' starting values.
  */
 export interface StepCatalogEntryDto {
   stepId: string;
   label: string;
   blurb: string;
-  dials: ProviderSettingsField[];
+  dials: SettingsFieldDto[];
   defaults: Record<string, unknown>;
 }
 

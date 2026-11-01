@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { ProviderSettingsField, ProviderType, TextStep } from '@app/api';
+import type { SettingsFieldDto, ProviderType, TextStepDto } from '@app/api';
 import { override, resetServices } from '@app/core/services';
 import { ConfirmService, type ConfirmOptions } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
@@ -16,11 +16,11 @@ import './provider-settings-page';
  * and its HTTP goes through `FakeApi`; the hub is `FakeLive`; the discard prompt is a recorded
  * stub. The editor's managed-service resolve 404s harmlessly.
  */
-const num = (key: string, label: string, extra: Partial<ProviderSettingsField> = {}) =>
-  ({ key, label, kind: 'number', default: 1, nullable: false, ...extra }) as ProviderSettingsField;
+const num = (key: string, label: string, extra: Partial<SettingsFieldDto> = {}) =>
+  ({ key, label, kind: 'number', default: 1, nullable: false, ...extra }) as SettingsFieldDto;
 
 /** A cut of what the host's schema endpoints answer per provider type. */
-const SCHEMAS: Record<string, ProviderSettingsField[]> = {
+const SCHEMAS: Record<string, SettingsFieldDto[]> = {
   'paragraph-tts:VoxCpm2': [
     num('cfg_value', 'CFG Value', { min: 1, max: 5, step: 0.1, default: 2 }),
   ],
@@ -44,7 +44,7 @@ const SCHEMAS: Record<string, ProviderSettingsField[]> = {
   ],
 };
 
-const STEPS: TextStep[] = [
+const STEPS: TextStepDto[] = [
   {
     stepId: 'to-sentence-case',
     label: 'Sentence case',

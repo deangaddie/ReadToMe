@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { AppTheme } from '@app/api';
+import { PALETTE_DEFAULTS } from '../../../../testing/themes';
 import { DEFAULT_DRAFT, fromDraft, isDraftValid, toDraft, validateDraft } from './theme-form';
 
 describe('theme form', () => {
@@ -21,6 +22,7 @@ describe('theme form', () => {
 
   it('round-trips a theme through the draft, normalising hex and blanking to null', () => {
     const theme: AppTheme = {
+      ...PALETTE_DEFAULTS,
       id: 4,
       name: 'Sunset',
       isBuiltIn: false,

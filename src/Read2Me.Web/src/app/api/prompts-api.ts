@@ -1,39 +1,36 @@
 import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
-import type { PromptCatalogEntry, PromptKind, PromptPreviewResponse } from './dtos';
+import type { PromptCatalogEntry, PromptKind } from './dtos';
 
 /** `SettingsEndpoints.MapPromptEndpoints`: LLM prompt templates keyed by kind. */
 export class PromptsApi {
   private readonly api = use(ApiClient);
-  private readonly base = '/api/settings/prompts';
 
-  /** Every template, resolved (stored override or built-in default). */
-  all(): Promise<Record<PromptKind, string>> {
-    return this.api.untypedGet<Record<PromptKind, string>>(this.base);
+  /** Every template, resolved (stored override or built-in default), keyed by every kind. */
+  async all(): Promise<Record<PromptKind, string>> {
+    return (await this.api.get('/api/settings/prompts')) as Record<PromptKind, string>;
   }
 
   /** Every kind with its copy, tokens, resolved and default templates, override flag and warnings. */
-  catalog(): Promise<PromptCatalogEntry[]> {
-    return this.api.untypedGet<PromptCatalogEntry[]>(`${this.base}/catalog`);
+  async catalog(): Promise<PromptCatalogEntry[]> {
+    return (await this.api.get('/api/settings/prompts/catalog')) as PromptCatalogEntry[];
   }
 
   /** Renders a template — saved or not — with the kind's sample values. */
   async preview(kind: PromptKind, template: string): Promise<string> {
-    const response = await this.api.untypedPost<PromptPreviewResponse>(
-      `${this.base}/${kind}/preview`,
-      {
-        template,
-      },
-    );
+    const response = await this.api.post('/api/settings/prompts/{kind}/preview', {
+      path: { kind },
+      body: { template },
+    });
     return response.rendered;
   }
 
   set(kind: PromptKind, template: string): Promise<void> {
-    return this.api.untypedPut<void>(`${this.base}/${kind}`, { template });
+    return this.api.put('/api/settings/prompts/{kind}', { path: { kind }, body: { template } });
   }
 
   /** Back to the built-in default. */
   reset(kind: PromptKind): Promise<void> {
-    return this.api.untypedDelete(`${this.base}/${kind}`);
+    return this.api.delete('/api/settings/prompts/{kind}', { path: { kind } });
   }
 }

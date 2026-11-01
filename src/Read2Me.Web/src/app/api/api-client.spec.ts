@@ -202,9 +202,9 @@ describe('ApiClient path-typed methods', () => {
     expect(requests[0]?.url).toBe('/api/projects/dracula/history/s1/restore');
     expect(requests[0]?.init.method).toBe('POST');
 
-    await api.put('/api/settings/themes/{id}', {
-      path: { id: 7 },
-      body: { id: 7, name: 'Dusk' },
+    await api.put('/api/projects/{folder}/narrator-only-mode', {
+      path: { folder: 'dracula' },
+      body: { enabled: true },
     });
     expect(requests[1]?.init.method).toBe('PUT');
     expect(headersOf(requests[1]?.init)['Content-Type']).toBe('application/json');

@@ -1,4 +1,4 @@
-import type { AttributionChainStep, AttributionPromptStyle, LlmServerConfig } from '@app/api';
+import type { AttributionChainStepDto, AttributionPromptStyle, LlmServerConfig } from '@app/api';
 
 /**
  * Pure edits over the stored attribution chain. Steps
@@ -23,10 +23,10 @@ export interface ChainOption {
 }
 
 export function moveStep(
-  steps: AttributionChainStep[],
+  steps: AttributionChainStepDto[],
   index: number,
   delta: -1 | 1,
-): AttributionChainStep[] {
+): AttributionChainStepDto[] {
   const target = index + delta;
   if (index < 0 || index >= steps.length || target < 0 || target >= steps.length) return steps;
   return steps.map((step, i) =>
@@ -34,14 +34,17 @@ export function moveStep(
   );
 }
 
-export function removeStep(steps: AttributionChainStep[], index: number): AttributionChainStep[] {
+export function removeStep(
+  steps: AttributionChainStepDto[],
+  index: number,
+): AttributionChainStepDto[] {
   return index < 0 || index >= steps.length ? steps : steps.filter((_, i) => i !== index);
 }
 
 export function addStep(
-  steps: AttributionChainStep[],
-  step: AttributionChainStep,
-): AttributionChainStep[] {
+  steps: AttributionChainStepDto[],
+  step: AttributionChainStepDto,
+): AttributionChainStepDto[] {
   const present = steps.some(
     (s) =>
       s.configId === step.configId &&
@@ -51,11 +54,11 @@ export function addStep(
   return present ? steps : [...steps, step];
 }
 
-const effectiveStyle = (step: AttributionChainStep, config: LlmServerConfig) =>
+const effectiveStyle = (step: AttributionChainStepDto, config: LlmServerConfig) =>
   step.promptStyle ?? config.promptStyle;
 
 export function chainRows(
-  steps: readonly AttributionChainStep[],
+  steps: readonly AttributionChainStepDto[],
   configs: readonly LlmServerConfig[],
 ): ChainRow[] {
   const byId = new Map(configs.map((c) => [c.id, c]));
@@ -84,7 +87,7 @@ const VARIANTS: readonly { promptStyle: AttributionPromptStyle; thinking: boolea
  * occupies the variant it actually runs as.
  */
 export function chainOptions(
-  steps: readonly AttributionChainStep[],
+  steps: readonly AttributionChainStepDto[],
   configs: readonly LlmServerConfig[],
 ): ChainOption[] {
   const key = (id: number, thinking: boolean, style: AttributionPromptStyle) =>

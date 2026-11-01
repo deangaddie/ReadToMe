@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { AppTheme } from '@app/api';
+import { PALETTE_DEFAULTS } from '../../testing/themes';
 import { resetServices } from '@app/core/services';
 import { FakeApi, problem } from '../../testing/fake-api';
 import { ThemeService } from './theme.service';
 
 const light: AppTheme = {
+  ...PALETTE_DEFAULTS,
   id: 1,
   name: 'Light',
   isBuiltIn: true,
@@ -14,6 +16,7 @@ const light: AppTheme = {
 };
 const dark: AppTheme = { ...light, id: 2, name: 'Dark', isDark: true, primary: '#7C5CBF' };
 const orange: AppTheme = {
+  ...PALETTE_DEFAULTS,
   id: 10,
   name: 'Orange',
   isBuiltIn: false,

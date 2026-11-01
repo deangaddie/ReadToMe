@@ -33,7 +33,7 @@ public class SettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Assert.Equal(HttpStatusCode.OK, update.StatusCode);
 
         var setActive = await Http.PutAsJsonAsync($"{app.BaseUrl}/api/settings/llm/active", new { id });
-        Assert.Equal(HttpStatusCode.OK, setActive.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, setActive.StatusCode);
 
         var active = JsonDocument.Parse(await Http.GetStringAsync($"{app.BaseUrl}/api/settings/llm/active"));
         Assert.Equal(id, active.RootElement.GetProperty("id").GetInt32());
@@ -57,13 +57,13 @@ public class SettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 
         var put = await Http.PutAsJsonAsync($"{app.BaseUrl}/api/settings/prompts/discover-characters",
             new { template = "CUSTOM {{book_title}}" });
-        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, put.StatusCode);
 
         var updated = JsonDocument.Parse(await Http.GetStringAsync($"{app.BaseUrl}/api/settings/prompts"));
         Assert.Equal("CUSTOM {{book_title}}", updated.RootElement.GetProperty("discover-characters").GetString());
 
         var reset = await Http.DeleteAsync($"{app.BaseUrl}/api/settings/prompts/discover-characters");
-        Assert.Equal(HttpStatusCode.OK, reset.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, reset.StatusCode);
 
         var restored = JsonDocument.Parse(await Http.GetStringAsync($"{app.BaseUrl}/api/settings/prompts"));
         Assert.Equal(original.GetString(), restored.RootElement.GetProperty("discover-characters").GetString());
@@ -104,7 +104,7 @@ public class SettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             // A stored override without {{narrator_identity}} is flagged; one with it is not.
             var put = await Http.PutAsJsonAsync($"{app.BaseUrl}/api/settings/prompts/character",
                 new { template = "Who speaks in {{book_title}}? {{context_json}} {{response_format}}" });
-            Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, put.StatusCode);
             character = await CatalogEntryAsync("character");
             Assert.True(character.GetProperty("isOverridden").GetBoolean());
             Assert.Equal("Stored override missing {{narrator_identity}}",
@@ -119,7 +119,7 @@ public class SettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             Assert.Empty(character.GetProperty("warnings").EnumerateArray());
 
             var reset = await Http.DeleteAsync($"{app.BaseUrl}/api/settings/prompts/character");
-            Assert.Equal(HttpStatusCode.OK, reset.StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, reset.StatusCode);
             character = await CatalogEntryAsync("character");
             Assert.False(character.GetProperty("isOverridden").GetBoolean());
         }

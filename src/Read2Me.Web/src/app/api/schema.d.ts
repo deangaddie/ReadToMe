@@ -4667,7 +4667,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["LlmServerConfig"][];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -4695,12 +4697,14 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Created */
+                201: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["LlmServerConfig"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -4741,6 +4745,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["LlmServerConfig"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -4754,7 +4767,7 @@ export interface paths {
                 };
             };
         };
-        /** Select the active llm config. */
+        /** Select the active llm config. 204 on success, 404 when no config has the id. */
         put: {
             parameters: {
                 query?: never;
@@ -4768,8 +4781,15 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -4815,7 +4835,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["AttributionChainResponse"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -4847,7 +4869,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["AttributionChainResponse"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -4895,7 +4919,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["LlmModelsResponse"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -4936,7 +4962,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["LlmTestStatusResponse"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -4986,6 +5014,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["LlmServerConfig"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -5012,8 +5049,8 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -5060,8 +5097,15 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -5093,7 +5137,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Stop the running test send (one runs at a time, whichever config it targets). Harmless when nothing is running. */
+        /** Stop the running test send (one runs at a time, whichever config it targets). Harmless when nothing is running. 204. */
         post: {
             parameters: {
                 query?: never;
@@ -5105,8 +5149,8 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -5151,7 +5195,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ParagraphTtsServiceConfig"][];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -5179,12 +5225,14 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Created */
+                201: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ParagraphTtsServiceConfig"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -5225,6 +5273,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["ParagraphTtsServiceConfig"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -5238,7 +5295,7 @@ export interface paths {
                 };
             };
         };
-        /** Select the active paragraph-tts config. */
+        /** Select the active paragraph-tts config. 204 on success, 404 when no config has the id. */
         put: {
             parameters: {
                 query?: never;
@@ -5252,8 +5309,15 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -5301,7 +5365,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ParagraphTtsSettingsSchema"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -5351,6 +5417,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["ParagraphTtsServiceConfig"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -5377,8 +5452,8 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -5421,6 +5496,15 @@ export interface paths {
             responses: {
                 /** @description OK */
                 200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TextStepDto"][];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -5467,7 +5551,11 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": {
+                            [key: string]: string;
+                        };
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -5510,7 +5598,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["PromptCatalogEntry"][];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -5539,7 +5629,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Override one prompt template. */
+        /** Override one prompt template. 204 on success. */
         put: {
             parameters: {
                 query?: never;
@@ -5555,8 +5645,8 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -5574,7 +5664,7 @@ export interface paths {
             };
         };
         post?: never;
-        /** Reset one prompt template to its built-in default. */
+        /** Reset one prompt template to its built-in default. 204 on success. */
         delete: {
             parameters: {
                 query?: never;
@@ -5586,8 +5676,8 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -5639,7 +5729,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["PromptPreviewResponse"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -5680,7 +5772,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["SemanticSimilarityServiceConfig"][];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -5708,12 +5802,14 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Created */
+                201: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["SemanticSimilarityServiceConfig"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -5754,6 +5850,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["SemanticSimilarityServiceConfig"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -5767,7 +5872,7 @@ export interface paths {
                 };
             };
         };
-        /** Select the active semantic-similarity config. */
+        /** Select the active semantic-similarity config. 204 on success, 404 when no config has the id. */
         put: {
             parameters: {
                 query?: never;
@@ -5781,8 +5886,15 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -5830,7 +5942,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["SemanticSimilaritySettingsSchema"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -5880,6 +5994,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["SemanticSimilarityServiceConfig"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -5906,8 +6029,8 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -5959,6 +6082,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["SimilarityTestResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -6000,7 +6132,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["AppTheme"][];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -6028,12 +6162,14 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Created */
+                201: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["AppTheme"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -6074,7 +6210,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ThemeSelectionDto"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -6103,6 +6241,15 @@ export interface paths {
             responses: {
                 /** @description OK */
                 200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ThemeSelectionDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -6155,6 +6302,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["AppTheme"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -6181,8 +6337,15 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -6226,7 +6389,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["TranscriptionServiceConfig"][];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -6254,12 +6419,14 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Created */
+                201: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["TranscriptionServiceConfig"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -6300,6 +6467,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["TranscriptionServiceConfig"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -6313,7 +6489,7 @@ export interface paths {
                 };
             };
         };
-        /** Select the active transcription config. */
+        /** Select the active transcription config. 204 on success, 404 when no config has the id. */
         put: {
             parameters: {
                 query?: never;
@@ -6327,8 +6503,15 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -6376,7 +6559,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["TranscriptionSettingsSchema"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -6426,6 +6611,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["TranscriptionServiceConfig"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -6452,8 +6646,8 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -6501,6 +6695,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["TranscriptionTestResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -6542,7 +6745,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["VoiceDesignServiceConfig"][];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -6570,12 +6775,14 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Created */
+                201: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["VoiceDesignServiceConfig"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -6616,6 +6823,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["VoiceDesignServiceConfig"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -6629,7 +6845,7 @@ export interface paths {
                 };
             };
         };
-        /** Select the active voice-design config. */
+        /** Select the active voice-design config. 204 on success, 404 when no config has the id. */
         put: {
             parameters: {
                 query?: never;
@@ -6643,8 +6859,15 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -6690,7 +6913,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["VoiceDesignSampleTextResponse"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -6722,7 +6947,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["VoiceDesignSampleTextResponse"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -6766,7 +6993,9 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["VoiceDesignSettingsSchema"];
+                    };
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -6816,6 +7045,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["VoiceDesignServiceConfig"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -6842,8 +7080,8 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -6892,6 +7130,15 @@ export interface paths {
             responses: {
                 /** @description OK */
                 200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VoiceDesignTestResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -7268,19 +7515,19 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         AppTheme: {
-            appbarBackground?: null | string;
-            background?: null | string;
-            drawerBackground?: null | string;
+            appbarBackground: null | string;
+            background: null | string;
+            drawerBackground: null | string;
             /** Format: int32 */
-            id?: number;
-            isBuiltIn?: boolean;
-            isDark?: boolean;
-            name?: string;
-            primary?: string;
-            secondary?: string;
-            surface?: null | string;
-            textPrimary?: null | string;
-            textSecondary?: null | string;
+            id: number;
+            isBuiltIn: boolean;
+            isDark: boolean;
+            name: string;
+            primary: string;
+            secondary: string;
+            surface: null | string;
+            textPrimary: null | string;
+            textSecondary: null | string;
         };
         ApplyDiscoveryRow: {
             aliases: null | string[];
@@ -7297,6 +7544,12 @@ export interface components {
             /** @default false */
             selfConsistency: boolean;
             steps?: null | components["schemas"]["AttributionChainStepDto"][];
+        };
+        AttributionChainResponse: {
+            available: components["schemas"]["LlmServerConfig"][];
+            resolved: components["schemas"]["ResolvedChainStepDto"][];
+            selfConsistency: boolean;
+            steps: components["schemas"]["AttributionChainStepDto"][];
         };
         AttributionChainStepDto: {
             /** Format: int32 */
@@ -7492,32 +7745,40 @@ export interface components {
         JsonObject: Record<string, never>;
         /** @enum {unknown} */
         LlmApiType: "OpenAiCompatible";
+        LlmModelsResponse: {
+            models: string[];
+        };
         LlmServerConfig: {
-            apiKey?: null | string;
-            apiType?: components["schemas"]["LlmApiType"];
+            apiKey: null | string;
+            apiType: components["schemas"]["LlmApiType"];
             /** Format: int32 */
-            attributionBatchSize?: number;
-            baseUrl?: string;
+            attributionBatchSize: number;
+            baseUrl: string;
             /** Format: double */
-            frequencyPenalty?: null | number;
+            frequencyPenalty: null | number;
             /** Format: int32 */
-            id?: number;
+            id: number;
             /** Format: int32 */
-            maxTokens?: null | number;
-            model?: null | string;
-            name?: string;
+            maxTokens: null | number;
+            model: null | string;
+            name: string;
             /** Format: double */
-            presencePenalty?: null | number;
-            promptStyle?: components["schemas"]["AttributionPromptStyle"];
-            supportsModelSwitch?: boolean;
+            presencePenalty: null | number;
+            promptStyle: components["schemas"]["AttributionPromptStyle"];
+            supportsModelSwitch: boolean;
             /** Format: double */
-            temperature?: null | number;
+            temperature: null | number;
             /** Format: double */
-            topP?: null | number;
+            topP: null | number;
         };
         LlmTestRequest: {
             connectionId?: null | string;
             prompt?: null | string;
+        };
+        LlmTestStatusResponse: {
+            /** Format: int32 */
+            configId: null | number;
+            running: boolean;
         };
         ManualImportRequest: {
             chapter: null | components["schemas"]["SplitRuleRequest"];
@@ -7569,17 +7830,21 @@ export interface components {
             review: number;
         };
         ParagraphTtsServiceConfig: {
-            enabledStepIds?: string[];
+            enabledStepIds: string[];
             /** Format: int32 */
-            id?: number;
-            name?: string;
-            settingsJson?: string;
-            substitutionSteps?: components["schemas"]["TextSubstitutionStep"][];
-            toSentenceCaseConfig?: null | components["schemas"]["ToSentenceCaseConfig"];
-            type?: components["schemas"]["ParagraphTtsServiceType"];
+            id: number;
+            name: string;
+            settingsJson: string;
+            substitutionSteps: components["schemas"]["TextSubstitutionStep"][];
+            toSentenceCaseConfig: null | components["schemas"]["ToSentenceCaseConfig"];
+            type: components["schemas"]["ParagraphTtsServiceType"];
         };
         /** @enum {unknown} */
         ParagraphTtsServiceType: "VoxCpm2" | "Chatterbox" | "Qwen3Base" | "Breeze";
+        ParagraphTtsSettingsSchema: {
+            fields: components["schemas"]["SettingsFieldDto"][];
+            type: components["schemas"]["ParagraphTtsServiceType"];
+        };
         ParagraphsEnqueueRequest: {
             paragraphIds: string[];
         };
@@ -7674,8 +7939,22 @@ export interface components {
             folderName: string;
             title: string;
         };
+        PromptCatalogEntry: {
+            defaultTemplate: string;
+            description: string;
+            expectedResponse: null | string;
+            isOverridden: boolean;
+            kind: string;
+            template: string;
+            title: string;
+            tokens: string[];
+            warnings: string[];
+        };
         PromptPreviewRequest: {
             template: string;
+        };
+        PromptPreviewResponse: {
+            rendered: string;
         };
         PromptTemplateRequest: {
             template: string;
@@ -7785,6 +8064,11 @@ export interface components {
             /** @default false */
             thinking: boolean;
         };
+        ResolvedChainStepDto: {
+            config: components["schemas"]["LlmServerConfig"];
+            promptStyle: components["schemas"]["AttributionPromptStyle"];
+            thinking: boolean;
+        };
         RestorePreviewDto: {
             /** Format: int32 */
             audioDiscardCount: number;
@@ -7798,13 +8082,17 @@ export interface components {
         };
         SemanticSimilarityServiceConfig: {
             /** Format: int32 */
-            id?: number;
-            name?: string;
-            settingsJson?: string;
-            type?: components["schemas"]["SemanticSimilarityServiceType"];
+            id: number;
+            name: string;
+            settingsJson: string;
+            type: components["schemas"]["SemanticSimilarityServiceType"];
         };
         /** @enum {unknown} */
         SemanticSimilarityServiceType: "MiniLmL6" | "MpnetBaseV2";
+        SemanticSimilaritySettingsSchema: {
+            fields: components["schemas"]["SettingsFieldDto"][];
+            type: components["schemas"]["SemanticSimilarityServiceType"];
+        };
         SetActiveRequest: {
             /** Format: int32 */
             id: number;
@@ -7815,6 +8103,26 @@ export interface components {
         SetPronunciationRequest: {
             spokenForm: null | string;
             writtenForm: null | string;
+        };
+        SettingsFieldDto: {
+            default?: unknown;
+            help?: null | string;
+            key: string;
+            kind: string;
+            label: string;
+            /** Format: double */
+            max?: null | number;
+            /** Format: double */
+            min?: null | number;
+            /** @default false */
+            nullable: boolean;
+            options?: null | components["schemas"]["SettingsOptionDto"][];
+            /** Format: double */
+            step?: null | number;
+        };
+        SettingsOptionDto: {
+            label?: null | string;
+            value: string;
         };
         /** @enum {unknown} */
         SetupCheckGroup: "WorkspaceAndTools" | "AiConfigs" | "DockerServices";
@@ -7880,6 +8188,13 @@ export interface components {
             text1?: null | string;
             text2?: null | string;
         };
+        SimilarityTestResponse: {
+            pass: boolean;
+            /** Format: double */
+            score: number;
+            /** Format: double */
+            threshold: number;
+        };
         SplitRuleRequest: {
             mode: null | string;
             prefix?: null | string;
@@ -7910,14 +8225,26 @@ export interface components {
             nodeKind: components["schemas"]["NodeKind"];
             placements: components["schemas"]["StructurePlacementDto"][];
         };
+        TextStepDto: {
+            builtIn: boolean;
+            description: string;
+            label: string;
+            options?: null | components["schemas"]["SettingsFieldDto"][];
+            stepId: string;
+        };
         TextSubstitutionStep: {
-            fromText?: string;
-            id?: string;
+            fromText: string;
+            id: string;
             /** Format: int32 */
-            order?: number;
+            order: number;
             /** Format: int32 */
-            paragraphTtsServiceConfigId?: number;
-            toText?: string;
+            paragraphTtsServiceConfigId: number;
+            toText: string;
+        };
+        ThemeSelectionDto: {
+            followSystemPreference: boolean;
+            /** Format: int32 */
+            selectedThemeId: null | number;
         };
         ThemeSelectionUpdateRequest: {
             followSystemPreference?: null | boolean;
@@ -7926,23 +8253,30 @@ export interface components {
         };
         ToSentenceCaseConfig: {
             /** Format: int32 */
-            id?: number;
-            paragraphEnabled?: boolean;
+            id: number;
+            paragraphEnabled: boolean;
             /** Format: int32 */
-            paragraphTtsServiceConfigId?: number;
-            wordEnabled?: boolean;
+            paragraphTtsServiceConfigId: number;
+            wordEnabled: boolean;
             /** Format: int32 */
-            wordMinLength?: number;
+            wordMinLength: number;
         };
         TranscriptionServiceConfig: {
             /** Format: int32 */
-            id?: number;
-            name?: string;
-            settingsJson?: string;
-            type?: components["schemas"]["TranscriptionServiceType"];
+            id: number;
+            name: string;
+            settingsJson: string;
+            type: components["schemas"]["TranscriptionServiceType"];
         };
         /** @enum {unknown} */
         TranscriptionServiceType: "LocalWhisper";
+        TranscriptionSettingsSchema: {
+            fields: components["schemas"]["SettingsFieldDto"][];
+            type: components["schemas"]["TranscriptionServiceType"];
+        };
+        TranscriptionTestResponse: {
+            transcript: string;
+        };
         TryPronunciationRequest: {
             asWritten: boolean;
             draft: null | components["schemas"]["PronunciationDraftRequest"];
@@ -7964,17 +8298,31 @@ export interface components {
         VoiceDesignSampleTextRequest: {
             text?: null | string;
         };
+        VoiceDesignSampleTextResponse: {
+            default: string;
+            /** Format: int32 */
+            maxLength: number;
+            text: null | string;
+        };
         VoiceDesignServiceConfig: {
             /** Format: int32 */
-            id?: number;
-            name?: string;
-            settingsJson?: string;
-            type?: components["schemas"]["VoiceDesignServiceType"];
+            id: number;
+            name: string;
+            settingsJson: string;
+            type: components["schemas"]["VoiceDesignServiceType"];
         };
         /** @enum {unknown} */
         VoiceDesignServiceType: "VoxCpm2" | "Qwen3" | "Breeze";
+        VoiceDesignSettingsSchema: {
+            fields: components["schemas"]["SettingsFieldDto"][];
+            type: components["schemas"]["VoiceDesignServiceType"];
+        };
         VoiceDesignTestRequest: {
             prompt?: null | string;
+        };
+        VoiceDesignTestResponse: {
+            audioBase64: string;
+            contentType: string;
         };
     };
     responses: never;
