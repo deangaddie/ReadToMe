@@ -13,9 +13,9 @@ source of truth.
 dictionary keys; route and query names match exactly, so `nodes/Chapter/...` is a 400. An
 integer for an enum, or a string for a number (`"3"`), is a 400.
 
-**Errors**: RFC 7807 ProblemDetails, the `default` response of every operation in the document. 400 malformed input, 404 unknown folder/entity,
-409 already-running or blocked (assembly carries `audioRemainingCount`), 422 domain
-failure (message in `detail`).
+**Errors**: RFC 7807 ProblemDetails, the `default` response of every operation in the
+document. 400 malformed input, 404 unknown folder/entity, 409 already-running or blocked
+(assembly carries `audioRemainingCount`), 422 domain failure (message in `detail`).
 
 **Polling pattern**: the four long operations (attribution, audio, voice batch,
 assembly) return `202 Accepted` and run in the background. Poll their status

@@ -99,8 +99,8 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
 
     /// <summary>
     /// A 2xx answer under <c>/api/</c> declares its content (#168): a JSON body from a <c>Results&lt;&gt;</c>
-    /// union, or a file's content type. A 200 with no content is an untyped <c>IResult</c> handler; a 201,
-    /// 202 or 204 with no content has no body by design. <see cref="NotYetTyped"/> holds the operations the
+    /// union, or a file's content type. Only a 204, or a bare 202, has no body by design;
+    /// an untyped <c>IResult</c> handler shows as a 200 with no content. <see cref="NotYetTyped"/> holds the operations the
     /// endpoint slices still have to convert, and shrinks as they do.
     /// </summary>
     [Fact]
@@ -108,7 +108,7 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
     {
         var undeclared = Operations(await DocumentAsync())
             .Where(o => o.Operation["responses"]?.AsObject() is { } responses
-                        && responses.Any(r => r.Key == "200" && r.Value?["content"] is null))
+                        && responses.Any(r => r.Key.StartsWith('2') && r.Key is not ("202" or "204") && r.Value?["content"] is null))
             .Select(o => o.Key)
             .ToHashSet();
 
@@ -116,7 +116,7 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
         var stale = NotYetTyped.Except(undeclared).Order(StringComparer.Ordinal).ToList();
 
         Assert.True(missing.Count == 0 && stale.Count == 0,
-            "Operations answering 200 with undeclared content (return a Results<> union):\n  " + string.Join("\n  ", missing) +
+            "Operations answering 2xx with undeclared content (return a Results<> union):\n  " + string.Join("\n  ", missing) +
             "\nNotYetTyped entries that are now typed or gone (remove them):\n  " + string.Join("\n  ", stale));
     }
 
@@ -165,16 +165,19 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
         {
             foreach (var argument in type.GetGenericArguments())
                 Walk(argument, seen);
-            if (type.Namespace?.StartsWith("System", StringComparison.Ordinal) == true)
+            if (InNamespace(type, "System"))
                 return;
         }
-        if (type.IsPrimitive || type.Namespace?.StartsWith("System", StringComparison.Ordinal) == true || !seen.Add(type))
+        if (type.IsPrimitive || InNamespace(type, "System") || !seen.Add(type))
             return;
-        if (type.Namespace?.StartsWith("Read2Me", StringComparison.Ordinal) != true || type.IsEnum)
+        if (!InNamespace(type, "Read2Me") || type.IsEnum)
             return;
         foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
             Walk(property.PropertyType, seen);
     }
+
+    private static bool InNamespace(Type type, string root) =>
+        type.Namespace?.StartsWith(root, StringComparison.Ordinal) == true;
 
     /// <summary>Every <c>/api/</c> operation, keyed <c>"GET /api/…"</c>.</summary>
     private static IEnumerable<(string Key, JsonObject Operation)> Operations(JsonObject document) =>
