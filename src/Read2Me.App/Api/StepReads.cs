@@ -51,7 +51,8 @@ namespace Read2Me.App.Api
                         In = ParameterLocation.Query,
                         Required = false,
                         Description = "A History step id: read the project as it stood after that step instead of now. " +
-                                      "404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened.",
+                                      "400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, " +
+                                      "503 when opening it failed for a reason that passes (try again).",
                         Schema = new OpenApiSchema { Type = JsonSchemaType.String, Format = "uuid" },
                     });
                     return Task.CompletedTask;

@@ -8,8 +8,8 @@ namespace Read2Me.App.Api
     /// <summary>
     /// States the agent API's one failure rule in one place (#168): every <c>/api/</c> operation gets a
     /// <c>default</c> response of <c>ProblemDetails</c> as <c>application/problem+json</c>, since any
-    /// non-2xx answer is a problem. Endpoints declare only their 2xx outcomes; the statuses a refusal
-    /// can carry are in each operation's summary.
+    /// non-2xx answer is a problem. Endpoints declare only their 2xx outcomes; which statuses a refusal
+    /// carries is prose in the operation's summary where it matters.
     /// </summary>
     public sealed class ProblemResponseTransformer : IOpenApiDocumentTransformer
     {

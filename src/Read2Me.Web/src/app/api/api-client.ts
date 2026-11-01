@@ -26,14 +26,14 @@ export type SuccessBody<O> = O extends { responses: infer R }
   ? { [S in keyof R & SuccessStatus]: BodyOf<R[S]> }[keyof R & SuccessStatus]
   : never;
 
-type Parameters_<O> = O extends { parameters: infer P } ? P : never;
+type ParamsOf<O> = O extends { parameters: infer P } ? P : never;
 
-type PathPart<O> = Parameters_<O> extends { path: infer V } ? { path: V } : { path?: never };
+type PathPart<O> = ParamsOf<O> extends { path: infer V } ? { path: V } : { path?: never };
 
 type QueryPart<O> =
-  Parameters_<O> extends { query: infer Q }
+  ParamsOf<O> extends { query: infer Q }
     ? { query: Q }
-    : Parameters_<O> extends { query?: infer Q }
+    : ParamsOf<O> extends { query?: infer Q }
       ? [NonNullable<Q>] extends [never]
         ? { query?: never }
         : { query?: NonNullable<Q> }

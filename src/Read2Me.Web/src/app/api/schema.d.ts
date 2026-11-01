@@ -927,7 +927,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
@@ -1586,7 +1586,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
@@ -1907,7 +1907,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
@@ -2100,7 +2100,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
@@ -2244,7 +2244,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
@@ -2346,7 +2346,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
@@ -2395,7 +2395,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
@@ -2444,7 +2444,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
@@ -3026,7 +3026,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
@@ -3075,7 +3075,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
@@ -3127,7 +3127,7 @@ export interface paths {
                 query?: {
                     needsAudioOnly?: boolean;
                     narratorOnlyMode?: boolean;
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
@@ -3178,7 +3178,7 @@ export interface paths {
             parameters: {
                 query?: {
                     unprocessedOnly?: boolean;
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
@@ -3228,7 +3228,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
@@ -3281,7 +3281,7 @@ export interface paths {
                     chapterId: string;
                     before?: number;
                     after?: number;
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
@@ -3330,7 +3330,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
@@ -3501,7 +3501,7 @@ export interface paths {
             parameters: {
                 query?: {
                     chapterIds?: string[];
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
@@ -3774,7 +3774,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
@@ -3916,7 +3916,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
@@ -4157,7 +4157,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
+                    /** @description A History step id: read the project as it stood after that step instead of now. 400 not a step id, 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened, 503 when opening it failed for a reason that passes (try again). */
                     at?: string;
                 };
                 header?: never;
