@@ -1,6 +1,17 @@
 {
   "components": {
     "schemas": {
+      "ApiItemType": {
+        "enum": [
+          "Narration",
+          "Character",
+          "Pause",
+          "ParagraphPause",
+          "ChapterPause",
+          "PartPause",
+          "VolumePause"
+        ]
+      },
       "AppTheme": {
         "properties": {
           "appbarBackground": {
@@ -300,6 +311,38 @@
         ],
         "type": "object"
       },
+      "AudioItemRefDto": {
+        "properties": {
+          "chapterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "paragraphId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "partId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "volumeId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "paragraphId",
+          "chapterId",
+          "partId",
+          "volumeId"
+        ],
+        "type": "object"
+      },
       "AudioPostProcessStepConfig": {
         "properties": {
           "enabled": {
@@ -395,6 +438,100 @@
         ],
         "type": "object"
       },
+      "BookEditRowDto": {
+        "properties": {
+          "displayPath": {
+            "type": "string"
+          },
+          "failureReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/BookEditTargetKind"
+          },
+          "newValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "oldValue": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProposalStatus"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "displayPath",
+          "oldValue",
+          "newValue",
+          "status",
+          "failureReason"
+        ],
+        "type": "object"
+      },
+      "BookEditRunDto": {
+        "properties": {
+          "done": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/BookEditRowDto"
+            },
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BookEditRunStatus"
+          },
+          "total": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status",
+          "done",
+          "total",
+          "rows",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "BookEditRunStatus": {
+        "enum": [
+          "Idle",
+          "Running",
+          "Completed",
+          "Cancelled",
+          "Failed"
+        ]
+      },
+      "BookEditTargetKind": {
+        "enum": [
+          "VolumeTitle",
+          "PartTitle",
+          "ChapterTitle",
+          "ParagraphItemText"
+        ]
+      },
       "BookFileType": {
         "enum": [
           "Text",
@@ -452,6 +589,23 @@
           "totalChapters",
           "revision",
           "structureRules"
+        ],
+        "type": "object"
+      },
+      "BulkAssignPreviewDto": {
+        "properties": {
+          "characterItems": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "paragraphsWithCharacterItems": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "paragraphsWithCharacterItems",
+          "characterItems"
         ],
         "type": "object"
       },
@@ -544,6 +698,21 @@
           "Skipped"
         ]
       },
+      "CommandResponse": {
+        "properties": {
+          "newEntityId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "newEntityId"
+        ],
+        "type": "object"
+      },
       "CoverImageResponse": {
         "properties": {
           "coverImage": {
@@ -565,6 +734,16 @@
           "folderName"
         ],
         "type": "object"
+      },
+      "EditPlanStatus": {
+        "enum": [
+          "Ok",
+          "NoLlmConfigured",
+          "Unsupported",
+          "Failed",
+          "ServiceUnavailable",
+          "NoTargets"
+        ]
       },
       "FfmpegTestRequest": {
         "properties": {
@@ -909,6 +1088,27 @@
         ],
         "type": "object"
       },
+      "ItemVoiceDto": {
+        "properties": {
+          "narratedBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "voiceName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "voiceName",
+          "narratedBy"
+        ],
+        "type": "object"
+      },
       "ItemsEnqueueRequest": {
         "properties": {
           "itemIds": {
@@ -1122,6 +1322,30 @@
         ],
         "type": "object"
       },
+      "NarrationReleasePreviewDto": {
+        "properties": {
+          "itemsWithAudio": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "paragraphs": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "speechMarkers": {
+            "items": {
+              "$ref": "#/components/schemas/SpeechMarkerCountDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "paragraphs",
+          "itemsWithAudio",
+          "speechMarkers"
+        ],
+        "type": "object"
+      },
       "NarrationReleasePreviewRequest": {
         "properties": {
           "nodeId": {
@@ -1173,6 +1397,43 @@
         },
         "required": [
           "enabled"
+        ],
+        "type": "object"
+      },
+      "NodeChildrenDto": {
+        "properties": {
+          "chapters": {
+            "items": {
+              "$ref": "#/components/schemas/NodeDto"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "paragraphs": {
+            "items": {
+              "$ref": "#/components/schemas/ParagraphDto"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/NodeDto"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          }
+        },
+        "required": [
+          "parts",
+          "chapters",
+          "paragraphs"
         ],
         "type": "object"
       },
@@ -1256,6 +1517,109 @@
           "attributionProcessing",
           "attributionQueued",
           "isDone"
+        ],
+        "type": "object"
+      },
+      "ParagraphDto": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "isPauseParagraph": {
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ParagraphItemDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "items",
+          "isPauseParagraph"
+        ],
+        "type": "object"
+      },
+      "ParagraphItemDto": {
+        "properties": {
+          "audioFileName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "characterId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "isPause": {
+            "type": "boolean"
+          },
+          "itemType": {
+            "$ref": "#/components/schemas/ApiItemType"
+          },
+          "orderKey": {
+            "type": "string"
+          },
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "voiceInstructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "itemType",
+          "text",
+          "characterId",
+          "audioFileName",
+          "voiceInstructions",
+          "orderKey",
+          "isPause"
+        ],
+        "type": "object"
+      },
+      "ParagraphRefDto": {
+        "properties": {
+          "chapterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "partId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "volumeId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "chapterId",
+          "partId",
+          "volumeId"
         ],
         "type": "object"
       },
@@ -1404,6 +1768,66 @@
         },
         "required": [
           "instruction"
+        ],
+        "type": "object"
+      },
+      "PlanBookEditResponse": {
+        "properties": {
+          "program": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "requestCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EditPlanStatus"
+          },
+          "summary": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "targetCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "transform": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TransformKind"
+              }
+            ]
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "reason",
+          "summary",
+          "program",
+          "transform",
+          "targetCount",
+          "requestCount",
+          "warnings"
         ],
         "type": "object"
       },
@@ -1870,6 +2294,41 @@
         ],
         "type": "object"
       },
+      "PronunciationEntry": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "itemCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "matchCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "spokenForm": {
+            "type": "string"
+          },
+          "withAudioCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "writtenForm": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "writtenForm",
+          "spokenForm",
+          "matchCount",
+          "itemCount",
+          "withAudioCount"
+        ],
+        "type": "object"
+      },
       "PronunciationImpactReport": {
         "properties": {
           "audioDiscardCount": {
@@ -2131,6 +2590,13 @@
           "spans"
         ],
         "type": "object"
+      },
+      "ProposalStatus": {
+        "enum": [
+          "Proposed",
+          "NoChange",
+          "Failed"
+        ]
       },
       "ProposeBookEditRequest": {
         "properties": {
@@ -2696,6 +3162,22 @@
         ],
         "type": "object"
       },
+      "SpeechMarkerCountDto": {
+        "properties": {
+          "marker": {
+            "type": "string"
+          },
+          "paragraphs": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "marker",
+          "paragraphs"
+        ],
+        "type": "object"
+      },
       "SplitRuleRequest": {
         "properties": {
           "mode": {
@@ -3078,6 +3560,14 @@
           "transcript"
         ],
         "type": "object"
+      },
+      "TransformKind": {
+        "enum": [
+          "RegexReplace",
+          "SetTemplate",
+          "Llm",
+          "ChangeCase"
+        ]
       },
       "TryPronunciationRequest": {
         "properties": {
@@ -4732,6 +5222,9 @@
             },
             "description": "OK"
           },
+          "404": {
+            "description": "Not Found"
+          },
           "default": {
             "content": {
               "application/problem+json": {
@@ -4779,7 +5272,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanBookEditResponse"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -4819,8 +5322,11 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -4859,7 +5365,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookEditRunDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -4899,8 +5415,11 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -4913,7 +5432,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Stop the running proposal; the rows computed so far stay reviewable. 200 whether or not a run was in flight.",
+        "summary": "Stop the running proposal; the rows computed so far stay reviewable. 204 whether or not a run was in flight.",
         "tags": [
           "BookEditEndpoints"
         ]
@@ -4956,8 +5475,18 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartedResponse"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -5014,7 +5543,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookEditRowDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -5056,7 +5595,20 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CharacterDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -5099,7 +5651,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkAssignPreviewDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -5742,7 +6304,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6113,7 +6685,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NarrationReleasePreviewDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6216,7 +6798,20 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/ItemVoiceDto"
+                  },
+                  "type": "object"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6275,7 +6870,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeChildrenDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6350,7 +6955,20 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AudioItemRefDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6417,7 +7035,20 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ParagraphRefDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6606,7 +7237,20 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PronunciationEntry"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6662,25 +7306,8 @@
             },
             "description": "Created"
           },
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6738,24 +7365,7 @@
             },
             "description": "OK"
           },
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
           "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
             "description": "Not Found"
           },
           "default": {
@@ -6818,6 +7428,9 @@
             },
             "description": "OK"
           },
+          "404": {
+            "description": "Not Found"
+          },
           "default": {
             "content": {
               "application/problem+json": {
@@ -6865,57 +7478,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "audio/wav": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stream"
+                }
+              }
+            },
             "description": "OK"
           },
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
           "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
             "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           },
           "default": {
             "content": {
@@ -6967,24 +7540,7 @@
             "description": "OK"
           },
           "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
             "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
           },
           "default": {
             "content": {
@@ -7049,35 +7605,8 @@
             },
             "description": "OK"
           },
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
           "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
             "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
           },
           "default": {
             "content": {

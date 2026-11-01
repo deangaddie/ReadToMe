@@ -1,4 +1,4 @@
-import type { Guid, PronunciationDto, PronunciationRef } from '@app/api';
+import type { Guid, PronunciationEntry, PronunciationRef } from '@app/api';
 import { type Forms, WRITTEN_FORM_MAX } from '../pronunciations/pronunciation-logic';
 import type { TextPlace } from '../pronunciations/try-out-logic';
 import type { IndexedMarks } from './pronunciation-marks';
@@ -55,7 +55,7 @@ export const PILL_MAX_WORDS = 4;
 export interface SelectionPill {
   action: 'add' | 'edit';
   /** The entry whose written form the selection is, ignoring case; null to add. */
-  entry: PronunciationDto | null;
+  entry: PronunciationEntry | null;
   /** What the editor opens with: the selection twice to add, the entry's own forms to edit. */
   forms: Forms;
   /** Characters dropped from the selection's front: its text starts this far into the selection. */
@@ -72,7 +72,7 @@ const EDGE = /^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu;
  */
 export function selectionPill(
   selected: string,
-  entries: readonly PronunciationDto[],
+  entries: readonly PronunciationEntry[],
 ): SelectionPill | null {
   const lead = selected.length - selected.replace(/^[^\p{L}\p{N}]+/u, '').length;
   const text = selected.replace(EDGE, '').replace(/\s+/g, ' ');

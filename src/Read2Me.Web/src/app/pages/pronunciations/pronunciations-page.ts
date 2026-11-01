@@ -1,6 +1,6 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
-import { type Guid, type PronunciationDto, PronunciationsApi, toApiError } from '@app/api';
+import { type Guid, type PronunciationEntry, PronunciationsApi, toApiError } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
@@ -43,7 +43,7 @@ export class PronunciationsPage extends R2mElement {
   private readonly router = use(Router);
   private project!: ProjectStore;
 
-  readonly entries = signal<PronunciationDto[]>([]);
+  readonly entries = signal<PronunciationEntry[]>([]);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly query = signal('');
@@ -118,7 +118,7 @@ export class PronunciationsPage extends R2mElement {
     this.editing.set(next);
   }
 
-  private async deleteEntry(entry: PronunciationDto): Promise<void> {
+  private async deleteEntry(entry: PronunciationEntry): Promise<void> {
     const folder = this.project.folder();
     if (!folder) return;
     if ((await this.writer.remove(folder, entry)) && this.openEntry()?.id === entry.id) {

@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { type PronunciationDto, type PronunciationImpactDto, VIEWING_READ_ONLY } from '@app/api';
+import {
+  type PronunciationEntry,
+  type PronunciationImpactReport,
+  VIEWING_READ_ONLY,
+} from '@app/api';
 import { Router } from '@app/core/router';
 import { override, resetServices } from '@app/core/services';
 import { type ConfirmOptions, ConfirmService } from '@app/ui/dialogs';
@@ -14,7 +18,7 @@ import './pronunciation-editor';
 const BASE = '/api/projects/the-adventures-of-sherlock-holmes/pronunciations';
 const IMPACT = `${BASE}/impact`;
 
-const WATSON: PronunciationDto = {
+const WATSON: PronunciationEntry = {
   id: 'k1',
   writtenForm: 'Watson',
   spokenForm: 'WAT-sun',
@@ -23,7 +27,7 @@ const WATSON: PronunciationDto = {
   withAudioCount: 3,
 };
 
-function impact(overrides: Partial<PronunciationImpactDto> = {}): PronunciationImpactDto {
+function impact(overrides: Partial<PronunciationImpactReport> = {}): PronunciationImpactReport {
   return {
     matchCount: 14,
     itemCount: 9,
@@ -79,7 +83,7 @@ afterEach(() => {
 });
 
 async function mount(
-  entry: PronunciationDto | null,
+  entry: PronunciationEntry | null,
   setup: (e: PronunciationEditor) => void = () => undefined,
 ): Promise<PronunciationEditor> {
   editor = document.createElement('r2m-pronunciation-editor') as PronunciationEditor;

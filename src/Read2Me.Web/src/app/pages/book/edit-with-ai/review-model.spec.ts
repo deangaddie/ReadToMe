@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { BookEditRow, ProposalStatus } from '@app/api';
+import type { BookEditRowDto, ProposalStatus } from '@app/api';
 import { ReviewSelection, effectiveValue, isUserEdited, rowState } from './review-model';
 
 /**
@@ -9,7 +9,7 @@ function proposal(
   status: ProposalStatus,
   oldValue = 'Chapter I',
   newValue: string | null = 'Chapter 1',
-): BookEditRow {
+): BookEditRowDto {
   return {
     kind: 'ChapterTitle',
     id: crypto.randomUUID(),
@@ -23,10 +23,10 @@ function proposal(
 
 /** What a retry hands back for a row that already exists. */
 function retryResult(
-  existing: BookEditRow,
+  existing: BookEditRowDto,
   status: ProposalStatus,
   newValue: string | null,
-): BookEditRow {
+): BookEditRowDto {
   return {
     ...existing,
     newValue: status === 'Failed' ? null : newValue,
@@ -35,12 +35,12 @@ function retryResult(
   };
 }
 
-function selectionOf(...proposals: BookEditRow[]): ReviewSelection {
+function selectionOf(...proposals: BookEditRowDto[]): ReviewSelection {
   return ReviewSelection.from(proposals);
 }
 
 /** The row for a proposal, read out of the current (immutable) selection. */
-function row(selection: ReviewSelection, proposal: BookEditRow) {
+function row(selection: ReviewSelection, proposal: BookEditRowDto) {
   const found = selection.rows.find((r) => r.proposal.id === proposal.id);
   if (!found) throw new Error(`no row for ${proposal.id}`);
   return found;

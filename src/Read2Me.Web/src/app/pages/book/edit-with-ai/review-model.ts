@@ -1,4 +1,4 @@
-import type { BookEditItem, EditPlanStatus, BookEditRow, Guid } from '@app/api';
+import type { BookEditItem, EditPlanStatus, BookEditRowDto, Guid } from '@app/api';
 
 /**
  * What the review screen shows for one row: the AI's own verdict, or the user's if they have typed
@@ -21,7 +21,7 @@ export type ReviewRowState =
  * lifetime of the open dialog only; nothing here is persisted.
  */
 export interface ReviewRow {
-  readonly proposal: BookEditRow;
+  readonly proposal: BookEditRowDto;
   /**
    * The user's value, or null when they have not typed into this row. Setting it to the AI's own
    * value still counts as a hand edit — the mark tracks ownership, not difference.
@@ -76,7 +76,7 @@ export class ReviewSelection {
   ) {}
 
   /** A fresh review: every appliable row starts ticked. */
-  static from(proposals: readonly BookEditRow[]): ReviewSelection {
+  static from(proposals: readonly BookEditRowDto[]): ReviewSelection {
     const rows = proposals.map((proposal) => ({ proposal, userValue: null }));
     // A program has one target selector, so an id names at most one row within a session.
     return new ReviewSelection(rows, new Set(rows.filter(isAppliable).map((r) => r.proposal.id)));
@@ -127,7 +127,7 @@ export class ReviewSelection {
    * Unlike a hand edit, this ticks even a row the user had unticked — asking the AI again is a
    * deliberate act on that row, so a usable answer is wanted. The hand edit goes: retry wins.
    */
-  replaceProposal(row: ReviewRow, proposal: BookEditRow): ReviewSelection {
+  replaceProposal(row: ReviewRow, proposal: BookEditRowDto): ReviewSelection {
     const next: ReviewRow = { proposal, userValue: null };
     const selected = new Set(this.selected);
     selected.delete(row.proposal.id);

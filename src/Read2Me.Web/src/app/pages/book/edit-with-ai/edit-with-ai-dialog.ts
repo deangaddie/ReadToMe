@@ -3,7 +3,7 @@ import { repeat } from 'lit-html/directives/repeat.js';
 import { LlmStreamFeed } from '@app/activity/stream-feed';
 import {
   BookEditsApi,
-  type BookEditRow,
+  type BookEditRowDto,
   type Guid,
   type PlanBookEditResponse,
   toApiError,
@@ -705,7 +705,7 @@ export class EditWithAiDialog extends R2mElement {
     );
   }
 
-  private finishRun(rows: readonly BookEditRow[]): void {
+  private finishRun(rows: readonly BookEditRowDto[]): void {
     this.stopWatching();
     // New rows, so a new selection: every appliable row starts ticked.
     this.selection.set(ReviewSelection.from(rows));

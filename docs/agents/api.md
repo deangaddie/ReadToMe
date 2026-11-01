@@ -756,7 +756,7 @@ curl -s http://localhost:5000/api/projects/{folder}/book-edits/{program}
 # row status: Proposed (usable) | NoChange (the value equals the current text) | Failed
 
 # stop early — the rows already computed stay reviewable and appliable:
-curl -s -X POST http://localhost:5000/api/projects/{folder}/book-edits/{program}/cancel
+curl -s -X POST http://localhost:5000/api/projects/{folder}/book-edits/{program}/cancel   # 204
 
 # re-ask for one row, steered by a hint (Llm plans only):
 curl -s -X POST http://localhost:5000/api/projects/{folder}/book-edits/{program}/propose-one \

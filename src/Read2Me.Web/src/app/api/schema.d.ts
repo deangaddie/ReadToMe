@@ -1650,6 +1650,13 @@ export interface paths {
                         "application/json": components["schemas"]["BookOverviewDto"];
                     };
                 };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
                 /** @description A problem: any non-2xx answer. */
                 default: {
                     headers: {
@@ -1699,6 +1706,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["PlanBookEditResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -1743,6 +1759,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["BookEditRunDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -1771,8 +1796,15 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1803,7 +1835,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Stop the running proposal; the rows computed so far stay reviewable. 200 whether or not a run was in flight. */
+        /** Stop the running proposal; the rows computed so far stay reviewable. 204 whether or not a run was in flight. */
         post: {
             parameters: {
                 query?: never;
@@ -1816,8 +1848,15 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description OK */
-                200: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1866,8 +1905,17 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description OK */
-                200: {
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StartedResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1921,6 +1969,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["BookEditRowDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -1964,6 +2021,15 @@ export interface paths {
             responses: {
                 /** @description OK */
                 200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CharacterDto"][];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2015,6 +2081,15 @@ export interface paths {
             responses: {
                 /** @description OK */
                 200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BulkAssignPreviewDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2649,6 +2724,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["CommandResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -3064,6 +3148,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["NarrationReleasePreviewDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -3167,6 +3260,17 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": {
+                            [key: string]: components["schemas"]["ItemVoiceDto"];
+                        };
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -3214,6 +3318,15 @@ export interface paths {
             responses: {
                 /** @description OK */
                 200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NodeChildrenDto"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -3269,6 +3382,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["AudioItemRefDto"][];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -3317,6 +3439,15 @@ export interface paths {
             responses: {
                 /** @description OK */
                 200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ParagraphRefDto"][];
+                    };
+                };
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -3479,6 +3610,15 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
+                    content: {
+                        "application/json": components["schemas"]["PronunciationEntry"][];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
                     content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -3518,23 +3658,12 @@ export interface paths {
                         "application/json": components["schemas"]["PronunciationSaved"];
                     };
                 };
-                /** @description Bad Request */
-                400: {
+                /** @description Not Found */
+                404: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
+                    content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -3587,23 +3716,12 @@ export interface paths {
                         "application/json": components["schemas"]["PronunciationImpactReport"];
                     };
                 };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
                 /** @description Not Found */
                 404: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
+                    content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -3654,6 +3772,13 @@ export interface paths {
                         "application/json": components["schemas"]["PronunciationSpanReport"];
                     };
                 };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
                 /** @description A problem: any non-2xx answer. */
                 default: {
                     headers: {
@@ -3703,15 +3828,8 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
                     content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                        "audio/wav": components["schemas"]["Stream"];
                     };
                 };
                 /** @description Not Found */
@@ -3719,36 +3837,7 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Unprocessable Entity */
-                422: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Service Unavailable */
-                503: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
+                    content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -3801,32 +3890,12 @@ export interface paths {
                         "application/json": components["schemas"]["PronunciationSaved"];
                     };
                 };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
                 /** @description Not Found */
                 404: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
+                    content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -3867,18 +3936,7 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
-                };
-                /** @description Conflict */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/problem+json": components["schemas"]["ProblemDetails"];
-                    };
+                    content?: never;
                 };
                 /** @description A problem: any non-2xx answer. */
                 default: {
@@ -7637,6 +7695,8 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {unknown} */
+        ApiItemType: "Narration" | "Character" | "Pause" | "ParagraphPause" | "ChapterPause" | "PartPause" | "VolumePause";
         AppTheme: {
             appbarBackground: null | string;
             background: null | string;
@@ -7717,6 +7777,18 @@ export interface components {
             /** Format: uuid */
             nodeId: string;
         };
+        AudioItemRefDto: {
+            /** Format: uuid */
+            chapterId: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            paragraphId: string;
+            /** Format: uuid */
+            partId: string;
+            /** Format: uuid */
+            volumeId: string;
+        };
         AudioPostProcessStepConfig: {
             enabled: boolean;
             settings: null | components["schemas"]["JsonElement"];
@@ -7745,6 +7817,29 @@ export interface components {
             /** Format: int32 */
             queuedCount: number;
         };
+        BookEditRowDto: {
+            displayPath: string;
+            failureReason: null | string;
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["BookEditTargetKind"];
+            newValue: null | string;
+            oldValue: string;
+            status: components["schemas"]["ProposalStatus"];
+        };
+        BookEditRunDto: {
+            /** Format: int32 */
+            done: number;
+            reason: null | string;
+            rows: components["schemas"]["BookEditRowDto"][];
+            status: components["schemas"]["BookEditRunStatus"];
+            /** Format: int32 */
+            total: number;
+        };
+        /** @enum {unknown} */
+        BookEditRunStatus: "Idle" | "Running" | "Completed" | "Cancelled" | "Failed";
+        /** @enum {unknown} */
+        BookEditTargetKind: "VolumeTitle" | "PartTitle" | "ChapterTitle" | "ParagraphItemText";
         /** @enum {unknown} */
         BookFileType: "Text" | "Epub";
         /** @enum {unknown} */
@@ -7760,6 +7855,12 @@ export interface components {
             /** Format: int32 */
             totalParts: number;
             volumes: components["schemas"]["NodeDto"][];
+        };
+        BulkAssignPreviewDto: {
+            /** Format: int32 */
+            characterItems: number;
+            /** Format: int32 */
+            paragraphsWithCharacterItems: number;
         };
         BulkAssignPreviewRequest: {
             paragraphIds: string[];
@@ -7784,12 +7885,18 @@ export interface components {
         CheckpointRequestState: "Confirmed" | "Skipped" | "Open";
         /** @enum {unknown} */
         CheckpointState: "Confirmed" | "Skipped";
+        CommandResponse: {
+            /** Format: uuid */
+            newEntityId: null | string;
+        };
         CoverImageResponse: {
             coverImage: string;
         };
         CreateProjectResponse: {
             folderName: string;
         };
+        /** @enum {unknown} */
+        EditPlanStatus: "Ok" | "NoLlmConfigured" | "Unsupported" | "Failed" | "ServiceUnavailable" | "NoTargets";
         FfmpegTestRequest: {
             ffmpegPath?: null | string;
         };
@@ -7876,6 +7983,10 @@ export interface components {
             /** Format: int32 */
             withAudio: number;
         };
+        ItemVoiceDto: {
+            narratedBy: null | string;
+            voiceName: null | string;
+        };
         ItemsEnqueueRequest: {
             itemIds: string[];
         };
@@ -7925,6 +8036,13 @@ export interface components {
             part: null | components["schemas"]["SplitRuleRequest"];
             volume: null | components["schemas"]["SplitRuleRequest"];
         };
+        NarrationReleasePreviewDto: {
+            /** Format: int32 */
+            itemsWithAudio: number;
+            /** Format: int32 */
+            paragraphs: number;
+            speechMarkers: components["schemas"]["SpeechMarkerCountDto"][];
+        };
         NarrationReleasePreviewRequest: {
             /** Format: uuid */
             nodeId: string;
@@ -7940,6 +8058,11 @@ export interface components {
         };
         NarratorOnlyModeRequest: {
             enabled: boolean;
+        };
+        NodeChildrenDto: {
+            chapters: null | components["schemas"]["NodeDto"][];
+            paragraphs: null | components["schemas"]["ParagraphDto"][];
+            parts: null | components["schemas"]["NodeDto"][];
         };
         NodeDto: {
             /** Format: uuid */
@@ -7966,6 +8089,34 @@ export interface components {
             isDone: boolean;
             /** Format: int32 */
             review: number;
+        };
+        ParagraphDto: {
+            /** Format: uuid */
+            id: string;
+            isPauseParagraph: boolean;
+            items: components["schemas"]["ParagraphItemDto"][];
+        };
+        ParagraphItemDto: {
+            audioFileName: null | string;
+            /** Format: uuid */
+            characterId: null | string;
+            /** Format: uuid */
+            id: string;
+            isPause: boolean;
+            itemType: components["schemas"]["ApiItemType"];
+            orderKey: string;
+            text: null | string;
+            voiceInstructions: null | string;
+        };
+        ParagraphRefDto: {
+            /** Format: uuid */
+            chapterId: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            partId: string;
+            /** Format: uuid */
+            volumeId: string;
         };
         ParagraphTtsServiceConfig: {
             enabledStepIds: string[];
@@ -8004,6 +8155,18 @@ export interface components {
             instruction: null | string;
             /** @default false */
             thinking: boolean;
+        };
+        PlanBookEditResponse: {
+            program: null | string;
+            reason: null | string;
+            /** Format: int32 */
+            requestCount: number;
+            status: components["schemas"]["EditPlanStatus"];
+            summary: null | string;
+            /** Format: int32 */
+            targetCount: number;
+            transform: null | components["schemas"]["TransformKind"];
+            warnings: string[];
         };
         PreflightRunRequest: {
             connectionId?: null | string;
@@ -8121,6 +8284,18 @@ export interface components {
             spokenForm: null | string;
             writtenForm: null | string;
         };
+        PronunciationEntry: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            itemCount: number;
+            /** Format: int32 */
+            matchCount: number;
+            spokenForm: string;
+            /** Format: int32 */
+            withAudioCount: number;
+            writtenForm: string;
+        };
         PronunciationImpactReport: {
             /** Format: int32 */
             audioDiscardCount: number;
@@ -8200,6 +8375,8 @@ export interface components {
             pronunciations: components["schemas"]["PronunciationRef"][];
             spans: components["schemas"]["PronunciationSpan"][];
         };
+        /** @enum {unknown} */
+        ProposalStatus: "Proposed" | "NoChange" | "Failed";
         ProposeBookEditRequest: {
             connectionId?: null | string;
             /** @default false */
@@ -8345,6 +8522,11 @@ export interface components {
             /** Format: double */
             threshold: number;
         };
+        SpeechMarkerCountDto: {
+            marker: string;
+            /** Format: int32 */
+            paragraphs: number;
+        };
         SplitRuleRequest: {
             mode: null | string;
             prefix?: null | string;
@@ -8442,6 +8624,8 @@ export interface components {
         TranscriptionTestResponse: {
             transcript: string;
         };
+        /** @enum {unknown} */
+        TransformKind: "RegexReplace" | "SetTemplate" | "Llm" | "ChangeCase";
         TryPronunciationRequest: {
             asWritten: boolean;
             draft: null | components["schemas"]["PronunciationDraftRequest"];

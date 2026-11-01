@@ -64,16 +64,12 @@ namespace Read2Me.App.Api
                              "matchCount (matched spans), itemCount (items holding one) and withAudioCount (those items that have audio).");
             endpoints.MapGet("/api/projects/{folder}/pronunciations/matches", MatchesAsync)
                 .ReadsAt()
-                .Produces<PronunciationSpanReport>()
                 .WithSummary("Where the list matches in the chapters named by repeated chapterIds (the Book view's marks): spans in book " +
                              "order — itemId, start and length in the item's text, pronunciationId, and sentenceStart (where the sentence " +
                              "around it starts, what a try-out names it by) — and pronunciations, the entries they name { id, writtenForm, " +
                              "spokenForm }, sorted by written form. Unknown chapters match nothing.");
             endpoints.MapPost("/api/projects/{folder}/pronunciations", AddAsync)
                 .RecordsOwnStep()
-                .Produces<PronunciationSaved>(StatusCodes.Status201Created)
-                .ProducesProblem(StatusCodes.Status400BadRequest)
-                .ProducesProblem(StatusCodes.Status409Conflict)
                 .WithSummary("Add a Pronunciation { writtenForm, spokenForm }. Both are trimmed and inner whitespace collapsed to one space. " +
                              $"Written form: 1–{PronunciationForms.MaxWrittenLength} characters, starting and ending with a letter or digit; " +
                              $"spoken form: 1–{PronunciationForms.MaxSpokenLength} characters. 201 with the entry, its reach and what it cost; 400 invalid; " +
@@ -81,25 +77,15 @@ namespace Read2Me.App.Api
                              ChangeCost);
             endpoints.MapPut("/api/projects/{folder}/pronunciations/{id:guid}", EditAsync)
                 .RecordsOwnStep()
-                .Produces<PronunciationSaved>()
-                .ProducesProblem(StatusCodes.Status400BadRequest)
-                .ProducesProblem(StatusCodes.Status404NotFound)
-                .ProducesProblem(StatusCodes.Status409Conflict)
                 .WithSummary("Edit a Pronunciation's { writtenForm, spokenForm }, checked as an add. 200 with the entry, its reach and what it cost; " +
                              "400 invalid; 404 unknown id; 409 when another entry has the written form. Saving it unchanged writes nothing and lands no step; " +
                              "otherwise one History step, labelled Pronunciation: edit \"<written>\". " + ChangeCost);
             endpoints.MapDelete("/api/projects/{folder}/pronunciations/{id:guid}", DeleteAsync)
                 .RecordsOwnStep()
-                .Produces<PronunciationDeleted>()
-                .ProducesProblem(StatusCodes.Status404NotFound)
-                .ProducesProblem(StatusCodes.Status409Conflict)
                 .WithSummary("Delete a Pronunciation: its word goes back to how the provider reads it. 404 unknown id. " +
                              "One History step, labelled Pronunciation: delete \"<written>\". " + ChangeCost);
             endpoints.MapPost("/api/projects/{folder}/pronunciations/impact", ImpactAsync)
                 .RecordsNoStep("A dry run: it reads the list and the book and writes nothing.")
-                .Produces<PronunciationImpactReport>()
-                .ProducesProblem(StatusCodes.Status400BadRequest)
-                .ProducesProblem(StatusCodes.Status404NotFound)
                 .WithSummary("What saving a draft { id?, writtenForm, spokenForm, delete? } would do, writing nothing: no id adds, an id edits " +
                              "that entry, delete: true deletes it (forms ignored). Answers matchCount, itemCount, withAudioCount (a delete's: the entry's " +
                              "reach now), audioDiscardCount (exactly what the save would discard), overlaps (entries whose written form holds the draft's " +
@@ -111,12 +97,7 @@ namespace Read2Me.App.Api
                              "spoken form (its case carried over) sits in spokenSentence. 400 invalid; 404 unknown id.");
             endpoints.MapPost("/api/projects/{folder}/pronunciations/try", TryAsync).RefusedWhileSetupCheckRuns()
                 .RecordsNoStep("A try-out: it renders a sentence and stores nothing.")
-                .Produces(StatusCodes.Status200OK, contentType: "audio/wav")
-                .ProducesProblem(StatusCodes.Status400BadRequest)
-                .ProducesProblem(StatusCodes.Status404NotFound)
-                .ProducesProblem(StatusCodes.Status409Conflict)
-                .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
-                .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
+                .Produces<Stream>(contentType: "audio/wav")
                 .WithSummary("Render one try-out sentence { itemId, sentenceStart, draft?, asWritten, voice }: the sentence of the item starting at " +
                              "sentenceStart (an impact match's), carried on over a match that runs past its end. The list, with draft { id?, writtenForm, " +
                              "spokenForm, delete? } in place of its entry, is applied unless asWritten. voice is { voiceId } or \"item\" (the item's own " +
@@ -126,88 +107,88 @@ namespace Read2Me.App.Api
                              "(it holds the GPU); 422 no voice resolves, the voice has no audio or no TTS config is active; 503 TTS busy or down.");
         }
 
-        private static async Task<IResult> ListAsync(string folder, IFileSystem fs, ProjectDbSession session, CancellationToken ct)
+        private static async Task<Results<Ok<IReadOnlyList<PronunciationEntry>>, NotFound>> ListAsync(string folder, IFileSystem fs, ProjectDbSession session, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
-            return Results.Ok(await PronunciationList.ReadAsync(await session.OpenAsync(folderId), ct));
+                return TypedResults.NotFound();
+            return TypedResults.Ok(await PronunciationList.ReadAsync(await session.OpenAsync(folderId), ct));
         }
 
-        private static async Task<IResult> MatchesAsync(
+        private static async Task<Results<Ok<PronunciationSpanReport>, NotFound>> MatchesAsync(
             string folder, Guid[]? chapterIds, IFileSystem fs, ProjectDbSession session, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
-            return Results.Ok(await PronunciationSpans.ReadAsync(await session.OpenAsync(folderId), chapterIds ?? [], ct));
+                return TypedResults.NotFound();
+            return TypedResults.Ok(await PronunciationSpans.ReadAsync(await session.OpenAsync(folderId), chapterIds ?? [], ct));
         }
 
-        private static async Task<IResult> AddAsync(
+        private static async Task<Results<Created<PronunciationSaved>, NotFound, ProblemHttpResult>> AddAsync(
             string folder, SetPronunciationRequest? body, HttpRequest request, IFileSystem fs, BookMutations mutations,
             MutationOrigin origin, HistoryStepScope steps, ProjectDbSession session, AudioQueueService audioQueue, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var draft = new PronunciationDraft(null, body?.WrittenForm, body?.SpokenForm);
             var label = $"Pronunciation: add \"{PronunciationForms.Normalise(body?.WrittenForm)}\"";
             return await SetAsync(folderId, draft, label, StepAction.Pronunciation, request, mutations, origin, steps, session, audioQueue, ct) switch
             {
                 (BookMutationOutcome.Committed { Receipt.Effects.CreatedId: { } id }, var discarded) =>
-                    Results.Created($"/api/projects/{folder}/pronunciations/{id}", await SavedAsync(session, folderId, id, discarded, ct)),
+                    TypedResults.Created($"/api/projects/{folder}/pronunciations/{id}", await SavedAsync(session, folderId, id, discarded, ct)),
                 (var refused, _) => Refusal(refused, ct),
             };
         }
 
-        private static async Task<IResult> EditAsync(
+        private static async Task<Results<Ok<PronunciationSaved>, NotFound, ProblemHttpResult>> EditAsync(
             string folder, Guid id, SetPronunciationRequest? body, HttpRequest request, IFileSystem fs, BookMutations mutations,
             MutationOrigin origin, HistoryStepScope steps, ProjectDbSession session, AudioQueueService audioQueue, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var draft = new PronunciationDraft(id, body?.WrittenForm, body?.SpokenForm);
             var label = $"Pronunciation: edit \"{PronunciationForms.Normalise(body?.WrittenForm)}\"";
             return await SetAsync(folderId, draft, label, StepAction.Pronunciation, request, mutations, origin, steps, session, audioQueue, ct) switch
             {
                 (BookMutationOutcome.Committed or BookMutationOutcome.NoChange, var discarded) =>
-                    Results.Ok(await SavedAsync(session, folderId, id, discarded, ct)),
+                    TypedResults.Ok(await SavedAsync(session, folderId, id, discarded, ct)),
                 (var refused, _) => Refusal(refused, ct),
             };
         }
 
-        private static async Task<IResult> DeleteAsync(
+        private static async Task<Results<Ok<PronunciationDeleted>, NotFound, ProblemHttpResult>> DeleteAsync(
             string folder, Guid id, HttpRequest request, IFileSystem fs, BookMutations mutations,
             MutationOrigin origin, HistoryStepScope steps, ProjectDbSession session, AudioQueueService audioQueue, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             // Read for the label only: the mutation finds the entry again under the write lock.
             var written = await (await session.OpenAsync(folderId)).Pronunciations.AsNoTracking()
                 .Where(p => p.Id == id).Select(p => p.WrittenForm).SingleOrDefaultAsync(ct);
             if (written is null)
-                return Results.Problem($"No pronunciation {id}.", statusCode: StatusCodes.Status404NotFound);
+                return TypedResults.Problem($"No pronunciation {id}.", statusCode: StatusCodes.Status404NotFound);
 
             var draft = new PronunciationDraft(id, null, null, Delete: true);
             return await SetAsync(folderId, draft, $"Pronunciation: delete \"{written}\"", StepAction.Delete,
                     request, mutations, origin, steps, session, audioQueue, ct) switch
             {
                 (BookMutationOutcome.Committed, var discarded) =>
-                    Results.Ok(new PronunciationDeleted(discarded, await NeedsAudioCountAsync(session, folderId, ct))),
+                    TypedResults.Ok(new PronunciationDeleted(discarded, await NeedsAudioCountAsync(session, folderId, ct))),
                 (var refused, _) => Refusal(refused, ct),
             };
         }
 
-        private static async Task<IResult> ImpactAsync(
+        private static async Task<Results<Ok<PronunciationImpactReport>, NotFound, ProblemHttpResult>> ImpactAsync(
             string folder, PronunciationDraftRequest? body, IFileSystem fs, ProjectDbSession session, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var draft = new PronunciationDraft(body?.Id, body?.WrittenForm, body?.SpokenForm, body?.Delete ?? false);
             try
             {
-                return Results.Ok(await PronunciationImpact.ReadAsync(await session.OpenAsync(folderId), draft, ct));
+                return TypedResults.Ok(await PronunciationImpact.ReadAsync(await session.OpenAsync(folderId), draft, ct));
             }
             catch (BookMutationRejectedException refused)
             {
@@ -215,18 +196,18 @@ namespace Read2Me.App.Api
             }
         }
 
-        private static async Task<IResult> TryAsync(
+        private static async Task<Results<FileContentHttpResult, NotFound, ProblemHttpResult>> TryAsync(
             string folder, TryPronunciationRequest? body, HttpResponse response, IFileSystem fs, PronunciationTryOut tryOut,
             CharacterQueueService characterQueue, AudioQueueService audioQueue, VoiceBatchRunner voiceBatch, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             if (body is null)
-                return Results.Problem("A try-out names an item and a sentence.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("A try-out names an item and a sentence.", statusCode: StatusCodes.Status400BadRequest);
             if (GpuBusyReason(characterQueue, audioQueue, voiceBatch) is { } busy)
-                return Results.Problem(busy, statusCode: StatusCodes.Status409Conflict);
+                return TypedResults.Problem(busy, statusCode: StatusCodes.Status409Conflict);
             if (!TryReadVoice(body.Voice, out var voiceId))
-                return Results.Problem("voice is { \"voiceId\": \"…\" } or \"item\".", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("voice is { \"voiceId\": \"…\" } or \"item\".", statusCode: StatusCodes.Status400BadRequest);
 
             var draft = body.Draft is { } d ? new PronunciationDraft(d.Id, d.WrittenForm, d.SpokenForm, d.Delete) : null;
             TryOutResult result;
@@ -237,20 +218,20 @@ namespace Read2Me.App.Api
             }
             catch (TtsBusyException)
             {
-                return Results.Problem(TtsBusyException.UserMessage, statusCode: StatusCodes.Status503ServiceUnavailable);
+                return TypedResults.Problem(TtsBusyException.UserMessage, statusCode: StatusCodes.Status503ServiceUnavailable);
             }
             catch (AiServiceUnavailableException unavailable)
             {
-                return Results.Problem(unavailable.Message, statusCode: StatusCodes.Status503ServiceUnavailable);
+                return TypedResults.Problem(unavailable.Message, statusCode: StatusCodes.Status503ServiceUnavailable);
             }
 
             switch (result)
             {
                 case TryOutResult.Audio audio:
                     response.Headers.CacheControl = "no-store";
-                    return Results.Bytes(audio.Wav, "audio/wav");
+                    return TypedResults.Bytes(audio.Wav, "audio/wav");
                 case TryOutResult.Refused refused:
-                    return Results.Problem(refused.Message, statusCode: refused.Reason switch
+                    return TypedResults.Problem(refused.Message, statusCode: refused.Reason switch
                     {
                         TryOutRefusal.NotFound => StatusCodes.Status404NotFound,
                         TryOutRefusal.CannotSpeak => StatusCodes.Status422UnprocessableEntity,

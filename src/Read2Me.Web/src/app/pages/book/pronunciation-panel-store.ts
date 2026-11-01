@@ -1,4 +1,4 @@
-import { type Guid, type PronunciationDto, PronunciationsApi } from '@app/api';
+import { type Guid, type PronunciationEntry, PronunciationsApi } from '@app/api';
 import { ActivityStore } from '@app/activity/activity-store';
 import { use } from '@app/core/services';
 import { computed, effect, signal, untracked } from '@app/core/signals';
@@ -39,7 +39,7 @@ export class PronunciationPanelState {
   readonly session = signal<PanelSession | null>(null);
   /** The panel row the pointer is on. */
   readonly hovered = signal<Guid | null>(null);
-  readonly entries = signal<PronunciationDto[]>([]);
+  readonly entries = signal<PronunciationEntry[]>([]);
 
   /** The entries whose marks light: the hovered row's and the one the editor holds. */
   readonly lit = computed<ReadonlySet<Guid>>(() => {

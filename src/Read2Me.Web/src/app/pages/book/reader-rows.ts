@@ -5,7 +5,7 @@ import type {
   NarratorDto,
   ParagraphDto,
   ParagraphItemDto,
-  ParagraphItemType,
+  ApiItemType,
 } from '@app/api';
 import type {
   AudioReviewInfo,
@@ -244,7 +244,7 @@ export type ReaderRow =
       label: string;
     } & RowPosition);
 
-const PAUSE_LABELS: Partial<Record<ParagraphItemType, string>> = {
+const PAUSE_LABELS: Partial<Record<ApiItemType, string>> = {
   Pause: 'Pause',
   ParagraphPause: 'Paragraph pause',
   ChapterPause: 'Chapter pause',

@@ -1,5 +1,5 @@
 import {
-  type PronunciationDto,
+  type PronunciationEntry,
   PronunciationsApi,
   type SetPronunciationRequest,
   toApiError,
@@ -25,7 +25,7 @@ export class PronunciationWriter {
   /** Adds (`entry` null) or edits an entry. */
   async save(
     folder: string,
-    entry: PronunciationDto | null,
+    entry: PronunciationEntry | null,
     forms: SetPronunciationRequest,
   ): Promise<boolean> {
     try {
@@ -41,7 +41,7 @@ export class PronunciationWriter {
   }
 
   /** Deletes an entry once the confirm, which names the audio it costs, says so. */
-  async remove(folder: string, entry: PronunciationDto): Promise<boolean> {
+  async remove(folder: string, entry: PronunciationEntry): Promise<boolean> {
     try {
       const cost = await this.api.impact(folder, {
         id: entry.id,

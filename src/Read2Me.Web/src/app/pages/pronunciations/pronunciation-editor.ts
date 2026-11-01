@@ -2,8 +2,8 @@ import { html, nothing } from 'lit-html';
 import { live } from 'lit-html/directives/live.js';
 import {
   type PronunciationDraftRequest,
-  type PronunciationDto,
-  type PronunciationImpactDto,
+  type PronunciationEntry,
+  type PronunciationImpactReport,
   PronunciationsApi,
   toApiError,
 } from '@app/api';
@@ -60,11 +60,11 @@ export class PronunciationEditor extends R2mElement {
    * compared against and asks the impact again, so a draft survives another tab's save and its
    * counts follow it.
    */
-  readonly #entry = signal<PronunciationDto | null>(null);
+  readonly #entry = signal<PronunciationEntry | null>(null);
   get entry() {
     return this.#entry();
   }
-  set entry(value: PronunciationDto | null) {
+  set entry(value: PronunciationEntry | null) {
     const same = value !== null && value.id === this.#entry()?.id;
     this.#entry.set(value);
     if (same) {
@@ -123,7 +123,7 @@ export class PronunciationEditor extends R2mElement {
   readonly written = signal('');
   readonly spoken = signal('');
   /** The host's answer for the draft as last asked; kept while a newer question is pending. */
-  readonly impact = signal<PronunciationImpactDto | null>(null);
+  readonly impact = signal<PronunciationImpactReport | null>(null);
   /** The host's 400 detail for the draft, or null. */
   readonly invalid = signal<string | null>(null);
   readonly writing = signal(false);
@@ -244,7 +244,7 @@ export class PronunciationEditor extends R2mElement {
   /** The panel's try-out: the sentence at `origin`, or why there is none once the impact answers. */
   private originTry(
     origin: TextPlace,
-    impact: PronunciationImpactDto | null,
+    impact: PronunciationImpactReport | null,
     draft: PronunciationDraftRequest,
     readOnly: string | null,
   ) {
