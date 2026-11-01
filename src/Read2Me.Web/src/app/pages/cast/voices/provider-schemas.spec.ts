@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import type { ProviderSettingsSchema } from '@app/api';
+import { FIELD_UNSET } from '../../../../testing/settings-fields';
 import { toFormSchema } from './provider-schemas';
 
 const WIRE: ProviderSettingsSchema = {
   type: 'VoxCpm2',
   fields: [
     {
+      ...FIELD_UNSET,
       key: 'cfg_value',
       label: 'CFG Value',
       kind: 'number',
@@ -16,8 +18,16 @@ const WIRE: ProviderSettingsSchema = {
       help: 'Guidance',
       nullable: false,
     },
-    { key: 'denoise', label: 'Denoise', kind: 'boolean', default: false, nullable: false },
     {
+      ...FIELD_UNSET,
+      key: 'denoise',
+      label: 'Denoise',
+      kind: 'boolean',
+      default: false,
+      nullable: false,
+    },
+    {
+      ...FIELD_UNSET,
       key: 'top_k',
       label: 'Top K',
       kind: 'number',

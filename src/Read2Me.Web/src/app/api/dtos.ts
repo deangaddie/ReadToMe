@@ -10,7 +10,7 @@
  * name, in bodies, route segments and dictionary keys alike (#166). A feature that needs an enum's
  * labels or order keeps a `Record<Union, string>` or a `readonly Union[]` beside its own code.
  */
-import type { components } from './schema';
+import type { components, paths } from './schema';
 import type { BookEditTargetKind, NodeKind, Placement, VoiceAnchorLevel } from './book-commands';
 
 /** Component schemas the host's OpenAPI document declares (request bodies + settings entities). */
@@ -368,34 +368,18 @@ export interface ApplyDiscoveryResponse {
 
 // ---- Voices (`VoiceEndpoints.cs`) ------------------------------------------------------------------
 
-export type VoiceSource = 'Uploaded' | 'Generated';
+export type VoiceSource = Schema['VoiceSource'];
 
 /**
  * A voice as the cast page shows it. `isEdited` is the host's on-disk invariant: the audio has
  * been through the voice editor, so fresh audio would discard that edit. The override JSONs are
  * sparse patches keyed as the provider's settings schema lists them (ticket 16).
+ * `referenceSeconds` is the stored audio's length (null without audio); `referenceWarning` is set
+ * over the Reference Limit's 15 s soft limit (kept, but warned).
  */
-export interface VoiceDto {
-  id: Guid;
-  characterId: Guid;
-  name: string;
-  description: string | null;
-  source: VoiceSource;
-  designPrompt: string | null;
-  transcript: string | null;
-  audioFileName: string | null;
-  isEdited: boolean;
-  voiceDesignSettingsOverrideJson: string | null;
-  ttsSettingsOverrideJson: string | null;
-  /** The stored audio's length, read from its WAV header; null without audio. */
-  referenceSeconds: number | null;
-  /** Set when the reference is over the Reference Limit's 15 s soft limit (kept, but warned). */
-  referenceWarning: string | null;
-}
+export type VoiceDto = Schema['VoiceDto'];
 
-export interface TranscribeVoiceResponse {
-  transcript: string;
-}
+export type TranscribeVoiceResponse = Schema['TranscribeVoiceResponse'];
 
 /**
  * One voice rule as `GET …/characters/{id}/voice-rules` lists it (ticket 17), in evaluation
@@ -426,17 +410,9 @@ export interface ChapterVoicePreviewDto {
   voiceName: string | null;
 }
 
-export interface RenderedDesignPromptResponse {
-  prompt: string;
-}
-
-export interface GenerateDesignPromptRequest {
-  prompt: string;
-}
-
-export interface GenerateDesignPromptResponse {
-  designPrompt: string;
-}
+export type RenderedDesignPromptResponse = Schema['RenderedDesignPromptResponse'];
+export type GenerateDesignPromptRequest = Schema['GenerateDesignPromptRequest'];
+export type GenerateDesignPromptResponse = Schema['GenerateDesignPromptResponse'];
 
 // ---- Provider settings schemas (`ProviderSettingsSchema.cs`) ----------------------------------------
 
@@ -462,41 +438,24 @@ export type ProviderSettingsSchema =
   | TranscriptionSettingsSchema
   | SemanticSimilaritySettingsSchema;
 
-export interface CharacterVoicesDto {
-  defaultVoiceId: Guid | null;
-  voices: VoiceDto[];
-}
+export type CharacterVoicesDto = Schema['CharacterVoicesDto'];
 
-/** Optional `generate-audio` body: an unsaved prompt to design from, stored with the take. */
-export interface GenerateVoiceAudioRequest {
-  designPrompt?: string | null;
-}
+/**
+ * Optional `generate-audio` body: an unsaved prompt to design from, stored with the take. The
+ * handler reads it by hand, so the document has it inline on its operation, not as a component.
+ */
+export type GenerateVoiceAudioRequest = NonNullable<
+  paths['/api/projects/{folder}/characters/{characterId}/voices/{voiceId}/generate-audio']['post']['requestBody']
+>['content']['application/json'];
 
-export interface GenerateVoiceAudioResponse {
-  audioFileName: string;
-  transcript: string;
-  /** The stored take's length, as `VoiceDto` reports it. */
-  referenceSeconds: number | null;
-  /** Set over the 15 s soft Reference Limit: the take was kept, but warned. */
-  referenceWarning: string | null;
-}
+/** `referenceSeconds` / `referenceWarning` as `VoiceDto` reports them for the stored take. */
+export type GenerateVoiceAudioResponse = Schema['GenerateVoiceAudioResponse'];
 
 export type VoiceBatchStartRequest = Schema['VoiceBatchStartRequest'];
+export type VoiceBatchStatusDto = Schema['VoiceBatchStatusDto'];
 
-export interface VoiceBatchStatusDto {
-  isRunning: boolean;
-  processed: number;
-  total: number;
-  failed: number;
-  currentVoiceName: string | null;
-  currentOperation: string | null;
-  lastError: string | null;
-}
-
-/** 202 body for the voice-batch and assembly starts. */
-export interface StartedResponse {
-  started: boolean;
-}
+/** 202 body for the voice-batch, assembly and book-edit starts. */
+export type StartedResponse = Schema['StartedResponse'];
 
 // ---- Assembly (`AssemblyEndpoints.cs`) --------------------------------------------------------------
 
@@ -895,39 +854,16 @@ export interface ParagraphContextDto {
  * One step of the voice editor's checklist: its dials are `SettingsFieldDto`s so
  * `r2m-settings-form` renders them; `defaults` holds the dial keys' starting values.
  */
-export interface StepCatalogEntryDto {
-  stepId: string;
-  label: string;
-  blurb: string;
-  dials: SettingsFieldDto[];
-  defaults: Record<string, unknown>;
-}
+export type StepCatalogEntryDto = Schema['StepCatalogEntryDto'];
 
-export interface PreviewStepRequest {
-  stepId: string;
-  settings: Record<string, unknown>;
-}
-
-export interface PreviewRequest {
-  steps: PreviewStepRequest[];
-}
+export type PreviewStepRequest = Schema['PreviewStepRequest'];
+export type PreviewRequest = Schema['PreviewRequest'];
 
 /** `applied` false means the step fell back to its input; `reason` says why. */
-export interface PreviewStageDto {
-  stepId: string;
-  applied: boolean;
-  reason: string | null;
-  url: string;
-}
+export type PreviewStageDto = Schema['PreviewStageDto'];
 
-export interface PreviewResponse {
-  previewId: string;
-  stages: PreviewStageDto[];
-}
-
-export interface ApplyPreviewRequest {
-  previewId: string;
-}
+export type PreviewResponse = Schema['PreviewResponse'];
+export type ApplyPreviewRequest = Schema['ApplyPreviewRequest'];
 
 // ---- AI book edits (`BookEditEndpoints.cs`) --------------------------------------------------------
 

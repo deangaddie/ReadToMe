@@ -48,9 +48,9 @@ namespace Read2Me.App.Api
         /// <summary>Labels and new-config defaults of the To Sentence Case step's options; keys are <c>toSentenceCaseConfig</c>'s.</summary>
         private static readonly IReadOnlyList<SettingsFieldDto> ToSentenceCaseOptions =
         [
-            new("paragraphEnabled", "Normalise all-caps paragraphs", "boolean", Default: true),
-            new("wordEnabled", "De-shout long all-caps words", "boolean", Default: true),
-            new("wordMinLength", "Minimum word length", "number", Min: 1, Step: 1, Default: 5),
+            SettingsFieldDto.Field("paragraphEnabled", "Normalise all-caps paragraphs", "boolean", Default: true),
+            SettingsFieldDto.Field("wordEnabled", "De-shout long all-caps words", "boolean", Default: true),
+            SettingsFieldDto.Field("wordMinLength", "Minimum word length", "number", Min: 1, Step: 1, Default: 5),
         ];
 
         public static void MapProviderSettingsEndpoints(this IEndpointRouteBuilder endpoints)

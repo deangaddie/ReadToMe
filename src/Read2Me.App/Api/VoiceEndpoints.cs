@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.OpenApi;
@@ -93,13 +94,13 @@ namespace Read2Me.App.Api
                 .RecordsNoStep("Starts the voice batch; what it commits is recorded as it lands.")
                 .WithSummary("Start the voice-audio batch: synthesise every generated voice that has a design prompt but no audio. Poll /api/voice-batch/status.");
             endpoints.MapGet("/api/voice-batch/status",
-                    (VoiceBatchRunner runner) => Results.Ok(new VoiceBatchStatusDto(
+                    (VoiceBatchRunner runner) => TypedResults.Ok(new VoiceBatchStatusDto(
                         runner.IsRunning, runner.Processed, runner.Total, runner.Failed,
                         runner.CurrentVoiceName, runner.CurrentOperation, runner.LastError)))
                 .WithSummary("Voice batch progress.");
             endpoints.MapPost("/api/voice-batch/cancel",
-                    (VoiceBatchRunner runner) => { runner.Cancel(); return Results.Ok(); })
-                .WithSummary("Cancel the running voice batch.");
+                    (VoiceBatchRunner runner) => { runner.Cancel(); return TypedResults.NoContent(); })
+                .WithSummary("Cancel the running voice batch. 204, also when none is running.");
         }
 
         /// <summary>
@@ -137,41 +138,41 @@ namespace Read2Me.App.Api
                 ReferenceLimit.SoftWarning(durationMs));
         }
 
-        private static async Task<IResult> GetVoicesAsync(
+        private static async Task<Results<Ok<CharacterVoicesDto>, NotFound>> GetVoicesAsync(
             string folder, Guid characterId, IFileSystem fs, ICharacterReader reader, IVoiceOriginalStore originals)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var voices = await reader.GetCharacterVoicesAsync(folderId, characterId);
             var defaultVoiceId = await reader.GetDefaultVoiceIdAsync(folderId, characterId);
-            return Results.Ok(new CharacterVoicesDto(
+            return TypedResults.Ok(new CharacterVoicesDto(
                 defaultVoiceId,
                 voices.Select(v => ToDto(folderId, v, originals, fs)).ToList()));
         }
 
-        private static async Task<IResult> GetVoiceAsync(
+        private static async Task<Results<Ok<VoiceDto>, NotFound>> GetVoiceAsync(
             string folder, Guid voiceId, IFileSystem fs, ICharacterReader reader, IVoiceOriginalStore originals)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var voice = await reader.GetVoiceAsync(folderId, voiceId);
-            return voice is null ? Results.NotFound() : Results.Ok(ToDto(folderId, voice, originals, fs));
+            return voice is null ? TypedResults.NotFound() : TypedResults.Ok(ToDto(folderId, voice, originals, fs));
         }
 
         /// The orchestrator stores the recording and commits the Book mutation that names it
         /// together (ADR 0007).
-        private static async Task<IResult> UploadAudioAsync(
+        private static async Task<Results<Ok<VoiceDto>, NotFound, ProblemHttpResult>> UploadAudioAsync(
             string folder, Guid voiceId, HttpRequest request, IFileSystem fs, ICharacterReader reader,
             IVoiceOriginalStore originals, VoiceOrchestrator orchestrator, MutationOrigin origin, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var voice = await reader.GetVoiceAsync(folderId, voiceId);
             if (voice is null)
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             // Kestrel's default body cap is 30 MB; a voice upload may be up to 200 MB.
             var sizeFeature = request.HttpContext.Features.Get<IHttpMaxRequestBodySizeFeature>();
@@ -204,91 +205,91 @@ namespace Read2Me.App.Api
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                return Results.Problem(ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
+                return TypedResults.Problem(ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
             }
 
             var updated = await reader.GetVoiceAsync(folderId, voiceId);
-            return updated is null ? Results.NotFound() : Results.Ok(ToDto(folderId, updated, originals, fs));
+            return updated is null ? TypedResults.NotFound() : TypedResults.Ok(ToDto(folderId, updated, originals, fs));
         }
 
         /// Transcribe, then commit the transcript.
-        private static async Task<IResult> TranscribeAsync(
+        private static async Task<Results<Ok<TranscribeVoiceResponse>, NotFound, ProblemHttpResult>> TranscribeAsync(
             string folder, Guid voiceId, HttpRequest request, IFileSystem fs, ICharacterReader reader,
             VoiceOrchestrator orchestrator, BookMutations mutations, MutationOrigin origin, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var voice = await reader.GetVoiceAsync(folderId, voiceId);
             if (voice is null)
-                return Results.NotFound();
+                return TypedResults.NotFound();
             if (voice.AudioFileName is null)
-                return Results.Problem("Voice has no reference audio to transcribe.", statusCode: StatusCodes.Status422UnprocessableEntity);
+                return TypedResults.Problem("Voice has no reference audio to transcribe.", statusCode: StatusCodes.Status422UnprocessableEntity);
 
             string transcript;
             try
             {
                 using var stream = orchestrator.OpenAudioStream(folderId, voice.AudioFileName);
                 if (stream is null)
-                    return Results.Problem("Could not open the voice audio file.", statusCode: StatusCodes.Status422UnprocessableEntity);
+                    return TypedResults.Problem("Could not open the voice audio file.", statusCode: StatusCodes.Status422UnprocessableEntity);
                 transcript = await orchestrator.TranscribeAsync(
                     folderId, voice.Id, stream, Path.GetFileName(voice.AudioFileName), ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                return Results.Problem(ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
+                return TypedResults.Problem(ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
             }
 
             OriginHeader.Apply(request, origin);
             var outcome = await mutations.CommitAsync(new SetVoiceTranscriptMutation(folderId, voice.Id, transcript), ct);
             return outcome is BookMutationOutcome.Rejected rejected
-                ? Results.Problem(rejected.Message, statusCode: StatusCodes.Status422UnprocessableEntity)
-                : Results.Ok(new TranscribeVoiceResponse(transcript));
+                ? TypedResults.Problem(rejected.Message, statusCode: StatusCodes.Status422UnprocessableEntity)
+                : TypedResults.Ok(new TranscribeVoiceResponse(transcript));
         }
 
         /// The voice-design prompt template rendered for one character, with the book's title and author.
-        private static async Task<IResult> RenderDesignPromptAsync(
+        private static async Task<Results<Ok<RenderedDesignPromptResponse>, NotFound>> RenderDesignPromptAsync(
             string folder, Guid characterId, IFileSystem fs, ICharacterReader reader,
             IProjectCatalogReader catalog, VoiceOrchestrator orchestrator)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var character = (await reader.GetCharactersWithAliasesAsync(folderId))
                 .SingleOrDefault(c => c.Id == characterId);
             if (character is null)
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var project = await catalog.GetProjectAsync(folderId);
             var prompt = await orchestrator.BuildRenderedPromptAsync(
                 project?.BookTitle ?? string.Empty, project?.Author ?? string.Empty, character.Name);
-            return Results.Ok(new RenderedDesignPromptResponse(prompt));
+            return TypedResults.Ok(new RenderedDesignPromptResponse(prompt));
         }
 
         /// A single voice design is a
         /// Throughput Run of one, bracketed so the live hub's LLM stream shows it as a run.
-        private static async Task<IResult> GenerateDesignPromptAsync(
+        private static async Task<Results<Ok<GenerateDesignPromptResponse>, NotFound, ProblemHttpResult>> GenerateDesignPromptAsync(
             string folder, Guid characterId, GenerateDesignPromptRequest? body, IFileSystem fs,
             ICharacterReader reader, VoiceOrchestrator orchestrator,
             EventBroadcaster<LlmStreamEvent> llmEvents, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             if (string.IsNullOrWhiteSpace(body?.Prompt))
-                return Results.Problem("Field 'prompt' is required.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("Field 'prompt' is required.", statusCode: StatusCodes.Status400BadRequest);
 
             if ((await reader.GetCharactersWithAliasesAsync(folderId)).All(c => c.Id != characterId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             llmEvents.Publish(new RunStarted());
             try
             {
                 var designPrompt = await orchestrator.GenerateWithPromptAsync(body.Prompt, ct);
-                return Results.Ok(new GenerateDesignPromptResponse(designPrompt));
+                return TypedResults.Ok(new GenerateDesignPromptResponse(designPrompt));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                return Results.Problem(ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
+                return TypedResults.Problem(ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
             }
             finally
             {
@@ -298,12 +299,12 @@ namespace Read2Me.App.Api
 
         /// Mirrors GenerateAudioPhase.RunStepAsync for a single voice; the generator
         /// persists the result (SetVoiceGeneratedCommand) itself.
-        private static async Task<IResult> GenerateAudioAsync(
+        private static async Task<Results<Ok<GenerateVoiceAudioResponse>, NotFound, ProblemHttpResult>> GenerateAudioAsync(
             string folder, Guid characterId, Guid voiceId, HttpRequest request, IFileSystem fs,
             ICharacterReader reader, VoiceOrchestrator orchestrator, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             // Read by hand rather than bound: an endpoint that declares a JSON body is not matched by a
             // bodyless POST at all (the /api fallback answers it 404), and bodyless is the common call.
@@ -316,23 +317,23 @@ namespace Read2Me.App.Api
                 }
                 catch (JsonException ex)
                 {
-                    return Results.Problem($"Invalid body: {ex.Message}", statusCode: StatusCodes.Status400BadRequest);
+                    return TypedResults.Problem($"Invalid body: {ex.Message}", statusCode: StatusCodes.Status400BadRequest);
                 }
             }
 
             var character = (await reader.GetCharactersWithAliasesAsync(folderId))
                 .SingleOrDefault(c => c.Id == characterId);
             if (character is null)
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var voice = (await reader.GetCharacterVoicesAsync(folderId, characterId))
                 .SingleOrDefault(v => v.Id == voiceId);
             if (voice is null)
-                return Results.NotFound();
+                return TypedResults.NotFound();
             // An unsaved prompt from the caller wins: the take's commit stores whichever prompt it was designed from.
             var designPrompt = string.IsNullOrWhiteSpace(body?.DesignPrompt) ? voice.DesignPrompt : body.DesignPrompt;
             if (string.IsNullOrWhiteSpace(designPrompt))
-                return Results.Problem("Voice has no design prompt. Send one as designPrompt, or set one first (SetVoiceDesignPrompt command or the prompt batch).",
+                return TypedResults.Problem("Voice has no design prompt. Send one as designPrompt, or set one first (SetVoiceDesignPrompt command or the prompt batch).",
                     statusCode: StatusCodes.Status422UnprocessableEntity);
 
             var result = await orchestrator.GenerateVoiceAudioAsync(new VoiceGenerationRequest
@@ -348,34 +349,34 @@ namespace Read2Me.App.Api
             }, ct);
 
             if (result.IsSuccess)
-                return Results.Ok(new GenerateVoiceAudioResponse(result.AudioFileName!, result.Transcript ?? string.Empty,
+                return TypedResults.Ok(new GenerateVoiceAudioResponse(result.AudioFileName!, result.Transcript ?? string.Empty,
                     result.ReferenceSeconds, result.ReferenceWarning));
             // Busy is transient, not a failed generation: the caller should just try again.
-            return Results.Problem(result.ErrorMessage ?? "Voice audio generation failed.",
+            return TypedResults.Problem(result.ErrorMessage ?? "Voice audio generation failed.",
                 statusCode: result.IsBusy ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status422UnprocessableEntity);
         }
 
-        private static IResult StartPromptBatch(
+        private static Results<Accepted<StartedResponse>, NotFound, ProblemHttpResult> StartPromptBatch(
             string folder, VoiceBatchStartRequest? body, IFileSystem fs, VoiceBatchRunner runner)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             return BatchStarted(runner.StartGeneratePrompts(folderId, body?.RegenerateAll ?? false));
         }
 
-        private static IResult StartAudioBatch(string folder, IFileSystem fs, VoiceBatchRunner runner)
+        private static Results<Accepted<StartedResponse>, NotFound, ProblemHttpResult> StartAudioBatch(string folder, IFileSystem fs, VoiceBatchRunner runner)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             return BatchStarted(runner.StartGenerateAudio(folderId));
         }
 
-        private static IResult BatchStarted(VoiceBatchStart start) => start switch
+        private static Results<Accepted<StartedResponse>, NotFound, ProblemHttpResult> BatchStarted(VoiceBatchStart start) => start switch
         {
-            VoiceBatchStart.Started => Results.Accepted(value: new StartedResponse(true)),
-            VoiceBatchStart.AlreadyRunning => Results.Problem("A voice batch is already running.", statusCode: StatusCodes.Status409Conflict),
+            VoiceBatchStart.Started => TypedResults.Accepted((string?)null, new StartedResponse(true)),
+            VoiceBatchStart.AlreadyRunning => TypedResults.Problem("A voice batch is already running.", statusCode: StatusCodes.Status409Conflict),
             VoiceBatchStart.Refused(var refusal) => StepReads.Refused(refusal),
             var other => throw new InvalidOperationException($"Unhandled {other}."),
         };

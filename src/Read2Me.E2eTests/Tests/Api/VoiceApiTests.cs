@@ -231,11 +231,11 @@ public class VoiceApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     [Fact]
-    public async Task Voice_batch_cancel_returns_ok()
+    public async Task Voice_batch_cancel_answers_no_content()
     {
         var response = await Http.PostAsync($"{app.BaseUrl}/api/voice-batch/cancel", null);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 
     [Fact]

@@ -8,21 +8,17 @@
  * entities and the book overview. Other response DTOs have no OpenAPI counterpart (see `dtos.ts`).
  */
 import type {
-  ApplyPreviewRequest,
   AudioPostProcessStepConfig,
   AudioProcessingUpdateRequest,
   BookOverviewDto,
   BulkAssignPreviewRequest,
   FfmpegTestRequest,
-  GenerateDesignPromptRequest,
-  GenerateVoiceAudioRequest,
   ItemsEnqueueRequest,
   NarrationReleasePreviewRequest,
   ParagraphsEnqueueRequest,
   PauseDurations,
   PlanBookEditRequest,
   PreflightRunRequest,
-  PreviewRequest,
   PronunciationDeletedDto,
   PronunciationDraftRequest,
   PronunciationImpactDto,
@@ -37,7 +33,6 @@ import type {
   StructureRuleDto,
   TryPronunciationRequest,
 } from './dtos';
-import type { paths } from './schema';
 
 type Pin<THand extends TGenerated, TGenerated> = THand;
 
@@ -52,9 +47,6 @@ export type SchemaPins = [
   Pin<BulkAssignPreviewRequest, Schema['BulkAssignPreviewRequest']>,
   Pin<NarrationReleasePreviewRequest, Schema['NarrationReleasePreviewRequest']>,
   Pin<ItemsEnqueueRequest, Schema['ItemsEnqueueRequest']>,
-  Pin<GenerateDesignPromptRequest, Schema['GenerateDesignPromptRequest']>,
-  Pin<PreviewRequest, Schema['PreviewRequest']>,
-  Pin<ApplyPreviewRequest, Schema['ApplyPreviewRequest']>,
   Pin<PlanBookEditRequest, Schema['PlanBookEditRequest']>,
   Pin<ProposeBookEditRequest, Schema['ProposeBookEditRequest']>,
   Pin<ProposeOneBookEditRequest, Schema['ProposeOneBookEditRequest']>,
@@ -68,11 +60,4 @@ export type SchemaPins = [
   Pin<TryPronunciationRequest, Schema['TryPronunciationRequest']>,
   Pin<PronunciationSpanReport, Schema['PronunciationSpanReport']>,
   Pin<SetupCheckReport, Schema['SetupCheckReport']>,
-  // Inline in the document (the handler reads it by hand), so pinned to its operation.
-  Pin<
-    GenerateVoiceAudioRequest,
-    NonNullable<
-      paths['/api/projects/{folder}/characters/{characterId}/voices/{voiceId}/generate-audio']['post']['requestBody']
-    >['content']['application/json']
-  >,
 ];
