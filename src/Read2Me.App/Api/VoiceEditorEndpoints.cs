@@ -2,12 +2,14 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.History;
+using static Read2Me.App.Api.SettingsFieldDto;
 using VoiceEntity = Read2Me.Data.Entities.Voice;
 
 namespace Read2Me.App.Api
@@ -19,7 +21,8 @@ namespace Read2Me.App.Api
     /// settings (silence-trim's output floor) are fixed server-side.
     /// </summary>
     public sealed record StepCatalogEntryDto(
-        string StepId, string Label, string Blurb, IReadOnlyList<SettingsFieldDto> Dials, JsonElement Defaults);
+        string StepId, string Label, string Blurb, IReadOnlyList<SettingsFieldDto> Dials,
+        IReadOnlyDictionary<string, JsonElement> Defaults);
 
     public sealed record PreviewStepRequest(string? StepId, JsonElement? Settings);
     public sealed record PreviewRequest(IReadOnlyList<PreviewStepRequest>? Steps);
@@ -44,6 +47,7 @@ namespace Read2Me.App.Api
                 .RecordsNoStep("A preview; nothing is written.")
                 .WithSummary("Render a chain of steps over the voice's original audio. Steps run in catalog order whatever order they are sent; settings are dial values merged over the step's defaults. Answers a previewId (valid 30 minutes) and one playable stage per step.");
             endpoints.MapGet("/api/previews/{previewId}/{stepId}.wav", GetPreviewStage)
+                .Produces<Stream>(contentType: "audio/wav")
                 .WithSummary("The audio after one stage of a rendered preview. 404 once the preview has expired.");
             endpoints.MapPost("/api/projects/{folder}/voices/{voiceId:guid}/editor/apply", ApplyAsync)
                 .RecordsStep("Edit voice audio", StepAction.Voice)
@@ -52,39 +56,40 @@ namespace Read2Me.App.Api
                 .RecordsStep("Restore original voice audio", StepAction.Voice)
                 .WithSummary("Put the voice's original audio back and forget the edit. A no-op for a voice that was never edited.");
             endpoints.MapGet("/api/projects/{folder}/voices/{voiceId:guid}/original.wav", GetOriginalAsync)
+                .Produces<Stream>(contentType: "audio/wav")
                 .ReadsAt()
                 .WithSummary("The voice's audio as it was before the editor touched it. 404 while the voice is unedited — the live WAV is the original then.");
         }
 
-        private static IResult GetCatalog(string? scope)
+        private static Results<Ok<IReadOnlyList<StepCatalogEntryDto>>, ProblemHttpResult> GetCatalog(string? scope)
         {
             if (!string.Equals(scope, "voice", StringComparison.OrdinalIgnoreCase))
-                return Results.Problem("Only scope=voice has a step catalog.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("Only scope=voice has a step catalog.", statusCode: StatusCodes.Status400BadRequest);
 
-            return Results.Ok(VoiceStepCatalog.Entries);
+            return TypedResults.Ok(VoiceStepCatalog.Entries);
         }
 
-        private static async Task<IResult> PreviewAsync(
+        private static async Task<Results<Ok<PreviewResponse>, NotFound, ProblemHttpResult>> PreviewAsync(
             string folder, Guid voiceId, PreviewRequest? body, IFileSystem fs, ICharacterReader reader,
             IVoicePreviewRenderer renderer, IPreviewStore previews, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var voice = await reader.GetVoiceAsync(folderId, voiceId);
             if (voice is null)
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             if (body?.Steps is null || body.Steps.Count == 0)
-                return Results.Problem("Tick at least one step to preview.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("Tick at least one step to preview.", statusCode: StatusCodes.Status400BadRequest);
 
             var requested = new Dictionary<string, JsonElement?>(StringComparer.Ordinal);
             foreach (var step in body.Steps)
             {
                 if (step.StepId is null || !VoiceStepCatalog.Contains(step.StepId))
-                    return Results.Problem($"'{step.StepId}' is not a voice editor step.", statusCode: StatusCodes.Status400BadRequest);
+                    return TypedResults.Problem($"'{step.StepId}' is not a voice editor step.", statusCode: StatusCodes.Status400BadRequest);
                 if (!requested.TryAdd(step.StepId, step.Settings))
-                    return Results.Problem($"Step '{step.StepId}' was sent twice.", statusCode: StatusCodes.Status400BadRequest);
+                    return TypedResults.Problem($"Step '{step.StepId}' was sent twice.", statusCode: StatusCodes.Status400BadRequest);
             }
 
             if (VoiceRefOrNull(folderId, voice) is not { } voiceRef)
@@ -92,42 +97,42 @@ namespace Read2Me.App.Api
 
             var (chain, refusal) = VoiceStepCatalog.BuildChain(requested);
             if (refusal is not null)
-                return Results.Problem(refusal, statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem(refusal, statusCode: StatusCodes.Status400BadRequest);
 
             // No tokens: AudioPreviewStore never evicts, and this store keeps the bytes.
             var result = await renderer.RenderChainAsync(voiceRef, chain!, tokens: [], ct);
             if (result.Error is not null)
-                return Results.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+                return TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
 
             var entry = previews.Save(folderId, voiceId, result.Steps);
-            return Results.Ok(new PreviewResponse(
+            return TypedResults.Ok(new PreviewResponse(
                 entry.PreviewId,
                 entry.Stages.Select(s => new PreviewStageDto(s.StepId, s.Applied, s.Reason, StageUrl(entry.PreviewId, s.StepId))).ToList()));
         }
 
-        private static IResult GetPreviewStage(string previewId, string stepId, HttpResponse response, IPreviewStore previews)
+        private static Results<FileContentHttpResult, NotFound> GetPreviewStage(string previewId, string stepId, HttpResponse response, IPreviewStore previews)
         {
             var stage = previews.TryGet(previewId)?.Stages.FirstOrDefault(s => s.StepId == stepId);
-            return stage is null ? Results.NotFound() : Wav(response, stage.Audio);
+            return stage is null ? TypedResults.NotFound() : Wav(response, stage.Audio);
         }
 
-        private static async Task<IResult> ApplyAsync(
+        private static async Task<Results<Ok<VoiceDto>, NotFound, ProblemHttpResult>> ApplyAsync(
             string folder, Guid voiceId, ApplyPreviewRequest? body, IFileSystem fs, ICharacterReader reader,
             IVoiceOriginalStore originals, IPreviewStore previews, IVoiceAudioEditor editor, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var voice = await reader.GetVoiceAsync(folderId, voiceId);
             if (voice is null)
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             if (string.IsNullOrWhiteSpace(body?.PreviewId))
-                return Results.Problem("previewId is required.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("previewId is required.", statusCode: StatusCodes.Status400BadRequest);
 
             var entry = previews.TryGet(body.PreviewId);
             if (entry is null || entry.Folder != folderId || entry.VoiceId != voiceId)
-                return Results.Problem(
+                return TypedResults.Problem(
                     "That preview has expired or was not rendered for this voice — preview again before applying.",
                     statusCode: StatusCodes.Status422UnprocessableEntity);
 
@@ -141,21 +146,21 @@ namespace Read2Me.App.Api
             catch (InvalidOperationException ex)
             {
                 // The Book refused to record the edit; the editor has already put the audio back.
-                return Results.Problem(ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
+                return TypedResults.Problem(ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
             }
-            return Results.Ok(VoiceEndpoints.ToDto(folderId, voice, originals, fs));
+            return TypedResults.Ok(VoiceEndpoints.ToDto(folderId, voice, originals, fs));
         }
 
-        private static async Task<IResult> RestoreAsync(
+        private static async Task<Results<Ok<VoiceDto>, NotFound, ProblemHttpResult>> RestoreAsync(
             string folder, Guid voiceId, IFileSystem fs, ICharacterReader reader,
             IVoiceOriginalStore originals, IVoiceAudioEditor editor, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var voice = await reader.GetVoiceAsync(folderId, voiceId);
             if (voice is null)
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             if (VoiceRefOrNull(folderId, voice) is not { } voiceRef)
                 return NoAudio();
@@ -166,9 +171,9 @@ namespace Read2Me.App.Api
             }
             catch (InvalidOperationException ex)
             {
-                return Results.Problem(ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
+                return TypedResults.Problem(ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
             }
-            return Results.Ok(VoiceEndpoints.ToDto(folderId, voice, originals, fs));
+            return TypedResults.Ok(VoiceEndpoints.ToDto(folderId, voice, originals, fs));
         }
 
         private static async Task<IResult> GetOriginalAsync(
@@ -198,17 +203,17 @@ namespace Read2Me.App.Api
                 ? null
                 : new VoiceAudioRef(folderId, voice.CharacterId, voice.Id, voice.AudioFileName);
 
-        private static IResult NoAudio() =>
-            Results.Problem("This voice has no audio to edit.", statusCode: StatusCodes.Status422UnprocessableEntity);
+        private static ProblemHttpResult NoAudio() =>
+            TypedResults.Problem("This voice has no audio to edit.", statusCode: StatusCodes.Status422UnprocessableEntity);
 
         internal static string StageUrl(string previewId, string stepId) => $"/api/previews/{previewId}/{stepId}.wav";
 
         /// Previews are rewritten per render and the original vanishes on restore, so neither may be
-        /// cached. Results.Bytes sets the explicit Content-Length the audio element needs for a duration.
-        private static IResult Wav(HttpResponse response, byte[] audio)
+        /// cached. TypedResults.Bytes sets the explicit Content-Length the audio element needs for a duration.
+        private static FileContentHttpResult Wav(HttpResponse response, byte[] audio)
         {
             response.Headers.CacheControl = "no-store";
-            return Results.Bytes(audio, "audio/wav");
+            return TypedResults.Bytes(audio, "audio/wav");
         }
     }
 
@@ -285,33 +290,32 @@ namespace Read2Me.App.Api
         {
             var row = VoiceStepRow.From(defaults);
             var dials = DialsFor(defaults.StepId);
-            var values = new JsonObject();
+            var values = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
             if (defaults.Settings is { } settings)
                 foreach (var dial in dials)
                     if (settings.TryGetProperty(dial.Key, out var value))
-                        values[dial.Key] = JsonNode.Parse(value.GetRawText());
+                        values[dial.Key] = value.Clone();
 
-            var defaultsElement = JsonSerializer.SerializeToElement(values);
             return new StepCatalogEntryDto(
                 defaults.StepId, row.Label, row.Blurb,
-                dials.Select(d => d with { Default = defaultsElement.TryGetProperty(d.Key, out var v) ? v : null }).ToList(),
-                defaultsElement);
+                dials.Select(d => d with { Default = values.TryGetValue(d.Key, out var v) ? v : null }).ToList(),
+                values);
         }
 
         private static IReadOnlyList<SettingsFieldDto> DialsFor(string stepId) => stepId switch
         {
             AudioPostProcessStepIds.DePlosive =>
             [
-                new("cutoffHz", "Cutoff (Hz)", "number", DePlosiveSettings.MinCutoffHz, DePlosiveSettings.MaxCutoffHz, 5,
+                Field("cutoffHz", "Cutoff (Hz)", "number", DePlosiveSettings.MinCutoffHz, DePlosiveSettings.MaxCutoffHz, 5,
                     Help: "Above ~100 Hz this starts eating a deep voice's fundamental."),
             ],
             AudioPostProcessStepIds.Denoise =>
             [
-                new("strength", "Strength", "number", DenoiseSettings.MinStrength, DenoiseSettings.MaxStrength, 1),
+                Field("strength", "Strength", "number", DenoiseSettings.MinStrength, DenoiseSettings.MaxStrength, 1),
             ],
             AudioPostProcessStepIds.HissReduce =>
             [
-                new("preset", "Strength", "enum", Options:
+                Field("preset", "Strength", "enum", Options:
                 [
                     new(HissReducePresets.Light, "Light"),
                     new(HissReducePresets.Strong, "Strong"),
@@ -319,7 +323,7 @@ namespace Read2Me.App.Api
             ],
             AudioPostProcessStepIds.ConsonantSoften =>
             [
-                new("preset", "Preset", "enum", Options:
+                Field("preset", "Preset", "enum", Options:
                 [
                     new(ConsonantSoftenPresets.Light, "Light"),
                     new(ConsonantSoftenPresets.Medium, "Medium"),
@@ -328,9 +332,9 @@ namespace Read2Me.App.Api
             ],
             AudioPostProcessStepIds.SilenceTrim =>
             [
-                new("thresholdDb", "Threshold (dB)", "number",
+                Field("thresholdDb", "Threshold (dB)", "number",
                     SilenceTrimSettings.VoiceMinThresholdDb, SilenceTrimSettings.VoiceMaxThresholdDb, SilenceTrimSettings.VoiceThresholdStepDb),
-                new("padMs", "Pad (ms)", "number",
+                Field("padMs", "Pad (ms)", "number",
                     SilenceTrimSettings.VoiceMinPadMs, SilenceTrimSettings.VoiceMaxPadMs, SilenceTrimSettings.VoicePadStepMs),
             ],
             _ => [],

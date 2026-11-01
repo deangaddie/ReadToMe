@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { PreviewStageDto, StepCatalogEntryDto, VoiceDto } from '@app/api';
+import { FIELD_UNSET } from '../../../testing/settings-fields';
 import {
   applyBlockedReason,
   buildPreviewSteps,
@@ -18,6 +19,7 @@ const CATALOG: StepCatalogEntryDto[] = [
     blurb: 'Removes broadband room noise and hum.',
     dials: [
       {
+        ...FIELD_UNSET,
         key: 'strength',
         label: 'Strength',
         kind: 'number',
@@ -36,6 +38,7 @@ const CATALOG: StepCatalogEntryDto[] = [
     blurb: 'Attenuates hiss above 5 kHz only.',
     dials: [
       {
+        ...FIELD_UNSET,
         key: 'preset',
         label: 'Strength',
         kind: 'enum',
@@ -56,6 +59,7 @@ const CATALOG: StepCatalogEntryDto[] = [
     blurb: 'Trims dead air from the start and end.',
     dials: [
       {
+        ...FIELD_UNSET,
         key: 'thresholdDb',
         label: 'Threshold (dB)',
         kind: 'number',
@@ -66,6 +70,7 @@ const CATALOG: StepCatalogEntryDto[] = [
         nullable: false,
       },
       {
+        ...FIELD_UNSET,
         key: 'padMs',
         label: 'Pad (ms)',
         kind: 'number',

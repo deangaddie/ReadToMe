@@ -14,6 +14,7 @@ import { ConfirmService } from '@app/ui/dialogs';
 import { FakeApi, problem } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';
 import { installNavigation, settle } from '../../../testing/fake-navigation';
+import { FIELD_UNSET } from '../../../testing/settings-fields';
 import type { VoiceEditorPage } from './voice-editor-page';
 import '../project/project-shell';
 import './voice-editor-page';
@@ -60,6 +61,7 @@ const CATALOG: StepCatalogEntryDto[] = [
     blurb: 'Removes broadband room noise and hum.',
     dials: [
       {
+        ...FIELD_UNSET,
         key: 'strength',
         label: 'Strength',
         kind: 'number',
@@ -78,10 +80,14 @@ const CATALOG: StepCatalogEntryDto[] = [
     blurb: 'Attenuates hiss above 5 kHz only.',
     dials: [
       {
+        ...FIELD_UNSET,
         key: 'preset',
         label: 'Strength',
         kind: 'enum',
-        options: [{ value: 'light' }, { value: 'strong' }],
+        options: [
+          { value: 'light', label: null },
+          { value: 'strong', label: null },
+        ],
         default: 'light',
         nullable: false,
       },
@@ -94,6 +100,7 @@ const CATALOG: StepCatalogEntryDto[] = [
     blurb: 'Trims dead air from the start and end.',
     dials: [
       {
+        ...FIELD_UNSET,
         key: 'thresholdDb',
         label: 'Threshold (dB)',
         kind: 'number',

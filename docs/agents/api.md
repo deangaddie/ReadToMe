@@ -461,7 +461,7 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/voice-batch/prompts 
 # synthesise reference audio for every planned voice:
 curl -s -X POST http://localhost:5000/api/projects/{folder}/voice-batch/audio
 # poll /api/voice-batch/status; stop a running batch early (voices done so far stay):
-curl -s -X POST http://localhost:5000/api/voice-batch/cancel
+curl -s -X POST http://localhost:5000/api/voice-batch/cancel   # 204
 
 # inspect / regenerate one voice:
 curl -s http://localhost:5000/api/projects/{folder}/characters/{characterId}/voices
@@ -494,7 +494,8 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/{characte
 # the schema per provider type (ranges, defaults) drives an editor:
 curl -s 'http://localhost:5000/api/settings/paragraph-tts/schema?type=VoxCpm2'   # VoxCpm2|Chatterbox|Qwen3Base|Breeze
 curl -s 'http://localhost:5000/api/settings/voice-design/schema?type=Qwen3'      # VoxCpm2|Qwen3|Breeze
-# → { type, fields: [{ key, label, kind: number|boolean|enum|string|text, min?, max?, step?, options?, default, help?, nullable }] }
+# → { type, fields: [{ key, label, kind: number|boolean|enum|string|text, min, max, step, options: [{ value, label }], default, help, nullable }] }
+#   every field present, null when a field has none (an option's null label shows its value)
 # then: SetVoiceTtsSettingsOverride / SetVoiceSettingsOverride commands with json = '{"cfg_value":3.5}' (null clears)
 
 # voice audio editor: clean up a voice's reference audio with post-process steps. The catalog lists

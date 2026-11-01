@@ -1,9 +1,7 @@
 import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import type {
-  ApplyPreviewRequest,
   Guid,
-  PreviewRequest,
   PreviewResponse,
   PreviewStepRequest,
   StepCatalogEntryDto,
@@ -26,31 +24,29 @@ export class VoiceEditorApi {
 
   /** The voice-scope steps in chain order, each with dials and defaults. */
   catalog(): Promise<StepCatalogEntryDto[]> {
-    return this.api.untypedGet<StepCatalogEntryDto[]>('/api/audio/steps/catalog', {
-      scope: 'voice',
-    });
+    return this.api.get('/api/audio/steps/catalog', { query: { scope: 'voice' } });
   }
 
   /** Render the ticked steps over the voice's original. 400 on an empty or unknown chain, 422 without audio. */
   preview(folder: string, voiceId: Guid, steps: PreviewStepRequest[]): Promise<PreviewResponse> {
-    const request: PreviewRequest = { steps };
-    return this.api.untypedPost<PreviewResponse>(
-      `${projectUrl(folder)}/voices/${voiceId}/editor/preview`,
-      request,
-    );
+    return this.api.post('/api/projects/{folder}/voices/{voiceId}/editor/preview', {
+      path: { folder, voiceId },
+      body: { steps },
+    });
   }
 
   /** Write a preview's final stage over the voice. 422 when the preview expired or is another voice's. */
   apply(folder: string, voiceId: Guid, previewId: string): Promise<VoiceDto> {
-    const request: ApplyPreviewRequest = { previewId };
-    return this.api.untypedPost<VoiceDto>(
-      `${projectUrl(folder)}/voices/${voiceId}/editor/apply`,
-      request,
-    );
+    return this.api.post('/api/projects/{folder}/voices/{voiceId}/editor/apply', {
+      path: { folder, voiceId },
+      body: { previewId },
+    });
   }
 
   /** Put the original back and forget the edit. */
   restore(folder: string, voiceId: Guid): Promise<VoiceDto> {
-    return this.api.untypedPost<VoiceDto>(`${projectUrl(folder)}/voices/${voiceId}/editor/restore`);
+    return this.api.post('/api/projects/{folder}/voices/{voiceId}/editor/restore', {
+      path: { folder, voiceId },
+    });
   }
 }

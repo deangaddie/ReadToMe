@@ -32,13 +32,16 @@ it.** Four decisions make it up; each issue's resolution comment holds the detai
   (`OpenApiContractTests.Write_the_contract`) gets the `v1` document from `IOpenApiDocumentProvider` on the in-proc
   host and writes a canonical `src/Read2Me.Web/src/app/api/openapi.json`: keys sorted at every depth, `servers`
   dropped, array order kept. `scripts/api-types.ps1` runs it, then `bun run api:types` turns the file into
-  `schema.d.ts`. The gate runs that script after `dotnet build` and before the web check, so `typecheck` is the
-  comparison, not a text diff. Both files are committed, so a contract change shows as a diff and the web-only loop
-  needs no .NET.
+  `schema.d.ts` (with `--empty-objects-unknown`, so an object with no listed properties, such as a `JsonObject` or a
+  map of `JsonElement`, reads `Record<string, unknown>`). The gate runs that script after `dotnet build` and before
+  the web check, so `typecheck` is the comparison, not a text diff. Both files are committed, so a contract change
+  shows as a diff and the web-only loop needs no .NET.
 - **[An endpoint's return type is its declaration](https://github.com/deangaddie/ReadToMe/issues/168).** Handlers
   return `Results<>` unions built with `TypedResults`, over named positional records. One document transformer adds a
-  `default` ProblemDetails response to every `/api/` operation. Mapped file endpoints declare a content type with no
-  schema. A property that isn't a constructor parameter (a computed get-only one, or any property of a settable
+  `default` ProblemDetails response to every `/api/` operation. Mapped file endpoints declare their content type with a
+  binary schema, `.Produces<Stream>(contentType: …)` (a bare `.Produces(200, contentType: …)` documents no content).
+  A response record's constructor parameters carry no defaults, so every field reads required. A property that
+  isn't a constructor parameter (a computed get-only one, or any property of a settable
   class such as a settings entity) is marked required, since every answer carries it. Numbers are strict
   (`NumberHandling.Strict`). Document tests fail on an undeclared 2xx body, an integer or
   nullable enum, or a duplicate short schema name.

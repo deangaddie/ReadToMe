@@ -64,7 +64,7 @@ bundler does not see it until then.
 - `src/app/history/` — the project History sheet: its store, rows and viewing a past step.
 - `src/app/theme/` — the theme service and theme CSS.
 - `src/styles/global.css` — design tokens, fonts and the global primitive CSS.
-- `src/testing/` — test helpers: fake Navigation API, API client, live hub and timers.
+- `src/testing/` — test helpers: fake Navigation API, API client, live hub and timers, and wire fixtures (settings fields, structure rules, themes).
 - `src/app/help/` — `helpText(step, { title? })`, the `r2m-help` partial, over `help.generated.ts`, which
   `bun run help` renders from the repo's `docs/guide/<step>.md`. See "Help text" below.
 - `scripts/` — `icons.ts` / `icon-manifest.ts`

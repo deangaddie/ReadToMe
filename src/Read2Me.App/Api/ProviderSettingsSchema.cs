@@ -2,11 +2,12 @@ using Read2Me.AppData.Entities;
 using Read2Me.Services.Audio.ParagraphTts.Settings;
 using Read2Me.Services.Audio.SemanticSimilarity.Settings;
 using Read2Me.Services.Audio.VoiceDesign.Settings;
+using static Read2Me.App.Api.SettingsFieldDto;
 
 namespace Read2Me.App.Api
 {
-    /// <summary>One choice of an <c>enum</c> field.</summary>
-    public sealed record SettingsOptionDto(string Value, string? Label = null);
+    /// <summary>One choice of an <c>enum</c> field; a null <see cref="Label"/> shows the value.</summary>
+    public sealed record SettingsOptionDto(string Value, string? Label);
 
     /// <summary>
     /// One editable field of a provider's settings record. <see cref="Key"/> is the JSON property
@@ -15,17 +16,29 @@ namespace Read2Me.App.Api
     /// A number with both <see cref="Min"/> and <see cref="Max"/> renders as a slider. A
     /// <see cref="Nullable"/> number may be left blank, meaning "use the server's default".
     /// </summary>
+    /// <remarks>
+    /// Positional with no defaults, so the document reads every field required, as every answer writes
+    /// them all (#168). <see cref="Field"/> builds one naming only the parts it sets.
+    /// </remarks>
     public sealed record SettingsFieldDto(
         string Key,
         string Label,
         string Kind,
-        double? Min = null,
-        double? Max = null,
-        double? Step = null,
-        IReadOnlyList<SettingsOptionDto>? Options = null,
-        object? Default = null,
-        string? Help = null,
-        bool Nullable = false);
+        double? Min,
+        double? Max,
+        double? Step,
+        IReadOnlyList<SettingsOptionDto>? Options,
+        object? Default,
+        string? Help,
+        bool Nullable)
+    {
+        /// <summary>A field with only the parts it names; the rest are null, and it isn't nullable.</summary>
+        public static SettingsFieldDto Field(
+            string key, string label, string kind, double? Min = null, double? Max = null, double? Step = null,
+            IReadOnlyList<SettingsOptionDto>? Options = null, object? Default = null, string? Help = null,
+            bool Nullable = false) =>
+            new(key, label, kind, Min, Max, Step, Options, Default, Help, Nullable);
+    }
 
     // The fields a provider type exposes, with the recommended default per field: one named record per
     // area, so each document component reads as its area (a generic record would be SettingsSchemaDtoOfX).
@@ -52,7 +65,7 @@ namespace Read2Me.App.Api
     {
         private static readonly IReadOnlyList<SettingsOptionDto> Qwen3Languages =
             new[] { "auto", "en", "zh", "ja", "ko", "de", "fr", "ru", "pt", "es", "it" }
-                .Select(l => new SettingsOptionDto(l)).ToList();
+                .Select(l => new SettingsOptionDto(l, null)).ToList();
 
         public static ParagraphTtsSettingsSchema ParagraphTts(ParagraphTtsServiceType type) => type switch
         {
@@ -93,7 +106,7 @@ namespace Read2Me.App.Api
         /// <summary>Both similarity models share one record; the key is its (unnamed, so PascalCase) JSON property.</summary>
         public static SemanticSimilaritySettingsSchema SemanticSimilarity(SemanticSimilarityServiceType type) => new(type,
         [
-            new(nameof(SemanticSimilaritySettings.PassThreshold), "Pass Threshold", "number", Min: 0.0, Max: 1.0, Step: 0.01,
+            Field(nameof(SemanticSimilaritySettings.PassThreshold), "Pass Threshold", "number", Min: 0.0, Max: 1.0, Step: 0.01,
                 Default: new SemanticSimilaritySettings().PassThreshold,
                 Help: "Similarity at or above this passes the semantic accuracy check. (0–1, exclusive)"),
         ]);
@@ -106,23 +119,23 @@ namespace Read2Me.App.Api
             string modelId, double cfgValue, int inferenceTimesteps, int minLen, int maxLen,
             bool retryBadcase, int retryBadcaseMaxTimes, double retryBadcaseRatioThreshold) =>
         [
-            new("modelId", "Model", "string", Default: modelId,
+            Field("modelId", "Model", "string", Default: modelId,
                 Help: "The audio.cpp server.json model entry."),
-            new("cfg_value", "CFG Value", "number", Min: 1.0, Max: 5.0, Step: 0.1, Default: cfgValue,
+            Field("cfg_value", "CFG Value", "number", Min: 1.0, Max: 5.0, Step: 0.1, Default: cfgValue,
                 Help: "Guidance scale — higher = closer to design prompt. (1.0–5.0)"),
-            new("inference_timesteps", "LocDiT Steps", "number", Min: 1, Max: 50, Step: 1, Default: inferenceTimesteps,
+            Field("inference_timesteps", "LocDiT Steps", "number", Min: 1, Max: 50, Step: 1, Default: inferenceTimesteps,
                 Help: "Flow-matching diffusion steps — speed vs quality. (1–50)"),
-            new("min_len", "Min Length (tokens)", "number", Min: 1, Max: 100, Step: 1, Default: minLen,
+            Field("min_len", "Min Length (tokens)", "number", Min: 1, Max: 100, Step: 1, Default: minLen,
                 Help: "Minimum output length in tokens."),
-            new("max_len", "Max Length (tokens)", "number", Min: 10, Max: 8192, Step: 1, Default: maxLen,
+            Field("max_len", "Max Length (tokens)", "number", Min: 10, Max: 8192, Step: 1, Default: maxLen,
                 Help: "Maximum output length in tokens (server caps at 8192)."),
-            new("retry_badcase", "Retry Bad Cases", "boolean", Default: retryBadcase,
+            Field("retry_badcase", "Retry Bad Cases", "boolean", Default: retryBadcase,
                 Help: "Re-synthesize when a bad result is detected."),
-            new("retry_badcase_max_times", "Max Retries", "number", Min: 1, Max: 10, Step: 1, Default: retryBadcaseMaxTimes,
+            Field("retry_badcase_max_times", "Max Retries", "number", Min: 1, Max: 10, Step: 1, Default: retryBadcaseMaxTimes,
                 Help: "Maximum retry attempts."),
-            new("retry_badcase_ratio_threshold", "Ratio Threshold", "number", Min: 1.0, Step: 0.1, Default: retryBadcaseRatioThreshold,
+            Field("retry_badcase_ratio_threshold", "Ratio Threshold", "number", Min: 1.0, Step: 0.1, Default: retryBadcaseRatioThreshold,
                 Help: "Bad-case detection ratio threshold."),
-            new("seed", "Seed", "number", Min: 0, Step: 1, Default: null, Nullable: true,
+            Field("seed", "Seed", "number", Min: 0, Step: 1, Default: null, Nullable: true,
                 Help: "Pin a seed for repeatable output. Leave blank for a random seed per request, so retries differ."),
         ];
 
@@ -135,21 +148,21 @@ namespace Read2Me.App.Api
             var r = ChatterboxParagraphTtsSettings.Recommended;
             return
             [
-                new("modelId", "Model", "string", Default: r.ModelId,
+                Field("modelId", "Model", "string", Default: r.ModelId,
                     Help: "The audio.cpp server.json model entry."),
-                new("exaggeration", "Exaggeration", "number", Min: 0.0, Max: 2.0, Step: 0.05, Default: r.Exaggeration,
+                Field("exaggeration", "Exaggeration", "number", Min: 0.0, Max: 2.0, Step: 0.05, Default: r.Exaggeration,
                     Help: "Emotional intensity. (0.0–2.0)"),
-                new("cfg_weight", "CFG Weight", "number", Min: 0.0, Max: 1.0, Step: 0.05, Default: r.CfgWeight,
+                Field("cfg_weight", "CFG Weight", "number", Min: 0.0, Max: 1.0, Step: 0.05, Default: r.CfgWeight,
                     Help: "Pace/guidance weight. (0.0–1.0)"),
-                new("temperature", "Temperature", "number", Min: 0.0, Max: 2.0, Step: 0.05, Default: r.Temperature,
+                Field("temperature", "Temperature", "number", Min: 0.0, Max: 2.0, Step: 0.05, Default: r.Temperature,
                     Help: "Sampling randomness. (0.0–2.0)"),
-                new("min_p", "Min P", "number", Min: 0.0, Max: 1.0, Step: 0.01, Default: r.MinP,
+                Field("min_p", "Min P", "number", Min: 0.0, Max: 1.0, Step: 0.01, Default: r.MinP,
                     Help: "Nucleus sampling floor."),
-                new("top_p", "Top P", "number", Min: 0.0, Max: 1.0, Step: 0.01, Default: r.TopP,
+                Field("top_p", "Top P", "number", Min: 0.0, Max: 1.0, Step: 0.01, Default: r.TopP,
                     Help: "Nucleus sampling ceiling."),
-                new("repetition_penalty", "Repetition Penalty", "number", Min: 1.0, Max: 2.0, Step: 0.05, Default: r.RepetitionPenalty,
+                Field("repetition_penalty", "Repetition Penalty", "number", Min: 1.0, Max: 2.0, Step: 0.05, Default: r.RepetitionPenalty,
                     Help: "Penalizes repeated tokens."),
-                new("seed", "Seed", "number", Min: 0, Step: 1, Default: null, Nullable: true,
+                Field("seed", "Seed", "number", Min: 0, Step: 1, Default: null, Nullable: true,
                     Help: "Pin a seed for repeatable output. Leave blank for a random seed per request, so retries differ."),
             ];
         }
@@ -160,21 +173,21 @@ namespace Read2Me.App.Api
             var r = BreezeParagraphTtsSettings.Recommended;
             return
             [
-                new("modelId", "Model", "string", Default: r.ModelId,
+                Field("modelId", "Model", "string", Default: r.ModelId,
                     Help: "The audio.cpp server.json model entry."),
-                new("instructedGuidanceScale", "Instructed Guidance Scale", "number", Min: 1.0, Max: 5.0, Step: 0.1,
+                Field("instructedGuidanceScale", "Instructed Guidance Scale", "number", Min: 1.0, Max: 5.0, Step: 0.1,
                     Default: r.InstructedGuidanceScale,
                     Help: "Guidance scale when the item has voice instructions — higher follows them harder. (1.0–5.0)"),
-                new("plainGuidanceScale", "Plain Guidance Scale", "number", Min: 1.0, Max: 5.0, Step: 0.1,
+                Field("plainGuidanceScale", "Plain Guidance Scale", "number", Min: 1.0, Max: 5.0, Step: 0.1,
                     Default: r.PlainGuidanceScale,
                     Help: "Guidance scale when the item has no voice instructions. 1 is fastest. (1.0–5.0)"),
-                new("temperature", "Temperature", "number", Min: 0.0, Max: 2.0, Step: 0.05, Default: r.Temperature,
+                Field("temperature", "Temperature", "number", Min: 0.0, Max: 2.0, Step: 0.05, Default: r.Temperature,
                     Help: "Sampling randomness. (0.0–2.0)"),
-                new("topK", "Top K", "number", Min: 1, Step: 1, Default: r.TopK,
+                Field("topK", "Top K", "number", Min: 1, Step: 1, Default: r.TopK,
                     Help: "Top-K sampling cutoff."),
-                new("topP", "Top P", "number", Min: 0.0, Max: 1.0, Step: 0.01, Default: r.TopP,
+                Field("topP", "Top P", "number", Min: 0.0, Max: 1.0, Step: 0.01, Default: r.TopP,
                     Help: "Nucleus sampling ceiling."),
-                new("seed", "Seed", "number", Min: 0, Step: 1, Default: r.Seed, Nullable: true,
+                Field("seed", "Seed", "number", Min: 0, Step: 1, Default: r.Seed, Nullable: true,
                     Help: "Pin a seed for repeatable output. Leave blank for a random seed per request, so retries differ."),
             ];
         }
@@ -189,11 +202,11 @@ namespace Read2Me.App.Api
             var r = Qwen3ParagraphTtsSettings.Recommended;
             return
             [
-                new("modelId", "Model", "string", Default: r.ModelId,
+                Field("modelId", "Model", "string", Default: r.ModelId,
                     Help: "The audio.cpp server.json model entry."),
-                new("language", "Language", "enum", Options: Qwen3Languages, Default: r.Language),
+                Field("language", "Language", "enum", Options: Qwen3Languages, Default: r.Language),
                 ..Qwen3SamplingFields("temperature", "top_p", "top_k", "repetition_penalty", "max_new_tokens"),
-                new("seed", "Seed", "number", Min: 0, Step: 1, Default: null, Nullable: true,
+                Field("seed", "Seed", "number", Min: 0, Step: 1, Default: null, Nullable: true,
                     Help: "Pin a seed for repeatable output. Leave blank for a random seed per request, so retries differ."),
             ];
         }
@@ -208,11 +221,11 @@ namespace Read2Me.App.Api
             var r = Qwen3VoiceDesignSettings.Recommended;
             return
             [
-                new("modelId", "Model", "string", Default: r.ModelId,
+                Field("modelId", "Model", "string", Default: r.ModelId,
                     Help: "The audio.cpp server.json model entry."),
-                new("language", "Language", "enum", Options: Qwen3Languages, Default: r.Language),
+                Field("language", "Language", "enum", Options: Qwen3Languages, Default: r.Language),
                 ..Qwen3SamplingFields("temperature", "topP", "topK", "repetitionPenalty", "maxNewTokens"),
-                new("seed", "Seed", "number", Min: 0, Step: 1, Default: r.Seed, Nullable: true,
+                Field("seed", "Seed", "number", Min: 0, Step: 1, Default: r.Seed, Nullable: true,
                     Help: "Pin a seed for repeatable output. Leave blank for a random seed per request, so regenerating differs."),
             ];
         }
@@ -223,11 +236,11 @@ namespace Read2Me.App.Api
             var r = BreezeVoiceDesignSettings.Recommended;
             return
             [
-                new("modelId", "Model", "string", Default: r.ModelId,
+                Field("modelId", "Model", "string", Default: r.ModelId,
                     Help: "The audio.cpp server.json model entry."),
-                new("guidanceScale", "Guidance Scale", "number", Min: 1.0, Max: 5.0, Step: 0.1, Default: r.GuidanceScale,
+                Field("guidanceScale", "Guidance Scale", "number", Min: 1.0, Max: 5.0, Step: 0.1, Default: r.GuidanceScale,
                     Help: "How closely the voice follows the design prompt. (1.0–5.0)"),
-                new("seed", "Seed", "number", Min: 0, Step: 1, Default: r.Seed, Nullable: true,
+                Field("seed", "Seed", "number", Min: 0, Step: 1, Default: r.Seed, Nullable: true,
                     Help: "Pin a seed for repeatable output. Leave blank for a random seed per request, so regenerating differs."),
             ];
         }
@@ -235,15 +248,15 @@ namespace Read2Me.App.Api
         private static IEnumerable<SettingsFieldDto> Qwen3SamplingFields(
             string temperature, string topP, string topK, string repetitionPenalty, string maxNewTokens) =>
         [
-            new(temperature, "Temperature", "number", Min: 0.0, Max: 2.0, Step: 0.05, Nullable: true,
+            Field(temperature, "Temperature", "number", Min: 0.0, Max: 2.0, Step: 0.05, Nullable: true,
                 Help: "Sampling randomness. Leave blank to use server default."),
-            new(topP, "Top P", "number", Min: 0.0, Max: 1.0, Step: 0.01, Nullable: true,
+            Field(topP, "Top P", "number", Min: 0.0, Max: 1.0, Step: 0.01, Nullable: true,
                 Help: "Nucleus sampling ceiling. Leave blank to use server default."),
-            new(topK, "Top K", "number", Min: 1, Step: 1, Nullable: true,
+            Field(topK, "Top K", "number", Min: 1, Step: 1, Nullable: true,
                 Help: "Top-K sampling cutoff. Leave blank to use server default."),
-            new(repetitionPenalty, "Repetition Penalty", "number", Min: 1.0, Max: 2.0, Step: 0.05, Nullable: true,
+            Field(repetitionPenalty, "Repetition Penalty", "number", Min: 1.0, Max: 2.0, Step: 0.05, Nullable: true,
                 Help: "Penalizes repeated tokens. Leave blank to use server default."),
-            new(maxNewTokens, "Max New Tokens", "number", Min: 1, Step: 1, Nullable: true,
+            Field(maxNewTokens, "Max New Tokens", "number", Min: 1, Step: 1, Nullable: true,
                 Help: "Caps generated token count. Leave blank to use server default."),
         ];
     }

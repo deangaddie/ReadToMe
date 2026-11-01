@@ -10,7 +10,7 @@
     "format:check": "bun --bun oxfmt --check",
     "typecheck": "bun --bun x tsc --noEmit",
     "test": "bun test",
-    "api:types": "bun --bun x openapi-typescript src/app/api/openapi.json -o src/app/api/schema.d.ts",
+    "api:types": "bun --bun x openapi-typescript src/app/api/openapi.json -o src/app/api/schema.d.ts --empty-objects-unknown",
     "icons": "bun scripts/icons.ts",
     "icons:check": "bun scripts/icons.ts --check",
     "help": "bun scripts/help.ts",

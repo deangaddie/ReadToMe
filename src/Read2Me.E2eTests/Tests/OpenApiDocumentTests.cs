@@ -101,6 +101,25 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
     }
 
     /// <summary>
+    /// A response record's constructor parameters carry no defaults, so every field the serializer writes
+    /// reads required (#168, #177), nullable or not; a <c>= null</c> default would make it optional.
+    /// </summary>
+    [Theory]
+    [InlineData("SettingsFieldDto", "min")]
+    [InlineData("SettingsFieldDto", "options")]
+    [InlineData("SettingsFieldDto", "default")]
+    [InlineData("SettingsFieldDto", "help")]
+    [InlineData("SettingsOptionDto", "label")]
+    [InlineData("StepCatalogEntryDto", "defaults")]
+    public async Task A_response_field_is_required(string component, string property)
+    {
+        var schema = (await DocumentAsync())["components"]!["schemas"]![component]!;
+
+        Assert.NotNull(schema["properties"]?[property]);
+        Assert.Contains(property, schema["required"]!.AsArray().Select(r => r!.GetValue<string>()));
+    }
+
+    /// <summary>
     /// Every <c>/api/</c> operation states the failure rule: a <c>default</c> response of
     /// <c>ProblemDetails</c> as <c>application/problem+json</c> (#168).
     /// </summary>
@@ -221,8 +240,6 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
         "GET /api/ai-services/{name}/status",
         "GET /api/assembly/status",
         "GET /api/audio/samples/recent",
-        "GET /api/audio/steps/catalog",
-        "GET /api/previews/{previewId}/{stepId}.wav",
         "GET /api/projects/{folder}/assembly/outputs",
         "GET /api/projects/{folder}/assembly/outputs/{fileName}",
         "GET /api/projects/{folder}/attribution/paragraphs/{paragraphId}",
@@ -231,7 +248,6 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
         "GET /api/projects/{folder}/book-edits/{program}",
         "GET /api/projects/{folder}/characters",
         "GET /api/projects/{folder}/characters/summary",
-        "GET /api/projects/{folder}/characters/{characterId}/voices",
         "GET /api/projects/{folder}/characters/{id}/lines",
         "GET /api/projects/{folder}/characters/{id}/voice-rules",
         "GET /api/projects/{folder}/characters/{id}/voice-rules/preview",
@@ -241,11 +257,8 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
         "GET /api/projects/{folder}/nodes/{level}/{id}/paragraph-ids",
         "GET /api/projects/{folder}/paragraphs/{paragraphId}/context",
         "GET /api/projects/{folder}/pronunciations",
-        "GET /api/projects/{folder}/voices/{voiceId}",
-        "GET /api/projects/{folder}/voices/{voiceId}/original.wav",
         "GET /api/settings/audio-processing",
         "GET /api/settings/audio-processing/full",
-        "GET /api/voice-batch/status",
         "POST /api/ai-services/{name}/restart",
         "POST /api/ai-services/{name}/shutdown",
         "POST /api/ai-services/{name}/start",
@@ -267,22 +280,11 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
         "POST /api/projects/{folder}/characters/bulk-assign-preview",
         "POST /api/projects/{folder}/characters/discover",
         "POST /api/projects/{folder}/characters/discover/apply",
-        "POST /api/projects/{folder}/characters/{characterId}/design-prompt/generate",
-        "POST /api/projects/{folder}/characters/{characterId}/design-prompt/render",
-        "POST /api/projects/{folder}/characters/{characterId}/voices/{voiceId}/generate-audio",
         "POST /api/projects/{folder}/commands",
         "POST /api/projects/{folder}/narration/release-preview",
         "POST /api/projects/{folder}/pronunciations/try",
-        "POST /api/projects/{folder}/voice-batch/audio",
-        "POST /api/projects/{folder}/voice-batch/prompts",
-        "POST /api/projects/{folder}/voices/{voiceId}/editor/apply",
-        "POST /api/projects/{folder}/voices/{voiceId}/editor/preview",
-        "POST /api/projects/{folder}/voices/{voiceId}/editor/restore",
-        "POST /api/projects/{folder}/voices/{voiceId}/transcribe",
         "POST /api/settings/audio-processing/ffmpeg/test",
         "POST /api/settings/audio-processing/steps/{stepId}/preview",
-        "POST /api/voice-batch/cancel",
-        "PUT /api/projects/{folder}/voices/{voiceId}/audio",
         "PUT /api/settings/audio-processing",
         "PUT /api/settings/audio-processing/pauses",
         "PUT /api/settings/audio-processing/steps/{stepId}",

@@ -509,6 +509,28 @@
         ],
         "type": "object"
       },
+      "CharacterVoicesDto": {
+        "properties": {
+          "defaultVoiceId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "voices": {
+            "items": {
+              "$ref": "#/components/schemas/VoiceDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "defaultVoiceId",
+          "voices"
+        ],
+        "type": "object"
+      },
       "CheckpointRequestState": {
         "enum": [
           "Confirmed",
@@ -563,6 +585,47 @@
         },
         "required": [
           "prompt"
+        ],
+        "type": "object"
+      },
+      "GenerateDesignPromptResponse": {
+        "properties": {
+          "designPrompt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "designPrompt"
+        ],
+        "type": "object"
+      },
+      "GenerateVoiceAudioResponse": {
+        "properties": {
+          "audioFileName": {
+            "type": "string"
+          },
+          "referenceSeconds": {
+            "format": "double",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "referenceWarning": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "transcript": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "audioFileName",
+          "transcript",
+          "referenceSeconds",
+          "referenceWarning"
         ],
         "type": "object"
       },
@@ -1372,6 +1435,24 @@
         ],
         "type": "object"
       },
+      "PreviewResponse": {
+        "properties": {
+          "previewId": {
+            "type": "string"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewStageDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "previewId",
+          "stages"
+        ],
+        "type": "object"
+      },
       "PreviewSampleRef": {
         "properties": {
           "folder": {
@@ -1388,6 +1469,32 @@
         "required": [
           "folder",
           "itemId"
+        ],
+        "type": "object"
+      },
+      "PreviewStageDto": {
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "stepId": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "stepId",
+          "applied",
+          "reason",
+          "url"
         ],
         "type": "object"
       },
@@ -2062,6 +2169,17 @@
         ],
         "type": "object"
       },
+      "RenderedDesignPromptResponse": {
+        "properties": {
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "type": "object"
+      },
       "ResolvedChainStepDto": {
         "properties": {
           "config": {
@@ -2253,7 +2371,6 @@
             ]
           },
           "nullable": {
-            "default": false,
             "type": "boolean"
           },
           "options": {
@@ -2276,7 +2393,14 @@
         "required": [
           "key",
           "label",
-          "kind"
+          "kind",
+          "min",
+          "max",
+          "step",
+          "options",
+          "default",
+          "help",
+          "nullable"
         ],
         "type": "object"
       },
@@ -2293,7 +2417,8 @@
           }
         },
         "required": [
-          "value"
+          "value",
+          "label"
         ],
         "type": "object"
       },
@@ -2591,6 +2716,17 @@
         ],
         "type": "object"
       },
+      "StartedResponse": {
+        "properties": {
+          "started": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "started"
+        ],
+        "type": "object"
+      },
       "StepAction": {
         "enum": [
           "Edit",
@@ -2606,6 +2742,36 @@
           "Attribution",
           "Pronunciation"
         ]
+      },
+      "StepCatalogEntryDto": {
+        "properties": {
+          "blurb": {
+            "type": "string"
+          },
+          "defaults": {
+            "type": "object"
+          },
+          "dials": {
+            "items": {
+              "$ref": "#/components/schemas/SettingsFieldDto"
+            },
+            "type": "array"
+          },
+          "label": {
+            "type": "string"
+          },
+          "stepId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "stepId",
+          "label",
+          "blurb",
+          "dials",
+          "defaults"
+        ],
+        "type": "object"
       },
       "StepCheckpointDto": {
         "properties": {
@@ -2655,6 +2821,10 @@
           "settings"
         ],
         "type": "object"
+      },
+      "Stream": {
+        "format": "binary",
+        "type": "string"
       },
       "StructureAnchor": {
         "enum": [
@@ -2840,6 +3010,17 @@
         ],
         "type": "object"
       },
+      "TranscribeVoiceResponse": {
+        "properties": {
+          "transcript": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "transcript"
+        ],
+        "type": "object"
+      },
       "TranscriptionServiceConfig": {
         "properties": {
           "id": {
@@ -2973,6 +3154,53 @@
         },
         "type": "object"
       },
+      "VoiceBatchStatusDto": {
+        "properties": {
+          "currentOperation": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "currentVoiceName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "failed": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "isRunning": {
+            "type": "boolean"
+          },
+          "lastError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "processed": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "total": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "isRunning",
+          "processed",
+          "total",
+          "failed",
+          "currentVoiceName",
+          "currentOperation",
+          "lastError"
+        ],
+        "type": "object"
+      },
       "VoiceDesignSampleTextRequest": {
         "properties": {
           "text": {
@@ -3081,6 +3309,98 @@
           "contentType"
         ],
         "type": "object"
+      },
+      "VoiceDto": {
+        "properties": {
+          "audioFileName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "characterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "designPrompt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "isEdited": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "referenceSeconds": {
+            "format": "double",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "referenceWarning": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/VoiceSource"
+          },
+          "transcript": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "ttsSettingsOverrideJson": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "voiceDesignSettingsOverrideJson": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "characterId",
+          "name",
+          "description",
+          "source",
+          "designPrompt",
+          "transcript",
+          "audioFileName",
+          "isEdited",
+          "voiceDesignSettingsOverrideJson",
+          "ttsSettingsOverrideJson",
+          "referenceSeconds",
+          "referenceWarning"
+        ],
+        "type": "object"
+      },
+      "VoiceSource": {
+        "enum": [
+          "Uploaded",
+          "Generated"
+        ]
       }
     }
   },
@@ -3521,6 +3841,16 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StepCatalogEntryDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -3644,7 +3974,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "audio/wav": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stream"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -4945,7 +5285,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateDesignPromptResponse"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -4987,7 +5337,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenderedDesignPromptResponse"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -5038,7 +5398,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CharacterVoicesDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -5106,7 +5476,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateVoiceAudioResponse"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6781,8 +7161,18 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartedResponse"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6830,8 +7220,18 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartedResponse"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6882,7 +7282,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6924,7 +7334,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6982,7 +7402,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -7040,7 +7470,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewResponse"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -7082,7 +7522,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -7133,6 +7583,13 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "audio/wav": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stream"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -7175,7 +7632,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscribeVoiceResponse"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -9827,8 +10294,8 @@
     "/api/voice-batch/cancel": {
       "post": {
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -9841,7 +10308,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Cancel the running voice batch.",
+        "summary": "Cancel the running voice batch. 204, also when none is running.",
         "tags": [
           "Read2Me.App"
         ]
@@ -9851,6 +10318,13 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceBatchStatusDto"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
