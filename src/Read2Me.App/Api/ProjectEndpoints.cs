@@ -30,11 +30,11 @@ namespace Read2Me.App.Api
                 .WithSummary("Delete a project folder and everything in it.");
             endpoints.MapPost("/api/projects/{folder}/import", ImportAsync)
                 .RecordsOwnStep()
-                .WithSummary("Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. 204 on success, " +
+                .WithSummary("Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. 204 on success. " +
                              "An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes.");
             endpoints.MapPost("/api/projects/{folder}/import/manual", ImportManuallyAsync)
                 .RecordsStep("Re-split book", StepAction.Split)
-                .WithSummary("Re-split the stored book file by hand-chosen rules (replaces existing content). " +
+                .WithSummary("Re-split the stored book file by hand-chosen rules (replaces existing content); 204 on success. " +
                              "Per level: mode Prefix (with prefix) | Arabic | Roman. 400 when a switched-on level lacks a valid rule. " +
                              "An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes.");
             endpoints.MapPatch("/api/projects/{folder}", UpdateAsync)

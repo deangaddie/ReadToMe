@@ -133,7 +133,7 @@ export interface QueueMessage {
 
 // ---- nodeStatus / itemStatus (group project:{folder}, debounced deltas) -------------------------
 
-/** `NodeStatusService.NodeStatusSummary`: the same record `GET /api/projects/{folder}/status` returns. */
+/** `NodeStatusService.NodeStatusSummary`: the same shape as `NodeStatusSummaryDto`, which `GET /api/projects/{folder}/status` returns. */
 export type NodeStatusSummary = NodeStatusSummaryDto;
 
 /** A `null` entry means the node no longer rolls up. */
