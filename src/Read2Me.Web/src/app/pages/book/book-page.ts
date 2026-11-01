@@ -36,6 +36,7 @@ import type { PronunciationEditRequest } from './pronunciation-card';
 import { PronunciationMarks } from './pronunciation-marks-store';
 import type { PronunciationPanel } from './pronunciation-panel';
 import { PronunciationPanelState } from './pronunciation-panel-store';
+import { type ReaderGeometry, ReaderWindow } from './reader-window';
 import { addPausesChange } from './permanent-changes';
 import {
   READER_MODES,
@@ -61,9 +62,7 @@ import bookCss from './book.css' with { type: 'text' };
 
 adoptStyles(bookCss);
 
-/** Load the adjacent chapter when the viewport is this close to either end. */
-const EDGE_PX = 600;
-/** How often the viewport edges are checked; see {@link BookPage.checkEdges}. */
+/** How often the viewport edges are checked; see {@link ReaderWindow.tick}. */
 const EDGE_POLL_MS = 250;
 
 const MODE_LABELS: Record<ReaderMode, string> = {
@@ -123,15 +122,8 @@ export class BookPage extends R2mElement {
   /** The bulk-assign menu is open: its speaker menu is rendered fresh per open. */
   private readonly bulkOpen = signal(false);
 
-  /** The chapter last opened from a link or the tree, until the viewport has scrolled it to the top. */
-  private scrollTarget: string | null = null;
-  /**
-   * The chapter last opened from a link or the tree, held current until the reader scrolls: the
-   * loads and anchoring that follow an open move the top row on their own, and when the chapters
-   * after a short one cannot fill the viewport, the top row is never that chapter at all. Outlives
-   * {@link scrollTarget}, which clears once the scroll has landed.
-   */
-  private openedChapter: string | null = null;
+  /** The reader window policy: edge loads, the opened chapter's scroll, the current chapter. */
+  private reader!: ReaderWindow;
   private rows = computed<ReaderRow[]>(() => []);
   private ctx = computed<RowContext>(() => EMPTY_CONTEXT);
   private noContent = computed(() => false);
@@ -142,6 +134,7 @@ export class BookPage extends R2mElement {
   protected override connected(): void {
     this.project = use(ProjectStore, this);
     this.store = use(BookStore, this);
+    this.reader = new ReaderWindow(() => this.geometry(), this.store);
     this.editor = use(BookEditor, this);
     this.selection = use(SelectionStore, this);
     this.audioSelection = use(AudioSelectionStore, this);
@@ -255,7 +248,7 @@ export class BookPage extends R2mElement {
       else this.removeAttribute('data-current-chapter');
     });
 
-    const edges = setInterval(() => this.checkEdges(), EDGE_POLL_MS);
+    const edges = setInterval(() => this.reader.tick(), EDGE_POLL_MS);
     this.onDisconnect(() => clearInterval(edges));
   }
 
@@ -674,15 +667,14 @@ export class BookPage extends R2mElement {
   }
 
   private readonly onTopRow = (e: Event): void => {
-    if (this.openedChapter) return;
     const row = this.rows()[(e as CustomEvent<number>).detail];
-    if (row) this.store.setCurrentChapter(row.chapterId);
+    if (row) this.reader.topRow(row.chapterId, false);
   };
 
   /** The reader took over from an open: the chapter at the top is current again. */
   private readonly onReaderScroll = (e: Event): void => {
-    this.openedChapter = null;
-    this.onTopRow(e);
+    const row = this.rows()[(e as CustomEvent<number>).detail];
+    if (row) this.reader.topRow(row.chapterId, true);
   };
 
   private readonly refresh = (): void => {
@@ -835,7 +827,7 @@ export class BookPage extends R2mElement {
   }
 
   private async start(folder: string): Promise<void> {
-    this.openedChapter = null; // another project's chapter
+    this.reader.reset(); // another project's chapter
     await this.store.open(folder);
     if (this.noContent()) return;
     // `?chapter=` wins over whatever the window holds: a reload may have opened the first chapter
@@ -846,81 +838,24 @@ export class BookPage extends R2mElement {
   }
 
   private scrollToChapter(chapterId: string): void {
-    void this.rendered().then(() => {
-      const index = this.chapterRowIndex(chapterId);
-      const list = this.list();
-      if (index < 0 || !list) return;
-      this.scrollTarget = chapterId;
-      this.openedChapter = chapterId;
-      list.scrollToIndex(index);
-      // The chapter before is needed to scroll up from the top of this one; the edge check loads
-      // it once that can keep this chapter in place.
-      this.checkEdges();
-    });
+    void this.rendered().then(() => this.reader.open(chapterId));
   }
 
-  /**
-   * Loads the neighbouring chapter when the viewport nears an end. Polled rather than tied to
-   * scroll events: a chapter shorter than the viewport never scrolls, and wheel input at the very
-   * top fires no scroll event at all.
-   *
-   * Two rules keep the chapter the reader is on in place when chapters are short (a part whose
-   * only chapter is its heading). Content shorter than the viewport cannot scroll, so a chapter
-   * prepended to it pushes the reader's chapter down: load next until there is something to
-   * scroll, and previous only then (or when there is no next). And a full window drops its far
-   * end only when that chapter is off screen by a margin; dropping one still in view would empty
-   * the screen and start the loads over. A chapter opened from a link that could not scroll to
-   * the top yet ({@link scrollTarget}) is scrolled there once the chapters after it have loaded.
-   */
-  private checkEdges(): void {
+  /** The list in chapters for the {@link ReaderWindow}; null with no list or no rows yet. */
+  private geometry(): ReaderGeometry | null {
     const list = this.list();
-    if (!list || this.rows().length === 0) return;
-    const top = list.scrollOffset('top');
-    const bottom = list.scrollOffset('bottom');
-    const size = list.clientHeight;
-    const loaded = this.store.window();
-    const scrollable = top + bottom >= 1;
-
-    const reaching = this.reachScrollTarget(list, top, bottom);
-    if (bottom < EDGE_PX) {
-      // Dropping the first chapter is safe when the second starts well above the viewport.
-      const second = loaded[1];
-      void this.store.loadNext(second !== undefined && this.chapterOffset(second) <= top - EDGE_PX);
-    }
-    if (!reaching && top < EDGE_PX && (scrollable || this.store.atEnd())) {
-      const last = loaded.at(-1);
-      void this.store.loadPrevious(
-        last !== undefined && this.chapterOffset(last) >= top + size + EDGE_PX,
-      );
-    }
-  }
-
-  /**
-   * Scrolls on to {@link scrollTarget} when the content below it has grown; true while the target
-   * is still out of reach. It is given up once reached, gone, or the book has nothing more to load.
-   */
-  private reachScrollTarget(list: MeasuredList<ReaderRow>, top: number, bottom: number): boolean {
-    const chapterId = this.scrollTarget;
-    if (!chapterId) return false;
-    const target = this.chapterOffset(chapterId);
-    if (!Number.isFinite(target) || top >= target - 1 || this.store.atEnd()) {
-      this.scrollTarget = null;
-      return false;
-    }
-    if (bottom >= 1) list.scrollToOffset(target);
-    return true;
-  }
-
-  /** Where a loaded chapter's header row starts; a chapter with no rows sits off screen. */
-  private chapterOffset(chapterId: string): number {
-    const index = this.chapterRowIndex(chapterId);
-    const list = this.list();
-    return index < 0 || !list ? Number.POSITIVE_INFINITY : list.offsetOf(index);
-  }
-
-  /** The row index of a chapter's header, -1 when the chapter is not in the window. */
-  private chapterRowIndex(chapterId: string): number {
-    return this.rows().findIndex((r) => r.kind === 'chapter' && r.chapterId === chapterId);
+    const rows = this.rows();
+    if (!list || rows.length === 0) return null;
+    return {
+      scrollTop: () => list.scrollOffset('top'),
+      scrollBottom: () => list.scrollOffset('bottom'),
+      viewportHeight: () => list.clientHeight,
+      chapterTop: (chapterId) => {
+        const index = rows.findIndex((r) => r.kind === 'chapter' && r.chapterId === chapterId);
+        return index < 0 ? Number.POSITIVE_INFINITY : list.offsetOf(index);
+      },
+      scrollTo: (offset) => list.scrollToOffset(offset),
+    };
   }
 }
 
