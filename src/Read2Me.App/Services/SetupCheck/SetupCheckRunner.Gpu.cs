@@ -140,7 +140,7 @@ namespace Read2Me.App.Services.SetupCheck
                 { Duration: { } d } when d > TimeSpan.Zero =>
                     new CheckAnswer(true, $"{verb} {d.TotalSeconds:0.0} s of audio"),
                 { Duration: not null } => new CheckAnswer(false, $"{verb} audio that ffprobe reads as 0 s long",
-                    new SetupFixHint($"It answered with no sound: check the config's model in {settings.Label}.", settings)),
+                    new SetupFixHint($"It answered with no sound: check the config's model in {settings.Label}.", settings, null)),
                 _ => new CheckAnswer(false, $"ffprobe couldn't read the audio: {measured.Error}", FfmpegFix),
             };
         }
@@ -156,7 +156,7 @@ namespace Read2Me.App.Services.SetupCheck
                 return content.Length > 0
                     ? new CheckAnswer(true, $"answered \"{content}\"")
                     : new CheckAnswer(false, "answered 200 with no content",
-                        new SetupFixHint($"Check the model's chat template, or correct the model in {SetupSettingsLink.Llm.Label}.", SetupSettingsLink.Llm));
+                        new SetupFixHint($"Check the model's chat template, or correct the model in {SetupSettingsLink.Llm.Label}.", SetupSettingsLink.Llm, null));
             }, target.Model);
             target.Answer = answer;
 
@@ -182,7 +182,7 @@ namespace Read2Me.App.Services.SetupCheck
                 Expected = $"A 1-token chat completion with thinking off answers with text from {string.Join(", ", all.Select(t => t.Label))}",
                 Result = failed is null ? SetupCheckResult.Passed : SetupCheckResult.Failed,
                 Found = string.Join("; ", answered.Select(t => $"{t.Label} {t.Answer!.Found}")),
-                Fix = failed?.Answer!.Fix ?? new SetupFixHint($"Change it in {SetupSettingsLink.Llm.Label}.", SetupSettingsLink.Llm),
+                Fix = failed?.Answer!.Fix ?? new SetupFixHint($"Change it in {SetupSettingsLink.Llm.Label}.", SetupSettingsLink.Llm, null),
             };
         }
 
@@ -270,8 +270,7 @@ namespace Read2Me.App.Services.SetupCheck
             {
                 var path = ModelPath().Match(error) is { Success: true } match ? match.Value : null;
                 var file = path ?? $"the GGUF the {model} entry names in Infra/audiocpp/server.json";
-                return new SetupFixHint($"The model file is missing: {file}. Put it in {GgufFolder}, {restart}.",
-                    Copy: path ?? "Infra/.env");
+                return new SetupFixHint($"The model file is missing: {file}. Put it in {GgufFolder}, {restart}.", null, path ?? "Infra/.env");
             }
             if (!error.Contains("failed to load", StringComparison.OrdinalIgnoreCase))
                 return null;
@@ -279,8 +278,7 @@ namespace Read2Me.App.Services.SetupCheck
             var where = service?.Name == Llama ? "the GGUF its preset names in Infra/llama/config/models.ini" : "its GGUF";
             var logs = service is null ? "the service's logs" : $"docker logs -f {service.ContainerName}";
             return new SetupFixHint(
-                $"{service?.Name ?? "The service"} couldn't load {model}: check that {where} is in {GgufFolder}, then read why with {logs}.",
-                Copy: service is null ? "Infra/.env" : $"docker logs -f {service.ContainerName}");
+                $"{service?.Name ?? "The service"} couldn't load {model}: check that {where} is in {GgufFolder}, then read why with {logs}.", null, service is null ? "Infra/.env" : $"docker logs -f {service.ContainerName}");
         }
     }
 }

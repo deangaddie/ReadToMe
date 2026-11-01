@@ -22,28 +22,34 @@ const json = (body: unknown, init: ResponseInit = {}) =>
     headers: { 'Content-Type': 'application/json' },
   });
 
+const theme = { name: 'Dusk' } as Schema['AppTheme'];
+const tryOut = { itemId: 'i' } as Schema['TryPronunciationRequest'];
+
 describe('ApiClient', () => {
   it('sends the origin id header and returns the JSON body', async () => {
-    const { api, requests } = clientReturning(() => json({ ok: true }));
-    const body = await api.untypedGet<{ ok: boolean }>('/api/projects', {
-      limit: 5,
-      skip: undefined,
-    });
-    expect(body).toEqual({ ok: true });
-    expect(requests[0]?.url).toBe('/api/projects?limit=5');
+    const { api, requests } = clientReturning(() => json([{ folder: 'dracula' }]));
+    const body = await api.get('/api/projects');
+    expect(body as unknown).toEqual([{ folder: 'dracula' }]);
+    expect(requests[0]?.url).toBe('/api/projects');
     expect(requests[0]?.init.method).toBe('GET');
     expect(headersOf(requests[0]?.init)['X-Origin-Id']).toBe(ORIGIN_ID);
   });
 
-  it('repeats a query key once per value of an array', async () => {
+  it('repeats a query key once per value of an array, and leaves out an empty one', async () => {
     const { api, requests } = clientReturning(() => json({}));
-    await api.untypedGet('/api/x', { chapterIds: ['a', 'b'], none: [] });
-    expect(requests[0]?.url).toBe('/api/x?chapterIds=a&chapterIds=b');
+    const path = { folder: 'dracula' };
+    const matches = '/api/projects/{folder}/pronunciations/matches' as const;
+    await api.get(matches, { path, query: { chapterIds: ['a', 'b'] } });
+    await api.get(matches, { path, query: { chapterIds: [] } });
+    expect(requests.map((r) => r.url)).toEqual([
+      '/api/projects/dracula/pronunciations/matches?chapterIds=a&chapterIds=b',
+      '/api/projects/dracula/pronunciations/matches',
+    ]);
   });
 
   it('posts a JSON body with its content type', async () => {
     const { api, requests } = clientReturning(() => json({}));
-    await api.untypedPost('/api/settings/themes', { name: 'Dusk' });
+    await api.post('/api/settings/themes', { body: theme });
     const init = requests[0]?.init;
     expect(init?.method).toBe('POST');
     expect(init?.body).toBe('{"name":"Dusk"}');
@@ -54,15 +60,17 @@ describe('ApiClient', () => {
     const { api, requests } = clientReturning(() => json({}));
     const form = new FormData();
     form.set('file', 'x');
-    await api.untypedPostForm('/api/projects', form);
+    await api.postForm('/api/projects', {}, form);
     const init = requests[0]?.init;
     expect(init?.body).toBe(form);
     expect(headersOf(init)['Content-Type']).toBeUndefined();
   });
 
   it('posts JSON for bytes, answering the body as a blob and a refusal as ApiError', async () => {
+    const route = '/api/projects/{folder}/pronunciations/try' as const;
+    const init = { path: { folder: 'dracula' }, body: tryOut };
     const wav = clientReturning(() => new Response(new Uint8Array([82, 73, 70, 70])));
-    const blob = await wav.api.untypedPostForBlob('/api/try', { itemId: 'i' });
+    const blob = await wav.api.postForBlob(route, init);
     expect(await blob.text()).toBe('RIFF');
     expect(wav.requests[0]?.init.body).toBe('{"itemId":"i"}');
     expect(headersOf(wav.requests[0]?.init)['X-Origin-Id']).toBe(ORIGIN_ID);
@@ -70,7 +78,7 @@ describe('ApiClient', () => {
     const busy = clientReturning(() =>
       json({ status: 409, detail: 'Busy.' }, { status: 409, statusText: 'Conflict' }),
     );
-    const error = await busy.api.untypedPostForBlob('/api/try', {}).catch((e: unknown) => e);
+    const error = await busy.api.postForBlob(route, init).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).detail).toBe('Busy.');
   });
@@ -82,7 +90,11 @@ describe('ApiClient', () => {
       return Promise.reject(init.signal?.reason as Error);
     });
     const error = await api
-      .untypedPostForBlob('/api/try', {}, abort.signal)
+      .postForBlob(
+        '/api/projects/{folder}/pronunciations/try',
+        { path: { folder: 'dracula' }, body: tryOut },
+        abort.signal,
+      )
       .catch((e: unknown) => e);
     expect(error).not.toBeInstanceOf(ApiError);
   });
@@ -94,9 +106,7 @@ describe('ApiClient', () => {
         { status: 400, statusText: 'Bad Request' },
       ),
     );
-    const error = await api
-      .untypedPost('/api/settings/themes', { name: '' })
-      .catch((e: unknown) => e);
+    const error = await api.post('/api/settings/themes', { body: theme }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     const apiError = error as ApiError;
     expect(apiError.status).toBe(400);
@@ -119,7 +129,9 @@ describe('ApiClient', () => {
         { status: 422, statusText: 'Unprocessable' },
       ),
     );
-    const error = (await api.untypedPut('/api/x', {}).catch((e: unknown) => e)) as ApiError;
+    const error = (await api
+      .put('/api/settings/themes/{id}', { path: { id: 1 }, body: theme })
+      .catch((e: unknown) => e)) as ApiError;
     expect(error.detail).toBe('name: required; primary: bad');
   });
 
@@ -127,7 +139,7 @@ describe('ApiClient', () => {
     const { api } = clientReturning(
       () => new Response('upstream timed out', { status: 502, statusText: 'Bad Gateway' }),
     );
-    const error = (await api.untypedGet('/api/x').catch((e: unknown) => e)) as ApiError;
+    const error = (await api.get('/api/projects').catch((e: unknown) => e)) as ApiError;
     expect(error.status).toBe(502);
     expect(error.title).toBe('Bad Gateway');
     expect(error.detail).toBe('upstream timed out');
@@ -137,7 +149,9 @@ describe('ApiClient', () => {
     const { api } = clientReturning(() => {
       throw new TypeError('Failed to fetch');
     });
-    const error = (await api.untypedDelete('/api/x').catch((e: unknown) => e)) as ApiError;
+    const error = (await api
+      .delete('/api/projects/{folder}', { path: { folder: 'x' } })
+      .catch((e: unknown) => e)) as ApiError;
     expect(error.status).toBe(0);
     expect(error.title).toBe('Host unreachable');
     expect(error.detail).toBe('Failed to fetch');
@@ -145,7 +159,7 @@ describe('ApiClient', () => {
 
   it('resolves undefined for an empty 204', async () => {
     const { api } = clientReturning(() => new Response(null, { status: 204 }));
-    expect(await api.untypedDelete('/api/x/1')).toBeUndefined();
+    expect(await api.delete('/api/projects/{folder}', { path: { folder: 'x' } })).toBeUndefined();
   });
 });
 

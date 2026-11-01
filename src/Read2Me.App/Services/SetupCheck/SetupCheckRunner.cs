@@ -118,14 +118,14 @@ namespace Read2Me.App.Services.SetupCheck
         /// </summary>
         private SetupCheckReport NoWorkspaceReport()
         {
-            var fix = new SetupFixHint("Fix the Workspace row first, then restart the app.");
+            var fix = new SetupFixHint("Fix the Workspace row first, then restart the app.", null, null);
             var rows = new List<SetupCheckRow>
             {
                 WorkspaceRow(workspaceStart.AtStart),
                 new(SetupCheckIds.Ffmpeg, SetupCheckGroup.WorkspaceAndTools, "ffmpeg", SetupCheckTier.Quick,
-                    SetupCheckResult.NotRun, "ffmpeg -version and ffprobe -version", NeedsWorkspace, null, fix, Managed: false),
+                    SetupCheckResult.NotRun, "ffmpeg -version and ffprobe -version", NeedsWorkspace, null, fix, Managed: false, Rerun: null),
                 new(SetupCheckIds.Docker, SetupCheckGroup.WorkspaceAndTools, "docker CLI", SetupCheckTier.Quick,
-                    SetupCheckResult.NotRun, "docker on PATH", NeedsWorkspace, null, fix, Managed: false),
+                    SetupCheckResult.NotRun, "docker on PATH", NeedsWorkspace, null, fix, Managed: false, Rerun: null),
             };
             rows.AddRange(new AiServicesCheck(aiServices).NotRun(NeedsWorkspace, fix));
             return _report with { Rows = rows, QuickCheckedAt = _clock.GetUtcNow() };
@@ -139,7 +139,7 @@ namespace Read2Me.App.Services.SetupCheck
             verdict.Usable ? SetupCheckResult.Passed : SetupCheckResult.Failed,
             $"An absolute, writable folder ({WorkspaceStart.Key})", verdict.Found,
             verdict.Usable && workspaceStart.CreatedFolder ? CreatedNote : null,
-            WorkspaceFix(), Managed: false);
+            WorkspaceFix(), Managed: false, Rerun: null);
 
         /// <summary>
         /// Names the key, the absolute path of appsettings.Local.json and the source whose value
@@ -168,7 +168,7 @@ namespace Read2Me.App.Services.SetupCheck
                     $"{WorkspaceStart.Key} comes from {file}: set it to an absolute, writable folder {local}, which overrides it, then restart the app.",
                 _ => $"Set {WorkspaceStart.Key} to an absolute, writable folder {local}, then restart the app.",
             };
-            return new SetupFixHint(text, Copy: localPath);
+            return new SetupFixHint(text, null, localPath);
         }
 
 
@@ -193,11 +193,11 @@ namespace Read2Me.App.Services.SetupCheck
             return new SetupCheckRow(
                 SetupCheckIds.Ffmpeg, SetupCheckGroup.WorkspaceAndTools, "ffmpeg", SetupCheckTier.Full,
                 ok ? SetupCheckResult.Passed : SetupCheckResult.Failed,
-                $"ffmpeg -version and ffprobe -version from {paths.Shown}", found, paths.Note, fix, Managed: false);
+                $"ffmpeg -version and ffprobe -version from {paths.Shown}", found, paths.Note, fix, Managed: false, Rerun: null);
         }
 
         private static readonly SetupFixHint FfmpegFix =
-            new("Set the ffmpeg path to an ffmpeg with ffprobe beside it.", AudioProcessing);
+            new("Set the ffmpeg path to an ffmpeg with ffprobe beside it.", AudioProcessing, null);
 
         /// <summary>
         /// <see cref="Live"/>: what the app runs, the Settings value else <see cref="Configured"/>
@@ -255,14 +255,14 @@ namespace Read2Me.App.Services.SetupCheck
         private async Task<(SetupCheckRow Row, bool OnPath)> CheckDockerAsync(CancellationToken ct)
         {
             var fix = new SetupFixHint(
-                "Install Docker Desktop so docker is on PATH, then restart the app.", Copy: "docker --version");
+                "Install Docker Desktop so docker is on PATH, then restart the app.", null, "docker --version");
             var run = await VersionAsync("docker", "--version", ct);
             return (new SetupCheckRow(
                 SetupCheckIds.Docker, SetupCheckGroup.WorkspaceAndTools, "docker CLI", SetupCheckTier.Quick,
                 run.Ok ? SetupCheckResult.Passed : SetupCheckResult.Failed,
                 "docker on PATH",
                 run.Launched ? run.Banner : "docker isn't on PATH",
-                null, fix, Managed: false), run.Launched);
+                null, fix, Managed: false, Rerun: null), run.Launched);
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────

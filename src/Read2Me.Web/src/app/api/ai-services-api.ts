@@ -12,13 +12,13 @@ export class AiServicesApi {
   private readonly api = use(ApiClient);
 
   list(): Promise<AiServiceDto[]> {
-    return this.api.untypedGet<AiServiceDto[]>('/api/ai-services');
+    return this.api.get('/api/ai-services');
   }
 
   /** The managed service behind a config base URL, or null when the watchdog does not manage it (404). */
   async resolve(baseUrl: string): Promise<AiServiceDto | null> {
     try {
-      return await this.api.untypedGet<AiServiceDto>('/api/ai-services/resolve', { baseUrl });
+      return await this.api.get('/api/ai-services/resolve', { query: { baseUrl } });
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return null;
       throw error;
@@ -27,26 +27,24 @@ export class AiServicesApi {
 
   /** One health probe per managed service, in one call. */
   statusAll(): Promise<AiServiceStatusDto[]> {
-    return this.api.untypedGet<AiServiceStatusDto[]>('/api/ai-services/status');
+    return this.api.get('/api/ai-services/status');
   }
 
   /** One health probe; 404 for a name not in the catalog. */
   status(name: string): Promise<AiServiceStatusDto> {
-    return this.api.untypedGet<AiServiceStatusDto>(
-      `/api/ai-services/${encodeURIComponent(name)}/status`,
-    );
+    return this.api.get('/api/ai-services/{name}/status', { path: { name } });
   }
 
   /** docker start → health → warm-up in the background (202); 409 while an op is already in flight. */
   start(name: string): Promise<void> {
-    return this.api.untypedPost<void>(`/api/ai-services/${encodeURIComponent(name)}/start`);
+    return this.api.post('/api/ai-services/{name}/start', { path: { name } });
   }
 
   restart(name: string): Promise<void> {
-    return this.api.untypedPost<void>(`/api/ai-services/${encodeURIComponent(name)}/restart`);
+    return this.api.post('/api/ai-services/{name}/restart', { path: { name } });
   }
 
   shutdown(name: string): Promise<void> {
-    return this.api.untypedPost<void>(`/api/ai-services/${encodeURIComponent(name)}/shutdown`);
+    return this.api.post('/api/ai-services/{name}/shutdown', { path: { name } });
   }
 }

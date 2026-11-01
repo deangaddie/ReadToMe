@@ -1,6 +1,29 @@
 {
   "components": {
     "schemas": {
+      "AiServiceDto": {
+        "properties": {
+          "baseUrl": {
+            "type": "string"
+          },
+          "containerName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "usesGpu": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "containerName",
+          "baseUrl",
+          "usesGpu"
+        ],
+        "type": "object"
+      },
       "AiServiceStatus": {
         "enum": [
           "NotFound",
@@ -11,6 +34,21 @@
           "Down",
           "Unknown"
         ]
+      },
+      "AiServiceStatusDto": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AiServiceStatus"
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
+        "type": "object"
       },
       "ApiItemType": {
         "enum": [
@@ -3690,7 +3728,6 @@
             "type": "boolean"
           },
           "fullCheckEstimateSeconds": {
-            "default": 0,
             "format": "int32",
             "type": "integer"
           },
@@ -3744,7 +3781,10 @@
           "fullCheckedAt",
           "firstRun",
           "startedAt",
-          "noWorkspace"
+          "noWorkspace",
+          "fullRun",
+          "fullCheckEstimateSeconds",
+          "putBack"
         ],
         "type": "object"
       },
@@ -3814,7 +3854,8 @@
           "found",
           "note",
           "fix",
-          "managed"
+          "managed",
+          "rerun"
         ],
         "type": "object"
       },
@@ -3847,7 +3888,9 @@
           }
         },
         "required": [
-          "text"
+          "text",
+          "link",
+          "copy"
         ],
         "type": "object"
       },
@@ -4822,6 +4865,16 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AiServiceDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -4854,7 +4907,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiServiceDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -4869,7 +4932,7 @@
         },
         "summary": "The managed service behind a config base URL (?baseUrl=, matched on scheme/host/port), 404 when the URL is not one the watchdog manages.",
         "tags": [
-          "Read2Me.App"
+          "AiServiceEndpoints"
         ]
       }
     },
@@ -4877,6 +4940,16 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AiServiceStatusDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -4909,8 +4982,11 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "202": {
+            "description": "Accepted"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -4942,8 +5018,11 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "202": {
+            "description": "Accepted"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -4975,8 +5054,11 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "202": {
+            "description": "Accepted"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -5009,7 +5091,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiServiceStatusDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -11839,7 +11931,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "The Setup check report: one row per check (id, group, name, tier, result, expected, found, note?, fix { text, link?, copy? }), the times of the last Quick and Full check, firstRun (this start created app.db), putBack (after a Full check, what it did with the containers it drove), startedAt (when this host started) and noWorkspace (this host started without a usable Workspace: every other API call answers 503 No Workspace until the app restarts). Empty rows until the start-up Quick check ends.",
+        "summary": "The Setup check report: one row per check (id, group, name, tier, result, expected, found, note, fix { text, link, copy }, managed, rerun), the times of the last Quick and Full check, firstRun (this start created app.db), putBack (after a Full check, what it did with the containers it drove), startedAt (when this host started) and noWorkspace (this host started without a usable Workspace: every other API call answers 503 No Workspace until the app restarts). Empty rows until the start-up Quick check ends.",
         "tags": [
           "Read2Me.App"
         ]
@@ -11868,26 +11960,6 @@
             },
             "description": "Accepted"
           },
-          "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
           "default": {
             "content": {
               "application/problem+json": {
@@ -11901,7 +11973,7 @@
         },
         "summary": "Re-run one Full-tier check (a row whose rerun isn't null) in the background: only the steps that judge it (similarity transcribes first, to score a real transcript), under the Full check's rules — queues wait, Preflight refuses new AI tasks, the containers it drives are put back, and progress goes out as setupCheck messages. rerun.gpu says it stops the running GPU container. The report's fullCheckedAt stays the last whole Full check's. 202 with the report (fullRun shows the re-run); 404 for an unknown or Quick-tier id; 409 while a Full check runs, while work is in flight (named, as for the Full check), before the start-up Quick check ends, when the check has no active config, or when its rerun.gpu is stale (the check now drives a GPU container: run the Quick check first).",
         "tags": [
-          "Read2Me.App"
+          "SetupCheckEndpoints"
         ]
       }
     },
@@ -11918,16 +11990,6 @@
             },
             "description": "Accepted"
           },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
           "default": {
             "content": {
               "application/problem+json": {
@@ -11941,7 +12003,7 @@
         },
         "summary": "Start the Full check in the background, or join the Full check already going (one per host): 202 with the report, whose fullRun { step, total, lane: local|cpu|gpu, label, cancelling } shows the run. While it runs every queue waits and Preflight refuses new AI tasks with \"Setup check running\". Progress and the final report go to every live hub client as setupCheck { kind: progress|done, report }. 409 naming the work in flight while the Audio or Character queue holds items, or a voice batch, discovery or assembly runs, and while one check re-runs.",
         "tags": [
-          "Read2Me.App"
+          "SetupCheckEndpoints"
         ]
       }
     },
@@ -11958,16 +12020,6 @@
             },
             "description": "Accepted"
           },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
           "default": {
             "content": {
               "application/problem+json": {
@@ -11981,7 +12033,7 @@
         },
         "summary": "Cancel the Full check: it stops once the current step ends, and the checks it hadn't reached read Not run. 202 with the report (fullRun.cancelling true); 409 when none is running.",
         "tags": [
-          "Read2Me.App"
+          "SetupCheckEndpoints"
         ]
       }
     },
@@ -12138,6 +12190,9 @@
     },
     {
       "name": "PreflightEndpoints"
+    },
+    {
+      "name": "SetupCheckEndpoints"
     }
   ]
 }

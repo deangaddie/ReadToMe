@@ -111,6 +111,11 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
     [InlineData("SettingsFieldDto", "help")]
     [InlineData("SettingsOptionDto", "label")]
     [InlineData("StepCatalogEntryDto", "defaults")]
+    [InlineData("SetupCheckReport", "fullRun")]
+    [InlineData("SetupCheckRow", "rerun")]
+    [InlineData("SetupFixHint", "link")]
+    [InlineData("SetupFixHint", "copy")]
+    [InlineData("SetupCheckReport", "putBack")]
     public async Task A_response_field_is_required(string component, string property)
     {
         var schema = (await DocumentAsync())["components"]!["schemas"]![component]!;
@@ -138,8 +143,7 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
     /// <summary>
     /// A 2xx answer under <c>/api/</c> declares its content (#168): a JSON body from a <c>Results&lt;&gt;</c>
     /// union, or a file's content type. Only a 204, or a bare 202, has no body by design;
-    /// an untyped <c>IResult</c> handler shows as a 200 with no content. <see cref="NotYetTyped"/> holds the operations the
-    /// endpoint slices still have to convert, and shrinks as they do.
+    /// an untyped <c>IResult</c> handler shows as a 200 with no content, and fails here.
     /// </summary>
     [Fact]
     public async Task Every_2xx_api_response_declares_its_content()
@@ -148,14 +152,11 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
             .Where(o => o.Operation["responses"]?.AsObject() is { } responses
                         && responses.Any(r => r.Key.StartsWith('2') && r.Key is not ("202" or "204") && r.Value?["content"] is null))
             .Select(o => o.Key)
-            .ToHashSet();
+            .Order(StringComparer.Ordinal)
+            .ToList();
 
-        var missing = undeclared.Except(NotYetTyped).Order(StringComparer.Ordinal).ToList();
-        var stale = NotYetTyped.Except(undeclared).Order(StringComparer.Ordinal).ToList();
-
-        Assert.True(missing.Count == 0 && stale.Count == 0,
-            "Operations answering 2xx with undeclared content (return a Results<> union):\n  " + string.Join("\n  ", missing) +
-            "\nNotYetTyped entries that are now typed or gone (remove them):\n  " + string.Join("\n  ", stale));
+        Assert.True(undeclared.Count == 0,
+            "Operations answering 2xx with undeclared content (return a Results<> union):\n  " + string.Join("\n  ", undeclared));
     }
 
     /// <summary>
@@ -224,19 +225,4 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
         from operation in path.Value!.AsObject()
         where operation.Value is JsonObject { } op && op.ContainsKey("responses")
         select ($"{operation.Key.ToUpperInvariant()} {path.Key}", operation.Value!.AsObject());
-
-    /// <summary>
-    /// The operations still answering untyped (an <c>IResult</c> handler), until their endpoint slice
-    /// converts them (#175-#180). An entry here that is typed or gone fails the test, so the list only shrinks.
-    /// </summary>
-    private static readonly HashSet<string> NotYetTyped =
-    [
-        "GET /api/ai-services",
-        "GET /api/ai-services/resolve",
-        "GET /api/ai-services/status",
-        "GET /api/ai-services/{name}/status",
-        "POST /api/ai-services/{name}/restart",
-        "POST /api/ai-services/{name}/shutdown",
-        "POST /api/ai-services/{name}/start",
-    ];
 }

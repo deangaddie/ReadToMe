@@ -1,10 +1,12 @@
 /**
  * Wire shapes for the Agent API (spec D8, ticket 05).
  *
- * A type the host's OpenAPI document declares is an alias, `export type X = Schema['X']`, named as
- * its C# record (ADR 0017). Endpoints not yet typed (their slice of #171 hasn't landed) answer
- * untyped, so their response DTOs are still hand-written here, mirrored from the C# records in
- * `src/Read2Me.App/Api/*.cs`, and any that exist in the schema are pinned to it in `schema-pins.ts`.
+ * Every shape the host's OpenAPI document declares is an alias, `export type X = Schema['X']`, named
+ * as its C# record (ADR 0017), so `bun run typecheck` catches a field the host renames or drops once
+ * `pwsh scripts/api-types.ps1` regenerates the contract. What stays hand-written here is what the
+ * document doesn't describe: multipart form fields, a shape the web app itself abstracts over
+ * (`SettingsConfig`), the stored step settings the host keeps as raw JSON, and the member names of a
+ * value the host reads as text (a route segment such as `AiTaskKind`), which the document types `string`.
  *
  * Conventions: camelCase property names, `Guid` as string, and every enum as its PascalCase member
  * name, in bodies, route segments and dictionary keys alike (#166). A feature that needs an enum's
@@ -538,19 +540,11 @@ export type StepPreviewResponse = Schema['StepPreviewResponse'];
 
 // ---- AI services (`AiServiceEndpoints.cs`) ----------------------------------------------------------
 
-export interface AiServiceDto {
-  name: string;
-  containerName: string;
-  baseUrl: string;
-  usesGpu: boolean;
-}
+export type AiServiceDto = Schema['AiServiceDto'];
 
 export type AiServiceStatus = Schema['AiServiceStatus'];
 
-export interface AiServiceStatusDto {
-  name: string;
-  status: AiServiceStatus;
-}
+export type AiServiceStatusDto = Schema['AiServiceStatusDto'];
 
 // ---- Preflight (`PreflightEndpoints.cs`, ticket 25) -------------------------------------------------
 
@@ -739,76 +733,24 @@ export type SetupCheckResult = Schema['SetupCheckResult'];
 /** `SetupCheckLane`: where a Full check step runs — on this machine, in a CPU container, or on the GPU. */
 export type SetupCheckLane = Schema['SetupCheckLane'];
 
-/**
- * The Full check going on: step `step` of `total`, its lane and what it is doing. `cancelling`: a
- * cancel was asked for, so the run stops once this step ends.
- */
-export interface SetupFullRun {
-  step: number;
-  total: number;
-  lane: SetupCheckLane;
-  label: string;
-  cancelling: boolean;
-}
+/** The Full check going on: its step of the total, its lane, and whether a cancel was asked for. */
+export type SetupFullRun = Schema['SetupFullRun'];
 
 /** The in-app Settings section that owns the value: an app-relative path and its label. */
-export interface SetupSettingsLink {
-  path: string;
-  label: string;
-}
+export type SetupSettingsLink = Schema['SetupSettingsLink'];
 
 /** One sentence, plus a Settings link and/or a command or file path to copy. */
-export interface SetupFixHint {
-  text: string;
-  link: SetupSettingsLink | null;
-  copy: string | null;
-}
+export type SetupFixHint = Schema['SetupFixHint'];
 
-/**
- * Re-running one Full-tier check. `gpu`: it drives a GPU container, so it stops the one running and
- * loads a model, and the page confirms first.
- */
-export interface SetupRerun {
-  gpu: boolean;
-}
+/** Re-running one Full-tier check; `gpu`: it stops the running GPU container, so the page confirms first. */
+export type SetupRerun = Schema['SetupRerun'];
 
-/**
- * One check: what the app expected and what it found. A note never changes the result. `managed`:
- * the app can start and restart what the row checks (a docker AI service, or a config on one).
- * `rerun`: what re-running this one check takes; null when it can't be (a Quick-tier row, or a
- * config with no active one).
- */
-export interface SetupCheckRow {
-  id: string;
-  group: SetupCheckGroup;
-  name: string;
-  tier: SetupCheckTier;
-  result: SetupCheckResult;
-  expected: string;
-  found: string;
-  note: string | null;
-  fix: SetupFixHint;
-  managed: boolean;
-  rerun: SetupRerun | null;
-}
+/** One check: what the app expected and what it found; `rerun` null when it can't be re-run alone. */
+export type SetupCheckRow = Schema['SetupCheckRow'];
 
 /**
  * `GET /api/setup-check`: the rows in table order and when each tier last ran (null: not yet).
- * `firstRun`: this host start created app.db. `startedAt`: when this host started, which keys the
- * start banner's dismissal. `noWorkspace`: this host started without a usable Workspace, so every
- * other API call answers 503 "No Workspace" and every route shows the Setup check until a restart.
- * `fullRun`: the Full check going on, null when none is. `fullCheckEstimateSeconds`: how long a Full
- * check is likely to take, for its confirm. `putBack`: after a Full check, what it did with the
- * containers it drove ("Put back: read2me-whisper stopped again."); null before one.
+ * `noWorkspace`: this host started without a usable Workspace, so every other API call answers 503
+ * "No Workspace" and every route shows the Setup check until a restart.
  */
-export interface SetupCheckReport {
-  rows: SetupCheckRow[];
-  quickCheckedAt: string | null;
-  fullCheckedAt: string | null;
-  firstRun: boolean;
-  startedAt: string;
-  noWorkspace: boolean;
-  fullRun: SetupFullRun | null;
-  fullCheckEstimateSeconds: number;
-  putBack: string | null;
-}
+export type SetupCheckReport = Schema['SetupCheckReport'];

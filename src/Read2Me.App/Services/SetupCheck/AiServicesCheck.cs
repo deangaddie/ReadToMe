@@ -60,7 +60,7 @@ namespace Read2Me.App.Services.SetupCheck
         {
             SetupCheckRow Config(string id, string name, string expected) =>
                 new(id, SetupCheckGroup.AiConfigs, name, SetupCheckTier.Full, SetupCheckResult.NotRun,
-                    expected, found, null, fix, Managed: false);
+                    expected, found, null, fix, Managed: false, Rerun: null);
 
             var rows = new List<SetupCheckRow>
             {
@@ -74,7 +74,7 @@ namespace Read2Me.App.Services.SetupCheck
             rows.AddRange(deps.Registry.All.Select(service => new SetupCheckRow(
                 SetupCheckIds.Container(service.Name), SetupCheckGroup.DockerServices, service.ContainerName,
                 SetupCheckTier.Quick, SetupCheckResult.NotRun,
-                $"{service.ContainerName} running and answering at {service.BaseUrl}", found, null, fix, Managed: true)));
+                $"{service.ContainerName} running and answering at {service.BaseUrl}", found, null, fix, Managed: true, Rerun: null)));
             return rows;
         }
 
@@ -111,7 +111,7 @@ namespace Read2Me.App.Services.SetupCheck
                 return new SetupCheckRow(
                     SetupCheckIds.AttributionChain, SetupCheckGroup.AiConfigs, "Attribution chain", SetupCheckTier.Full,
                     SetupCheckResult.NotRun, ChainExpected, "Needs an active LLM config", null,
-                    new SetupFixHint($"no active config — choose one in {SetupSettingsLink.Llm.Label}", SetupSettingsLink.Llm), Managed: false);
+                    new SetupFixHint($"no active config — choose one in {SetupSettingsLink.Llm.Label}", SetupSettingsLink.Llm, null), Managed: false, Rerun: null);
             return await ConfigRowAsync(SetupCheckIds.AttributionChain, "Attribution chain", ChainExpected, SetupSettingsLink.Llm, chain,
                 required: true, Reach.ModelList, DescribeChain, ct);
         }
@@ -131,11 +131,11 @@ namespace Read2Me.App.Services.SetupCheck
             var managed = false;
             // Full-tier: the Quick check judges the config, the Full check sends it a real request.
             SetupCheckRow Row(SetupCheckResult result, string found, string? note, SetupFixHint fix) =>
-                new(id, SetupCheckGroup.AiConfigs, name, SetupCheckTier.Full, result, expected, found, note, fix, managed);
+                new(id, SetupCheckGroup.AiConfigs, name, SetupCheckTier.Full, result, expected, found, note, fix, managed, Rerun: null);
 
             if (configs.Count == 0)
             {
-                var noConfig = new SetupFixHint($"no active config — choose one in {settings.Label}", settings);
+                var noConfig = new SetupFixHint($"no active config — choose one in {settings.Label}", settings, null);
                 return required
                     ? Row(SetupCheckResult.Failed, "No active config", null, noConfig)
                     : Row(SetupCheckResult.NotUsed, "No active config", NoAccuracyScore, noConfig);
@@ -153,10 +153,10 @@ namespace Read2Me.App.Services.SetupCheck
             {
                 if (config.BaseUrl is null)
                     return Row(SetupCheckResult.Failed, $"{config.Name}: no base URL", null,
-                        new SetupFixHint($"Set the config's base URL in {settings.Label}.", settings));
+                        new SetupFixHint($"Set the config's base URL in {settings.Label}.", settings, null));
                 if (!IsHttpUrl(config.BaseUrl))
                     return Row(SetupCheckResult.Failed, $"{config.Name}: \"{config.BaseUrl}\" isn't a URL", null,
-                        new SetupFixHint($"Correct the config's base URL in {settings.Label}.", settings));
+                        new SetupFixHint($"Correct the config's base URL in {settings.Label}.", settings, null));
                 if (config.Service is not null)
                     continue;
 
@@ -164,12 +164,11 @@ namespace Read2Me.App.Services.SetupCheck
                 if (error is not null)
                     return Row(SetupCheckResult.Failed, $"{config.Name}: GET {url} failed: {error}", note,
                         new SetupFixHint(
-                            $"The app can't reach {config.BaseUrl}: start it where it runs, or correct the config's URL in {settings.Label}.",
-                            settings));
+                            $"The app can't reach {config.BaseUrl}: start it where it runs, or correct the config's URL in {settings.Label}.", settings, null));
             }
 
             return Row(SetupCheckResult.Passed, describe(configs), note,
-                new SetupFixHint($"Change it in {settings.Label}.", settings));
+                new SetupFixHint($"Change it in {settings.Label}.", settings, null));
         }
 
         private static bool IsHttpUrl(string url) =>
@@ -207,14 +206,14 @@ namespace Read2Me.App.Services.SetupCheck
             var note = deps.Watchdog.Value.Enabled ? null : WatchdogOff;
             SetupCheckRow Row(SetupCheckResult result, string found, SetupFixHint fix) =>
                 new(SetupCheckIds.Container(service.Name), SetupCheckGroup.DockerServices, service.ContainerName,
-                    SetupCheckTier.Quick, result, expected, found, note, fix, Managed: true);
+                    SetupCheckTier.Quick, result, expected, found, note, fix, Managed: true, Rerun: null);
 
             if (!dockerOnPath)
                 return Row(SetupCheckResult.NotRun, "Needs the docker CLI",
-                    new SetupFixHint("Fix the docker CLI row first, then run the Quick check again."));
+                    new SetupFixHint("Fix the docker CLI row first, then run the Quick check again.", null, null));
             if (users.Count == 0)
                 return Row(SetupCheckResult.NotUsed, "No active config uses it",
-                    new SetupFixHint("Nothing to do: no active config uses this container."));
+                    new SetupFixHint("Nothing to do: no active config uses this container.", null, null));
 
             // A container an active config uses is one of the used services the caller read.
             var containerStatus = statuses[service.Name];
@@ -230,17 +229,16 @@ namespace Read2Me.App.Services.SetupCheck
                 if (status is null)
                     return Row(SetupCheckResult.Failed, $"Running, but {health} didn't answer",
                         new SetupFixHint(
-                            $"The app expects {service.Name} at {service.BaseUrl}: check the port mapping for {service.Name} in Infra/docker-compose.yml.",
-                            Copy: "Infra/docker-compose.yml"));
+                            $"The app expects {service.Name} at {service.BaseUrl}: check the port mapping for {service.Name} in Infra/docker-compose.yml.", null, "Infra/docker-compose.yml"));
                 if (status is < 200 or > 299)
                     return Row(SetupCheckResult.NotConfirmed,
                         $"{health} answers {status}: not ready yet (a model may still be loading)",
-                        new SetupFixHint("Wait for it to finish loading, then run the Quick check again."));
+                        new SetupFixHint("Wait for it to finish loading, then run the Quick check again.", null, null));
                 // 2xx: it became ready since the status was read, so it goes on as Ready.
             }
 
             if (models.Count == 0)
-                return Row(SetupCheckResult.Passed, "Running and answering", new SetupFixHint("Nothing to do."));
+                return Row(SetupCheckResult.Passed, "Running and answering", new SetupFixHint("Nothing to do.", null, null));
 
             var url = $"{service.BaseUrl.TrimEnd('/')}/v1/models";
             var modelFix = ModelListFix(service.Name);
@@ -264,12 +262,10 @@ namespace Read2Me.App.Services.SetupCheck
         private static SetupFixHint ModelListFix(string serviceName) => serviceName switch
         {
             "llama" => new SetupFixHint(
-                $"Add a preset with that name to Infra/llama/config/models.ini, or correct the model in {SetupSettingsLink.Llm.Label}.",
-                SetupSettingsLink.Llm, "Infra/llama/config/models.ini"),
+                $"Add a preset with that name to Infra/llama/config/models.ini, or correct the model in {SetupSettingsLink.Llm.Label}.", SetupSettingsLink.Llm, "Infra/llama/config/models.ini"),
             "audiocpp" => new SetupFixHint(
-                "Add that entry to Infra/audiocpp/server.json and restart audiocpp, or correct the config's model in Settings → Paragraph TTS or Voice design.",
-                Copy: "Infra/audiocpp/server.json"),
-            _ => new SetupFixHint("Correct the config's model in Settings."),
+                "Add that entry to Infra/audiocpp/server.json and restart audiocpp, or correct the config's model in Settings → Paragraph TTS or Voice design.", null, "Infra/audiocpp/server.json"),
+            _ => new SetupFixHint("Correct the config's model in Settings.", null, null),
         };
 
         /// <summary>The <c>id</c>s of an OpenAI-style <c>data[]</c> listing; throws when the GET fails.</summary>
