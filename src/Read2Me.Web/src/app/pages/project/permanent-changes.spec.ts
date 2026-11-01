@@ -17,7 +17,7 @@ describe('rereadConfirm (guidance-primitives 14)', () => {
 
   it('says that the confirmed and skipped steps go when any checkpoint row exists', () => {
     expect(
-      rereadConfirm({ structure: { state: 'skipped', stale: false, at: '2026-10-18T00:00:00Z' } })
+      rereadConfirm({ Structure: { state: 'Skipped', stale: false, at: '2026-10-18T00:00:00Z' } })
         .message,
     ).toBe(`${body} Clears your confirmed and skipped steps. This cannot be undone.`);
   });

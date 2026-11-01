@@ -83,6 +83,6 @@ public class SetupCheckSurfacingTests(E2eAppFixture app, PlaywrightFixture pw) :
         response.EnsureSuccessStatusCode();
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         return doc.RootElement.GetProperty("rows").EnumerateArray()
-            .Count(r => r.GetProperty("result").GetString() == "failed");
+            .Count(r => r.GetProperty("result").GetString() == "Failed");
     }
 }

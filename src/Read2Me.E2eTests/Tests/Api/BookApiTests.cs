@@ -32,13 +32,13 @@ public class BookApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Assert.Equal(1, volumes.GetArrayLength());
         var volumeId = volumes[0].GetProperty("id").GetString();
 
-        var parts = await GetJsonAsync($"/api/projects/{folder}/nodes/volume/{volumeId}/children");
+        var parts = await GetJsonAsync($"/api/projects/{folder}/nodes/Volume/{volumeId}/children");
         var partId = parts.RootElement.GetProperty("parts")[0].GetProperty("id").GetString();
 
-        var chapters = await GetJsonAsync($"/api/projects/{folder}/nodes/part/{partId}/children");
+        var chapters = await GetJsonAsync($"/api/projects/{folder}/nodes/Part/{partId}/children");
         var chapterId = chapters.RootElement.GetProperty("chapters")[0].GetProperty("id").GetString();
 
-        var paragraphs = await GetJsonAsync($"/api/projects/{folder}/nodes/chapter/{chapterId}/children");
+        var paragraphs = await GetJsonAsync($"/api/projects/{folder}/nodes/Chapter/{chapterId}/children");
         var paragraphArray = paragraphs.RootElement.GetProperty("paragraphs");
         Assert.Equal(3, paragraphArray.GetArrayLength());
         var firstItems = paragraphArray[0].GetProperty("items");
@@ -110,7 +110,7 @@ public class BookApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Assert.Equal(status.GetProperty("audio").GetProperty("remaining").GetInt32(),
             volume.GetProperty("audioRemaining").GetInt32());
 
-        var summary = (await GetJsonAsync($"/api/projects/{folder}/nodes/volume/{volumeId}/status")).RootElement;
+        var summary = (await GetJsonAsync($"/api/projects/{folder}/nodes/Volume/{volumeId}/status")).RootElement;
         Assert.Equal(attributionRemaining, summary.GetProperty("attributionRemaining").GetInt32());
         Assert.False(summary.GetProperty("isDone").GetBoolean());
     }
@@ -185,7 +185,7 @@ public class BookApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         var status = await Http.GetAsync($"{app.BaseUrl}/api/projects/nope-xyz/status");
         Assert.Equal(HttpStatusCode.NotFound, status.StatusCode);
 
-        var node = await Http.GetAsync($"{app.BaseUrl}/api/projects/nope-xyz/nodes/chapter/{Guid.NewGuid()}/status");
+        var node = await Http.GetAsync($"{app.BaseUrl}/api/projects/nope-xyz/nodes/Chapter/{Guid.NewGuid()}/status");
         Assert.Equal(HttpStatusCode.NotFound, node.StatusCode);
     }
 }

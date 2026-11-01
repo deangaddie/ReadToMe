@@ -16,7 +16,7 @@ namespace Read2Me.App.Api
     /// once that job has completed and names a file under its assembly outputs.
     /// </summary>
     public sealed record AssemblyStatusDto(
-        bool IsRunning, string? CurrentPhase, double EncodePercent,
+        bool IsRunning, AssemblyPhase? CurrentPhase, double EncodePercent,
         string? LastError, int AudioRemainingCount,
         string? Folder, string? OutputFileName);
 
@@ -33,7 +33,7 @@ namespace Read2Me.App.Api
                 .WithSummary("Start m4b assembly. 409 with audioRemainingCount when items still lack audio and allowPartial is false. Poll /api/assembly/status.");
             endpoints.MapGet("/api/assembly/status",
                     (AudiobookAssemblyService svc) => Results.Ok(new AssemblyStatusDto(
-                        svc.IsRunning, svc.CurrentPhase?.ToString(), svc.EncodePercent,
+                        svc.IsRunning, svc.CurrentPhase, svc.EncodePercent,
                         svc.LastError, svc.AudioRemainingCount, svc.Folder, svc.OutputFileName)))
                 .WithSummary("Assembly progress: phase (Gather/Silence/ProbeConcat/Encode/Finalize) and encode percent, the folder of the running or most recent job, and outputFileName once it completed.");
             endpoints.MapPost("/api/assembly/cancel",

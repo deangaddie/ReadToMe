@@ -2,6 +2,7 @@ import type {
   InsertPosition,
   MergeDirection,
   NodeKind,
+  NodeLevel,
   PauseKind,
   Placement,
   StructureAnchor,
@@ -18,6 +19,19 @@ import type { IconName } from '@app/ui/icons';
  */
 
 export type NodeMenuKind = 'volume' | 'part' | 'chapter' | 'paragraph' | 'item' | 'pause-paragraph';
+
+/** A heading's menu kind for its level (the host's `BookNodeLevel`), and back. */
+export const MENU_KIND_OF_LEVEL = {
+  Volume: 'volume',
+  Part: 'part',
+  Chapter: 'chapter',
+} as const satisfies Record<NodeLevel, NodeMenuKind>;
+
+export const LEVEL_OF_MENU_KIND = {
+  volume: 'Volume',
+  part: 'Part',
+  chapter: 'Chapter',
+} as const satisfies Record<(typeof MENU_KIND_OF_LEVEL)[NodeLevel], NodeLevel>;
 
 export interface NodeMenuTarget {
   kind: NodeMenuKind;

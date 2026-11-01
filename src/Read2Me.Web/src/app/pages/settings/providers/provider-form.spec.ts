@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'bun:test';
-import { ParagraphTtsServiceType } from '@app/api';
 import { SettingsField } from '@app/ui/settings-form';
 import {
   ProviderConfig,
@@ -30,7 +29,7 @@ function ttsConfig(overrides: Partial<ProviderConfig> = {}): ProviderConfig {
   return {
     id: 4,
     name: 'Vox',
-    type: ParagraphTtsServiceType.VoxCpm2,
+    type: 'VoxCpm2',
     settingsJson: '{"baseUrl":"http://tts:8003","cfg_value":3.5,"maxChunkChars":400}',
     enabledStepIds: ['to-sentence-case', 's1'],
     substitutionSteps: [
@@ -255,14 +254,14 @@ describe('provider form', () => {
   });
 
   it('starts a new config empty, with text processing only where the area has it', () => {
-    expect(emptyProviderForm(0, true).text).toEqual({
+    expect(emptyProviderForm('VoxCpm2', true).text).toEqual({
       enabledStepIds: [],
       substitutions: [],
       toSentenceCase: { paragraphEnabled: true, wordEnabled: true, wordMinLength: '5' },
     });
-    expect(emptyProviderForm(1, false)).toEqual({
+    expect(emptyProviderForm('Chatterbox', false)).toEqual({
       name: '',
-      type: 1,
+      type: 'Chatterbox',
       baseUrl: '',
       settings: {},
       text: null,

@@ -72,39 +72,39 @@ describe('isNarrationOnlyParagraph', () => {
 
 describe('selectedUnder', () => {
   it('counts by the level of the node asked about', () => {
-    expect(selectedUnder(SELECTION, 'chapter', 'c1')).toBe(2);
-    expect(selectedUnder(SELECTION, 'chapter', 'c2')).toBe(1);
-    expect(selectedUnder(SELECTION, 'part', 'pt1')).toBe(3);
-    expect(selectedUnder(SELECTION, 'volume', 'v1')).toBe(3);
-    expect(selectedUnder(SELECTION, 'volume', 'v2')).toBe(0);
+    expect(selectedUnder(SELECTION, 'Chapter', 'c1')).toBe(2);
+    expect(selectedUnder(SELECTION, 'Chapter', 'c2')).toBe(1);
+    expect(selectedUnder(SELECTION, 'Part', 'pt1')).toBe(3);
+    expect(selectedUnder(SELECTION, 'Volume', 'v1')).toBe(3);
+    expect(selectedUnder(SELECTION, 'Volume', 'v2')).toBe(0);
   });
 
   it('a row with unknown part/volume counts under its chapter only', () => {
-    expect(selectedUnder(SELECTION, 'chapter', 'c9')).toBe(1);
-    expect(selectedUnder({ p9: SELECTION['p9']! }, 'volume', 'v1')).toBe(0);
+    expect(selectedUnder(SELECTION, 'Chapter', 'c9')).toBe(1);
+    expect(selectedUnder({ p9: SELECTION['p9']! }, 'Volume', 'v1')).toBe(0);
   });
 });
 
 describe('nodeState (tri-state roll-up)', () => {
   it('nothing selected under the node is unchecked, whatever the total', () => {
-    expect(nodeState(SELECTION, 'chapter', 'c3', 4)).toBe('unchecked');
-    expect(nodeState(SELECTION, 'chapter', 'c3', undefined)).toBe('unchecked');
-    expect(nodeState({}, 'volume', 'v1', 0)).toBe('unchecked');
+    expect(nodeState(SELECTION, 'Chapter', 'c3', 4)).toBe('unchecked');
+    expect(nodeState(SELECTION, 'Chapter', 'c3', undefined)).toBe('unchecked');
+    expect(nodeState({}, 'Volume', 'v1', 0)).toBe('unchecked');
   });
 
   it('every paragraph the node holds selected is checked', () => {
-    expect(nodeState(SELECTION, 'chapter', 'c1', 2)).toBe('checked');
-    expect(nodeState(SELECTION, 'part', 'pt1', 3)).toBe('checked');
+    expect(nodeState(SELECTION, 'Chapter', 'c1', 2)).toBe('checked');
+    expect(nodeState(SELECTION, 'Part', 'pt1', 3)).toBe('checked');
   });
 
   it('some of them is indeterminate', () => {
-    expect(nodeState(SELECTION, 'chapter', 'c1', 5)).toBe('indeterminate');
-    expect(nodeState(SELECTION, 'volume', 'v1', 10)).toBe('indeterminate');
+    expect(nodeState(SELECTION, 'Chapter', 'c1', 5)).toBe('indeterminate');
+    expect(nodeState(SELECTION, 'Volume', 'v1', 10)).toBe('indeterminate');
   });
 
   it('a node whose total is unknown, or zero, cannot read as checked', () => {
-    expect(nodeState(SELECTION, 'chapter', 'c1', undefined)).toBe('indeterminate');
-    expect(nodeState(SELECTION, 'chapter', 'c1', 0)).toBe('indeterminate');
+    expect(nodeState(SELECTION, 'Chapter', 'c1', undefined)).toBe('indeterminate');
+    expect(nodeState(SELECTION, 'Chapter', 'c1', 0)).toBe('indeterminate');
   });
 });
 

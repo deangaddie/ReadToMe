@@ -31,7 +31,7 @@ public class ReaderApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         var book = await app.SeedProjectAsync(folder, "Reader Book", "Author");
 
         var paragraphs = (await GetJsonAsync(
-            $"/api/projects/{folder}/nodes/chapter/{book.ChapterId("ch1")}/children")).GetProperty("paragraphs");
+            $"/api/projects/{folder}/nodes/Chapter/{book.ChapterId("ch1")}/children")).GetProperty("paragraphs");
 
         var first = paragraphs[0];
         Assert.False(first.GetProperty("isPauseParagraph").GetBoolean());
@@ -49,7 +49,7 @@ public class ReaderApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         var folder = $"api-reader-voices-{Guid.NewGuid():N}";
         var book = await app.SeedProjectAsync(folder, "Voices Book", "Author", characterName: "Watson");
         await app.SeedNarratorVoiceAsync(folder);
-        var path = $"/api/projects/{folder}/nodes/chapter/{book.ChapterId("ch1")}/voices";
+        var path = $"/api/projects/{folder}/nodes/Chapter/{book.ChapterId("ch1")}/voices";
 
         var voices = await GetJsonAsync(path);
 
@@ -157,7 +157,7 @@ public class ReaderApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     public async Task Unknown_project_is_404()
     {
         var voices = await Http.GetAsync(
-            $"{app.BaseUrl}/api/projects/no-such-project-xyz/nodes/chapter/{Guid.NewGuid()}/voices");
+            $"{app.BaseUrl}/api/projects/no-such-project-xyz/nodes/Chapter/{Guid.NewGuid()}/voices");
         Assert.Equal(HttpStatusCode.NotFound, voices.StatusCode);
 
         var reviews = await Http.GetAsync($"{app.BaseUrl}/api/projects/no-such-project-xyz/audio/reviews");

@@ -1,4 +1,4 @@
-import { AttributionPromptStyle, LlmApiType, type LlmServerConfig } from '@app/api';
+import type { AttributionPromptStyle, LlmApiType, LlmServerConfig } from '@app/api';
 import { isAbsoluteUrl } from '@app/shared/config-form';
 
 /**
@@ -23,12 +23,12 @@ export interface LlmConfigForm {
 }
 
 export const API_TYPE_LABELS: Record<LlmApiType, string> = {
-  [LlmApiType.OpenAiCompatible]: 'OpenAI compatible',
+  OpenAiCompatible: 'OpenAI compatible',
 };
 
 export const EMPTY_LLM_FORM: LlmConfigForm = {
   name: '',
-  apiType: LlmApiType.OpenAiCompatible,
+  apiType: 'OpenAiCompatible',
   baseUrl: '',
   apiKey: '',
   model: '',
@@ -38,7 +38,7 @@ export const EMPTY_LLM_FORM: LlmConfigForm = {
   frequencyPenalty: '',
   presencePenalty: '',
   attributionBatchSize: '1',
-  promptStyle: AttributionPromptStyle.Full,
+  promptStyle: 'Full',
   supportsModelSwitch: false,
 };
 

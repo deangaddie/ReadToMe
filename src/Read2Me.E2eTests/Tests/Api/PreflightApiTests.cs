@@ -58,7 +58,7 @@ public class PreflightApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         app.FakeControl.StatusByName[Llm] = AiServiceStatus.Stopped;
         try
         {
-            var plan = await PlanAsync("characterattribution");
+            var plan = await PlanAsync("CharacterAttribution");
             Assert.False(plan.GetProperty("ready").GetBoolean());
             var toStart = Assert.Single(plan.GetProperty("toStart").EnumerateArray());
             Assert.Equal(Llm, toStart.GetProperty("name").GetString());

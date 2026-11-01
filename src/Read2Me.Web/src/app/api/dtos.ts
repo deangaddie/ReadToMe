@@ -8,8 +8,9 @@
  * exist in the generated schema is pinned to it in `schema-pins.ts` so a renamed or removed field
  * fails `bun run typecheck`.
  *
- * Conventions: the host serialises with Minimal API defaults: camelCase names, `Guid` as string,
- * entity enums as their integer value, `ToString()`-ed enums as their member name.
+ * Conventions: camelCase property names, `Guid` as string, and every enum as its PascalCase member
+ * name, in bodies, route segments and dictionary keys alike (#166). A feature that needs an enum's
+ * labels or order keeps a `Record<Union, string>` or a `readonly Union[]` beside its own code.
  */
 import type { components } from './schema';
 import type { BookEditTargetKind, NodeKind, Placement, VoiceAnchorLevel } from './book-commands';
@@ -20,42 +21,27 @@ export type Schema = components['schemas'];
 /** A `System.Guid` on the wire. */
 export type Guid = string;
 
-/** Route segment for node-scoped endpoints (`/nodes/{level}/…`, enqueue requests). */
-export type NodeLevel = 'volume' | 'part' | 'chapter';
+/** `BookNodeLevel`: the route segment of node-scoped endpoints (`/nodes/{level}/…`) and enqueue requests. */
+export type NodeLevel = Schema['BookNodeLevel'];
 
-// ---- Integer enums (settings entities serialise the numeric value) ---------------------------------
+// ---- Settings enums -------------------------------------------------------------------------------
 
-export const LlmApiType = { OpenAiCompatible: 0 } as const;
-export type LlmApiType = (typeof LlmApiType)[keyof typeof LlmApiType];
+export type LlmApiType = Schema['LlmApiType'];
+export type AttributionPromptStyle = Schema['AttributionPromptStyle'];
+export type ParagraphTtsServiceType = Schema['ParagraphTtsServiceType'];
+export type VoiceDesignServiceType = Schema['VoiceDesignServiceType'];
+export type TranscriptionServiceType = Schema['TranscriptionServiceType'];
+export type SemanticSimilarityServiceType = Schema['SemanticSimilarityServiceType'];
 
-export const AttributionPromptStyle = { Full: 0, Simple: 1, Chapter: 2 } as const;
-export type AttributionPromptStyle =
-  (typeof AttributionPromptStyle)[keyof typeof AttributionPromptStyle];
+/** Any provider settings area's type: what the shared provider page, store and editor carry. */
+export type ProviderType =
+  | ParagraphTtsServiceType
+  | VoiceDesignServiceType
+  | TranscriptionServiceType
+  | SemanticSimilarityServiceType;
 
-export const ParagraphTtsServiceType = {
-  VoxCpm2: 0,
-  Chatterbox: 1,
-  Qwen3Base: 3,
-  Breeze: 4,
-} as const;
-export type ParagraphTtsServiceType =
-  (typeof ParagraphTtsServiceType)[keyof typeof ParagraphTtsServiceType];
-
-export const VoiceDesignServiceType = { VoxCpm2: 0, Qwen3: 1, Breeze: 3 } as const;
-export type VoiceDesignServiceType =
-  (typeof VoiceDesignServiceType)[keyof typeof VoiceDesignServiceType];
-
-export const TranscriptionServiceType = { LocalWhisper: 0 } as const;
-export type TranscriptionServiceType =
-  (typeof TranscriptionServiceType)[keyof typeof TranscriptionServiceType];
-
-export const SemanticSimilarityServiceType = { MiniLmL6: 0, MpnetBaseV2: 1 } as const;
-export type SemanticSimilarityServiceType =
-  (typeof SemanticSimilarityServiceType)[keyof typeof SemanticSimilarityServiceType];
-
-/** `ParagraphOutcomeKind` / `AudioItemOutcomeKind`: same members, same numbers. */
-export const OutcomeKind = { Failed: 0, Unfinished: 1 } as const;
-export type OutcomeKind = (typeof OutcomeKind)[keyof typeof OutcomeKind];
+/** `ParagraphOutcomeKind` / `AudioItemOutcomeKind`: same members. */
+export type OutcomeKind = 'Failed' | 'Unfinished';
 
 // ---- Projects (`ProjectEndpoints.cs`) -------------------------------------------------------------
 
@@ -81,19 +67,19 @@ export type NarratorOnlyModeRequest = Schema['NarratorOnlyModeRequest'];
  * keys of {@link ProjectStatusDto.checkpoints}.
  */
 export const PIPELINE_STEP_IDS = [
-  'import',
-  'structure',
-  'speakers',
-  'text',
-  'voices',
-  'titles',
-  'pauses',
-  'audio',
-  'export',
+  'Import',
+  'Structure',
+  'Speakers',
+  'Text',
+  'Voices',
+  'Titles',
+  'Pauses',
+  'Audio',
+  'Export',
 ] as const;
 export type PipelineStepId = (typeof PIPELINE_STEP_IDS)[number];
 
-/** `PUT /api/projects/{folder}/checkpoints/{step}`: `open` deletes the row. */
+/** `PUT /api/projects/{folder}/checkpoints/{step}`: `Open` deletes the row. */
 export type SetCheckpointRequest = Schema['SetCheckpointRequest'];
 export type CheckpointRequestState = NonNullable<SetCheckpointRequest['state']>;
 
@@ -158,7 +144,7 @@ export interface ManualImportRequest {
 
 /** `StepCheckpointDto`: a confirmed or skipped step; `at` is when, kept when the row goes stale. */
 export interface StepCheckpointDto {
-  state: 'confirmed' | 'skipped';
+  state: Exclude<CheckpointRequestState, 'Open'>;
   stale: boolean;
   at: string;
 }
@@ -228,7 +214,7 @@ export interface ParagraphDto {
   isPauseParagraph: boolean;
 }
 
-/** `GET …/nodes/chapter/{id}/voices` entry. */
+/** `GET …/nodes/Chapter/{id}/voices` entry. */
 export interface ItemVoiceDto {
   /** null when no voice resolves for the item. */
   voiceName: string | null;
@@ -1212,7 +1198,7 @@ export interface BookEditRunDto {
 export type HistoryStepKind = Schema['HistoryStepKind'];
 
 /** `StepAction`: the kind of action a request's or Background run's step is (the host's `StepAction`). */
-export type StepAction = NonNullable<Schema['StepAction']>;
+export type StepAction = Schema['StepAction'];
 
 /** `HistoryStep`: one History step. `sequence` is for display; the line is the `parentStepId` chain from the Head. */
 export interface HistoryStep {
@@ -1385,22 +1371,16 @@ export interface PronunciationSpanReport {
 // ---- Setup check (`SetupCheckEndpoints.cs`) ---------------------------------------------------------
 
 /** `SetupCheckGroup`: the area a check sits under in the report's one table. */
-export type SetupCheckGroup = 'workspaceAndTools' | 'aiConfigs' | 'dockerServices';
+export type SetupCheckGroup = Schema['SetupCheckGroup'];
 
 /** `SetupCheckTier`: the Quick check reads; the Full check sends real requests. */
-export type SetupCheckTier = 'quick' | 'full';
+export type SetupCheckTier = Schema['SetupCheckTier'];
 
-/** `SetupCheckResult`: a check's one result; `checking` is transient, while a run is on the row. */
-export type SetupCheckResult =
-  | 'passed'
-  | 'failed'
-  | 'notConfirmed'
-  | 'notRun'
-  | 'notUsed'
-  | 'checking';
+/** `SetupCheckResult`: a check's one result; `Checking` is transient, while a run is on the row. */
+export type SetupCheckResult = Schema['SetupCheckResult'];
 
 /** `SetupCheckLane`: where a Full check step runs — on this machine, in a CPU container, or on the GPU. */
-export type SetupCheckLane = 'local' | 'cpu' | 'gpu';
+export type SetupCheckLane = Schema['SetupCheckLane'];
 
 /**
  * The Full check going on: step `step` of `total`, its lane and what it is doing. `cancelling`: a

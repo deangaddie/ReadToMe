@@ -9,7 +9,7 @@ import { SetupCheckStore } from './setup-check-store';
 const RUN: SetupFullRun = {
   step: 1,
   total: 1,
-  lane: 'local',
+  lane: 'Local',
   label: 'Encoding a 1 s tone to .m4b',
   cancelling: false,
 };
@@ -22,9 +22,9 @@ function report(
     rows: [
       {
         id: 'ffmpeg',
-        group: 'workspaceAndTools',
+        group: 'WorkspaceAndTools',
         name: 'ffmpeg',
-        tier: 'full',
+        tier: 'Full',
         result: ffmpeg,
         expected: 'e',
         found: 'f',
@@ -64,10 +64,10 @@ describe('SetupCheckStore and the Full check', () => {
     resetServices();
     live = new FakeLive().install();
     api = {
-      report: mock(async () => report('passed')),
-      runQuick: mock(async () => report('passed')),
-      startFull: mock(async () => report('passed', { fullRun: RUN })),
-      cancelFull: mock(async () => report('checking', { fullRun: { ...RUN, cancelling: true } })),
+      report: mock(async () => report('Passed')),
+      runQuick: mock(async () => report('Passed')),
+      startFull: mock(async () => report('Passed', { fullRun: RUN })),
+      cancelFull: mock(async () => report('Checking', { fullRun: { ...RUN, cancelling: true } })),
     };
     confirmed = true;
     confirms = [];
@@ -87,19 +87,19 @@ describe('SetupCheckStore and the Full check', () => {
   it('applies hub progress to the rows, the strip and the shield, and done clears the run', async () => {
     await store().load();
 
-    live.emit('setupCheck', { kind: 'progress', report: report('checking', { fullRun: RUN }) });
+    live.emit('setupCheck', { kind: 'progress', report: report('Checking', { fullRun: RUN }) });
 
-    expect(store().report()?.rows[0]?.result).toBe('checking');
+    expect(store().report()?.rows[0]?.result).toBe('Checking');
     expect(store().fullRun()).toEqual(RUN);
     expect(store().shield()).toEqual({ status: 'busy', failed: 0, label: 'Full check 1/1' });
 
     live.emit('setupCheck', {
       kind: 'done',
-      report: report('failed', { fullCheckedAt: '2026-10-29T09:05:00Z' }),
+      report: report('Failed', { fullCheckedAt: '2026-10-29T09:05:00Z' }),
     });
 
     expect(store().fullRun()).toBeNull();
-    expect(store().report()?.rows[0]?.result).toBe('failed');
+    expect(store().report()?.rows[0]?.result).toBe('Failed');
     expect(store().shield()).toEqual({
       status: 'error',
       failed: 1,
@@ -109,7 +109,7 @@ describe('SetupCheckStore and the Full check', () => {
 
   it('reads the report again when the hub reconnects, so a missed done is not left spinning', async () => {
     store();
-    live.emit('setupCheck', { kind: 'progress', report: report('checking', { fullRun: RUN }) });
+    live.emit('setupCheck', { kind: 'progress', report: report('Checking', { fullRun: RUN }) });
     expect(store().fullRun()).toEqual(RUN);
 
     live.resync();
@@ -133,14 +133,14 @@ describe('SetupCheckStore and the Full check', () => {
   it('keeps the hub done message when it arrives before the 202 that started the run', async () => {
     await store().load();
     api.startFull.mockImplementation(async () => {
-      live.emit('setupCheck', { kind: 'done', report: report('failed') });
-      return report('checking', { fullRun: RUN });
+      live.emit('setupCheck', { kind: 'done', report: report('Failed') });
+      return report('Checking', { fullRun: RUN });
     });
 
     await store().runFull();
 
     expect(store().fullRun()).toBeNull();
-    expect(store().report()?.rows[0]?.result).toBe('failed');
+    expect(store().report()?.rows[0]?.result).toBe('Failed');
   });
 
   it('starts nothing when the confirm is declined', async () => {
@@ -169,7 +169,7 @@ describe('SetupCheckStore and the Full check', () => {
 
   it('runs no Quick check while a Full check runs, and cancel shows it cancelling', async () => {
     store();
-    live.emit('setupCheck', { kind: 'progress', report: report('checking', { fullRun: RUN }) });
+    live.emit('setupCheck', { kind: 'progress', report: report('Checking', { fullRun: RUN }) });
 
     await store().runQuick();
     expect(api.runQuick).not.toHaveBeenCalled();

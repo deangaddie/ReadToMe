@@ -7,7 +7,7 @@ const middle = { isFirst: false, isLast: false };
 
 function input(overrides: Partial<StructureNodeMenuInput> = {}): StructureNodeMenuInput {
   return {
-    node: { level: 'chapter', id: 'c1', rawTitle: 'The Storm' },
+    node: { level: 'Chapter', id: 'c1', rawTitle: 'The Storm' },
     position: middle,
     selection: null,
     status: null,
@@ -31,7 +31,7 @@ describe('structureNodeMenu', () => {
 
   it('an untitled node carries a null title, not its placeholder', () => {
     const { target } = structureNodeMenu(
-      input({ node: { level: 'volume', id: 'v2', rawTitle: null } }),
+      input({ node: { level: 'Volume', id: 'v2', rawTitle: null } }),
     );
     expect(target).toMatchObject({ kind: 'volume', id: 'v2', text: null });
   });
@@ -42,7 +42,7 @@ describe('structureNodeMenu', () => {
     [{ isFirst: true, isLast: true }],
   ])('passes the sibling position through for the merge entries: %o', (position) => {
     const { target } = structureNodeMenu(
-      input({ node: { level: 'part', id: 'p1', rawTitle: 'One' }, position }),
+      input({ node: { level: 'Part', id: 'p1', rawTitle: 'One' }, position }),
     );
     expect(target).toMatchObject(position);
   });

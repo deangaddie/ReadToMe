@@ -7,29 +7,29 @@ export const RESULT_VIEW: Record<
   SetupCheckResult,
   { status: StatusKind; label: string; icon?: IconName }
 > = {
-  passed: { status: 'ok', label: 'Passed' },
-  failed: { status: 'error', label: 'Failed' },
-  notConfirmed: { status: 'warn', label: 'Not confirmed', icon: 'question_mark' },
-  notRun: { status: 'neutral', label: 'Not run', icon: 'block' },
-  notUsed: { status: 'neutral', label: 'Not used' },
-  checking: { status: 'busy', label: 'Checking…' },
+  Passed: { status: 'ok', label: 'Passed' },
+  Failed: { status: 'error', label: 'Failed' },
+  NotConfirmed: { status: 'warn', label: 'Not confirmed', icon: 'question_mark' },
+  NotRun: { status: 'neutral', label: 'Not run', icon: 'block' },
+  NotUsed: { status: 'neutral', label: 'Not used' },
+  Checking: { status: 'busy', label: 'Checking…' },
 };
 
 /** The table's groups, in order. */
 export const GROUPS: readonly { group: SetupCheckGroup; label: string }[] = [
-  { group: 'workspaceAndTools', label: 'Workspace and tools' },
-  { group: 'aiConfigs', label: 'AI configs' },
-  { group: 'dockerServices', label: 'Docker services' },
+  { group: 'WorkspaceAndTools', label: 'Workspace and tools' },
+  { group: 'AiConfigs', label: 'AI configs' },
+  { group: 'DockerServices', label: 'Docker services' },
 ];
 
 /** The summary's counts, in this order; a result nothing has is left out. */
 const SUMMARY_ORDER: readonly SetupCheckResult[] = [
-  'failed',
-  'passed',
-  'notConfirmed',
-  'notRun',
-  'notUsed',
-  'checking',
+  'Failed',
+  'Passed',
+  'NotConfirmed',
+  'NotRun',
+  'NotUsed',
+  'Checking',
 ];
 
 /** The local wall-clock time of an ISO instant, `HH:mm`. */
@@ -62,10 +62,10 @@ export function summaryLine(
 
 /** The Fix cell shows the hint on every row but Passed and Not used, which show "—". */
 export const showsFix = (row: SetupCheckRow): boolean =>
-  row.result !== 'passed' && row.result !== 'notUsed';
+  row.result !== 'Passed' && row.result !== 'NotUsed';
 
 /** The Re-run cell holds a button on Full-tier rows only; Quick-tier rows have nothing to send. */
-export const showsRerun = (row: SetupCheckRow): boolean => row.tier === 'full';
+export const showsRerun = (row: SetupCheckRow): boolean => row.tier === 'Full';
 
 /**
  * Why a Full-tier row's Re-run is off, or null when it can run: no Workspace, a run going (a

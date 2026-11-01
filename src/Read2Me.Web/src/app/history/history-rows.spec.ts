@@ -19,8 +19,8 @@ function step(overrides: Partial<HistoryStep> = {}): HistoryStep {
     endedAt: at(20, 14, 2),
     isOpen: false,
     note: null,
-    kind: 'request',
-    action: 'edit',
+    kind: 'Request',
+    action: 'Edit',
     restoredFromStepId: null,
     cantOpen: false,
     ...overrides,
@@ -90,33 +90,33 @@ describe('historyRow', () => {
   });
 
   it.each<[string, Partial<HistoryStep>, string, string]>([
-    ['attribution', { kind: 'backgroundRun', action: 'attribution' }, 'backgroundRun', 'smart_toy'],
+    ['attribution', { kind: 'BackgroundRun', action: 'Attribution' }, 'backgroundRun', 'smart_toy'],
     [
       'a voice batch',
-      { kind: 'backgroundRun', action: 'voice' },
+      { kind: 'BackgroundRun', action: 'Voice' },
       'backgroundRun',
       'record_voice_over',
     ],
-    ['a Restore', { kind: 'restore', action: null }, 'restore', 'restart_alt'],
-    ['History started', { kind: 'started', action: null }, 'step', 'history'],
-    ['the import', { kind: 'import', action: null }, 'step', 'upload_file'],
-    ['an edit', { kind: 'request', action: 'edit' }, 'step', 'edit'],
-    ['Edit with AI', { kind: 'request', action: 'editWithAi' }, 'step', 'auto_awesome'],
-    ['an insert', { kind: 'request', action: 'insert' }, 'step', 'add'],
-    ['a split', { kind: 'request', action: 'split' }, 'step', 'call_split'],
-    ['a merge', { kind: 'request', action: 'merge' }, 'step', 'merge'],
-    ['a delete', { kind: 'request', action: 'delete' }, 'step', 'delete'],
-    ['a title', { kind: 'request', action: 'title' }, 'step', 'title'],
-    ['a pause', { kind: 'request', action: 'pause' }, 'step', 'pause'],
-    ['a character action', { kind: 'request', action: 'character' }, 'step', 'person'],
-    ['a voice action', { kind: 'request', action: 'voice' }, 'step', 'record_voice_over'],
-    ['a pronunciation', { kind: 'request', action: 'pronunciation' }, 'step', 'text_to_speech'],
+    ['a Restore', { kind: 'Restore', action: null }, 'restore', 'restart_alt'],
+    ['History started', { kind: 'Started', action: null }, 'step', 'history'],
+    ['the import', { kind: 'Import', action: null }, 'step', 'upload_file'],
+    ['an edit', { kind: 'Request', action: 'Edit' }, 'step', 'edit'],
+    ['Edit with AI', { kind: 'Request', action: 'EditWithAi' }, 'step', 'auto_awesome'],
+    ['an insert', { kind: 'Request', action: 'Insert' }, 'step', 'add'],
+    ['a split', { kind: 'Request', action: 'Split' }, 'step', 'call_split'],
+    ['a merge', { kind: 'Request', action: 'Merge' }, 'step', 'merge'],
+    ['a delete', { kind: 'Request', action: 'Delete' }, 'step', 'delete'],
+    ['a title', { kind: 'Request', action: 'Title' }, 'step', 'title'],
+    ['a pause', { kind: 'Request', action: 'Pause' }, 'step', 'pause'],
+    ['a character action', { kind: 'Request', action: 'Character' }, 'step', 'person'],
+    ['a voice action', { kind: 'Request', action: 'Voice' }, 'step', 'record_voice_over'],
+    ['a pronunciation', { kind: 'Request', action: 'Pronunciation' }, 'step', 'text_to_speech'],
   ])('gives %s its kind and icon', (_, overrides, kind, icon) => {
     expect(historyRow(step(overrides), null)).toMatchObject({ kind, icon });
   });
 
   it('never reads the kind or icon from the label', () => {
-    const row = historyRow(step({ label: 'Delete voice', kind: 'request', action: 'merge' }), null);
+    const row = historyRow(step({ label: 'Delete voice', kind: 'Request', action: 'Merge' }), null);
 
     expect(row).toMatchObject({ kind: 'step', icon: 'merge' });
   });

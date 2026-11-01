@@ -138,7 +138,7 @@ export class SetupCheckPage extends R2mElement {
 
   private row(row: SetupCheckRow) {
     return html`<tr
-      class="setup-check__row ${row.result === 'failed' ? 'setup-check__row--failed' : ''}"
+      class="setup-check__row ${row.result === 'Failed' ? 'setup-check__row--failed' : ''}"
       data-check=${row.id}
       data-result=${row.result}
     >

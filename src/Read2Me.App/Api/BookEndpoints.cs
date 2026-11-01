@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+using Read2Me.Data.Enums;
 using System.Threading;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -18,12 +18,18 @@ namespace Read2Me.App.Api
     public sealed record NodeDto(Guid Id, string? Title);
 
     /// <summary>
+    /// The word an API client sees for an item's kind: <see cref="Narration"/> or <see cref="Character"/>
+    /// for speech (the speaker decides, ADR-0006), a pause kind by name otherwise.
+    /// </summary>
+    public enum ItemTypeWord { Narration, Character, Pause, ParagraphPause, ChapterPause, PartPause, VolumePause }
+
+    /// <summary>
     /// <see cref="OrderKey"/> is the item's fractional position key within its paragraph (items
     /// arrive already in that order). <see cref="ItemType"/> stays for older clients; new ones read
     /// <see cref="IsPause"/> and the speaker.
     /// </summary>
     public sealed record ParagraphItemDto(
-        Guid Id, string ItemType, string? Text, Guid? CharacterId, string? AudioFileName,
+        Guid Id, ItemTypeWord ItemType, string? Text, Guid? CharacterId, string? AudioFileName,
         string? VoiceInstructions, string OrderKey, bool IsPause);
 
     /// <summary><see cref="IsPauseParagraph"/>: no items, or a single pause item.</summary>
@@ -47,7 +53,7 @@ namespace Read2Me.App.Api
     public sealed record BulkAssignPreviewDto(int ParagraphsWithCharacterItems, int CharacterItems);
     /// <summary>The scope a Release narration would cover; the same shape as the command, minus its type.</summary>
     public sealed record NarrationReleasePreviewRequest(
-        [property: JsonConverter(typeof(JsonStringEnumConverter<NarrationReleaseScope>))] NarrationReleaseScope Scope,
+        NarrationReleaseScope Scope,
         Guid NodeId);
     /// <summary><see cref="NarrationReleasePreview"/> on the wire: what a Release narration over the scope would write.</summary>
     public sealed record NarrationReleasePreviewDto(int Paragraphs, int ItemsWithAudio, IReadOnlyList<SpeechMarkerCountDto> SpeechMarkers);
@@ -70,8 +76,8 @@ namespace Read2Me.App.Api
 
     /// <summary><see cref="StructureRule"/> on the wire, its enums by name.</summary>
     public sealed record StructureRuleDto(
-        [property: JsonConverter(typeof(JsonStringEnumConverter<StructureAnchor>))] StructureAnchor Anchor,
-        [property: JsonConverter(typeof(JsonStringEnumConverter<NodeKind>))] NodeKind NodeKind,
+        StructureAnchor Anchor,
+        NodeKind NodeKind,
         IReadOnlyList<StructurePlacementDto> Placements,
         int MinimumCount)
     {
@@ -82,8 +88,8 @@ namespace Read2Me.App.Api
     }
 
     public sealed record StructurePlacementDto(
-        [property: JsonConverter(typeof(JsonStringEnumConverter<Placement>))] Placement Placement,
-        [property: JsonConverter(typeof(JsonStringEnumConverter<NodeKind>))] NodeKind Creates,
+        Placement Placement,
+        NodeKind Creates,
         bool TextRequired);
 
     public static class BookEndpoints
@@ -96,16 +102,16 @@ namespace Read2Me.App.Api
                 .WithSummary("Book overview: volumes, characters and structure counts, the book revision they were read at, and the Structure rules (structureRules: per anchor kind, the placements it allows, the kind each creates, whether text is required, and the minimum count the book keeps). hasContent=false means import has not run.");
             endpoints.MapGet("/api/projects/{folder}/nodes/{level}/{id:guid}/children", GetChildrenAsync)
                 .ReadsAt()
-                .WithSummary("Ordered children of a node. level=volume gives parts, part gives chapters, chapter gives paragraphs with their items.");
-            endpoints.MapGet("/api/projects/{folder}/nodes/chapter/{id:guid}/voices", GetChapterVoicesAsync)
+                .WithSummary("Ordered children of a node. Volume gives parts, Part gives chapters, Chapter gives paragraphs with their items.");
+            endpoints.MapGet("/api/projects/{folder}/nodes/Chapter/{id:guid}/voices", GetChapterVoicesAsync)
                 .ReadsAt()
                 .WithSummary("Resolved voice per speech item of a chapter: { itemId: { voiceName, narratedBy } }. voiceName null = no voice resolves; narratedBy = the linked narrator's name on narration items.");
             endpoints.MapGet("/api/projects/{folder}/nodes/{level}/{id:guid}/paragraph-ids", GetParagraphIdsAsync)
                 .ReadsAt()
-                .WithSummary("The Character paragraphs under a node (level: volume|part|chapter) with their chapter/part/volume ids; unprocessedOnly=true keeps those still holding an unattributed line. What 'Select unprocessed' selects.");
+                .WithSummary("The Character paragraphs under a node (level: Volume|Part|Chapter) with their chapter/part/volume ids; unprocessedOnly=true keeps those still holding an unattributed line. What 'Select unprocessed' selects.");
             endpoints.MapGet("/api/projects/{folder}/nodes/{level}/{id:guid}/item-ids", GetItemIdsAsync)
                 .ReadsAt()
-                .WithSummary("The speech items under a node (level: volume|part|chapter) that have a speaker to read them, with their paragraph/chapter/part/volume ids; needsAudioOnly=true keeps those still missing a WAV; narratorOnlyMode=true counts unattributed lines as readable. What an audio tree checkbox or 'Select needs audio' selects.");
+                .WithSummary("The speech items under a node (level: Volume|Part|Chapter) that have a speaker to read them, with their paragraph/chapter/part/volume ids; needsAudioOnly=true keeps those still missing a WAV; narratorOnlyMode=true counts unattributed lines as readable. What an audio tree checkbox or 'Select needs audio' selects.");
             endpoints.MapGet("/api/projects/{folder}/characters", GetCharactersAsync)
                 .ReadsAt()
                 .WithSummary("All characters with their aliases.");
@@ -142,8 +148,8 @@ namespace Read2Me.App.Api
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
-            if (!Enum.TryParse<BookNodeLevel>(level, ignoreCase: true, out var nodeLevel))
-                return Results.Problem($"Unknown level '{level}'. Expected volume, part or chapter.",
+            if (!ApiJson.TryParseName<BookNodeLevel>(level, out var nodeLevel))
+                return Results.Problem($"Unknown level '{level}'. Expected Volume, Part or Chapter.",
                     statusCode: StatusCodes.Status400BadRequest);
 
             var children = await reader.GetChildrenAsync(folderId, nodeLevel, id);
@@ -182,8 +188,8 @@ namespace Read2Me.App.Api
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
-            if (!Enum.TryParse<BookNodeLevel>(level, ignoreCase: true, out var nodeLevel))
-                return Results.Problem($"Unknown level '{level}'. Expected volume, part or chapter.",
+            if (!ApiJson.TryParseName<BookNodeLevel>(level, out var nodeLevel))
+                return Results.Problem($"Unknown level '{level}'. Expected Volume, Part or Chapter.",
                     statusCode: StatusCodes.Status400BadRequest);
 
             var refs = await reader.GetCharacterParagraphsAsync(folderId, nodeLevel, id, unprocessedOnly);
@@ -198,8 +204,8 @@ namespace Read2Me.App.Api
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
-            if (!Enum.TryParse<BookNodeLevel>(level, ignoreCase: true, out var nodeLevel))
-                return Results.Problem($"Unknown level '{level}'. Expected volume, part or chapter.",
+            if (!ApiJson.TryParseName<BookNodeLevel>(level, out var nodeLevel))
+                return Results.Problem($"Unknown level '{level}'. Expected Volume, Part or Chapter.",
                     statusCode: StatusCodes.Status400BadRequest);
 
             var refs = await reader.GetAudioItemRefsAsync(
@@ -250,7 +256,7 @@ namespace Read2Me.App.Api
         private static ParagraphDto ToParagraphDto(Paragraph p) => new(
             p.Id,
             p.Items.Select(i => new ParagraphItemDto(
-                i.Id, ItemTypeWord(i), i.Text, i.CharacterId, i.AudioFileName,
+                i.Id, WordFor(i), i.Text, i.CharacterId, i.AudioFileName,
                 i.VoiceInstructions, i.Order, ParagraphItemKinds.IsPause(i.ItemType))).ToList(),
             PauseParagraph.Is(p));
 
@@ -258,11 +264,16 @@ namespace Read2Me.App.Api
         /// The word an API client sees for an item's kind. Storage no longer distinguishes narration
         /// from dialog — the speaker does (ADR-0006) — so the word is computed: narration when the
         /// speaker is the narrator sentinel, dialog otherwise (an unattributed item included), pause
-        /// kinds by name. The spelling is the one the API has always emitted, so no client changes.
+        /// kinds by name.
         /// </summary>
-        private static string ItemTypeWord(ParagraphItem item) =>
-            ParagraphItemKinds.IsPause(item.ItemType) ? item.ItemType.ToString()
-            : NarrationRule.IsNarration(item) ? "Narration"
-            : "Character";
+        private static ItemTypeWord WordFor(ParagraphItem item) => item.ItemType switch
+        {
+            ParagraphItemType.Pause => ItemTypeWord.Pause,
+            ParagraphItemType.ParagraphPause => ItemTypeWord.ParagraphPause,
+            ParagraphItemType.ChapterPause => ItemTypeWord.ChapterPause,
+            ParagraphItemType.PartPause => ItemTypeWord.PartPause,
+            ParagraphItemType.VolumePause => ItemTypeWord.VolumePause,
+            _ => NarrationRule.IsNarration(item) ? ItemTypeWord.Narration : ItemTypeWord.Character,
+        };
     }
 }

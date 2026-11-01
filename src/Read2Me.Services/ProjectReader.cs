@@ -58,7 +58,7 @@ namespace Read2Me.Services
                     project.CoverImage,
                     counts?.Total ?? 0,
                     counts?.Done ?? 0,
-                    project.Type.ToString()));
+                    project.Type));
             }
             return summaries;
         }

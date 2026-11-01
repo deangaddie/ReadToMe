@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -12,15 +10,14 @@ using Read2Me.Services.UseCases;
 
 namespace Read2Me.App.Api
 {
-    /// <summary>What a checkpoint PUT asks for: a state to hold, or <c>open</c> to hold none.</summary>
-    [JsonConverter(typeof(CamelCaseEnumConverter<CheckpointRequestState>))]
+    /// <summary>What a checkpoint PUT asks for: a state to hold, or <c>Open</c> to hold none.</summary>
     public enum CheckpointRequestState { Confirmed, Skipped, Open }
 
     public sealed record SetCheckpointRequest(CheckpointRequestState? State);
 
     /// <summary>A step's confirmed checkpoint as <c>/status</c> reports it.</summary>
     public sealed record StepCheckpointDto(
-        [property: JsonConverter(typeof(CamelCaseEnumConverter<CheckpointState>))] CheckpointState State,
+        CheckpointState State,
         bool Stale,
         DateTimeOffset At);
 
@@ -30,7 +27,7 @@ namespace Read2Me.App.Api
         {
             endpoints.MapPut("/api/projects/{folder}/checkpoints/{step}", SetAsync)
                 .RecordsNoStep("A Pipeline checkpoint is progress, not Project state.")
-                .WithSummary("Confirm, skip or reopen a Pipeline step (state: confirmed | skipped | open). 204 on success, " +
+                .WithSummary("Confirm, skip or reopen a Pipeline step (state: Confirmed | Skipped | Open). 204 on success, " +
                              "including a repeat that changed nothing; the refreshed /status arrives through the Checkpoints receipt. " +
                              "404 unknown step; 422 when the step does not take that state or the book has no content; 400 without a state.");
         }
@@ -42,13 +39,13 @@ namespace Read2Me.App.Api
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId) || !TryParseStep(step, out var pipelineStep))
                 return Results.NotFound();
             if (!TryReadState(body, out var state))
-                return Results.Problem("Expected a JSON body with 'state': confirmed, skipped or open.",
+                return Results.Problem("Expected a JSON body with 'state': Confirmed, Skipped or Open.",
                     statusCode: StatusCodes.Status400BadRequest);
 
             return ToResult(await useCases.SetCheckpointAsync(folderId.Value, pipelineStep, state), ct);
         }
 
-        /// <summary>The state to hold, null for <c>open</c>; false when the body or its state is missing.</summary>
+        /// <summary>The state to hold, null for <c>Open</c>; false when the body or its state is missing.</summary>
         internal static bool TryReadState(SetCheckpointRequest? body, out CheckpointState? state)
         {
             state = body?.State switch
@@ -60,25 +57,13 @@ namespace Read2Me.App.Api
             return body?.State is not null;
         }
 
-        /// <summary>The camelCase id a step has on the wire: the route segment, the status key and the web's step id.</summary>
-        internal static string StepId(PipelineStep step) => JsonNamingPolicy.CamelCase.ConvertName(step.ToString());
+        /// <summary><c>/status</c>'s <c>checkpoints</c>: only steps that have a row, keyed by step (its member name on the wire, as in the route).</summary>
+        internal static IReadOnlyDictionary<PipelineStep, StepCheckpointDto> StatusMap(IEnumerable<StepCheckpoint> rows) =>
+            rows.ToDictionary(r => r.Step, r => new StepCheckpointDto(r.State, r.Stale, r.At));
 
-        /// <summary><c>/status</c>'s <c>checkpoints</c>: only steps that have a row, keyed by step id.</summary>
-        internal static IReadOnlyDictionary<string, StepCheckpointDto> StatusMap(IEnumerable<StepCheckpoint> rows) =>
-            rows.ToDictionary(r => StepId(r.Step), r => new StepCheckpointDto(r.State, r.Stale, r.At));
-
-        /// <summary>The step's camelCase id, exactly as <c>/status</c> keys it; nothing numeric or combined.</summary>
-        internal static bool TryParseStep(string segment, out PipelineStep step)
-        {
-            step = default;
-            foreach (var candidate in Enum.GetValues<PipelineStep>())
-            {
-                if (StepId(candidate) != segment) continue;
-                step = candidate;
-                return true;
-            }
-            return false;
-        }
+        /// <summary>The step's id, exactly as <c>/status</c> keys it; nothing numeric or combined.</summary>
+        internal static bool TryParseStep(string segment, out PipelineStep step) =>
+            ApiJson.TryParseName(segment, out step);
 
         /// <summary>
         /// The outcome table. A repeat changed nothing and still answers 204: the pill already shows

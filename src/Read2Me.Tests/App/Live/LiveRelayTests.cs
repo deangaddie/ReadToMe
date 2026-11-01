@@ -88,13 +88,13 @@ public class LiveRelayTests : IAsyncLifetime
         var sent = _hub.Method("serviceStatus");
         Assert.All(sent, s => Assert.Equal("global", s.Target));
         var op = Assert.IsType<ServiceStatusMessage>(sent[0].Payload);
-        Assert.Equal(new ServiceStatusMessage("llama", "Stopped", "shutdown", true, null), op);
+        Assert.Equal(new ServiceStatusMessage("llama", AiServiceStatus.Stopped, "shutdown", true, null), op);
         var implied = Assert.IsType<ServiceStatusMessage>(sent[1].Payload);
-        Assert.Equal(new ServiceStatusMessage("whisper", "Down"), implied);
+        Assert.Equal(new ServiceStatusMessage("whisper", AiServiceStatus.Down), implied);
 
         var snapshot = _relay.BuildSnapshot([]);
-        Assert.Equal("Stopped", snapshot.ServiceStatus["llama"]);
-        Assert.Equal("Down", snapshot.ServiceStatus["whisper"]);
+        Assert.Equal(AiServiceStatus.Stopped, snapshot.ServiceStatus["llama"]);
+        Assert.Equal(AiServiceStatus.Down, snapshot.ServiceStatus["whisper"]);
         Assert.Equal("serviceDown", snapshot.Watchdog["whisper"]);
     }
 
@@ -290,7 +290,7 @@ public class LiveRelayTests : IAsyncLifetime
         Assert.Equal(["phaseStarted", "progress", "progress", "completed"], kinds.Select(k => k.Kind));
         Assert.Equal(0.0, kinds[1].Fraction);
         Assert.Equal(0.5, kinds[2].Fraction);
-        Assert.Equal("Encode", kinds[0].Phase);
+        Assert.Equal(AssemblyPhase.Encode, kinds[0].Phase);
         Assert.Equal("Dracula.m4b", kinds[3].OutputFileName);
         Assert.Equal("dracula", kinds[3].Folder);
     }

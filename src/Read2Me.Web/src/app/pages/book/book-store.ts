@@ -225,7 +225,7 @@ export class BookStore {
    */
   private loadChildren(ref: NodeRef): Promise<void> {
     const folder = this._folder();
-    if (!folder || ref.level === 'chapter' || this._children()[ref.id]) return Promise.resolve();
+    if (!folder || ref.level === 'Chapter' || this._children()[ref.id]) return Promise.resolve();
     const existing = this.childLoads.get(ref.id);
     if (existing) return existing;
 
@@ -236,8 +236,8 @@ export class BookStore {
         const nodes = childNodes(ref, result);
         this._children.update((c) => ({ ...c, [ref.id]: nodes }));
         const [only] = nodes;
-        if (ref.level === 'volume' && only && nodes.length === 1) {
-          await this.loadChildren({ level: 'part', id: only.id });
+        if (ref.level === 'Volume' && only && nodes.length === 1) {
+          await this.loadChildren({ level: 'Part', id: only.id });
         }
       } finally {
         this.childLoads.delete(ref.id);
@@ -353,7 +353,7 @@ export class BookStore {
     this.adoptBaseline(overview.revision);
     const [only] = overview.volumes;
     if (only && overview.volumes.length === 1)
-      await this.loadChildren({ level: 'volume', id: only.id });
+      await this.loadChildren({ level: 'Volume', id: only.id });
   }
 
   /** Overview plus every tree level already loaded, so the tree keeps its shape. */
@@ -387,7 +387,7 @@ export class BookStore {
     const folder = this._folder();
     if (!folder) return;
     const [children] = await Promise.all([
-      this.book.children(folder, 'chapter', chapterId),
+      this.book.children(folder, 'Chapter', chapterId),
       this._mode() === 'audio' ? this.loadVoices(chapterId) : Promise.resolve(),
     ]);
     if (this._folder() !== folder) return;
@@ -626,7 +626,7 @@ function mergePlans(a: ReceiptPlan, b: ReceiptPlan): ReceiptPlan {
 
 /** The list a volume (parts) or part (chapters) children read answers with. */
 function childNodes(ref: NodeRef, result: NodeChildrenDto): NodeDto[] {
-  return (ref.level === 'volume' ? result.parts : result.chapters) ?? [];
+  return (ref.level === 'Volume' ? result.parts : result.chapters) ?? [];
 }
 
 /** Volumes/parts whose children were loaded, still present in the fresh overview. */
@@ -635,8 +635,8 @@ function childRefs(volumes: readonly NodeDto[], loaded: ChildrenMap): NodeRef[] 
   for (const volume of volumes) {
     const parts = loaded[volume.id];
     if (!parts) continue;
-    refs.push({ level: 'volume', id: volume.id });
-    for (const part of parts) if (loaded[part.id]) refs.push({ level: 'part', id: part.id });
+    refs.push({ level: 'Volume', id: volume.id });
+    for (const part of parts) if (loaded[part.id]) refs.push({ level: 'Part', id: part.id });
   }
   return refs;
 }

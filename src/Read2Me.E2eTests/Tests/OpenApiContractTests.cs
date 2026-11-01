@@ -38,7 +38,7 @@ public class OpenApiContractTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
     /// order kept as the host emits it, two-space indent, LF line ends and a final newline. One host
     /// always gives the same bytes.
     /// </summary>
-    private static async Task<string> CanonicalDocumentAsync(IServiceProvider services)
+    internal static async Task<string> CanonicalDocumentAsync(IServiceProvider services)
     {
         const string documentName = "v1";
         var provider = services.GetRequiredKeyedService<IOpenApiDocumentProvider>(documentName);

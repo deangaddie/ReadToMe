@@ -117,7 +117,7 @@ public class CommandApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     private async Task<List<JsonElement>> ReadItemsAsync(string folder, Guid chapterId, Guid paragraphId)
     {
         var children = JsonDocument.Parse(await Http.GetStringAsync(
-            $"{app.BaseUrl}/api/projects/{folder}/nodes/chapter/{chapterId}/children"));
+            $"{app.BaseUrl}/api/projects/{folder}/nodes/Chapter/{chapterId}/children"));
         return [.. children.RootElement.GetProperty("paragraphs").EnumerateArray()
             .Single(p => p.GetProperty("id").GetGuid() == paragraphId)
             .GetProperty("items").EnumerateArray().Select(i => i.Clone())];

@@ -129,7 +129,7 @@ export const READS_AT_STEP = [
   '/api/projects/{folder}/characters/{id}/lines',
   '/api/projects/{folder}/characters/{id}/voice-rules',
   '/api/projects/{folder}/characters/{id}/voice-rules/preview',
-  '/api/projects/{folder}/nodes/chapter/{id}/voices',
+  '/api/projects/{folder}/nodes/Chapter/{id}/voices',
   '/api/projects/{folder}/nodes/{level}/{id}/children',
   '/api/projects/{folder}/nodes/{level}/{id}/item-ids',
   '/api/projects/{folder}/nodes/{level}/{id}/paragraph-ids',

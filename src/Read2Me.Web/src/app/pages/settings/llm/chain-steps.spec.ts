@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'bun:test';
 import {
   type AttributionChainStep,
-  AttributionPromptStyle,
-  LlmApiType,
+  type AttributionPromptStyle,
   type LlmServerConfig,
 } from '@app/api';
 import { addStep, chainOptions, chainRows, moveStep, optionLabel, removeStep } from './chain-steps';
 
-const { Full, Simple, Chapter } = AttributionPromptStyle;
+const Full: AttributionPromptStyle = 'Full';
+const Simple: AttributionPromptStyle = 'Simple';
+const Chapter: AttributionPromptStyle = 'Chapter';
 
 function config(
   id: number,
@@ -17,7 +18,7 @@ function config(
   return {
     id,
     name,
-    apiType: LlmApiType.OpenAiCompatible,
+    apiType: 'OpenAiCompatible',
     baseUrl: 'http://localhost:8080',
     apiKey: null,
     model: `${name}-model`,

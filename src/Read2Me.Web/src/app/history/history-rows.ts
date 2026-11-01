@@ -33,27 +33,27 @@ export interface HistoryGroup {
  * `StepAction`, so a new action fails the typecheck until it has an icon.
  */
 const ACTION_ICONS: Record<StepAction, IconName> = {
-  edit: 'edit',
-  editWithAi: 'auto_awesome',
-  insert: 'add',
-  split: 'call_split',
-  merge: 'merge',
-  delete: 'delete',
-  title: 'title',
-  pause: 'pause',
-  character: 'person',
-  voice: 'record_voice_over',
-  attribution: 'smart_toy',
-  pronunciation: 'text_to_speech',
+  Edit: 'edit',
+  EditWithAi: 'auto_awesome',
+  Insert: 'add',
+  Split: 'call_split',
+  Merge: 'merge',
+  Delete: 'delete',
+  Title: 'title',
+  Pause: 'pause',
+  Character: 'person',
+  Voice: 'record_voice_over',
+  Attribution: 'smart_toy',
+  Pronunciation: 'text_to_speech',
 };
 
 /** The icon of a step with no action, by its kind. */
 const KIND_ICONS: Record<HistoryStepKind, IconName> = {
-  request: 'edit',
-  backgroundRun: 'smart_toy',
-  restore: 'restart_alt',
-  started: 'history',
-  import: 'upload_file',
+  Request: 'edit',
+  BackgroundRun: 'smart_toy',
+  Restore: 'restart_alt',
+  Started: 'history',
+  Import: 'upload_file',
 };
 
 export function historyGroups(
@@ -74,7 +74,7 @@ export function historyGroups(
 
 export function historyRow(step: HistoryStep, headStepId: Guid | null): HistoryRow {
   const kind: HistoryRowKind =
-    step.kind === 'restore' || step.kind === 'backgroundRun' ? step.kind : 'step';
+    step.kind === 'Restore' ? 'restore' : step.kind === 'BackgroundRun' ? 'backgroundRun' : 'step';
   return {
     stepId: step.stepId,
     kind,

@@ -12,7 +12,7 @@ namespace Read2Me.Tests.App
         {
             var schema = ProviderSettingsSchema.ParagraphTts(ParagraphTtsServiceType.Qwen3Base);
 
-            Assert.Equal("Qwen3Base", schema.Type);
+            Assert.Equal(ParagraphTtsServiceType.Qwen3Base, schema.Type);
             Assert.Equal(
                 ["modelId", "language", "temperature", "top_p", "top_k", "repetition_penalty", "max_new_tokens", "seed"],
                 schema.Fields.Select(f => f.Key));

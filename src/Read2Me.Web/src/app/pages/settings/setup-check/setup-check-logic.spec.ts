@@ -11,12 +11,12 @@ import {
 const row = (
   id: string,
   result: SetupCheckResult,
-  group: SetupCheckRow['group'] = 'workspaceAndTools',
+  group: SetupCheckRow['group'] = 'WorkspaceAndTools',
 ): SetupCheckRow => ({
   id,
   group,
   name: id,
-  tier: 'quick',
+  tier: 'Quick',
   result,
   expected: 'e',
   found: 'f',
@@ -48,7 +48,7 @@ const at = (iso: string) => (iso.includes('T14') ? '14:02' : '15:30');
 describe('summaryLine', () => {
   it('counts failures first, leaves out results nothing has, then the check times', () => {
     const line = summaryLine(
-      report([row('a', 'passed'), row('b', 'failed'), row('c', 'passed')], '2026-10-28T14:02:00Z'),
+      report([row('a', 'Passed'), row('b', 'Failed'), row('c', 'Passed')], '2026-10-28T14:02:00Z'),
       at,
     );
     expect(line).toBe('1 failed · 2 passed — Quick check 14:02 · Full check not run yet');
@@ -57,7 +57,7 @@ describe('summaryLine', () => {
   it('names every result kind it holds, in order', () => {
     const line = summaryLine(
       report(
-        [row('a', 'notUsed'), row('b', 'notRun'), row('c', 'notConfirmed'), row('d', 'passed')],
+        [row('a', 'NotUsed'), row('b', 'NotRun'), row('c', 'NotConfirmed'), row('d', 'Passed')],
         '2026-10-28T14:02:00Z',
         '2026-10-28T15:30:00Z',
       ),
@@ -84,11 +84,11 @@ describe('clockTime', () => {
 
 describe('showsFix', () => {
   it.each([
-    ['passed', false],
-    ['notUsed', false],
-    ['failed', true],
-    ['notConfirmed', true],
-    ['notRun', true],
+    ['Passed', false],
+    ['NotUsed', false],
+    ['Failed', true],
+    ['NotConfirmed', true],
+    ['NotRun', true],
   ] as const)('%s → %p', (result, shown) => {
     expect(showsFix(row('x', result))).toBe(shown);
   });
@@ -97,9 +97,9 @@ describe('showsFix', () => {
 describe('groupedRows', () => {
   it('keeps the table order of groups and drops empty ones', () => {
     const groups = groupedRows([
-      row('svc', 'passed', 'dockerServices'),
-      row('ws', 'passed'),
-      row('ff', 'failed'),
+      row('svc', 'Passed', 'DockerServices'),
+      row('ws', 'Passed'),
+      row('ff', 'Failed'),
     ]);
     expect(groups.map((g) => [g.label, g.rows.map((r) => r.id)])).toEqual([
       ['Workspace and tools', ['ws', 'ff']],
@@ -109,8 +109,8 @@ describe('groupedRows', () => {
 });
 
 describe('rerunBlockedReason', () => {
-  const full: SetupCheckRow = { ...row('llm', 'failed'), tier: 'full', rerun: { gpu: true } };
-  const run = { step: 1, total: 1, lane: 'gpu' as const, label: 'Loading', cancelling: false };
+  const full: SetupCheckRow = { ...row('llm', 'Failed'), tier: 'Full', rerun: { gpu: true } };
+  const run = { step: 1, total: 1, lane: 'Gpu' as const, label: 'Loading', cancelling: false };
   const cases: [string, SetupCheckRow, Partial<SetupCheckReport>, RegExp | null][] = [
     ['a row with something to send, nothing running', full, {}, null],
     ['no Workspace', full, { noWorkspace: true }, /Workspace/],

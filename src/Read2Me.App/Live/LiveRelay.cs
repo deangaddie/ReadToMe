@@ -98,7 +98,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private VoiceBatchMessage? _pendingBatchProgress;
     private readonly Dictionary<string, LastSent> _lastSent = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _watchdogLast = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, string> _serviceStatusLast = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, AiServiceStatus> _serviceStatusLast = new(StringComparer.OrdinalIgnoreCase);
 
     private CancellationTokenSource? _cts;
     private Task? _drain;
@@ -495,13 +495,13 @@ public sealed class LiveRelay : IHostedService, IDisposable
         BuildQueueMessage(),
         // The service tracks encode progress as a 0..1 fraction; the wire state is a percentage,
         // which is what a client folding `progress` messages arrives at too.
-        new AssemblyState(_assemblyService.IsRunning, _assemblyService.CurrentPhase?.ToString(),
+        new AssemblyState(_assemblyService.IsRunning, _assemblyService.CurrentPhase,
             _assemblyService.EncodePercent * 100, _assemblyService.LastError, _assemblyService.AudioRemainingCount,
             _assemblyService.Folder, _assemblyService.OutputFileName),
         new VoiceBatchState(_batchRunner.IsRunning, _batchRunner.Processed, _batchRunner.Total, _batchRunner.Failed,
             _batchRunner.CurrentVoiceName, _batchRunner.CurrentOperation, _batchRunner.LastError),
         new Dictionary<string, string>(_watchdogLast, StringComparer.OrdinalIgnoreCase),
-        new Dictionary<string, string>(_serviceStatusLast, StringComparer.OrdinalIgnoreCase),
+        new Dictionary<string, AiServiceStatus>(_serviceStatusLast, StringComparer.OrdinalIgnoreCase),
         _throughput.Snapshot,
         folders.Distinct(StringComparer.OrdinalIgnoreCase)
             .ToDictionary(f => f, f => _status.Snapshot(new ProjectFolderId(f)), StringComparer.OrdinalIgnoreCase));

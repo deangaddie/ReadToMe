@@ -40,7 +40,7 @@ public class DeliveryCueApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
         var chapter = book.ChapterId("ch1");
         var line = book.ItemId("line1");
         await app.SeedItemAudioAsync(folder, line, await CharacterIdAsync(folder, "Alice"));
-        var statusPath = $"/api/projects/{folder}/nodes/chapter/{chapter}/status";
+        var statusPath = $"/api/projects/{folder}/nodes/Chapter/{chapter}/status";
         var remainingBefore = (await GetJsonAsync(statusPath)).GetProperty("audioRemaining").GetInt32();
 
         await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();

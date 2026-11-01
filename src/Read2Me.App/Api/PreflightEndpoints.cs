@@ -3,11 +3,12 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.App.Live;
 using Read2Me.App.Services.Preflight;
+using Read2Me.Services.Health;
 
 namespace Read2Me.App.Api
 {
-    /// <summary>A required service that is not Ready, with its status (<c>AiServiceStatus</c> member name).</summary>
-    public sealed record PreflightServiceDto(string Name, string Status);
+    /// <summary>A required service that is not Ready, with its status.</summary>
+    public sealed record PreflightServiceDto(string Name, AiServiceStatus Status);
 
     /// <summary>A running GPU service the task does not need; stopped first to free VRAM.</summary>
     public sealed record PreflightConflictDto(string Name, string Reason);
@@ -68,7 +69,7 @@ namespace Read2Me.App.Api
         }
 
         private static bool TryParse(string taskKind, out AiTaskKind task) =>
-            Enum.TryParse(taskKind, ignoreCase: true, out task) && Enum.IsDefined(task);
+            ApiJson.TryParseName(taskKind, out task);
 
         private static IResult UnknownTask(string taskKind) =>
             Results.Problem(
@@ -77,7 +78,7 @@ namespace Read2Me.App.Api
 
         public static PreflightPlanDto ToDto(AiPreflightPlan plan) => new(
             plan.NothingToDo,
-            plan.ToStart.Select(i => new PreflightServiceDto(i.Service.Name, i.Status.ToString())).ToList(),
+            plan.ToStart.Select(i => new PreflightServiceDto(i.Service.Name, i.Status)).ToList(),
             plan.Conflicts.Select(c => new PreflightConflictDto(c.Name, GpuConflictReason)).ToList());
     }
 }

@@ -1,5 +1,6 @@
 using Read2Me.Data;
 using Read2Me.Data.Entities;
+using Read2Me.Data.Enums;
 
 namespace Read2Me.App.Api
 {
@@ -31,13 +32,13 @@ namespace Read2Me.App.Api
         string BookTitle,
         string Author,
         string Filename,
-        string FileType,
+        BookFileType FileType,
         string? CoverImage,
         bool NarratorOnlyMode,
         NarratorDto Narrator)
     {
         public static ProjectDetailDto From(string folderName, Project p, NarratorIdentity narrator) => new(
             folderName, p.Title, p.BookTitle, p.Author, p.Filename,
-            p.Type.ToString(), p.CoverImage, p.NarratorOnlyMode, NarratorDto.From(narrator));
+            p.Type, p.CoverImage, p.NarratorOnlyMode, NarratorDto.From(narrator));
     }
 }

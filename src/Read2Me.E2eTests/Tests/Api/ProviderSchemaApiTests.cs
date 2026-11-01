@@ -40,11 +40,18 @@ public class ProviderSchemaApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
     }
 
     [Fact]
-    public async Task Schema_accepts_the_numeric_enum_value_and_rejects_unknown_types()
+    public async Task Schema_takes_only_the_member_name_and_rejects_unknown_types()
     {
-        var numeric = JsonDocument.Parse(
-            await Http.GetStringAsync($"{app.BaseUrl}/api/settings/paragraph-tts/schema?type=1")).RootElement;
-        Assert.Equal("Chatterbox", numeric.GetProperty("type").GetString());
+        var named = JsonDocument.Parse(
+            await Http.GetStringAsync($"{app.BaseUrl}/api/settings/paragraph-tts/schema?type=Chatterbox")).RootElement;
+        Assert.Equal("Chatterbox", named.GetProperty("type").GetString());
+
+        // One wire form (#166): a number or another casing names no type.
+        foreach (var loose in new[] { "1", "chatterbox" })
+        {
+            var response = await Http.GetAsync($"{app.BaseUrl}/api/settings/paragraph-tts/schema?type={loose}");
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
 
         var unknown = await Http.GetAsync($"{app.BaseUrl}/api/settings/voice-design/schema?type=Nope");
         Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);

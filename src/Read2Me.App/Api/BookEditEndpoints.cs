@@ -11,18 +11,21 @@ namespace Read2Me.App.Api
     /// <param name="Thinking">Let the model think before planning — slower, better on vague instructions.</param>
     public sealed record PlanBookEditRequest(string? Instruction, bool Thinking = false);
 
+    /// <summary>A plan's status on the wire: <see cref="EditPlanStatus"/> plus <c>NoTargets</c>.</summary>
+    public enum BookEditPlanStatus { Ok, NoLlmConfigured, Unsupported, Failed, ServiceUnavailable, NoTargets }
+
     /// <summary>
     /// <see cref="Status"/> mirrors <see cref="EditPlanStatus"/> plus <c>NoTargets</c> when the plan
     /// parsed but matched nothing. Only <c>Ok</c> carries a <see cref="Program"/>. <see cref="Transform"/>
-    /// is the <see cref="TransformKind"/> name: only <c>Llm</c> plans send requests per item, so only
+    /// is the plan's <see cref="TransformKind"/>: only <c>Llm</c> plans send requests per item, so only
     /// they count <see cref="RequestCount"/> and offer per-row retries.
     /// </summary>
     public sealed record PlanBookEditResponse(
-        string Status,
+        BookEditPlanStatus Status,
         string? Reason,
         string? Summary,
         string? Program,
-        string? Transform,
+        TransformKind? Transform,
         int TargetCount,
         int RequestCount,
         IReadOnlyList<string> Warnings);
@@ -33,7 +36,7 @@ namespace Read2Me.App.Api
     public sealed record ProposeOneBookEditRequest(Guid TargetId, string? Hint = null, bool Thinking = false);
 
     /// <summary>The session's proposal run as a whole — what a client that missed the hub asks for.</summary>
-    public sealed record BookEditRunDto(string Status, int Done, int Total, IReadOnlyList<BookEditRowDto> Rows, string? Reason);
+    public sealed record BookEditRunDto(BookEditRunStatus Status, int Done, int Total, IReadOnlyList<BookEditRowDto> Rows, string? Reason);
 
     /// <summary>
     /// The AI book-edit flow on the wire (Angular ticket 19): plan → propose → (retry one) → apply.
@@ -83,12 +86,12 @@ namespace Read2Me.App.Api
                 return StepReads.Refused(refusal);
             var outcome = await planner.PlanAsync(folderId, body.Instruction, !body.Thinking, ct);
             if (outcome.Status != EditPlanStatus.Ok)
-                return Results.Ok(NotPlanned(outcome.Status.ToString(), outcome.Reason));
+                return Results.Ok(NotPlanned(WireStatus(outcome.Status), outcome.Reason));
 
             var program = outcome.Program!;
             var targets = await resolver.ResolveAsync(folderId, program, ct);
             if (targets.Count == 0)
-                return Results.Ok(NotPlanned("NoTargets", "No items in the book match this instruction's scope."));
+                return Results.Ok(NotPlanned(BookEditPlanStatus.NoTargets, "No items in the book match this instruction's scope."));
 
             var session = sessions.Create(folderId, program, targets, EditProgramDescriber.Describe(program));
             // A Restore that began while the LLM was thinking or the scope resolved drops the project's
@@ -109,11 +112,21 @@ namespace Read2Me.App.Api
                 warnings.Add(titles);
 
             return Results.Ok(new PlanBookEditResponse(
-                "Ok", null, session.Summary, session.Id, program.Transform.Kind.ToString(),
+                BookEditPlanStatus.Ok, null, session.Summary, session.Id, program.Transform.Kind,
                 targets.Count, requestCount, warnings));
         }
 
-        private static PlanBookEditResponse NotPlanned(string status, string? reason) =>
+        private static BookEditPlanStatus WireStatus(EditPlanStatus status) => status switch
+        {
+            EditPlanStatus.Ok => BookEditPlanStatus.Ok,
+            EditPlanStatus.NoLlmConfigured => BookEditPlanStatus.NoLlmConfigured,
+            EditPlanStatus.Unsupported => BookEditPlanStatus.Unsupported,
+            EditPlanStatus.Failed => BookEditPlanStatus.Failed,
+            EditPlanStatus.ServiceUnavailable => BookEditPlanStatus.ServiceUnavailable,
+            _ => throw new NotSupportedException($"Unhandled plan status {status}."),
+        };
+
+        private static PlanBookEditResponse NotPlanned(BookEditPlanStatus status, string? reason) =>
             new(status, reason, null, null, null, 0, 0, []);
 
         private static IResult ProposeAsync(
@@ -141,7 +154,7 @@ namespace Read2Me.App.Api
 
             var run = session.Snapshot();
             return Results.Ok(new BookEditRunDto(
-                run.Status.ToString(), run.Done, run.Total, [.. run.Rows.Select(BookEditRowDto.From)], run.Reason));
+                run.Status, run.Done, run.Total, [.. run.Rows.Select(BookEditRowDto.From)], run.Reason));
         }
 
         private static async Task<IResult> ProposeOneAsync(

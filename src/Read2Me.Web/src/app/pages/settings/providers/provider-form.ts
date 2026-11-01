@@ -1,4 +1,4 @@
-import { TextSubstitutionStep, ToSentenceCaseConfig } from '@app/api';
+import { TextSubstitutionStep, ToSentenceCaseConfig, type ProviderType } from '@app/api';
 import { duplicateName, isAbsoluteUrl } from '@app/shared/config-form';
 import { SettingsField, SettingsValues, effectiveValue, isFieldValid } from '@app/ui/settings-form';
 
@@ -9,7 +9,7 @@ import { SettingsField, SettingsValues, effectiveValue, isFieldValid } from '@ap
 export interface ProviderConfig {
   id: number;
   name: string;
-  type: number;
+  type: ProviderType;
   settingsJson: string;
   enabledStepIds?: string[];
   substitutionSteps?: TextSubstitutionStep[];
@@ -44,7 +44,7 @@ export interface TextProcessingForm {
 /** Edit-state for a provider config of any of the four areas. */
 export interface ProviderForm {
   name: string;
-  type: number;
+  type: ProviderType;
   baseUrl: string;
   /**
    * `settingsJson` minus the base URL, keys lower-cased: the stored case differs per provider
@@ -65,7 +65,7 @@ const DEFAULT_TO_SENTENCE_CASE: ToSentenceCaseForm = {
 const BASE_URL_KEY = 'baseurl';
 const WHOLE = /^\d+$/;
 
-export function emptyProviderForm(type: number, withText: boolean): ProviderForm {
+export function emptyProviderForm(type: ProviderType, withText: boolean): ProviderForm {
   return {
     name: '',
     type,

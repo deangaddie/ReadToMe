@@ -5,19 +5,19 @@ import { nextStep } from './next-step';
 const CONFIRM: CheckpointPill = {
   id: 'confirm',
   label: 'Confirm',
-  state: 'confirmed',
+  state: 'Confirmed',
 };
-const SKIP: CheckpointPill = { id: 'skip', label: 'Skip', state: 'skipped' };
-const REOPEN: CheckpointPill = { id: 'reopen', label: 'Reopen', state: 'open' };
+const SKIP: CheckpointPill = { id: 'skip', label: 'Skip', state: 'Skipped' };
+const REOPEN: CheckpointPill = { id: 'reopen', label: 'Reopen', state: 'Open' };
 const RECONFIRM: CheckpointPill = {
   id: 'reconfirm',
   label: 'Reconfirm',
-  state: 'confirmed',
+  state: 'Confirmed',
 };
 const RECONFIRM_SKIP: CheckpointPill = {
   id: 'reconfirmSkip',
   label: 'Reconfirm skip',
-  state: 'skipped',
+  state: 'Skipped',
 };
 
 const CHECK: StepAction = {
@@ -30,7 +30,7 @@ const CHECK: StepAction = {
 
 function step(overrides: Partial<PipelineStep> & { state: StepState }): PipelineStep {
   return {
-    id: 'structure',
+    id: 'Structure',
     title: 'Structure',
     icon: 'menu_book',
     chip: { status: 'neutral', label: 'Not confirmed' },
@@ -45,7 +45,7 @@ function step(overrides: Partial<PipelineStep> & { state: StepState }): Pipeline
 }
 
 const IMPORT_DONE = step({
-  id: 'import',
+  id: 'Import',
   title: 'Import',
   state: 'done',
   chip: { status: 'ok', label: 'Done' },
@@ -60,7 +60,7 @@ describe('nextStep', () => {
     ]);
     expect(next).toEqual({
       kind: 'act',
-      step: 'structure',
+      step: 'Structure',
       label: 'Next: Structure · Check structure',
       tint: 'next',
       action: 'checkStructure',
@@ -71,7 +71,7 @@ describe('nextStep', () => {
 
   it('carries the primary action’s advice line as the tooltip, not the other actions’', () => {
     const titles = step({
-      id: 'titles',
+      id: 'Titles',
       title: 'Titles',
       state: 'unconfirmed',
       next: true,
@@ -113,7 +113,7 @@ describe('nextStep', () => {
       ]);
       expect(next).toEqual({
         kind: 'stale',
-        step: 'structure',
+        step: 'Structure',
         label: `Structure changed since you ${c.was}`,
         tint: 'warn',
         action: 'checkStructure',
@@ -126,7 +126,7 @@ describe('nextStep', () => {
   it('a running step shows step · chip with a busy tint and opens the Overview', () => {
     const next = nextStep([
       step({
-        id: 'speakers',
+        id: 'Speakers',
         title: 'Speakers',
         state: 'running',
         next: true,
@@ -144,7 +144,7 @@ describe('nextStep', () => {
     ]);
     expect(next).toEqual({
       kind: 'waiting',
-      step: 'speakers',
+      step: 'Speakers',
       label: 'Speakers · 12 queued',
       tint: 'busy',
       tooltip: null,
@@ -156,11 +156,11 @@ describe('nextStep', () => {
     const confirmReview: CheckpointPill = {
       id: 'confirm',
       label: 'Confirm review',
-      state: 'confirmed',
+      state: 'Confirmed',
     };
     const next = nextStep([
       step({
-        id: 'speakers',
+        id: 'Speakers',
         title: 'Speakers',
         state: 'unconfirmed',
         next: true,
@@ -179,7 +179,7 @@ describe('nextStep', () => {
     ]);
     expect(next).toEqual({
       kind: 'waiting',
-      step: 'speakers',
+      step: 'Speakers',
       label: 'Speakers · Review not confirmed',
       tint: 'neutral',
       tooltip: 'Every paragraph has a speaker',

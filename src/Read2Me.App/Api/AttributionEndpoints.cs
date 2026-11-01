@@ -9,7 +9,7 @@ using Read2Me.Services.UseCases;
 
 namespace Read2Me.App.Api
 {
-    public sealed record NodeEnqueueRequest(string Level, Guid NodeId, bool UnprocessedOnly = true);
+    public sealed record NodeEnqueueRequest(BookNodeLevel Level, Guid NodeId, bool UnprocessedOnly = true);
     /// <summary>An explicit selection. Ids that are not Character paragraphs are ignored.</summary>
     public sealed record ParagraphsEnqueueRequest(Guid[] ParagraphIds);
     public sealed record EnqueueResponse(int Enqueued)
@@ -22,7 +22,7 @@ namespace Read2Me.App.Api
     /// Queue state only. Attribution results are per item now — read them from the book endpoint's
     /// paragraph items, which carry the stamped character.
     /// </summary>
-    public sealed record ParagraphAttributionStatusDto(string? Status, ParagraphOutcome? Outcome);
+    public sealed record ParagraphAttributionStatusDto(ParagraphQueueStatus? Status, ParagraphOutcome? Outcome);
 
     public static class AttributionEndpoints
     {
@@ -30,7 +30,7 @@ namespace Read2Me.App.Api
         {
             endpoints.MapPost("/api/projects/{folder}/attribution/enqueue", EnqueueAsync)
                 .RecordsNoStep("Enqueues queue work; what it commits is recorded as it lands.")
-                .WithSummary("Queue LLM character attribution for the paragraphs under a node (level: volume|part|chapter). Poll /api/attribution/queue.");
+                .WithSummary("Queue LLM character attribution for the paragraphs under a node (level: Volume|Part|Chapter). Poll /api/attribution/queue.");
             endpoints.MapPost("/api/projects/{folder}/attribution/enqueue-paragraphs", EnqueueParagraphsAsync)
                 .RecordsNoStep("Enqueues queue work; what it commits is recorded as it lands.")
                 .WithSummary("Queue LLM character attribution for an explicit list of paragraph ids (a selection). Ids without dialog are ignored; the count answers with what was queued.");
@@ -53,11 +53,8 @@ namespace Read2Me.App.Api
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
-            if (!Enum.TryParse<BookNodeLevel>(request.Level, ignoreCase: true, out var level))
-                return Results.Problem($"Unknown level '{request.Level}'. Expected volume, part or chapter.",
-                    statusCode: StatusCodes.Status400BadRequest);
 
-            var enqueued = await useCases.EnqueueAttributionAsync(folderId, level, request.NodeId, request.UnprocessedOnly);
+            var enqueued = await useCases.EnqueueAttributionAsync(folderId, request.Level, request.NodeId, request.UnprocessedOnly);
             return EnqueueResponse.For(enqueued);
         }
 
@@ -88,7 +85,7 @@ namespace Read2Me.App.Api
                 return Results.NotFound();
 
             return Results.Ok(new ParagraphAttributionStatusDto(
-                queue.StatusOf(folderId, paragraphId)?.ToString(),
+                queue.StatusOf(folderId, paragraphId),
                 queue.OutcomeOf(folderId, paragraphId)));
         }
     }

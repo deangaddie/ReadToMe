@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Read2Me.App.Api;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,16 +24,13 @@ public static class LiveServiceCollectionExtensions
         return services;
     }
 
-    /// <summary>
-    /// The hub's payload options. Options converters outrank a type's own <c>[JsonConverter]</c>, so an
-    /// enum that is camelCase on the REST wire needs its converter on the property to stay so here.
-    /// </summary>
+    /// <summary>The hub's payload options: the agent API's wire form (<see cref="ApiJson"/>), nulls omitted.</summary>
     public static void ConfigurePayloadJson(JsonSerializerOptions options)
     {
         options.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
         options.DictionaryKeyPolicy = null;
         options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
-        options.Converters.Add(new JsonStringEnumConverter());
+        ApiJson.Configure(options);
     }
 
     public static IEndpointRouteBuilder MapLiveHub(this IEndpointRouteBuilder endpoints)

@@ -34,16 +34,16 @@ beforeEach(() => {
   api = new FakeApi();
   api.install();
   api.on('GET', `${BASE}/book`, { volumes: [{ id: 'v1', title: 'v1' }] });
-  api.on('GET', `${BASE}/nodes/volume/v1/children`, {
+  api.on('GET', `${BASE}/nodes/Volume/v1/children`, {
     parts: [{ id: 'p1', title: '' }],
   });
-  api.on('GET', `${BASE}/nodes/part/p1/children`, {
+  api.on('GET', `${BASE}/nodes/Part/p1/children`, {
     chapters: [
       { id: 'c1', title: 'Chapter 1' },
       { id: 'c3', title: 'Chapter 3' },
     ],
   });
-  api.on('GET', `${BASE}/nodes/chapter/c3/children`, {
+  api.on('GET', `${BASE}/nodes/Chapter/c3/children`, {
     paragraphs: [{ id: 'para', items: [{ id: 'item', text: 'Hello there, said Alice to Bob.' }] }],
   });
 });

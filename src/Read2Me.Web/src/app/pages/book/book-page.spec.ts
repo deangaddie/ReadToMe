@@ -137,17 +137,17 @@ beforeEach(() => {
     .on('GET', `${BASE}/status`, STATUS)
     .on('GET', `${BASE}/book`, OVERVIEW)
     .on('GET', `${BASE}/audio/reviews`, {})
-    .on('GET', `${BASE}/nodes/volume/v1/children`, { parts: [{ id: 'p1', title: null }] })
-    .on('GET', `${BASE}/nodes/part/p1/children`, {
+    .on('GET', `${BASE}/nodes/Volume/v1/children`, { parts: [{ id: 'p1', title: null }] })
+    .on('GET', `${BASE}/nodes/Part/p1/children`, {
       chapters: [
         { id: 'c1', title: 'Jonathan Harker’s Journal' },
         { id: 'c2', title: null },
       ],
     })
-    .on('GET', `${BASE}/nodes/chapter/c1/children`, { paragraphs: [DIALOG('p1'), DIALOG('p2')] })
-    .on('GET', `${BASE}/nodes/chapter/c2/children`, { paragraphs: [DIALOG('p3')] })
-    .on('GET', `${BASE}/nodes/chapter/c1/voices`, {})
-    .on('GET', `${BASE}/nodes/chapter/c2/voices`, {});
+    .on('GET', `${BASE}/nodes/Chapter/c1/children`, { paragraphs: [DIALOG('p1'), DIALOG('p2')] })
+    .on('GET', `${BASE}/nodes/Chapter/c2/children`, { paragraphs: [DIALOG('p3')] })
+    .on('GET', `${BASE}/nodes/Chapter/c1/voices`, {})
+    .on('GET', `${BASE}/nodes/Chapter/c2/voices`, {});
 });
 afterEach(() => document.body.replaceChildren());
 
@@ -234,14 +234,14 @@ describe('r2m-book-page', () => {
           { id: 'v2', title: null },
         ],
       })
-      .on('GET', `${BASE}/nodes/volume/v1/children`, {
+      .on('GET', `${BASE}/nodes/Volume/v1/children`, {
         parts: [
           { id: 'p1', title: 'Arrival' },
           { id: 'p2', title: null },
         ],
       })
-      .on('GET', `${BASE}/nodes/part/p1/children`, { chapters: [{ id: 'c1', title: 'One' }] })
-      .on('GET', `${BASE}/nodes/part/p2/children`, { chapters: [{ id: 'c2', title: 'Two' }] });
+      .on('GET', `${BASE}/nodes/Part/p1/children`, { chapters: [{ id: 'c1', title: 'One' }] })
+      .on('GET', `${BASE}/nodes/Part/p2/children`, { chapters: [{ id: 'c2', title: 'Two' }] });
     const { page, store } = await start('projects/dracula/book');
     await store.openChapter('c2');
     await store.loadPrevious(false);
@@ -320,7 +320,7 @@ describe('r2m-book-page', () => {
   });
 
   it('a pause paragraph row carries a node-menu trigger for its inserts and delete', async () => {
-    api.on('GET', `${BASE}/nodes/chapter/c1/children`, {
+    api.on('GET', `${BASE}/nodes/Chapter/c1/children`, {
       paragraphs: [
         DIALOG('p1'),
         {
@@ -426,7 +426,7 @@ describe('r2m-book-page', () => {
       await page.rendered();
       expect(headingTrigger(page, 'c1').disabled).toBe(false);
       // A failed read leaves the view stale, which locks the editor.
-      api.on('GET', `${BASE}/nodes/part/p1/children`, () => problem(500, 'db locked'));
+      api.on('GET', `${BASE}/nodes/Part/p1/children`, () => problem(500, 'db locked'));
       await store.refresh();
       await page.rendered();
       expect(store.stale()).toContain('db locked');
@@ -453,7 +453,7 @@ describe('r2m-book-page', () => {
       ]);
 
       // The receipt's reload reads the stored title back.
-      api.on('GET', `${BASE}/nodes/part/p1/children`, {
+      api.on('GET', `${BASE}/nodes/Part/p1/children`, {
         chapters: [
           { id: 'c1', title: 'Jonathan Harker’s Journal' },
           { id: 'c2', title: 'Dr. Seward’s Diary' },
@@ -479,18 +479,18 @@ describe('r2m-book-page', () => {
             { id: 'v2', title: null },
           ],
         })
-        .on('GET', `${BASE}/nodes/volume/v1/children`, {
+        .on('GET', `${BASE}/nodes/Volume/v1/children`, {
           parts: [
             { id: 'pa', title: 'Arrival' },
             { id: 'pb', title: null },
           ],
         })
-        .on('GET', `${BASE}/nodes/part/pa/children`, { chapters: [{ id: 'c1', title: 'One' }] })
-        .on('GET', `${BASE}/nodes/part/pb/children`, { chapters: [{ id: 'c2', title: 'Two' }] })
-        .on('GET', `${BASE}/nodes/volume/v2/children`, { parts: [{ id: 'pc', title: null }] })
-        .on('GET', `${BASE}/nodes/part/pc/children`, { chapters: [{ id: 'c3', title: 'Three' }] })
-        .on('GET', `${BASE}/nodes/chapter/c3/children`, { paragraphs: [DIALOG('p4')] })
-        .on('GET', `${BASE}/nodes/chapter/c3/voices`, {});
+        .on('GET', `${BASE}/nodes/Part/pa/children`, { chapters: [{ id: 'c1', title: 'One' }] })
+        .on('GET', `${BASE}/nodes/Part/pb/children`, { chapters: [{ id: 'c2', title: 'Two' }] })
+        .on('GET', `${BASE}/nodes/Volume/v2/children`, { parts: [{ id: 'pc', title: null }] })
+        .on('GET', `${BASE}/nodes/Part/pc/children`, { chapters: [{ id: 'c3', title: 'Three' }] })
+        .on('GET', `${BASE}/nodes/Chapter/c3/children`, { paragraphs: [DIALOG('p4')] })
+        .on('GET', `${BASE}/nodes/Chapter/c3/voices`, {});
       const started = await start(path);
       await started.store.openChapter('c2');
       await started.store.loadPrevious(false);
@@ -569,7 +569,7 @@ describe('r2m-book-page', () => {
       expect(headingTrigger(page, 'v1').disabled).toBe(false);
 
       // A failed read leaves the view stale, which locks the editor.
-      api.on('GET', `${BASE}/nodes/part/pb/children`, () => problem(500, 'db locked'));
+      api.on('GET', `${BASE}/nodes/Part/pb/children`, () => problem(500, 'db locked'));
       await store.refresh();
       await page.rendered();
       expect(store.stale()).toContain('db locked');
@@ -598,7 +598,7 @@ describe('r2m-book-page', () => {
 
     it('runs the shortcuts and Release narration as the tree does', async () => {
       api
-        .on('GET', `${BASE}/nodes/part/pa/paragraph-ids`, (_body, url) =>
+        .on('GET', `${BASE}/nodes/Part/pa/paragraph-ids`, (_body, url) =>
           url.searchParams.get('unprocessedOnly') === 'true'
             ? [{ id: 'p2', chapterId: 'c1', partId: 'pa', volumeId: 'v1' }]
             : [],
@@ -614,7 +614,7 @@ describe('r2m-book-page', () => {
 
       await choose(page, 'v1', 'attribute-node');
       expect(api.calls('POST', `${BASE}/attribution/enqueue`).map((r) => r.body)).toEqual([
-        { level: 'volume', nodeId: 'v1', unprocessedOnly: true },
+        { level: 'Volume', nodeId: 'v1', unprocessedOnly: true },
       ]);
 
       // The release names the part as it shows, placeholder title included.
@@ -662,8 +662,8 @@ describe('r2m-book-page', () => {
           { id: 'v2', title: 'Two' },
         ],
       })
-      .on('GET', `${BASE}/nodes/volume/v2/children`, { parts: [{ id: 'p2', title: 'Late' }] })
-      .on('GET', `${BASE}/nodes/part/p2/children`, { chapters: [{ id: 'c3', title: 'Three' }] });
+      .on('GET', `${BASE}/nodes/Volume/v2/children`, { parts: [{ id: 'p2', title: 'Late' }] })
+      .on('GET', `${BASE}/nodes/Part/p2/children`, { chapters: [{ id: 'c3', title: 'Three' }] });
     const { page, store } = await start('projects/dracula/book');
     const tree = page.querySelector('r2m-structure-tree')!;
     const ids = () =>
@@ -675,7 +675,7 @@ describe('r2m-book-page', () => {
     tree.querySelector<HTMLElement>('[data-node-id=v2] .tree__toggle')!.click();
     for (let i = 0; i < 4; i++) await settle();
     expect([...store.expanded()]).toEqual(['v2']);
-    expect(api.calls('GET', `${BASE}/nodes/volume/v2/children`)).toHaveLength(1);
+    expect(api.calls('GET', `${BASE}/nodes/Volume/v2/children`)).toHaveLength(1);
     await page.rendered();
     // A volume with one part shows that part's chapters directly (buildTree).
     expect(ids()).toEqual(['v1', 'v2', 'c3']);
@@ -710,8 +710,8 @@ describe('r2m-book-page', () => {
     expect(page.getAttribute('data-current-chapter')).toBe('c2');
     // c2 was read first; c1 only afterwards, when the edge check filled in the chapter before.
     const order = api.requests.map((r) => r.path);
-    expect(order.indexOf(`${BASE}/nodes/chapter/c2/children`)).toBeLessThan(
-      order.indexOf(`${BASE}/nodes/chapter/c1/children`),
+    expect(order.indexOf(`${BASE}/nodes/Chapter/c2/children`)).toBeLessThan(
+      order.indexOf(`${BASE}/nodes/Chapter/c1/children`),
     );
   });
 
@@ -719,7 +719,7 @@ describe('r2m-book-page', () => {
     const { page, store } = await start('projects/dracula/book?mode=audio');
     expect(store.mode()).toBe('audio');
     // Audio mode reads voices with the chapter and shows the voice line per item.
-    expect(api.calls('GET', `${BASE}/nodes/chapter/c1/voices`)).toHaveLength(1);
+    expect(api.calls('GET', `${BASE}/nodes/Chapter/c1/voices`)).toHaveLength(1);
     const inC1 = (selector: string) =>
       page.querySelectorAll(`.r2m-paragraph[data-chapter-id=c1] ${selector}`).length;
     expect(inC1('[data-testid=voice-line]')).toBe(2);
@@ -762,7 +762,7 @@ describe('r2m-book-page', () => {
       );
 
     it('a tree checkbox selects the node and shows the action bar, whose Attribute reaches the workflow', async () => {
-      api.on('GET', `${BASE}/nodes/chapter/c1/paragraph-ids`, [
+      api.on('GET', `${BASE}/nodes/Chapter/c1/paragraph-ids`, [
         { id: 'p1', chapterId: 'c1', partId: 'p1', volumeId: 'v1' },
         { id: 'p2', chapterId: 'c1', partId: 'p1', volumeId: 'v1' },
       ]);
@@ -844,7 +844,7 @@ describe('r2m-book-page', () => {
 
     it('a chapter heading menu runs the shortcuts and Release narration as the tree does', async () => {
       api
-        .on('GET', `${BASE}/nodes/chapter/c1/paragraph-ids`, (_body, url) =>
+        .on('GET', `${BASE}/nodes/Chapter/c1/paragraph-ids`, (_body, url) =>
           url.searchParams.get('unprocessedOnly') === 'true'
             ? [{ id: 'p2', chapterId: 'c1', partId: 'p1', volumeId: 'v1' }]
             : [],
@@ -870,7 +870,7 @@ describe('r2m-book-page', () => {
 
       await choose('c1', 'attribute-node');
       expect(api.calls('POST', `${BASE}/attribution/enqueue`).map((r) => r.body)).toEqual([
-        { level: 'chapter', nodeId: 'c1', unprocessedOnly: true },
+        { level: 'Chapter', nodeId: 'c1', unprocessedOnly: true },
       ]);
 
       // The release names the chapter as it shows, placeholder title included.
@@ -885,7 +885,7 @@ describe('r2m-book-page', () => {
         isPauseParagraph: false,
         items: [{ ...DIALOG('q1').items[0]!, itemType: 'Narration', text: 'Q: Your name?' }],
       };
-      api.on('GET', `${BASE}/nodes/chapter/c1/children`, {
+      api.on('GET', `${BASE}/nodes/Chapter/c1/children`, {
         paragraphs: [DIALOG('p1'), narration],
       });
       const { page } = await start('projects/dracula/book?mode=speakers');
@@ -968,7 +968,7 @@ describe('r2m-book-page', () => {
     it('turns Book actions off with the stale reason; the Pronunciations toggle stays', async () => {
       const { page, store } = await start('projects/dracula/book');
       // A failed read leaves the view stale.
-      api.on('GET', `${BASE}/nodes/part/p1/children`, () => problem(500, 'db locked'));
+      api.on('GET', `${BASE}/nodes/Part/p1/children`, () => problem(500, 'db locked'));
       await store.refresh();
       await page.rendered();
       expect(store.stale()).toContain('db locked');
@@ -1025,7 +1025,7 @@ describe('r2m-book-page', () => {
     it('the hints go once Structure is confirmed', async () => {
       api.on('GET', `${BASE}/status`, {
         ...STATUS,
-        checkpoints: { structure: { state: 'confirmed', stale: false, at: '2026-10-18' } },
+        checkpoints: { Structure: { state: 'Confirmed', stale: false, at: '2026-10-18' } },
       });
       const { page } = await open1();
       expect(page.querySelector('[data-action=add-titles] .r2m-menu__hint')).toBeNull();
@@ -1193,7 +1193,7 @@ describe('r2m-book-page', () => {
         ...STATUS,
         nodes: {},
         audio: { remaining: 0 },
-        checkpoints: { structure: { state: 'skipped', stale: false, at: '2026-10-18' } },
+        checkpoints: { Structure: { state: 'Skipped', stale: false, at: '2026-10-18' } },
       });
       confirmAnswer = false;
       const { page } = await open1();
@@ -1329,13 +1329,13 @@ describe('r2m-book-page', () => {
   });
 
   it('a failed read shows the stale banner, and Refresh reads again', async () => {
-    api.on('GET', `${BASE}/nodes/chapter/c1/children`, () => problem(500, 'db locked'));
+    api.on('GET', `${BASE}/nodes/Chapter/c1/children`, () => problem(500, 'db locked'));
     const { page, store } = await start('projects/dracula/book');
     expect(store.stale()).toContain('db locked');
     const banner = page.querySelector('.book__stale')!;
     expect(text(banner)).toContain('This view may be out of date');
 
-    api.on('GET', `${BASE}/nodes/chapter/c1/children`, { paragraphs: [DIALOG('p1')] });
+    api.on('GET', `${BASE}/nodes/Chapter/c1/children`, { paragraphs: [DIALOG('p1')] });
     banner.querySelector('button')!.click();
     for (let i = 0; i < 4; i++) await settle();
     expect(store.stale()).toBeNull();

@@ -17,20 +17,21 @@ namespace Read2Me.Tests.Api
     public class CheckpointEndpointsTests
     {
         [Theory]
-        [InlineData("structure", PipelineStep.Structure)]
-        [InlineData("speakers", PipelineStep.Speakers)]
-        [InlineData("export", PipelineStep.Export)]
-        public void TheStepSegment_isTheCamelCaseStepId(string segment, PipelineStep expected)
+        [InlineData("Structure", PipelineStep.Structure)]
+        [InlineData("Speakers", PipelineStep.Speakers)]
+        [InlineData("Export", PipelineStep.Export)]
+        public void TheStepSegment_isTheStepsMemberName(string segment, PipelineStep expected)
         {
             Assert.True(CheckpointEndpoints.TryParseStep(segment, out var step));
             Assert.Equal(expected, step);
         }
 
-        // Enum.TryParse alone would take "3" as Text and "Structure, Text" as a flag mix.
+        // Enum.TryParse alone would take "3" as Text, "Structure, Text" as a flag mix and "structure" ignoring case.
         [Theory]
         [InlineData("cast")]
         [InlineData("3")]
-        [InlineData("structure,text")]
+        [InlineData("Structure, Text")]
+        [InlineData("structure")]
         [InlineData("")]
         public void AnUnknownStepSegment_isRejected(string segment)
         {
@@ -79,10 +80,10 @@ namespace Read2Me.Tests.Api
             ]);
 
             Assert.Equal(
-                new Dictionary<string, StepCheckpointDto>
+                new Dictionary<PipelineStep, StepCheckpointDto>
                 {
-                    ["structure"] = new(CheckpointState.Confirmed, false, at),
-                    ["pauses"] = new(CheckpointState.Skipped, true, at),
+                    [PipelineStep.Structure] = new(CheckpointState.Confirmed, false, at),
+                    [PipelineStep.Pauses] = new(CheckpointState.Skipped, true, at),
                 },
                 map);
         }

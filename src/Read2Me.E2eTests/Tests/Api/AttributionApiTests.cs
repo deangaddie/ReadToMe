@@ -26,7 +26,7 @@ public class AttributionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
 
         var enqueue = await Http.PostAsJsonAsync(
             $"{app.BaseUrl}/api/projects/{folder}/attribution/enqueue",
-            new { level = "chapter", nodeId = chapterId, unprocessedOnly = true });
+            new { level = "Chapter", nodeId = chapterId, unprocessedOnly = true });
         Assert.Equal(HttpStatusCode.Accepted, enqueue.StatusCode);
         var enqueued = JsonDocument.Parse(await enqueue.Content.ReadAsStringAsync())
             .RootElement.GetProperty("enqueued").GetInt32();
@@ -42,7 +42,7 @@ public class AttributionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
         Assert.Equal(JsonValueKind.Null, status.RootElement.GetProperty("outcome").ValueKind);
 
         var children = JsonDocument.Parse(await Http.GetStringAsync(
-            $"{app.BaseUrl}/api/projects/{folder}/nodes/chapter/{chapterId}/children"));
+            $"{app.BaseUrl}/api/projects/{folder}/nodes/Chapter/{chapterId}/children"));
         var paragraph = children.RootElement.GetProperty("paragraphs").EnumerateArray()
             .Single(p => p.GetProperty("id").GetGuid() == paragraphId);
         var characterItems = paragraph.GetProperty("items").EnumerateArray()
@@ -58,7 +58,7 @@ public class AttributionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
     {
         var response = await Http.PostAsJsonAsync(
             $"{app.BaseUrl}/api/projects/nope-attr/attribution/enqueue",
-            new { level = "chapter", nodeId = Guid.NewGuid() });
+            new { level = "Chapter", nodeId = Guid.NewGuid() });
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }

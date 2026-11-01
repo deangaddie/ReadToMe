@@ -12,7 +12,7 @@ namespace Read2Me.Tests.App
         {
             var schema = ProviderSettingsSchema.VoiceDesign(VoiceDesignServiceType.Qwen3);
 
-            Assert.Equal("Qwen3", schema.Type);
+            Assert.Equal(VoiceDesignServiceType.Qwen3, schema.Type);
             Assert.Equal(
                 ["modelId", "language", "temperature", "topP", "topK", "repetitionPenalty", "maxNewTokens", "seed"],
                 schema.Fields.Select(f => f.Key));

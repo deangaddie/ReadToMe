@@ -19,7 +19,7 @@ namespace Read2Me.Tests.App
         {
             var schema = ProviderSettingsSchema.ParagraphTts(ParagraphTtsServiceType.Breeze);
 
-            Assert.Equal("Breeze", schema.Type);
+            Assert.Equal(ParagraphTtsServiceType.Breeze, schema.Type);
             Assert.Equal(
                 ["modelId", "instructedGuidanceScale", "plainGuidanceScale", "temperature", "topK", "topP", "seed"],
                 schema.Fields.Select(f => f.Key));

@@ -10,14 +10,14 @@ using Read2Me.Services.UseCases;
 namespace Read2Me.App.Api
 {
     public sealed record AudioEnqueueRequest(
-        string Level, Guid NodeId, bool NeedsAudioOnly = true, bool NarratorOnlyMode = false);
+        BookNodeLevel Level, Guid NodeId, bool NeedsAudioOnly = true, bool NarratorOnlyMode = false);
     /// <summary>An explicit item selection or a single retry. Ids that name no item are ignored.</summary>
     public sealed record ItemsEnqueueRequest(Guid[] ItemIds);
-    public sealed record AudioItemStatusDto(string? Status, AudioItemOutcome? Outcome, long? AudioVersion);
+    public sealed record AudioItemStatusDto(AudioItemQueueStatus? Status, AudioItemOutcome? Outcome, long? AudioVersion);
 
-    /// <summary><see cref="AudioReviewInfo"/> on the wire, with the state as its member name.</summary>
+    /// <summary><see cref="AudioReviewInfo"/> on the wire, with nulls sent explicitly.</summary>
     public sealed record AudioReviewDto(
-        string State, bool NormalizeOk, string? NormalizeReason, bool VerifyOk, double? Wer,
+        AudioReviewState State, bool NormalizeOk, string? NormalizeReason, bool VerifyOk, double? Wer,
         string? VerifyReason, string? Transcript, string? OriginalTextSnapshot);
 
     public static class AudioEndpoints
@@ -26,7 +26,7 @@ namespace Read2Me.App.Api
         {
             endpoints.MapPost("/api/projects/{folder}/audio/enqueue", EnqueueAsync)
                 .RecordsNoStep("Enqueues a Background run; takes are results.")
-                .WithSummary("Queue TTS audio generation for the items under a node (level: volume|part|chapter). Poll /api/audio/queue.");
+                .WithSummary("Queue TTS audio generation for the items under a node (level: Volume|Part|Chapter). Poll /api/audio/queue.");
             endpoints.MapPost("/api/projects/{folder}/audio/enqueue-items", EnqueueItemsAsync)
                 .RecordsNoStep("Enqueues a Background run; takes are results.")
                 .WithSummary("Queue TTS audio generation for an explicit list of item ids (a selection, or one item to retry). Unknown ids are ignored; the count answers with what was queued. 409 when no paragraph TTS service is active.");
@@ -47,15 +47,11 @@ namespace Read2Me.App.Api
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
-            if (!Enum.TryParse<BookNodeLevel>(request.Level, ignoreCase: true, out var level))
-                return Results.Problem($"Unknown level '{request.Level}'. Expected volume, part or chapter.",
-                    statusCode: StatusCodes.Status400BadRequest);
-
             if (await NoActiveTtsAsync(ttsSettings) is { } refused)
                 return refused;
 
             var enqueued = await useCases.EnqueueAudioAsync(
-                folderId, level, request.NodeId, request.NeedsAudioOnly, request.NarratorOnlyMode);
+                folderId, request.Level, request.NodeId, request.NeedsAudioOnly, request.NarratorOnlyMode);
             return EnqueueResponse.For(enqueued);
         }
 
@@ -89,7 +85,7 @@ namespace Read2Me.App.Api
             return Results.Ok(rows.ToDictionary(
                 r => r.ParagraphItemId.ToString(),
                 r => new AudioReviewDto(
-                    r.Info.State.ToString(), r.Info.NormalizeOk, r.Info.NormalizeReason, r.Info.VerifyOk,
+                    r.Info.State, r.Info.NormalizeOk, r.Info.NormalizeReason, r.Info.VerifyOk,
                     r.Info.Wer, r.Info.VerifyReason, r.Info.Transcript, r.Info.OriginalTextSnapshot)));
         }
 
@@ -100,7 +96,7 @@ namespace Read2Me.App.Api
                 return Results.NotFound();
 
             return Results.Ok(new AudioItemStatusDto(
-                queue.StatusOf(folderId, itemId)?.ToString(),
+                queue.StatusOf(folderId, itemId),
                 queue.OutcomeOf(folderId, itemId),
                 queue.AudioVersionOf(folderId, itemId)));
         }

@@ -40,7 +40,7 @@ export class BookApi {
   /** The voice each speech item of a chapter resolves to, keyed by item id. */
   chapterVoices(folder: string, chapterId: Guid): Promise<ChapterVoicesDto> {
     return this.api.get<ChapterVoicesDto>(
-      `${projectUrl(folder)}/nodes/chapter/${chapterId}/voices`,
+      `${projectUrl(folder)}/nodes/Chapter/${chapterId}/voices`,
     );
   }
 

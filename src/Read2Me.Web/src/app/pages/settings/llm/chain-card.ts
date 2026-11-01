@@ -1,6 +1,6 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
-import { type AttributionChainStep, AttributionPromptStyle, toApiError } from '@app/api';
+import { type AttributionChainStep, toApiError } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
@@ -123,12 +123,12 @@ export class LlmChainCard extends R2mElement {
       ${row.config.model ? html`<span class="chain__model">${row.config.model}</span>` : nothing}
       <span class="chain__flags">
         ${
-          row.style === AttributionPromptStyle.Simple
+          row.style === 'Simple'
             ? statusChip({ status: 'info', label: 'Simple', compact: true })
             : nothing
         }
         ${
-          row.style === AttributionPromptStyle.Chapter
+          row.style === 'Chapter'
             ? statusChip({ status: 'info', label: 'Chapter', compact: true })
             : nothing
         }

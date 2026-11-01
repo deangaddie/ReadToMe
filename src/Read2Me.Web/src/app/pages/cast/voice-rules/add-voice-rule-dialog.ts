@@ -221,21 +221,21 @@ export class AddVoiceRuleDialog extends R2mElement {
         this.chapters.set([]);
         this.paragraphs.set([]);
         if (id)
-          this.parts.set((await this.book.children(this.data.folder, 'volume', id)).parts ?? []);
+          this.parts.set((await this.book.children(this.data.folder, 'Volume', id)).parts ?? []);
         return;
       case 'part':
         this.chapters.set([]);
         this.paragraphs.set([]);
         if (id)
           this.chapters.set(
-            (await this.book.children(this.data.folder, 'part', id)).chapters ?? [],
+            (await this.book.children(this.data.folder, 'Part', id)).chapters ?? [],
           );
         return;
       case 'chapter':
         this.paragraphs.set([]);
         if (id)
           this.paragraphs.set(
-            (await this.book.children(this.data.folder, 'chapter', id)).paragraphs ?? [],
+            (await this.book.children(this.data.folder, 'Chapter', id)).paragraphs ?? [],
           );
         return;
       default:

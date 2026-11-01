@@ -27,7 +27,7 @@ function node(
     untitled: false,
     isFirst: true,
     isLast: true,
-    expandable: level !== 'chapter',
+    expandable: level !== 'Chapter',
     loaded: true,
     loadTarget: { level, id },
     children,
@@ -40,19 +40,19 @@ function siblings(...nodes: TreeNode[]): TreeNode[] {
   return nodes.map((n, i) => ({ ...n, isFirst: i === 0, isLast: i === nodes.length - 1 }));
 }
 
-const chapters = (...ids: string[]) => siblings(...ids.map((id) => node(id, 'chapter')));
+const chapters = (...ids: string[]) => siblings(...ids.map((id) => node(id, 'Chapter')));
 
 /** Two volumes: the first with two parts (the first part open to its chapters), the second unloaded. */
 const NODES: TreeNode[] = siblings(
   node(
     'v1',
-    'volume',
+    'Volume',
     siblings(
-      node('p1', 'part', chapters('Alpha', 'Bravo')),
-      node('p2', 'part', chapters('Charlie')),
+      node('p1', 'Part', chapters('Alpha', 'Bravo')),
+      node('p2', 'Part', chapters('Charlie')),
     ),
   ),
-  node('v2', 'volume', [], { loaded: false }),
+  node('v2', 'Volume', [], { loaded: false }),
 );
 
 let tree: StructureTree;
@@ -166,7 +166,7 @@ describe('r2m-structure-tree', () => {
   it('an untitled node shows its placeholder title set apart from real titles', async () => {
     await mount({
       nodes: chapters('Alpha').concat(
-        node('c2', 'chapter', [], { title: 'Untitled chapter 2', rawTitle: null, untitled: true }),
+        node('c2', 'Chapter', [], { title: 'Untitled chapter 2', rawTitle: null, untitled: true }),
       ),
     });
     const title = (id: string) => item(id).querySelector('.tree__title')!;
@@ -323,7 +323,7 @@ describe('r2m-structure-tree', () => {
     tree.statuses = { p2: status({ audioRemaining: 1 }) };
     await tree.rendered();
     expect(items().map((i) => i.tabIndex)).toEqual([-1, -1, -1, -1, 0, -1]);
-    tree.nodes = siblings(node('v1', 'volume', siblings(node('p1', 'part', chapters('Alpha')))));
+    tree.nodes = siblings(node('v1', 'Volume', siblings(node('p1', 'Part', chapters('Alpha')))));
     await tree.rendered();
     expect(items().map((i) => i.tabIndex)).toEqual([0, -1, -1]);
   });

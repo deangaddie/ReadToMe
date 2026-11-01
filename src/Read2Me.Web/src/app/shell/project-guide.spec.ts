@@ -19,7 +19,7 @@ describe('ProjectGuide', () => {
     guide.publish('dracula', DONE, runner);
     const next = {
       kind: 'waiting',
-      step: 'speakers',
+      step: 'Speakers',
       label: 'Speakers · 2 queued',
       tint: 'busy',
       tooltip: null,

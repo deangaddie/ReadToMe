@@ -42,8 +42,8 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         var history = await HistoryAsync(folder);
         var steps = history.GetProperty("steps").EnumerateArray().ToList();
         Assert.Equal(["New character", "History started"], steps.Select(s => s.GetProperty("label").GetString()));
-        Assert.Equal(["request", "started"], steps.Select(s => s.GetProperty("kind").GetString()));
-        Assert.Equal(["character", null], steps.Select(s => s.GetProperty("action").GetString()));
+        Assert.Equal(["Request", "Started"], steps.Select(s => s.GetProperty("kind").GetString()));
+        Assert.Equal(["Character", null], steps.Select(s => s.GetProperty("action").GetString()));
 
         var tip = steps[0];
         Assert.Equal(tip.GetProperty("stepId").GetGuid(), history.GetProperty("headStepId").GetGuid());
@@ -322,7 +322,7 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         try
         {
             var enqueue = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/attribution/enqueue",
-                new { level = "chapter", nodeId = builder.ChapterId("ch1"), unprocessedOnly = true });
+                new { level = "Chapter", nodeId = builder.ChapterId("ch1"), unprocessedOnly = true });
 
             Assert.Equal(HttpStatusCode.Conflict, enqueue.StatusCode);
             Assert.Equal("Project is restoring",

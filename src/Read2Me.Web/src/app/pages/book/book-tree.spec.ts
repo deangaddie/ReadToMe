@@ -22,7 +22,7 @@ describe('buildTree', () => {
       v1: [node('p1', 'Part')],
       p1: [node('c1', 'One'), node('c2', 'Two')],
     });
-    expect(shape(tree)).toEqual(['chapter:One', 'chapter:Two']);
+    expect(shape(tree)).toEqual(['Chapter:One', 'Chapter:Two']);
   });
 
   it('one volume with several parts shows the parts as roots', () => {
@@ -30,7 +30,7 @@ describe('buildTree', () => {
       v1: [node('p1', 'A'), node('p2', 'B')],
       p1: [node('c1', 'One')],
     });
-    expect(shape(tree)).toEqual([{ 'part:A': ['chapter:One'] }, 'part:B']);
+    expect(shape(tree)).toEqual([{ 'Part:A': ['Chapter:One'] }, 'Part:B']);
     expect(tree[1]).toMatchObject({ expandable: true, loaded: false });
     expect(tree[0]!.loaded).toBe(true);
   });
@@ -42,15 +42,15 @@ describe('buildTree', () => {
       v2: [node('p2', 'X'), node('p3', 'Y')],
     });
     expect(shape(tree)).toEqual([
-      { 'volume:I': ['chapter:One'] },
-      { 'volume:II': ['part:X', 'part:Y'] },
+      { 'Volume:I': ['Chapter:One'] },
+      { 'Volume:II': ['Part:X', 'Part:Y'] },
     ]);
   });
 
   it('a collapsed-away single part whose chapters are not loaded yet leaves the volume unloaded', () => {
     const tree = buildTree([node('v1', 'I'), node('v2', 'II')], { v1: [node('p1')] });
     expect(tree[0]).toMatchObject({ loaded: false, children: [] });
-    expect(tree[0]!.loadTarget).toEqual({ level: 'part', id: 'p1' });
+    expect(tree[0]!.loadTarget).toEqual({ level: 'Part', id: 'p1' });
   });
 
   it('untitled nodes carry a placeholder title numbered by position', () => {
@@ -96,7 +96,7 @@ describe('buildTree', () => {
 
   it('chapters are leaves', () => {
     const [chapter] = buildTree([node('v1')], { v1: [node('p1')], p1: [node('c1')] });
-    expect(chapter).toMatchObject({ level: 'chapter', expandable: false, loaded: true });
+    expect(chapter).toMatchObject({ level: 'Chapter', expandable: false, loaded: true });
   });
 });
 
@@ -232,10 +232,10 @@ describe('chapterSequence', () => {
 describe('firstUnloaded', () => {
   it('names the first parent in book order whose children are not loaded', () => {
     const volumes = [node('v1'), node('v2')];
-    expect(firstUnloaded(volumes, {})).toEqual({ level: 'volume', id: 'v1' });
-    expect(firstUnloaded(volumes, { v1: [node('p1')] })).toEqual({ level: 'part', id: 'p1' });
+    expect(firstUnloaded(volumes, {})).toEqual({ level: 'Volume', id: 'v1' });
+    expect(firstUnloaded(volumes, { v1: [node('p1')] })).toEqual({ level: 'Part', id: 'p1' });
     expect(firstUnloaded(volumes, { v1: [node('p1')], p1: [] })).toEqual({
-      level: 'volume',
+      level: 'Volume',
       id: 'v2',
     });
     expect(firstUnloaded(volumes, { v1: [], v2: [] })).toBeNull();
