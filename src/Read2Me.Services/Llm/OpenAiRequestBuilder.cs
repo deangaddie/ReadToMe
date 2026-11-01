@@ -10,6 +10,13 @@ namespace Read2Me.Services.Llm
     /// </summary>
     public static class OpenAiRequestBuilder
     {
+        /// <summary>
+        /// A minimal non-streamed chat body naming <paramref name="model"/> with max_tokens=1: llama's
+        /// autoload router loads the model on the way, at negligible generation cost.
+        /// </summary>
+        public static string OneTokenBody(string? model, bool disableThinking = false) =>
+            BuildChatBody(new LlmServerConfig { Model = model, MaxTokens = 1 }, "ping", stream: false, disableThinking: disableThinking);
+
         public static string BuildChatBody(
             LlmServerConfig config, string prompt, bool stream, string? jsonSchema = null,
             bool disableThinking = false, LlmRunOverrides? overrides = null,

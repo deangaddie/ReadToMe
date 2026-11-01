@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Read2Me.AppData.Entities;
 using Read2Me.Services;
+using Read2Me.Services.AiServers;
 using Read2Me.Services.Health;
 
 namespace Read2Me.App.Services.SetupCheck
@@ -277,16 +278,7 @@ namespace Read2Me.App.Services.SetupCheck
 
             await using var stream = await response.Content.ReadAsStreamAsync(ct);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-            var ids = new HashSet<string>(StringComparer.Ordinal);
-            if (doc.RootElement.ValueKind == JsonValueKind.Object
-                && doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in data.EnumerateArray())
-                    if (item.ValueKind == JsonValueKind.Object
-                        && item.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String)
-                        ids.Add(id.GetString()!);
-            }
-            return ids;
+            return ModelListing.Parse(doc.RootElement).Models.Select(m => m.Id).ToHashSet(StringComparer.Ordinal);
         }
 
         /// <summary>The HTTP status a health GET answers; null when nothing answered.</summary>

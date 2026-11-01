@@ -1,7 +1,6 @@
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Read2Me.AppData.Entities;
@@ -131,47 +130,8 @@ namespace Read2Me.Services.Llm
         public async Task<IReadOnlyList<string>> GetModelsAsync(
             LlmServerConfig config, CancellationToken ct = default)
         {
-            var http = CreateClient(config);
-
-            HttpResponseMessage response;
-            try
-            {
-                response = await http.GetAsync(OpenAiStreamParser.Combine(config.BaseUrl, "v1/models"), ct);
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                throw new LlmProviderException($"Failed to connect to LLM provider at {config.BaseUrl}", ex);
-            }
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var error = await response.Content.ReadAsStringAsync(ct);
-                throw new LlmProviderException($"LLM provider returned error ({response.StatusCode}): {error}", null!);
-            }
-
-            await using var stream = await response.Content.ReadAsStreamAsync(ct);
-            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-
-            var models = new List<string>();
-            if (doc.RootElement.TryGetProperty("data", out var data) &&
-                data.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in data.EnumerateArray())
-                {
-                    if (item.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String)
-                    {
-                        var value = id.GetString();
-                        if (!string.IsNullOrWhiteSpace(value))
-                            models.Add(value);
-                    }
-                }
-            }
-
-            return models;
+            var listing = await LlmModelList.ReadAsync(CreateClient(config), config, ct);
+            return [.. listing.Models.Select(m => m.Id)];
         }
 
         private HttpClient CreateClient(LlmServerConfig config)

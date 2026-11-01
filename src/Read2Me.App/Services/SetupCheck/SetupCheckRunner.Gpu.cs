@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Read2Me.App.Services.Preflight;
 using Read2Me.AppData.Entities;
 using Read2Me.Services;
+using Read2Me.Services.AiServers;
 using Read2Me.Services.Audio.ParagraphTts;
 using Read2Me.Services.Audio.VoiceDesign;
 using Read2Me.Services.Health;
@@ -195,7 +196,7 @@ namespace Read2Me.App.Services.SetupCheck
         /// </summary>
         private async Task<string> CompleteOneTokenAsync(LlmServerConfig config)
         {
-            var body = LlamaModelStatus.OneTokenRequestBody(config.Model, disableThinking: true);
+            var body = OpenAiRequestBuilder.OneTokenBody(config.Model, disableThinking: true);
             using var request = new HttpRequestMessage(HttpMethod.Post, OpenAiStreamParser.Combine(config.BaseUrl, "v1/chat/completions"))
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
@@ -228,7 +229,7 @@ namespace Read2Me.App.Services.SetupCheck
                 if (!response.IsSuccessStatusCode)
                     return null;
                 using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(timeout.Token));
-                return LlamaModelStatus.LoadedModel(doc.RootElement);
+                return ModelListing.Parse(doc.RootElement).LoadedModel;
             }
             catch
             {
