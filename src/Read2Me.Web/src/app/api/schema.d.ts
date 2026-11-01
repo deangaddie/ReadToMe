@@ -2884,7 +2884,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. 204 on success, An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
+        /** Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. 204 on success. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
         post: {
             parameters: {
                 query?: never;
@@ -2940,7 +2940,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Re-split the stored book file by hand-chosen rules (replaces existing content). Per level: mode Prefix (with prefix) | Arabic | Roman. 400 when a switched-on level lacks a valid rule. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
+        /** Re-split the stored book file by hand-chosen rules (replaces existing content); 204 on success. Per level: mode Prefix (with prefix) | Arabic | Roman. 400 when a switched-on level lacks a valid rule. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
         post: {
             parameters: {
                 query?: never;
