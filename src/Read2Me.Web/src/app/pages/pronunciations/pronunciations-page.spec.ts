@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   type ProjectDetailDto,
   type ProjectStatusDto,
-  type PronunciationDto,
+  type PronunciationEntry,
   StepView,
   VIEWING_READ_ONLY,
 } from '@app/api';
@@ -59,8 +59,8 @@ const STATUS: ProjectStatusDto = {
 function entry(
   written: string,
   spoken: string,
-  overrides: Partial<PronunciationDto> = {},
-): PronunciationDto {
+  overrides: Partial<PronunciationEntry> = {},
+): PronunciationEntry {
   return {
     id: written.toLowerCase(),
     writtenForm: written,
@@ -111,7 +111,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let api: FakeApi;
 let liveFake: FakeLive;
 let confirms: ConfirmOptions[];
-let list: PronunciationDto[];
+let list: PronunciationEntry[];
 
 beforeEach(() => {
   resetServices();

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { PronunciationDto } from '@app/api';
+import type { PronunciationEntry } from '@app/api';
 import { ActivityStore } from '@app/activity/activity-store';
 import { override, resetServices } from '@app/core/services';
 import { signal } from '@app/core/signals';
@@ -11,7 +11,7 @@ import { FakeLive } from '../../../testing/fake-live';
 import { PronunciationPanelState } from './pronunciation-panel-store';
 
 const LIST = '/api/projects/the-adventures-of-sherlock-holmes/pronunciations';
-const HOLMES: PronunciationDto = {
+const HOLMES: PronunciationEntry = {
   id: 'holmes',
   writtenForm: 'Holmes',
   spokenForm: 'HOHMZ',
@@ -29,7 +29,7 @@ let dirty: boolean;
 let confirms: number;
 let confirmAnswer: boolean;
 let state: PronunciationPanelState;
-let list: PronunciationDto[];
+let list: PronunciationEntry[];
 
 beforeEach(() => {
   resetServices();

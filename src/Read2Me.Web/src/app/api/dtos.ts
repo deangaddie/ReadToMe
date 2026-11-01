@@ -11,9 +11,9 @@
  * labels or order keeps a `Record<Union, string>` or a `readonly Union[]` beside its own code.
  */
 import type { components, paths } from './schema';
-import type { BookEditTargetKind, NodeKind, Placement, VoiceAnchorLevel } from './book-commands';
+import type { VoiceAnchorLevel } from './book-commands';
 
-/** Component schemas the host's OpenAPI document declares (request bodies + settings entities). */
+/** Component schemas the host's OpenAPI document declares: request bodies and typed responses. */
 export type Schema = components['schemas'];
 
 /** A `System.Guid` on the wire. */
@@ -123,43 +123,27 @@ export type ProjectStatusDto = Schema['ProjectStatusDto'];
 
 // ---- Book reads (`BookEndpoints.cs`) ---------------------------------------------------------------
 
-export interface NodeDto {
-  id: Guid;
-  title: string | null;
-}
+export type NodeDto = Schema['NodeDto'];
 
-export type PauseKind = 'Pause' | 'ParagraphPause' | 'ChapterPause' | 'PartPause' | 'VolumePause';
+/** `ApiItemType`: narration when the speaker is the narrator, dialog otherwise, a pause kind by name. */
+export type ApiItemType = Schema['ApiItemType'];
 
-/** `ApiItemType`: narration when the speaker is the narrator, dialog otherwise. */
-export type ParagraphItemType = 'Narration' | 'Character' | PauseKind;
+export type PauseKind = Exclude<ApiItemType, 'Narration' | 'Character'>;
 
-export interface ParagraphItemDto {
-  id: Guid;
-  /** Kept for older readers; new code reads {@link isPause} and the speaker. */
-  itemType: ParagraphItemType;
-  text: string | null;
-  characterId: Guid | null;
-  audioFileName: string | null;
-  voiceInstructions: string | null;
-  /** Fractional position key within the paragraph; items already arrive in this order. */
-  orderKey: string;
-  isPause: boolean;
-}
+/**
+ * `itemType` is kept for older readers; new code reads `isPause` and the speaker. `orderKey` is the
+ * fractional position key within the paragraph; items already arrive in this order.
+ */
+export type ParagraphItemDto = Schema['ParagraphItemDto'];
 
-export interface ParagraphDto {
-  id: Guid;
-  items: ParagraphItemDto[];
-  /** No items, or a single pause item. */
-  isPauseParagraph: boolean;
-}
+/** `isPauseParagraph`: no items, or a single pause item. */
+export type ParagraphDto = Schema['ParagraphDto'];
 
-/** `GET …/nodes/Chapter/{id}/voices` entry. */
-export interface ItemVoiceDto {
-  /** null when no voice resolves for the item. */
-  voiceName: string | null;
-  /** The linked narrator's name on a narration item. */
-  narratedBy: string | null;
-}
+/**
+ * `GET …/nodes/Chapter/{id}/voices` entry. `voiceName` is null when no voice resolves for the item;
+ * `narratedBy` is the linked narrator's name on a narration item.
+ */
+export type ItemVoiceDto = Schema['ItemVoiceDto'];
 
 /** Keyed by speech item id. */
 export type ChapterVoicesDto = Record<Guid, ItemVoiceDto>;
@@ -182,119 +166,60 @@ export interface AudioReviewDto {
 export type AudioReviewsDto = Record<Guid, AudioReviewDto>;
 
 /** Exactly one of the three lists is present, chosen by the requested level. */
-export interface NodeChildrenDto {
-  parts: NodeDto[] | null;
-  chapters: NodeDto[] | null;
-  paragraphs: ParagraphDto[] | null;
-}
+export type NodeChildrenDto = Schema['NodeChildrenDto'];
 
 /** `GET …/nodes/{level}/{id}/paragraph-ids` entry: a Character paragraph and the nodes it rolls up into. */
-export interface ParagraphRefDto {
-  id: Guid;
-  chapterId: Guid;
-  partId: Guid;
-  volumeId: Guid;
-}
+export type ParagraphRefDto = Schema['ParagraphRefDto'];
 
 /** `GET …/nodes/{level}/{id}/item-ids` entry: a speech item with a speaker and the nodes it rolls up into. */
-export interface AudioItemRefDto {
-  id: Guid;
-  paragraphId: Guid;
-  chapterId: Guid;
-  partId: Guid;
-  volumeId: Guid;
-}
+export type AudioItemRefDto = Schema['AudioItemRefDto'];
 
 /** `POST …/characters/bulk-assign-preview` body. */
-export interface BulkAssignPreviewRequest {
-  paragraphIds: Guid[];
-}
+export type BulkAssignPreviewRequest = Schema['BulkAssignPreviewRequest'];
 
 /** What a bulk speaker assign would write; paragraphs without dialog count in neither. */
-export interface BulkAssignPreviewDto {
-  paragraphsWithCharacterItems: number;
-  characterItems: number;
-}
+export type BulkAssignPreviewDto = Schema['BulkAssignPreviewDto'];
 
-/** Where a Release narration reaches: no whole-book scope (`NarrationReleaseScope`). */
-export type NarrationReleaseScope = 'Part' | 'Chapter' | 'Paragraph';
+/** Where a Release narration reaches: no whole-book scope. */
+export type NarrationReleaseScope = Schema['NarrationReleaseScope'];
 
 /** `POST …/narration/release-preview` body. */
-export interface NarrationReleasePreviewRequest {
-  scope: NarrationReleaseScope;
-  nodeId: Guid;
-}
+export type NarrationReleasePreviewRequest = Schema['NarrationReleasePreviewRequest'];
 
 /**
  * What a ReleaseNarration would write: paragraphs it releases, items whose audio it discards, and
  * for a Chapter or Part the speech markers that passed (count descending, then marker; empty for a
  * Paragraph and when nothing passes).
  */
-export interface NarrationReleasePreviewDto {
-  paragraphs: number;
-  itemsWithAudio: number;
-  speechMarkers: SpeechMarkerCountDto[];
-}
+export type NarrationReleasePreviewDto = Schema['NarrationReleasePreviewDto'];
 
 /** A speech marker as written (`Q.`, `Darcy:`, `—…—`) and how many paragraphs it releases. */
-export interface SpeechMarkerCountDto {
-  marker: string;
-  paragraphs: number;
-}
+export type SpeechMarkerCountDto = Schema['SpeechMarkerCountDto'];
 
-export interface CharacterAliasDto {
-  id: Guid;
-  name: string;
-}
+export type CharacterAliasDto = Schema['CharacterAliasDto'];
+export type CharacterDto = Schema['CharacterDto'];
 
-export interface CharacterDto {
-  id: Guid;
-  name: string;
-  aliases: CharacterAliasDto[];
-}
-
-export interface BookOverviewDto {
-  hasContent: boolean;
-  volumes: NodeDto[];
-  characters: CharacterDto[];
-  totalParts: number;
-  totalChapters: number;
-  /** The book revision the read ran against: the reader's baseline for receipts and snapshots. */
-  revision: number;
-  /** The Structure rules, one entry per anchor kind: what the node menu renders its inserts from. */
-  structureRules: StructureRuleDto[];
-}
+/**
+ * `revision`: the book revision the read ran against, the reader's baseline for receipts and
+ * snapshots. `structureRules`: one entry per anchor kind, what the node menu renders its inserts from.
+ */
+export type BookOverviewDto = Schema['BookOverviewDto'];
 
 /** What a Structure rules entry is keyed by; a pause paragraph is a `Paragraph` to the commands. */
-export type StructureAnchor =
-  | 'Volume'
-  | 'Part'
-  | 'Chapter'
-  | 'Paragraph'
-  | 'PauseParagraph'
-  | 'ParagraphItem';
+export type StructureAnchor = Schema['StructureAnchor'];
 
 /** One placement an anchor allows: the kind it creates, and whether that node needs text. */
-export interface StructurePlacementDto {
-  placement: Placement;
-  creates: NodeKind;
-  textRequired: boolean;
-}
+export type StructurePlacementDto = Schema['StructurePlacementDto'];
 
-/** One Structure rules entry; `nodeKind` is what a command names the anchor as. */
-export interface StructureRuleDto {
-  anchor: StructureAnchor;
-  nodeKind: NodeKind;
-  placements: StructurePlacementDto[];
-  /** How many of this kind the book always keeps (Volume: 1). */
-  minimumCount: number;
-}
+/**
+ * One Structure rules entry; `nodeKind` is what a command names the anchor as, `minimumCount` how
+ * many of this kind the book always keeps (Volume: 1).
+ */
+export type StructureRuleDto = Schema['StructureRuleDto'];
 
 // ---- Commands (`CommandEndpoints.cs`) --------------------------------------------------------------
 
-export interface CommandResponse {
-  newEntityId: Guid | null;
-}
+export type CommandResponse = Schema['CommandResponse'];
 
 // ---- Attribution + audio queues (`AttributionEndpoints.cs`, `AudioEndpoints.cs`, `QueueStatusEndpoints.cs`)
 
@@ -868,70 +793,30 @@ export type ApplyPreviewRequest = Schema['ApplyPreviewRequest'];
 // ---- AI book edits (`BookEditEndpoints.cs`) --------------------------------------------------------
 
 /** `EditPlanStatus`: `Ok` is the only status that carries a program; the rest explain why there is nothing to do. */
-export type EditPlanStatus =
-  | 'Ok'
-  | 'NoLlmConfigured'
-  | 'Unsupported'
-  | 'ServiceUnavailable'
-  | 'Failed'
-  | 'NoTargets';
+export type EditPlanStatus = Schema['EditPlanStatus'];
 
 /** `TransformKind`: only `Llm` plans send a request per item, so only they offer per-row retries. */
-export type BookEditTransformKind = 'RegexReplace' | 'SetTemplate' | 'ChangeCase' | 'Llm';
+export type TransformKind = Schema['TransformKind'];
 
-export type ProposalStatus = 'Proposed' | 'NoChange' | 'Failed';
+export type ProposalStatus = Schema['ProposalStatus'];
+export type BookEditRunStatus = Schema['BookEditRunStatus'];
+export type PlanBookEditRequest = Schema['PlanBookEditRequest'];
 
-export type BookEditRunStatus = 'Idle' | 'Running' | 'Completed' | 'Cancelled' | 'Failed';
-
-export interface PlanBookEditRequest {
-  instruction: string;
-  thinking: boolean;
-}
-
-/** `program` is the opaque session id every later call names; null unless `status` is `Ok`. */
-export interface PlanBookEditResponse {
-  status: EditPlanStatus;
-  reason: string | null;
-  summary: string | null;
-  program: string | null;
-  transform: BookEditTransformKind | null;
-  targetCount: number;
-  /** LLM requests the proposal will send; 0 for a deterministic plan. */
-  requestCount: number;
-  warnings: string[];
-}
+/**
+ * `program` is the opaque session id every later call names; null unless `status` is `Ok`.
+ * `requestCount` is the LLM requests the proposal will send; 0 for a deterministic plan.
+ */
+export type PlanBookEditResponse = Schema['PlanBookEditResponse'];
 
 /** `connectionId` names the hub connection the run's `bookEdit` messages go to. */
-export interface ProposeBookEditRequest {
-  thinking: boolean;
-  connectionId?: string | null;
-}
-
-export interface ProposeOneBookEditRequest {
-  targetId: Guid;
-  hint?: string | null;
-  thinking: boolean;
-}
+export type ProposeBookEditRequest = Schema['ProposeBookEditRequest'];
+export type ProposeOneBookEditRequest = Schema['ProposeOneBookEditRequest'];
 
 /** `ProposedEdit` on the wire; `newValue` is null on a `Failed` row. */
-export interface BookEditRow {
-  kind: BookEditTargetKind;
-  id: Guid;
-  displayPath: string;
-  oldValue: string;
-  newValue?: string | null;
-  status: ProposalStatus;
-  failureReason?: string | null;
-}
+export type BookEditRowDto = Schema['BookEditRowDto'];
 
 /** The session's proposal run — what a client that missed the hub reads back. */
-export interface BookEditRunDto {
-  status: BookEditRunStatus;
-  done: number;
-  total: number;
-  rows: BookEditRow[];
-  reason: string | null;
-}
+export type BookEditRunDto = Schema['BookEditRunDto'];
 
 /** `HistoryStepKind`: what opened a History step. */
 export type HistoryStepKind = Schema['HistoryStepKind'];
@@ -953,122 +838,63 @@ export type RestoreResultDto = Schema['RestoreResultDto'];
 
 // ---- Pronunciations (`PronunciationEndpoints.cs`) ---------------------------------------------------
 
-/** `GET /api/projects/{folder}/pronunciations`: one entry and its reach in the book. */
-export interface PronunciationDto {
-  id: Guid;
-  writtenForm: string;
-  spokenForm: string;
-  /** Matched spans in the book. */
-  matchCount: number;
-  /** Items holding a match. */
-  itemCount: number;
-  /** Those items that have audio. */
-  withAudioCount: number;
-}
+/**
+ * `GET /api/projects/{folder}/pronunciations`: one entry and its reach in the book — `matchCount`
+ * matched spans, `itemCount` items holding one, `withAudioCount` those items that have audio.
+ */
+export type PronunciationEntry = Schema['PronunciationEntry'];
 
 /** `POST …/pronunciations` and `PUT …/pronunciations/{id}`. */
-export interface SetPronunciationRequest {
-  writtenForm: string;
-  spokenForm: string;
-}
+export type SetPronunciationRequest = Schema['SetPronunciationRequest'];
 
-/** A saved entry with its reach, and what saving it cost. */
-export interface PronunciationSavedDto extends PronunciationDto {
-  /** Items that lost their audio. */
-  audioDiscardCount: number;
-  /** Spoken items without audio after the save: what needs generating. */
-  needsAudioCount: number;
-}
+/**
+ * A saved entry with its reach, and what saving it cost: `audioDiscardCount` items lost their
+ * audio, `needsAudioCount` spoken items have none after the save (what needs generating).
+ */
+export type PronunciationSaved = Schema['PronunciationSaved'];
 
 /** `DELETE …/pronunciations/{id}`. */
-export interface PronunciationDeletedDto {
-  audioDiscardCount: number;
-  needsAudioCount: number;
-}
+export type PronunciationDeleted = Schema['PronunciationDeleted'];
 
 /** `POST …/pronunciations/impact`: no id adds, an id edits that entry, `delete` deletes it. */
-export interface PronunciationDraftRequest {
-  id: Guid | null;
-  writtenForm: string | null;
-  spokenForm: string | null;
-  delete: boolean;
-}
+export type PronunciationDraftRequest = Schema['PronunciationDraftRequest'];
 
-export interface PronunciationRef {
-  id: Guid;
-  writtenForm: string;
-  spokenForm: string;
-}
+export type PronunciationRef = Schema['PronunciationRef'];
 
-/** An entry whose written form holds the draft's as whole words, or is held by it. */
-export interface PronunciationOverlap extends PronunciationRef {
-  /** The draft's written form is the longer, so it wins where both match. */
-  draftWins: boolean;
-}
+/** An entry whose written form holds the draft's as whole words, or is held by it; `draftWins` when the draft's is the longer. */
+export type PronunciationOverlap = Schema['PronunciationOverlap'];
 
-/** One match of the draft, in book order. */
-export interface PronunciationMatchInBook {
-  itemId: Guid;
-  chapterId: Guid;
-  chapterTitle: string | null;
-  speaker: string | null;
-  hasAudio: boolean;
-  /** The sentence around the match; `matchStart`/`matchLength` are offsets in it. */
-  sentence: string;
-  /** Where the sentence starts in the item's text: what a try-out names it by. */
-  sentenceStart: number;
-  matchStart: number;
-  matchLength: number;
-  /** The sentence with the drafted list applied. */
-  spokenSentence: string;
-  /** Where the match's spoken form (its case carried over) sits in `spokenSentence`. */
-  spokenMatchStart: number;
-  spokenMatchLength: number;
-}
+/**
+ * One match of the draft, in book order. `matchStart`/`matchLength` are offsets in `sentence`;
+ * `sentenceStart` is where the sentence starts in the item's text (what a try-out names it by);
+ * `spokenSentence` has the drafted list applied, and `spokenMatchStart`/`spokenMatchLength` are
+ * where the match's spoken form (its case carried over) sits in it.
+ */
+export type PronunciationMatchInBook = Schema['PronunciationMatchInBook'];
 
-/** What saving a draft would do. */
-export interface PronunciationImpactDto {
-  matchCount: number;
-  itemCount: number;
-  withAudioCount: number;
-  /** Exactly the audio a save would discard. */
-  audioDiscardCount: number;
-  overlaps: PronunciationOverlap[];
-  /** Another entry with the written form, ignoring case: a save would be 409. */
-  duplicateOf: PronunciationRef | null;
-  matches: PronunciationMatchInBook[];
-}
+/**
+ * What saving a draft would do. `audioDiscardCount` is exactly the audio a save would discard;
+ * `duplicateOf` is another entry with the written form, ignoring case (a save would be 409).
+ */
+export type PronunciationImpactReport = Schema['PronunciationImpactReport'];
 
 /** A try-out's voice: one of the project's voices, or the item's own resolved voice. */
 export type TryVoice = { voiceId: Guid } | 'item';
 
 /**
  * `POST …/pronunciations/try`: the item's sentence starting at `sentenceStart` (an impact match's),
- * with `draft` in its entry's place unless `asWritten`. Answers the WAV body.
+ * with `draft` in its entry's place unless `asWritten`. Answers the WAV body. The host reads
+ * `voice` as a raw JSON element, so the client narrows it to {@link TryVoice}.
  */
-export interface TryPronunciationRequest {
-  itemId: Guid;
-  sentenceStart: number;
-  draft: PronunciationDraftRequest | null;
-  asWritten: boolean;
+export type TryPronunciationRequest = Omit<Schema['TryPronunciationRequest'], 'voice'> & {
   voice: TryVoice;
-}
+};
 
 /** One span of an item's text the list matches (`GET …/pronunciations/matches`): offsets into the item's text. */
-export interface PronunciationSpan {
-  itemId: Guid;
-  start: number;
-  length: number;
-  pronunciationId: Guid;
-  /** Where the sentence around it starts in the item's text: what a try-out names it by. */
-  sentenceStart: number;
-}
+export type PronunciationSpan = Schema['PronunciationSpan'];
 
 /** `GET …/pronunciations/matches?chapterIds=…`: the spans in book order and the entries they name. */
-export interface PronunciationSpanReport {
-  pronunciations: PronunciationRef[];
-  spans: PronunciationSpan[];
-}
+export type PronunciationSpanReport = Schema['PronunciationSpanReport'];
 
 // ---- Setup check (`SetupCheckEndpoints.cs`) ---------------------------------------------------------
 

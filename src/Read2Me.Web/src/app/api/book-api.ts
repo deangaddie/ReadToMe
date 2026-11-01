@@ -5,19 +5,16 @@ import type {
   AudioItemRefDto,
   BookOverviewDto,
   BulkAssignPreviewDto,
-  BulkAssignPreviewRequest,
   ChapterVoicesDto,
   CharacterDto,
   CommandResponse,
   Guid,
   NarrationReleasePreviewDto,
-  NarrationReleasePreviewRequest,
   NarrationReleaseScope,
   NodeChildrenDto,
   NodeLevel,
   ParagraphRefDto,
 } from './dtos';
-import { projectUrl } from './projects-api';
 
 /**
  * `BookEndpoints.cs` + `CommandEndpoints.cs`: the read model and the one mutation channel. Per spec
@@ -29,21 +26,21 @@ export class BookApi {
   private readonly api = use(ApiClient);
 
   overview(folder: string): Promise<BookOverviewDto> {
-    return this.api.untypedGet<BookOverviewDto>(`${projectUrl(folder)}/book`);
+    return this.api.get('/api/projects/{folder}/book', { path: { folder } });
   }
 
   /** volume → parts, part → chapters, chapter → paragraphs with their items. */
   children(folder: string, level: NodeLevel, id: Guid): Promise<NodeChildrenDto> {
-    return this.api.untypedGet<NodeChildrenDto>(
-      `${projectUrl(folder)}/nodes/${level}/${id}/children`,
-    );
+    return this.api.get('/api/projects/{folder}/nodes/{level}/{id}/children', {
+      path: { folder, level, id },
+    });
   }
 
   /** The voice each speech item of a chapter resolves to, keyed by item id. */
   chapterVoices(folder: string, chapterId: Guid): Promise<ChapterVoicesDto> {
-    return this.api.untypedGet<ChapterVoicesDto>(
-      `${projectUrl(folder)}/nodes/Chapter/${chapterId}/voices`,
-    );
+    return this.api.get('/api/projects/{folder}/nodes/Chapter/{id}/voices', {
+      path: { folder, id: chapterId },
+    });
   }
 
   /**
@@ -56,10 +53,10 @@ export class BookApi {
     id: Guid,
     unprocessedOnly = false,
   ): Promise<ParagraphRefDto[]> {
-    return this.api.untypedGet<ParagraphRefDto[]>(
-      `${projectUrl(folder)}/nodes/${level}/${id}/paragraph-ids`,
-      unprocessedOnly ? { unprocessedOnly: true } : undefined,
-    );
+    return this.api.get('/api/projects/{folder}/nodes/{level}/{id}/paragraph-ids', {
+      path: { folder, level, id },
+      query: unprocessedOnly ? { unprocessedOnly: true } : {},
+    });
   }
 
   /**
@@ -73,26 +70,25 @@ export class BookApi {
     id: Guid,
     options: { needsAudioOnly?: boolean; narratorOnlyMode?: boolean } = {},
   ): Promise<AudioItemRefDto[]> {
-    const params: Record<string, boolean> = {};
-    if (options.needsAudioOnly) params['needsAudioOnly'] = true;
-    if (options.narratorOnlyMode) params['narratorOnlyMode'] = true;
-    return this.api.untypedGet<AudioItemRefDto[]>(
-      `${projectUrl(folder)}/nodes/${level}/${id}/item-ids`,
-      Object.keys(params).length > 0 ? params : undefined,
-    );
+    return this.api.get('/api/projects/{folder}/nodes/{level}/{id}/item-ids', {
+      path: { folder, level, id },
+      query: {
+        ...(options.needsAudioOnly ? { needsAudioOnly: true } : {}),
+        ...(options.narratorOnlyMode ? { narratorOnlyMode: true } : {}),
+      },
+    });
   }
 
   characters(folder: string): Promise<CharacterDto[]> {
-    return this.api.untypedGet<CharacterDto[]>(`${projectUrl(folder)}/characters`);
+    return this.api.get('/api/projects/{folder}/characters', { path: { folder } });
   }
 
   /** What a bulk speaker assign over the paragraphs would write (the confirm quotes it). */
   bulkAssignPreview(folder: string, paragraphIds: Guid[]): Promise<BulkAssignPreviewDto> {
-    const request: BulkAssignPreviewRequest = { paragraphIds };
-    return this.api.untypedPost<BulkAssignPreviewDto>(
-      `${projectUrl(folder)}/characters/bulk-assign-preview`,
-      request,
-    );
+    return this.api.post('/api/projects/{folder}/characters/bulk-assign-preview', {
+      path: { folder },
+      body: { paragraphIds },
+    });
   }
 
   /** What a ReleaseNarration over the node would write (the confirm quotes it). */
@@ -101,14 +97,20 @@ export class BookApi {
     scope: NarrationReleaseScope,
     nodeId: Guid,
   ): Promise<NarrationReleasePreviewDto> {
-    const request: NarrationReleasePreviewRequest = { scope, nodeId };
-    return this.api.untypedPost<NarrationReleasePreviewDto>(
-      `${projectUrl(folder)}/narration/release-preview`,
-      request,
-    );
+    return this.api.post('/api/projects/{folder}/narration/release-preview', {
+      path: { folder },
+      body: { scope, nodeId },
+    });
   }
 
+  /**
+   * The host binds the body as a raw `JsonObject`, so the document types it as an open object; the
+   * {@link BookCommand} union stays hand-written. Spreading it makes an object type that fits one.
+   */
   execute(folder: string, command: BookCommand): Promise<CommandResponse> {
-    return this.api.untypedPost<CommandResponse>(`${projectUrl(folder)}/commands`, command);
+    return this.api.post('/api/projects/{folder}/commands', {
+      path: { folder },
+      body: { ...command },
+    });
   }
 }

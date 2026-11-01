@@ -29,8 +29,8 @@ namespace Read2Me.Tests.Api
                         CreatedId = createdId,
                     })));
 
-        private static Guid? IdOf(IResult result) =>
-            Assert.IsType<Ok<CommandResponse>>(result).Value!.NewEntityId;
+        private static Guid? IdOf(Results<Ok<CommandResponse>, NotFound, ProblemHttpResult> result) =>
+            Assert.IsType<Ok<CommandResponse>>(result.Result).Value!.NewEntityId;
 
         [Fact]
         public void ACommittedMutation_AnswersWithTheIdentityItCreated()
@@ -112,7 +112,7 @@ namespace Read2Me.Tests.Api
                     new BookMutationOutcome.Rejected(reason, "that character is not in this book")),
                 CancellationToken.None);
 
-            var problem = Assert.IsType<ProblemHttpResult>(result);
+            var problem = Assert.IsType<ProblemHttpResult>(result.Result);
             Assert.Equal(StatusCodes.Status422UnprocessableEntity, problem.StatusCode);
             Assert.Equal("that character is not in this book", problem.ProblemDetails.Detail);
         }

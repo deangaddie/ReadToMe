@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { PronunciationDto } from '@app/api';
+import type { PronunciationEntry } from '@app/api';
 import { ActivityStore } from '@app/activity/activity-store';
 import { Router } from '@app/core/router';
 import { override, resetServices } from '@app/core/services';
@@ -18,7 +18,7 @@ import './pronunciation-panel';
 
 const BASE = '/api/projects/the-adventures-of-sherlock-holmes/pronunciations';
 
-const entry = (id: string, writtenForm: string, spokenForm: string): PronunciationDto => ({
+const entry = (id: string, writtenForm: string, spokenForm: string): PronunciationEntry => ({
   id,
   writtenForm,
   spokenForm,

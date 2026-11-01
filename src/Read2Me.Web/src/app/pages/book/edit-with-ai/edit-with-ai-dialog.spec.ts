@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { LlmStreamFeed } from '@app/activity/stream-feed';
 import {
   ApiError,
-  type BookEditRow,
+  type BookEditRowDto,
   type BookEditRunDto,
   type PlanBookEditResponse,
 } from '@app/api';
@@ -32,7 +32,7 @@ const PLAN: PlanBookEditResponse = {
   warnings: [],
 };
 
-function row(id: string, oldValue: string, newValue: string | null): BookEditRow {
+function row(id: string, oldValue: string, newValue: string | null): BookEditRowDto {
   return {
     kind: 'ChapterTitle',
     id,

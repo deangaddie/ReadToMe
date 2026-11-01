@@ -196,7 +196,7 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 
             await WaitForAsync(() => messages.Any(m => m.GetProperty("kind").GetString() == "progress"));
             var cancel = await Http.PostAsync(Url(folder, $"/{program}/cancel"), null);
-            Assert.Equal(HttpStatusCode.OK, cancel.StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, cancel.StatusCode);
 
             await WaitForAsync(() => messages.Any(m => m.GetProperty("kind").GetString() == "done"));
             var done = messages.Single(m => m.GetProperty("kind").GetString() == "done");
@@ -210,7 +210,7 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             Assert.Equal(landed, run.GetProperty("rows").GetArrayLength());
 
             // Cancelling with nothing running is harmless.
-            Assert.Equal(HttpStatusCode.OK, (await Http.PostAsync(Url(folder, $"/{program}/cancel"), null)).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await Http.PostAsync(Url(folder, $"/{program}/cancel"), null)).StatusCode);
         }
         finally
         {

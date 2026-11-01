@@ -53,7 +53,7 @@ namespace Read2Me.Tests.Api
         }
 
         private async Task<IResult> PostAsync(BookCommand command) =>
-            await _api.ExecuteAsync(command, CancellationToken.None);
+            (await _api.ExecuteAsync(command, CancellationToken.None)).Result;
 
         private static Guid? IdOf(IResult result) =>
             Assert.IsType<Ok<CommandResponse>>(result).Value!.NewEntityId;

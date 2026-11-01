@@ -8,7 +8,7 @@
 
 import {
   AiServiceStatus,
-  BookEditRow,
+  BookEditRowDto,
   Guid,
   HistoryStep,
   NodeStatusSummaryDto,
@@ -448,7 +448,7 @@ export interface BookEditMessage {
   done?: number | null;
   total?: number | null;
   cancelled?: boolean | null;
-  rows?: BookEditRow[] | null;
+  rows?: BookEditRowDto[] | null;
   reason?: string | null;
 }
 

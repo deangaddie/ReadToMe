@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Core.IO;
 using Read2Me.Services.Commands;
@@ -23,19 +24,19 @@ namespace Read2Me.App.Api
                 .RecordsOwnStep();
         }
 
-        private static async Task<IResult> ExecuteAsync(
+        private static async Task<Results<Ok<CommandResponse>, NotFound, ProblemHttpResult>> ExecuteAsync(
             string folder, JsonObject body, HttpRequest request, IFileSystem fs, BookCommandApiAdapter commands,
             MutationOrigin origin, HistoryStepScope steps, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var typeName = body["type"]?.GetValue<string>();
             if (string.IsNullOrEmpty(typeName))
-                return Results.Problem("Missing 'type' discriminator.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("Missing 'type' discriminator.", statusCode: StatusCodes.Status400BadRequest);
 
             if (!BookCommandJson.TryDeserialize(typeName, body, folderId, out var command, out var error))
-                return Results.Problem(error, statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem(error, statusCode: StatusCodes.Status400BadRequest);
 
             // The request scope is this command's scope: whatever the handler commits carries the origin.
             OriginHeader.Apply(request, origin);

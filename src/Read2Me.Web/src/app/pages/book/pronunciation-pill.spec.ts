@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { render } from 'lit-html';
-import { type PronunciationDto, VIEWING_READ_ONLY } from '@app/api';
+import { type PronunciationEntry, VIEWING_READ_ONLY } from '@app/api';
 import { ActivityStore } from '@app/activity/activity-store';
 import { override, resetServices } from '@app/core/services';
 import { signal } from '@app/core/signals';
@@ -12,7 +12,7 @@ import { PronunciationPanelState } from './pronunciation-panel-store';
 import type { PronunciationPill } from './pronunciation-pill';
 import './pronunciation-pill';
 
-const HOLMES: PronunciationDto = {
+const HOLMES: PronunciationEntry = {
   id: 'holmes',
   writtenForm: 'Holmes',
   spokenForm: 'HOHMZ',

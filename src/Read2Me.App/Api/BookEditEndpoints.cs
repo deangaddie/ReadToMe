@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.App.Live;
 using Read2Me.Core.IO;
@@ -61,20 +62,20 @@ namespace Read2Me.App.Api
                 .WithSummary("Ask the AI again for one matched item, optionally steered by a hint; answers the new row. Llm plans only — a deterministic plan answers a Failed row.");
             endpoints.MapPost("/api/projects/{folder}/book-edits/{program}/cancel", Cancel)
                 .RecordsNoStep("Stops a proposal; nothing is written.")
-                .WithSummary("Stop the running proposal; the rows computed so far stay reviewable. 200 whether or not a run was in flight.");
+                .WithSummary("Stop the running proposal; the rows computed so far stay reviewable. 204 whether or not a run was in flight.");
             endpoints.MapDelete("/api/projects/{folder}/book-edits/{program}", Delete)
                 .RecordsNoStep("Drops a proposal; nothing is written.")
                 .WithSummary("Drop the session, cancelling any run in flight (204; 404 when unknown or expired).");
         }
 
-        private static async Task<IResult> PlanAsync(
+        private static async Task<Results<Ok<PlanBookEditResponse>, NotFound, ProblemHttpResult>> PlanAsync(
             string folder, PlanBookEditRequest? body, IFileSystem fs, BookEditPlanner planner,
             ScopeResolver resolver, IBookEditSessionStore sessions, ProjectActivity activity, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             if (string.IsNullOrWhiteSpace(body?.Instruction))
-                return Results.Problem("An instruction is required.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("An instruction is required.", statusCode: StatusCodes.Status400BadRequest);
 
             var mark = activity.Mark(folderId);
             // A Restore already running is counted in the mark, so only its flag shows it: refuse it
@@ -83,12 +84,12 @@ namespace Read2Me.App.Api
                 return StepReads.Refused(refusal);
             var outcome = await planner.PlanAsync(folderId, body.Instruction, !body.Thinking, ct);
             if (outcome.Status != EditPlanStatus.Ok)
-                return Results.Ok(NotPlanned(outcome.Status, outcome.Reason));
+                return TypedResults.Ok(NotPlanned(outcome.Status, outcome.Reason));
 
             var program = outcome.Program!;
             var targets = await resolver.ResolveAsync(folderId, program, ct);
             if (targets.Count == 0)
-                return Results.Ok(NotPlanned(EditPlanStatus.NoTargets, "No items in the book match this instruction's scope."));
+                return TypedResults.Ok(NotPlanned(EditPlanStatus.NoTargets, "No items in the book match this instruction's scope."));
 
             var session = sessions.Create(folderId, program, targets, EditProgramDescriber.Describe(program));
             // A Restore that began while the LLM was thinking or the scope resolved drops the project's
@@ -108,7 +109,7 @@ namespace Read2Me.App.Api
             if (EditProgramDescriber.TitlesAlsoMatch(await resolver.CountTitlesAlsoMatchingAsync(folderId, program, ct)) is { } titles)
                 warnings.Add(titles);
 
-            return Results.Ok(new PlanBookEditResponse(
+            return TypedResults.Ok(new PlanBookEditResponse(
                 EditPlanStatus.Ok, null, session.Summary, session.Id, program.Transform.Kind,
                 targets.Count, requestCount, warnings));
         }
@@ -116,73 +117,73 @@ namespace Read2Me.App.Api
         private static PlanBookEditResponse NotPlanned(EditPlanStatus status, string? reason) =>
             new(status, reason, null, null, null, 0, 0, []);
 
-        private static IResult ProposeAsync(
+        private static Results<Accepted<StartedResponse>, NotFound, ProblemHttpResult> ProposeAsync(
             string folder, string program, ProposeBookEditRequest? body, IFileSystem fs,
             IBookEditSessionStore sessions, BookEditRunCoordinator runs)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             var session = sessions.TryGet(folderId, program);
             if (session is null)
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             return runs.TryStart(session, body?.Thinking ?? false, body?.ConnectionId)
-                ? Results.Accepted(value: new StartedResponse(true))
-                : Results.Problem("A proposal run is already in flight for this plan.", statusCode: StatusCodes.Status409Conflict);
+                ? TypedResults.Accepted((string?)null, new StartedResponse(true))
+                : TypedResults.Problem("A proposal run is already in flight for this plan.", statusCode: StatusCodes.Status409Conflict);
         }
 
-        private static IResult GetRun(string folder, string program, IFileSystem fs, IBookEditSessionStore sessions)
+        private static Results<Ok<BookEditRunDto>, NotFound> GetRun(string folder, string program, IFileSystem fs, IBookEditSessionStore sessions)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             var session = sessions.TryGet(folderId, program);
             if (session is null)
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var run = session.Snapshot();
-            return Results.Ok(new BookEditRunDto(
+            return TypedResults.Ok(new BookEditRunDto(
                 run.Status, run.Done, run.Total, [.. run.Rows.Select(BookEditRowDto.From)], run.Reason));
         }
 
-        private static async Task<IResult> ProposeOneAsync(
+        private static async Task<Results<Ok<BookEditRowDto>, NotFound, ProblemHttpResult>> ProposeOneAsync(
             string folder, string program, ProposeOneBookEditRequest? body, IFileSystem fs,
             IBookEditSessionStore sessions, BookEditProposalService proposals, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             var session = sessions.TryGet(folderId, program);
             if (session is null)
-                return Results.NotFound();
+                return TypedResults.NotFound();
             if (body is null)
-                return Results.Problem("A targetId is required.", statusCode: StatusCodes.Status400BadRequest);
+                return TypedResults.Problem("A targetId is required.", statusCode: StatusCodes.Status400BadRequest);
 
             var target = session.FindTarget(body.TargetId);
             if (target is null)
-                return Results.Problem("This row no longer maps to an item in the plan.", statusCode: StatusCodes.Status404NotFound);
+                return TypedResults.Problem("This row no longer maps to an item in the plan.", statusCode: StatusCodes.Status404NotFound);
 
             var result = await proposals.ProposeOneAsync(
                 folderId, session.Program, target, body.Hint, !body.Thinking, ct);
-            return Results.Ok(BookEditRowDto.From(result));
+            return TypedResults.Ok(BookEditRowDto.From(result));
         }
 
-        private static IResult Cancel(string folder, string program, IFileSystem fs, IBookEditSessionStore sessions)
+        private static Results<NoContent, NotFound> Cancel(string folder, string program, IFileSystem fs, IBookEditSessionStore sessions)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             var session = sessions.TryGet(folderId, program);
             if (session is null)
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             session.CancelRun();
-            return Results.Ok();
+            return TypedResults.NoContent();
         }
 
-        private static IResult Delete(string folder, string program, IFileSystem fs, IBookEditSessionStore sessions)
+        private static Results<NoContent, NotFound> Delete(string folder, string program, IFileSystem fs, IBookEditSessionStore sessions)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
-            return sessions.Remove(folderId, program) ? Results.NoContent() : Results.NotFound();
+            return sessions.Remove(folderId, program) ? TypedResults.NoContent() : TypedResults.NotFound();
         }
     }
 }

@@ -48,7 +48,7 @@ namespace Read2Me.Tests.Api
         {
             await using var request = _root.CreateAsyncScope();
             var api = new BookCommandApiAdapter(request.ServiceProvider.GetRequiredService<BookCommandDispatcher>());
-            return await api.ExecuteAsync(new SetItemDeliveryCueCommand(_folder, itemId, cue), CancellationToken.None);
+            return (await api.ExecuteAsync(new SetItemDeliveryCueCommand(_folder, itemId, cue), CancellationToken.None)).Result;
         }
 
         private static void AssertOk(IResult result) => Assert.IsType<Ok<CommandResponse>>(result);

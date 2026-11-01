@@ -2,6 +2,7 @@ using Read2Me.Data.Enums;
 using System.Threading;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
@@ -98,7 +99,6 @@ namespace Read2Me.App.Api
         {
             endpoints.MapGet("/api/projects/{folder}/book", GetOverviewAsync)
                 .ReadsAt()
-                .Produces<BookOverviewDto>()
                 .WithSummary("Book overview: volumes, characters and structure counts, the book revision they were read at, and the Structure rules (structureRules: per anchor kind, the placements it allows, the kind each creates, whether text is required, and the minimum count the book keeps). hasContent=false means import has not run.");
             endpoints.MapGet("/api/projects/{folder}/nodes/{level}/{id:guid}/children", GetChildrenAsync)
                 .ReadsAt()
@@ -123,17 +123,17 @@ namespace Read2Me.App.Api
                 .WithSummary("What a ReleaseNarration command over the scope (Part|Chapter|Paragraph + nodeId) would write: the narration-only paragraphs it would release (for Part and Chapter, only those carrying a speech marker that repeats in at least 5 narration-only paragraphs of their chapter; a Paragraph is unfiltered), how many of their items have audio it would discard, and for Part and Chapter the speechMarkers that passed with the paragraphs each covers (count descending, then marker; empty for a Paragraph and when nothing passes).");
         }
 
-        private static async Task<IResult> GetOverviewAsync(
+        private static async Task<Results<Ok<BookOverviewDto>, NotFound>> GetOverviewAsync(
             string folder, IFileSystem fs, IBookContentReader reader, BookRevisionSequence revisions)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             // Stamped before the read, as `/status` is: a mutation that commits during it carries a
             // higher revision, so a reader that baselines on this one still reloads.
             var revision = revisions.Current(folderId);
             var overview = await reader.GetBookOverviewAsync(folderId);
-            return Results.Ok(new BookOverviewDto(
+            return TypedResults.Ok(new BookOverviewDto(
                 overview.HasContent,
                 overview.Volumes.Select(v => new NodeDto(v.Id, v.Title)).ToList(),
                 overview.Characters.Select(ToCharacterDto).ToList(),
@@ -143,28 +143,28 @@ namespace Read2Me.App.Api
                 StructureRules.All.Select(StructureRuleDto.From).ToList()));
         }
 
-        private static async Task<IResult> GetChildrenAsync(
+        private static async Task<Results<Ok<NodeChildrenDto>, NotFound, ProblemHttpResult>> GetChildrenAsync(
             string folder, string level, Guid id, IFileSystem fs, IBookContentReader reader)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             if (!ApiJson.TryParseName<BookNodeLevel>(level, out var nodeLevel))
-                return Results.Problem($"Unknown level '{level}'. Expected Volume, Part or Chapter.",
+                return TypedResults.Problem($"Unknown level '{level}'. Expected Volume, Part or Chapter.",
                     statusCode: StatusCodes.Status400BadRequest);
 
             var children = await reader.GetChildrenAsync(folderId, nodeLevel, id);
-            return Results.Ok(new NodeChildrenDto(
+            return TypedResults.Ok(new NodeChildrenDto(
                 children.Parts?.Select(p => new NodeDto(p.Id, p.Title)).ToList(),
                 children.Chapters?.Select(c => new NodeDto(c.Id, c.Title)).ToList(),
                 children.Paragraphs?.Select(ToParagraphDto).ToList()));
         }
 
-        private static async Task<IResult> GetChapterVoicesAsync(
+        private static async Task<Results<Ok<Dictionary<string, ItemVoiceDto>>, NotFound>> GetChapterVoicesAsync(
             string folder, Guid id, IFileSystem fs, IBookContentReader content,
             IProjectCatalogReader catalog, IVoiceResolver voices, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var children = await content.GetChildrenAsync(folderId, BookNodeLevel.Chapter, id);
             var items = (children.Paragraphs ?? [])
@@ -172,79 +172,79 @@ namespace Read2Me.App.Api
                 .Where(i => !ParagraphItemKinds.IsPause(i.ItemType))
                 .ToList();
             if (items.Count == 0)
-                return Results.Ok(new Dictionary<string, ItemVoiceDto>());
+                return TypedResults.Ok(new Dictionary<string, ItemVoiceDto>());
 
             var names = await voices.ResolveNamesAsync(folderId, items.Select(i => i.Id).ToList(), ct);
             var narrator = await catalog.GetNarratorAsync(folderId, ct);
-            return Results.Ok(items.ToDictionary(
+            return TypedResults.Ok(items.ToDictionary(
                 i => i.Id.ToString(),
                 i => new ItemVoiceDto(
                     names.GetValueOrDefault(i.Id),
                     narrator.IsLinked && NarrationRule.IsNarration(i) ? narrator.DisplayName : null)));
         }
 
-        private static async Task<IResult> GetParagraphIdsAsync(
+        private static async Task<Results<Ok<List<ParagraphRefDto>>, NotFound, ProblemHttpResult>> GetParagraphIdsAsync(
             string folder, string level, Guid id, IFileSystem fs, ICharacterReader reader, bool unprocessedOnly = false)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             if (!ApiJson.TryParseName<BookNodeLevel>(level, out var nodeLevel))
-                return Results.Problem($"Unknown level '{level}'. Expected Volume, Part or Chapter.",
+                return TypedResults.Problem($"Unknown level '{level}'. Expected Volume, Part or Chapter.",
                     statusCode: StatusCodes.Status400BadRequest);
 
             var refs = await reader.GetCharacterParagraphsAsync(folderId, nodeLevel, id, unprocessedOnly);
-            return Results.Ok(refs
+            return TypedResults.Ok(refs
                 .Select(r => new ParagraphRefDto(r.ParagraphId, r.ChapterId, r.PartId, r.VolumeId))
                 .ToList());
         }
 
-        private static async Task<IResult> GetItemIdsAsync(
+        private static async Task<Results<Ok<List<AudioItemRefDto>>, NotFound, ProblemHttpResult>> GetItemIdsAsync(
             string folder, string level, Guid id, IFileSystem fs, IAudioItemReader reader,
             bool needsAudioOnly = false, bool narratorOnlyMode = false)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             if (!ApiJson.TryParseName<BookNodeLevel>(level, out var nodeLevel))
-                return Results.Problem($"Unknown level '{level}'. Expected Volume, Part or Chapter.",
+                return TypedResults.Problem($"Unknown level '{level}'. Expected Volume, Part or Chapter.",
                     statusCode: StatusCodes.Status400BadRequest);
 
             var refs = await reader.GetAudioItemRefsAsync(
                 folderId, nodeLevel, id, needsAudioOnly, narratorOnlyMode, voicedOnly: true);
-            return Results.Ok(refs
+            return TypedResults.Ok(refs
                 .Select(r => new AudioItemRefDto(r.ParagraphItemId, r.ParagraphId, r.ChapterId, r.PartId, r.VolumeId))
                 .ToList());
         }
 
-        private static async Task<IResult> GetCharactersAsync(string folder, IFileSystem fs, ICharacterReader reader)
+        private static async Task<Results<Ok<List<CharacterDto>>, NotFound>> GetCharactersAsync(string folder, IFileSystem fs, ICharacterReader reader)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var characters = await reader.GetCharactersWithAliasesAsync(folderId);
-            return Results.Ok(characters.Select(ToCharacterDto).ToList());
+            return TypedResults.Ok(characters.Select(ToCharacterDto).ToList());
         }
 
-        private static async Task<IResult> BulkAssignPreviewAsync(
+        private static async Task<Results<Ok<BulkAssignPreviewDto>, NotFound>> BulkAssignPreviewAsync(
             string folder, BulkAssignPreviewRequest request, IFileSystem fs, ICharacterReader reader, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var preview = await reader.GetBulkAssignPreviewAsync(folderId, request.ParagraphIds ?? [], ct);
-            return Results.Ok(new BulkAssignPreviewDto(preview.ParagraphsWithCharacterItems, preview.CharacterItems));
+            return TypedResults.Ok(new BulkAssignPreviewDto(preview.ParagraphsWithCharacterItems, preview.CharacterItems));
         }
 
-        private static async Task<IResult> NarrationReleasePreviewAsync(
+        private static async Task<Results<Ok<NarrationReleasePreviewDto>, NotFound, ProblemHttpResult>> NarrationReleasePreviewAsync(
             string folder, NarrationReleasePreviewRequest request, IFileSystem fs, ICharacterReader reader, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             if (!NarrationRelease.IsKnownScope(request.Scope))
-                return Results.Problem($"Unknown scope '{request.Scope}'. Expected Part, Chapter or Paragraph.",
+                return TypedResults.Problem($"Unknown scope '{request.Scope}'. Expected Part, Chapter or Paragraph.",
                     statusCode: StatusCodes.Status400BadRequest);
 
             var preview = await reader.GetNarrationReleasePreviewAsync(folderId, request.Scope, request.NodeId, ct);
-            return Results.Ok(new NarrationReleasePreviewDto(
+            return TypedResults.Ok(new NarrationReleasePreviewDto(
                 preview.Paragraphs,
                 preview.ItemsWithAudio,
                 [.. preview.SpeechMarkers.Select(m => new SpeechMarkerCountDto(m.Marker, m.Paragraphs))]));
