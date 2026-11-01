@@ -64,20 +64,20 @@ public class AttributionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
     }
 
     [Fact]
-    public async Task Cancel_returns_ok()
+    public async Task Cancel_returns_no_content()
     {
         var response = await Http.PostAsync($"{app.BaseUrl}/api/attribution/cancel", null);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 
     [Fact]
-    public async Task Dismiss_returns_ok_and_is_idempotent()
+    public async Task Dismiss_returns_no_content_and_is_idempotent()
     {
         var first = await Http.PostAsync($"{app.BaseUrl}/api/attribution/dismiss", null);
         var second = await Http.PostAsync($"{app.BaseUrl}/api/attribution/dismiss", null);
 
-        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, first.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, second.StatusCode);
     }
 }

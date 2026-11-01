@@ -1,6 +1,17 @@
 {
   "components": {
     "schemas": {
+      "AiServiceStatus": {
+        "enum": [
+          "NotFound",
+          "Stopped",
+          "Starting",
+          "Ready",
+          "Recovering",
+          "Down",
+          "Unknown"
+        ]
+      },
       "ApiItemType": {
         "enum": [
           "Narration",
@@ -83,6 +94,18 @@
           "drawerBackground",
           "textPrimary",
           "textSecondary"
+        ],
+        "type": "object"
+      },
+      "ApplyDiscoveryResponse": {
+        "properties": {
+          "applied": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "applied"
         ],
         "type": "object"
       },
@@ -962,6 +985,29 @@
         ],
         "type": "object"
       },
+      "ChapterVoicePreviewDto": {
+        "properties": {
+          "chapterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "chapterTitle": {
+            "type": "string"
+          },
+          "voiceName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "chapterId",
+          "chapterTitle",
+          "voiceName"
+        ],
+        "type": "object"
+      },
       "CharacterAliasDto": {
         "properties": {
           "id": {
@@ -998,6 +1044,78 @@
           "id",
           "name",
           "aliases"
+        ],
+        "type": "object"
+      },
+      "CharacterLineDto": {
+        "properties": {
+          "chapterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "itemId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "paragraphId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "itemId",
+          "paragraphId",
+          "chapterId",
+          "text"
+        ],
+        "type": "object"
+      },
+      "CharacterSummaryDto": {
+        "properties": {
+          "aliases": {
+            "items": {
+              "$ref": "#/components/schemas/CharacterAliasDto"
+            },
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "isNarrator": {
+            "type": "boolean"
+          },
+          "lineCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "narratesBook": {
+            "type": "boolean"
+          },
+          "readyVoiceCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "voiceCount": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "aliases",
+          "lineCount",
+          "voiceCount",
+          "readyVoiceCount",
+          "isNarrator",
+          "narratesBook"
         ],
         "type": "object"
       },
@@ -1051,6 +1169,51 @@
         ],
         "type": "object"
       },
+      "ContextItemDto": {
+        "properties": {
+          "isDialog": {
+            "type": "boolean"
+          },
+          "itemId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "speaker": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "itemId",
+          "text",
+          "isDialog",
+          "speaker"
+        ],
+        "type": "object"
+      },
+      "ContextParagraphDto": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ContextItemDto"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "items"
+        ],
+        "type": "object"
+      },
       "CoverImageResponse": {
         "properties": {
           "coverImage": {
@@ -1072,6 +1235,72 @@
           "folderName"
         ],
         "type": "object"
+      },
+      "DiscoveredCharacterDto": {
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "existingCharacterId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "aliases",
+          "existingCharacterId"
+        ],
+        "type": "object"
+      },
+      "DiscoveryOutcomeDto": {
+        "properties": {
+          "characters": {
+            "items": {
+              "$ref": "#/components/schemas/DiscoveredCharacterDto"
+            },
+            "type": "array"
+          },
+          "collisions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/DiscoveryStatus"
+          }
+        },
+        "required": [
+          "status",
+          "reason",
+          "characters",
+          "collisions"
+        ],
+        "type": "object"
+      },
+      "DiscoveryStatus": {
+        "enum": [
+          "Ok",
+          "NoLlmConfigured",
+          "Failed",
+          "ServiceUnavailable"
+        ]
       },
       "EditPlanStatus": {
         "enum": [
@@ -1885,6 +2114,60 @@
         ],
         "type": "object"
       },
+      "ParagraphAttributionStatusDto": {
+        "properties": {
+          "outcome": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ParagraphOutcome"
+              }
+            ]
+          },
+          "status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ParagraphQueueStatus"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "ParagraphContextDto": {
+        "properties": {
+          "after": {
+            "items": {
+              "$ref": "#/components/schemas/ContextParagraphDto"
+            },
+            "type": "array"
+          },
+          "before": {
+            "items": {
+              "$ref": "#/components/schemas/ContextParagraphDto"
+            },
+            "type": "array"
+          },
+          "paragraph": {
+            "$ref": "#/components/schemas/ContextParagraphDto"
+          }
+        },
+        "required": [
+          "before",
+          "paragraph",
+          "after"
+        ],
+        "type": "object"
+      },
       "ParagraphDto": {
         "properties": {
           "id": {
@@ -1960,6 +2243,36 @@
           "isPause"
         ],
         "type": "object"
+      },
+      "ParagraphOutcome": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ParagraphOutcomeKind"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "ParagraphOutcomeKind": {
+        "enum": [
+          "Failed",
+          "Unfinished"
+        ]
+      },
+      "ParagraphQueueStatus": {
+        "enum": [
+          "Queued",
+          "Processing"
+        ]
       },
       "ParagraphRefDto": {
         "properties": {
@@ -2196,6 +2509,46 @@
         ],
         "type": "object"
       },
+      "PreflightConflictDto": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "PreflightPlanDto": {
+        "properties": {
+          "conflicts": {
+            "items": {
+              "$ref": "#/components/schemas/PreflightConflictDto"
+            },
+            "type": "array"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "toStart": {
+            "items": {
+              "$ref": "#/components/schemas/PreflightServiceDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "ready",
+          "toStart",
+          "conflicts"
+        ],
+        "type": "object"
+      },
       "PreflightRunRequest": {
         "properties": {
           "connectionId": {
@@ -2205,6 +2558,32 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "PreflightRunResponse": {
+        "properties": {
+          "run": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "run"
+        ],
+        "type": "object"
+      },
+      "PreflightServiceDto": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AiServiceStatus"
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
         "type": "object"
       },
       "PreviewRequest": {
@@ -4076,6 +4455,15 @@
         },
         "type": "object"
       },
+      "VoiceAnchorLevel": {
+        "enum": [
+          "Volume",
+          "Part",
+          "Chapter",
+          "Paragraph",
+          "ParagraphItem"
+        ]
+      },
       "VoiceBatchStartRequest": {
         "properties": {
           "regenerateAll": {
@@ -4324,6 +4712,95 @@
           "ttsSettingsOverrideJson",
           "referenceSeconds",
           "referenceWarning"
+        ],
+        "type": "object"
+      },
+      "VoiceRuleDto": {
+        "properties": {
+          "fromDangling": {
+            "type": "boolean"
+          },
+          "fromLevel": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/VoiceAnchorLevel"
+              }
+            ]
+          },
+          "fromNodeId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fromTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "order": {
+            "type": "string"
+          },
+          "ruleId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "toDangling": {
+            "type": "boolean"
+          },
+          "toLevel": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/VoiceAnchorLevel"
+              }
+            ]
+          },
+          "toNodeId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "toTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "voiceId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "voiceName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ruleId",
+          "voiceId",
+          "voiceName",
+          "isDefault",
+          "fromLevel",
+          "fromNodeId",
+          "fromTitle",
+          "fromDangling",
+          "toLevel",
+          "toNodeId",
+          "toTitle",
+          "toDangling",
+          "order"
         ],
         "type": "object"
       },
@@ -4607,8 +5084,8 @@
     "/api/attribution/cancel": {
       "post": {
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -4621,7 +5098,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Cancel all queued attribution work.",
+        "summary": "Cancel all queued attribution work. 204, also when nothing is queued.",
         "tags": [
           "Read2Me.App"
         ]
@@ -4630,8 +5107,8 @@
     "/api/attribution/dismiss": {
       "post": {
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
           },
           "default": {
             "content": {
@@ -4644,7 +5121,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Dismiss the finished attribution run's throughput summary (the status dock's Dismiss). 200 whether or not one was showing.",
+        "summary": "Dismiss the finished attribution run's throughput summary (the status dock's Dismiss). 204 whether or not one was showing.",
         "tags": [
           "Read2Me.App"
         ]
@@ -4832,6 +5309,13 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreflightPlanDto"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -4880,8 +5364,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreflightRunResponse"
+                }
+              }
+            },
+            "description": "Accepted"
           },
           "default": {
             "content": {
@@ -5376,8 +5867,18 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnqueueResponse"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -5419,8 +5920,18 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnqueueResponse"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -5462,7 +5973,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParagraphAttributionStatusDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -5503,8 +6024,11 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6238,7 +6762,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoveryOutcomeDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6284,7 +6818,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyDiscoveryResponse"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6326,7 +6870,20 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CharacterSummaryDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6636,7 +7193,20 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CharacterLineDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6687,7 +7257,20 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/VoiceRuleDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -6738,7 +7321,20 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChapterVoicePreviewDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -7732,7 +8328,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParagraphContextDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {

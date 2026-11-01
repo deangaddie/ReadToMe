@@ -7,17 +7,8 @@
  * What is pinned is a hand-written shape whose endpoint has not converted yet (its slice of #171
  * hasn't landed); a converted endpoint's shapes are `Schema` aliases in `dtos.ts`, with nothing to pin.
  */
-import type {
-  ParagraphsEnqueueRequest,
-  PreflightRunRequest,
-  Schema,
-  SetupCheckReport,
-} from './dtos';
+import type { Schema, SetupCheckReport } from './dtos';
 
 type Pin<THand extends TGenerated, TGenerated> = THand;
 
-export type SchemaPins = [
-  Pin<PreflightRunRequest, Schema['PreflightRunRequest']>,
-  Pin<ParagraphsEnqueueRequest, Schema['ParagraphsEnqueueRequest']>,
-  Pin<SetupCheckReport, Schema['SetupCheckReport']>,
-];
+export type SchemaPins = [Pin<SetupCheckReport, Schema['SetupCheckReport']>];

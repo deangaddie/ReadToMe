@@ -47,50 +47,50 @@ namespace Read2Me.App.Api
                 .RecordsNoStep("Clears the queue's in-memory outcome; nothing is written.")
                 .WithSummary("Forget a paragraph's Failed/Unfinished attribution outcome (the chip goes away). 204 whether or not one was recorded.");
             endpoints.MapPost("/api/attribution/cancel",
-                    (CharacterQueueService queue) => { queue.CancelAll(); return Results.Ok(); })
-                .WithSummary("Cancel all queued attribution work.");
+                    (CharacterQueueService queue) => { queue.CancelAll(); return TypedResults.NoContent(); })
+                .WithSummary("Cancel all queued attribution work. 204, also when nothing is queued.");
             endpoints.MapPost("/api/attribution/dismiss",
-                    (AttributionProgressState progress) => { progress.Dismiss(); return Results.Ok(); })
-                .WithSummary("Dismiss the finished attribution run's throughput summary (the status dock's Dismiss). 200 whether or not one was showing.");
+                    (AttributionProgressState progress) => { progress.Dismiss(); return TypedResults.NoContent(); })
+                .WithSummary("Dismiss the finished attribution run's throughput summary (the status dock's Dismiss). 204 whether or not one was showing.");
         }
 
-        private static async Task<IResult> EnqueueAsync(
+        private static async Task<Results<Accepted<EnqueueResponse>, NotFound, ProblemHttpResult>> EnqueueAsync(
             string folder, NodeEnqueueRequest request, IFileSystem fs, EnqueueUseCases useCases)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var enqueued = await useCases.EnqueueAttributionAsync(folderId, request.Level, request.NodeId, request.UnprocessedOnly);
             return EnqueueResponse.For(enqueued);
         }
 
-        private static async Task<IResult> EnqueueParagraphsAsync(
+        private static async Task<Results<Accepted<EnqueueResponse>, NotFound, ProblemHttpResult>> EnqueueParagraphsAsync(
             string folder, ParagraphsEnqueueRequest request, IFileSystem fs, EnqueueUseCases useCases)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var enqueued = await useCases.EnqueueAttributionAsync(folderId, request.ParagraphIds ?? []);
             return EnqueueResponse.For(enqueued);
         }
 
-        private static IResult ClearOutcome(
+        private static Results<NoContent, NotFound> ClearOutcome(
             string folder, Guid paragraphId, IFileSystem fs, CharacterQueueService queue)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             queue.ClearOutcome(folderId, paragraphId);
-            return Results.NoContent();
+            return TypedResults.NoContent();
         }
 
-        private static IResult GetParagraphStatus(
+        private static Results<Ok<ParagraphAttributionStatusDto>, NotFound> GetParagraphStatus(
             string folder, Guid paragraphId, IFileSystem fs, CharacterQueueService queue)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
-            return Results.Ok(new ParagraphAttributionStatusDto(
+            return TypedResults.Ok(new ParagraphAttributionStatusDto(
                 queue.StatusOf(folderId, paragraphId),
                 queue.OutcomeOf(folderId, paragraphId)));
         }

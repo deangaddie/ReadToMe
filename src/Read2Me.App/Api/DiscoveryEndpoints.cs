@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.App.Characters;
 using Read2Me.Core.IO;
@@ -37,19 +38,19 @@ namespace Read2Me.App.Api
                 .WithSummary("Persist discovered characters: one create per row (idempotent on name/alias match) plus its aliases.");
         }
 
-        private static async Task<IResult> DiscoverAsync(
+        private static async Task<Results<Ok<DiscoveryOutcomeDto>, NotFound, ProblemHttpResult>> DiscoverAsync(
             string folder, bool? thinking, IFileSystem fs, CharacterDiscoveryService discovery,
             ICharacterReader reader, DiscoveryRuns runs, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             DiscoveryOutcome outcome;
             // Counted while it runs, so the Setup check's Full check refuses to start meanwhile.
             using (runs.Begin())
                 outcome = await discovery.DiscoverAsync(folderId, thinking ?? false, ct);
             if (outcome.Status == DiscoveryStatus.NoLlmConfigured)
-                return Results.Problem(outcome.Reason ?? "No active LLM server configured.",
+                return TypedResults.Problem(outcome.Reason ?? "No active LLM server configured.",
                     statusCode: StatusCodes.Status422UnprocessableEntity);
 
             // The same resolution the apply step performs, answered up front so the review can
@@ -63,19 +64,19 @@ namespace Read2Me.App.Api
                 rows.Select(r => new AliasClaim(r.Name, r.Aliases, r.ExistingCharacterId)),
                 roster.Select(c => c.ToAliasOwner()));
 
-            return Results.Ok(new DiscoveryOutcomeDto(
+            return TypedResults.Ok(new DiscoveryOutcomeDto(
                 outcome.Status, outcome.Reason, rows, collisions.Order().ToList()));
         }
 
         /// Applies the same rows the discovery review dialog applies, through the same seam, so the
         /// agent path and the human one cannot drift: resolve-or-create answers with the existing
         /// character on a name/alias match, and alias adds are deduped by the mutation (ADR 0007).
-        private static async Task<IResult> ApplyAsync(
+        private static async Task<Results<Ok<ApplyDiscoveryResponse>, NotFound>> ApplyAsync(
             string folder, IReadOnlyList<ApplyDiscoveryRow> rows, IFileSystem fs,
             CharacterResolver characters, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var applied = 0;
             foreach (var row in rows)
@@ -87,7 +88,7 @@ namespace Read2Me.App.Api
                     is not BookMutationOutcome.Rejected)
                     applied++;
             }
-            return Results.Ok(new ApplyDiscoveryResponse(applied));
+            return TypedResults.Ok(new ApplyDiscoveryResponse(applied));
         }
     }
 }
