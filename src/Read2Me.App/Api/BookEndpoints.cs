@@ -18,10 +18,10 @@ namespace Read2Me.App.Api
     public sealed record NodeDto(Guid Id, string? Title);
 
     /// <summary>
-    /// The word an API client sees for an item's kind: <see cref="Narration"/> or <see cref="Character"/>
+    /// An item's type as the API reports it: <see cref="Narration"/> or <see cref="Character"/>
     /// for speech (the speaker decides, ADR-0006), a pause kind by name otherwise.
     /// </summary>
-    public enum ItemTypeWord { Narration, Character, Pause, ParagraphPause, ChapterPause, PartPause, VolumePause }
+    public enum ApiItemType { Narration, Character, Pause, ParagraphPause, ChapterPause, PartPause, VolumePause }
 
     /// <summary>
     /// <see cref="OrderKey"/> is the item's fractional position key within its paragraph (items
@@ -29,7 +29,7 @@ namespace Read2Me.App.Api
     /// <see cref="IsPause"/> and the speaker.
     /// </summary>
     public sealed record ParagraphItemDto(
-        Guid Id, ItemTypeWord ItemType, string? Text, Guid? CharacterId, string? AudioFileName,
+        Guid Id, ApiItemType ItemType, string? Text, Guid? CharacterId, string? AudioFileName,
         string? VoiceInstructions, string OrderKey, bool IsPause);
 
     /// <summary><see cref="IsPauseParagraph"/>: no items, or a single pause item.</summary>
@@ -256,7 +256,7 @@ namespace Read2Me.App.Api
         private static ParagraphDto ToParagraphDto(Paragraph p) => new(
             p.Id,
             p.Items.Select(i => new ParagraphItemDto(
-                i.Id, WordFor(i), i.Text, i.CharacterId, i.AudioFileName,
+                i.Id, ApiItemTypeOf(i), i.Text, i.CharacterId, i.AudioFileName,
                 i.VoiceInstructions, i.Order, ParagraphItemKinds.IsPause(i.ItemType))).ToList(),
             PauseParagraph.Is(p));
 
@@ -266,14 +266,14 @@ namespace Read2Me.App.Api
         /// speaker is the narrator sentinel, dialog otherwise (an unattributed item included), pause
         /// kinds by name.
         /// </summary>
-        private static ItemTypeWord WordFor(ParagraphItem item) => item.ItemType switch
+        private static ApiItemType ApiItemTypeOf(ParagraphItem item) => item.ItemType switch
         {
-            ParagraphItemType.Pause => ItemTypeWord.Pause,
-            ParagraphItemType.ParagraphPause => ItemTypeWord.ParagraphPause,
-            ParagraphItemType.ChapterPause => ItemTypeWord.ChapterPause,
-            ParagraphItemType.PartPause => ItemTypeWord.PartPause,
-            ParagraphItemType.VolumePause => ItemTypeWord.VolumePause,
-            _ => NarrationRule.IsNarration(item) ? ItemTypeWord.Narration : ItemTypeWord.Character,
+            ParagraphItemType.Pause => ApiItemType.Pause,
+            ParagraphItemType.ParagraphPause => ApiItemType.ParagraphPause,
+            ParagraphItemType.ChapterPause => ApiItemType.ChapterPause,
+            ParagraphItemType.PartPause => ApiItemType.PartPause,
+            ParagraphItemType.VolumePause => ApiItemType.VolumePause,
+            _ => NarrationRule.IsNarration(item) ? ApiItemType.Narration : ApiItemType.Character,
         };
     }
 }

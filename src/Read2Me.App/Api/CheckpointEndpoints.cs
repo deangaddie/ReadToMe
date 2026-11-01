@@ -36,7 +36,7 @@ namespace Read2Me.App.Api
             string folder, string step, SetCheckpointRequest? body, IFileSystem fs, ProjectUseCases useCases,
             CancellationToken ct)
         {
-            if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId) || !TryParseStep(step, out var pipelineStep))
+            if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId) || !ApiJson.TryParseName<PipelineStep>(step, out var pipelineStep))
                 return Results.NotFound();
             if (!TryReadState(body, out var state))
                 return Results.Problem("Expected a JSON body with 'state': Confirmed, Skipped or Open.",
@@ -60,10 +60,6 @@ namespace Read2Me.App.Api
         /// <summary><c>/status</c>'s <c>checkpoints</c>: only steps that have a row, keyed by step (its member name on the wire, as in the route).</summary>
         internal static IReadOnlyDictionary<PipelineStep, StepCheckpointDto> StatusMap(IEnumerable<StepCheckpoint> rows) =>
             rows.ToDictionary(r => r.Step, r => new StepCheckpointDto(r.State, r.Stale, r.At));
-
-        /// <summary>The step's id, exactly as <c>/status</c> keys it; nothing numeric or combined.</summary>
-        internal static bool TryParseStep(string segment, out PipelineStep step) =>
-            ApiJson.TryParseName(segment, out step);
 
         /// <summary>
         /// The outcome table. A repeat changed nothing and still answers 204: the pill already shows

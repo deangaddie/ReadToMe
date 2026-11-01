@@ -11,17 +11,14 @@ namespace Read2Me.App.Api
     /// <param name="Thinking">Let the model think before planning — slower, better on vague instructions.</param>
     public sealed record PlanBookEditRequest(string? Instruction, bool Thinking = false);
 
-    /// <summary>A plan's status on the wire: <see cref="EditPlanStatus"/> plus <c>NoTargets</c>.</summary>
-    public enum BookEditPlanStatus { Ok, NoLlmConfigured, Unsupported, Failed, ServiceUnavailable, NoTargets }
-
     /// <summary>
-    /// <see cref="Status"/> mirrors <see cref="EditPlanStatus"/> plus <c>NoTargets</c> when the plan
-    /// parsed but matched nothing. Only <c>Ok</c> carries a <see cref="Program"/>. <see cref="Transform"/>
+    /// <see cref="Status"/> is the planner's <see cref="EditPlanStatus"/>, or <c>NoTargets</c> when the
+    /// plan parsed but matched nothing. Only <c>Ok</c> carries a <see cref="Program"/>. <see cref="Transform"/>
     /// is the plan's <see cref="TransformKind"/>: only <c>Llm</c> plans send requests per item, so only
     /// they count <see cref="RequestCount"/> and offer per-row retries.
     /// </summary>
     public sealed record PlanBookEditResponse(
-        BookEditPlanStatus Status,
+        EditPlanStatus Status,
         string? Reason,
         string? Summary,
         string? Program,
@@ -86,12 +83,12 @@ namespace Read2Me.App.Api
                 return StepReads.Refused(refusal);
             var outcome = await planner.PlanAsync(folderId, body.Instruction, !body.Thinking, ct);
             if (outcome.Status != EditPlanStatus.Ok)
-                return Results.Ok(NotPlanned(WireStatus(outcome.Status), outcome.Reason));
+                return Results.Ok(NotPlanned(outcome.Status, outcome.Reason));
 
             var program = outcome.Program!;
             var targets = await resolver.ResolveAsync(folderId, program, ct);
             if (targets.Count == 0)
-                return Results.Ok(NotPlanned(BookEditPlanStatus.NoTargets, "No items in the book match this instruction's scope."));
+                return Results.Ok(NotPlanned(EditPlanStatus.NoTargets, "No items in the book match this instruction's scope."));
 
             var session = sessions.Create(folderId, program, targets, EditProgramDescriber.Describe(program));
             // A Restore that began while the LLM was thinking or the scope resolved drops the project's
@@ -112,21 +109,11 @@ namespace Read2Me.App.Api
                 warnings.Add(titles);
 
             return Results.Ok(new PlanBookEditResponse(
-                BookEditPlanStatus.Ok, null, session.Summary, session.Id, program.Transform.Kind,
+                EditPlanStatus.Ok, null, session.Summary, session.Id, program.Transform.Kind,
                 targets.Count, requestCount, warnings));
         }
 
-        private static BookEditPlanStatus WireStatus(EditPlanStatus status) => status switch
-        {
-            EditPlanStatus.Ok => BookEditPlanStatus.Ok,
-            EditPlanStatus.NoLlmConfigured => BookEditPlanStatus.NoLlmConfigured,
-            EditPlanStatus.Unsupported => BookEditPlanStatus.Unsupported,
-            EditPlanStatus.Failed => BookEditPlanStatus.Failed,
-            EditPlanStatus.ServiceUnavailable => BookEditPlanStatus.ServiceUnavailable,
-            _ => throw new NotSupportedException($"Unhandled plan status {status}."),
-        };
-
-        private static PlanBookEditResponse NotPlanned(BookEditPlanStatus status, string? reason) =>
+        private static PlanBookEditResponse NotPlanned(EditPlanStatus status, string? reason) =>
             new(status, reason, null, null, null, 0, 0, []);
 
         private static IResult ProposeAsync(

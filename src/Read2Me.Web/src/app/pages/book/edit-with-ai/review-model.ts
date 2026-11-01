@@ -1,4 +1,4 @@
-import type { BookEditItem, BookEditPlanStatus, BookEditRow, Guid } from '@app/api';
+import type { BookEditItem, EditPlanStatus, BookEditRow, Guid } from '@app/api';
 
 /**
  * What the review screen shows for one row: the AI's own verdict, or the user's if they have typed
@@ -188,7 +188,7 @@ export class ReviewSelection {
  * What the Instruct screen says when a plan did not produce a program. `Ok` never reaches here.
  * One sentence per plan status, so every refusal says why it happened.
  */
-export function planErrorMessage(status: BookEditPlanStatus, reason: string | null): string {
+export function planErrorMessage(status: EditPlanStatus, reason: string | null): string {
   switch (status) {
     case 'NoLlmConfigured':
       return 'No LLM server is configured. Set one up under Settings → LLM.';
