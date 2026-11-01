@@ -29,17 +29,19 @@ export class BookApi {
   private readonly api = use(ApiClient);
 
   overview(folder: string): Promise<BookOverviewDto> {
-    return this.api.get<BookOverviewDto>(`${projectUrl(folder)}/book`);
+    return this.api.untypedGet<BookOverviewDto>(`${projectUrl(folder)}/book`);
   }
 
   /** volume → parts, part → chapters, chapter → paragraphs with their items. */
   children(folder: string, level: NodeLevel, id: Guid): Promise<NodeChildrenDto> {
-    return this.api.get<NodeChildrenDto>(`${projectUrl(folder)}/nodes/${level}/${id}/children`);
+    return this.api.untypedGet<NodeChildrenDto>(
+      `${projectUrl(folder)}/nodes/${level}/${id}/children`,
+    );
   }
 
   /** The voice each speech item of a chapter resolves to, keyed by item id. */
   chapterVoices(folder: string, chapterId: Guid): Promise<ChapterVoicesDto> {
-    return this.api.get<ChapterVoicesDto>(
+    return this.api.untypedGet<ChapterVoicesDto>(
       `${projectUrl(folder)}/nodes/Chapter/${chapterId}/voices`,
     );
   }
@@ -54,7 +56,7 @@ export class BookApi {
     id: Guid,
     unprocessedOnly = false,
   ): Promise<ParagraphRefDto[]> {
-    return this.api.get<ParagraphRefDto[]>(
+    return this.api.untypedGet<ParagraphRefDto[]>(
       `${projectUrl(folder)}/nodes/${level}/${id}/paragraph-ids`,
       unprocessedOnly ? { unprocessedOnly: true } : undefined,
     );
@@ -74,20 +76,20 @@ export class BookApi {
     const params: Record<string, boolean> = {};
     if (options.needsAudioOnly) params['needsAudioOnly'] = true;
     if (options.narratorOnlyMode) params['narratorOnlyMode'] = true;
-    return this.api.get<AudioItemRefDto[]>(
+    return this.api.untypedGet<AudioItemRefDto[]>(
       `${projectUrl(folder)}/nodes/${level}/${id}/item-ids`,
       Object.keys(params).length > 0 ? params : undefined,
     );
   }
 
   characters(folder: string): Promise<CharacterDto[]> {
-    return this.api.get<CharacterDto[]>(`${projectUrl(folder)}/characters`);
+    return this.api.untypedGet<CharacterDto[]>(`${projectUrl(folder)}/characters`);
   }
 
   /** What a bulk speaker assign over the paragraphs would write (the confirm quotes it). */
   bulkAssignPreview(folder: string, paragraphIds: Guid[]): Promise<BulkAssignPreviewDto> {
     const request: BulkAssignPreviewRequest = { paragraphIds };
-    return this.api.post<BulkAssignPreviewDto>(
+    return this.api.untypedPost<BulkAssignPreviewDto>(
       `${projectUrl(folder)}/characters/bulk-assign-preview`,
       request,
     );
@@ -100,13 +102,13 @@ export class BookApi {
     nodeId: Guid,
   ): Promise<NarrationReleasePreviewDto> {
     const request: NarrationReleasePreviewRequest = { scope, nodeId };
-    return this.api.post<NarrationReleasePreviewDto>(
+    return this.api.untypedPost<NarrationReleasePreviewDto>(
       `${projectUrl(folder)}/narration/release-preview`,
       request,
     );
   }
 
   execute(folder: string, command: BookCommand): Promise<CommandResponse> {
-    return this.api.post<CommandResponse>(`${projectUrl(folder)}/commands`, command);
+    return this.api.untypedPost<CommandResponse>(`${projectUrl(folder)}/commands`, command);
   }
 }

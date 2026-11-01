@@ -51,28 +51,28 @@ export abstract class SettingsApi<TConfig extends SettingsConfig> {
   }
 
   list(): Promise<TConfig[]> {
-    return this.api.get<TConfig[]>(this.base);
+    return this.api.untypedGet<TConfig[]>(this.base);
   }
 
   /** 201 with the stored row; the host assigns `id` and auto-activates the first config. */
   create(config: Omit<TConfig, 'id'>): Promise<TConfig> {
-    return this.api.post<TConfig>(this.base, { ...config, id: 0 });
+    return this.api.untypedPost<TConfig>(this.base, { ...config, id: 0 });
   }
 
   /** 404 when `config.id` does not exist. */
   update(config: TConfig): Promise<TConfig> {
-    return this.api.put<TConfig>(`${this.base}/${config.id}`, config);
+    return this.api.untypedPut<TConfig>(`${this.base}/${config.id}`, config);
   }
 
   /** The active selection reassigns or clears server-side. */
   delete(id: number): Promise<void> {
-    return this.api.delete(`${this.base}/${id}`);
+    return this.api.untypedDelete(`${this.base}/${id}`);
   }
 
   /** The active config, or null when none is selected (the host answers 404). */
   async active(): Promise<TConfig | null> {
     try {
-      return await this.api.get<TConfig>(`${this.base}/active`);
+      return await this.api.untypedGet<TConfig>(`${this.base}/active`);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return null;
       throw error;
@@ -81,7 +81,7 @@ export abstract class SettingsApi<TConfig extends SettingsConfig> {
 
   /** 404 when `id` does not exist. */
   setActive(id: number): Promise<void> {
-    return this.api.put<void>(`${this.base}/active`, { id });
+    return this.api.untypedPut<void>(`${this.base}/active`, { id });
   }
 }
 
@@ -93,31 +93,37 @@ export class LlmSettingsApi extends SettingsApi<LlmServerConfig> {
 
   /** Model ids the server behind `config` offers; the config need not be saved. 422 carries the reason. */
   async models(config: LlmServerConfig): Promise<string[]> {
-    const response = await this.api.post<LlmModelsResponse>('/api/settings/llm/models', config);
+    const response = await this.api.untypedPost<LlmModelsResponse>(
+      '/api/settings/llm/models',
+      config,
+    );
     return response.models;
   }
 
   /** 202; tokens arrive on `stream:llm` and the outcome as `llmTest` on `connectionId`. 409 while one runs. */
   startTest(id: number, request: LlmTestRequest): Promise<void> {
-    return this.api.post<void>(`/api/settings/llm/${id}/test`, request);
+    return this.api.untypedPost<void>(`/api/settings/llm/${id}/test`, request);
   }
 
   cancelTest(id: number): Promise<void> {
-    return this.api.post<void>(`/api/settings/llm/${id}/test/cancel`, null);
+    return this.api.untypedPost<void>(`/api/settings/llm/${id}/test/cancel`, null);
   }
 
   /** For a page that may have missed its `llmTest` message. */
   testStatus(): Promise<LlmTestStatusResponse> {
-    return this.api.get<LlmTestStatusResponse>('/api/settings/llm/test');
+    return this.api.untypedGet<LlmTestStatusResponse>('/api/settings/llm/test');
   }
 
   attributionChain(): Promise<AttributionChainResponse> {
-    return this.api.get<AttributionChainResponse>('/api/settings/llm/attribution-chain');
+    return this.api.untypedGet<AttributionChainResponse>('/api/settings/llm/attribution-chain');
   }
 
   /** Replaces the chain and the self-consistency flag; 422 when a step names no config. */
   setAttributionChain(request: AttributionChainRequest): Promise<AttributionChainResponse> {
-    return this.api.put<AttributionChainResponse>('/api/settings/llm/attribution-chain', request);
+    return this.api.untypedPut<AttributionChainResponse>(
+      '/api/settings/llm/attribution-chain',
+      request,
+    );
   }
 }
 
@@ -128,12 +134,14 @@ export class ParagraphTtsSettingsApi extends SettingsApi<ParagraphTtsServiceConf
 
   /** The editable fields of one TTS provider type with ranges and recommended defaults (ticket 16). */
   schema(type: ParagraphTtsServiceType): Promise<ProviderSettingsSchema> {
-    return this.api.get<ProviderSettingsSchema>('/api/settings/paragraph-tts/schema', { type });
+    return this.api.untypedGet<ProviderSettingsSchema>('/api/settings/paragraph-tts/schema', {
+      type,
+    });
   }
 
   /** The built-in steps, then config `id`'s substitutions; id 0 lists the built-ins only. */
   textSteps(id: number): Promise<TextStep[]> {
-    return this.api.get<TextStep[]>(`/api/settings/paragraph-tts/${id}/text-steps`);
+    return this.api.untypedGet<TextStep[]>(`/api/settings/paragraph-tts/${id}/text-steps`);
   }
 }
 
@@ -144,23 +152,31 @@ export class VoiceDesignSettingsApi extends SettingsApi<VoiceDesignServiceConfig
 
   /** The editable fields of one voice-design provider type with ranges and recommended defaults (ticket 16). */
   schema(type: VoiceDesignServiceType): Promise<ProviderSettingsSchema> {
-    return this.api.get<ProviderSettingsSchema>('/api/settings/voice-design/schema', { type });
+    return this.api.untypedGet<ProviderSettingsSchema>('/api/settings/voice-design/schema', {
+      type,
+    });
   }
 
   sampleText(): Promise<VoiceDesignSampleText> {
-    return this.api.get<VoiceDesignSampleText>('/api/settings/voice-design/sample-text');
+    return this.api.untypedGet<VoiceDesignSampleText>('/api/settings/voice-design/sample-text');
   }
 
   /** Null, blank or the default text clears the override. */
   setSampleText(text: string | null): Promise<VoiceDesignSampleText> {
     const request: VoiceDesignSampleTextRequest = { text };
-    return this.api.put<VoiceDesignSampleText>('/api/settings/voice-design/sample-text', request);
+    return this.api.untypedPut<VoiceDesignSampleText>(
+      '/api/settings/voice-design/sample-text',
+      request,
+    );
   }
 
   /** Designs a voice with the stored config `id` (up to 60 s); 422 carries the provider's reason. */
   test(id: number, prompt: string): Promise<VoiceDesignTestResponse> {
     const request: VoiceDesignTestRequest = { prompt };
-    return this.api.post<VoiceDesignTestResponse>(`/api/settings/voice-design/${id}/test`, request);
+    return this.api.untypedPost<VoiceDesignTestResponse>(
+      `/api/settings/voice-design/${id}/test`,
+      request,
+    );
   }
 }
 
@@ -170,14 +186,16 @@ export class TranscriptionSettingsApi extends SettingsApi<TranscriptionServiceCo
   }
 
   schema(type: TranscriptionServiceType): Promise<ProviderSettingsSchema> {
-    return this.api.get<ProviderSettingsSchema>('/api/settings/transcription/schema', { type });
+    return this.api.untypedGet<ProviderSettingsSchema>('/api/settings/transcription/schema', {
+      type,
+    });
   }
 
   /** Transcribes a wav / mp3 / aac (≤ 50 MB) with the stored config `id`; 422 carries the provider's reason. */
   async test(id: number, audio: File): Promise<string> {
     const form = new FormData();
     form.append('file', audio, audio.name);
-    const response = await this.api.postForm<TranscriptionTestResponse>(
+    const response = await this.api.untypedPostForm<TranscriptionTestResponse>(
       `/api/settings/transcription/${id}/test`,
       form,
     );
@@ -191,7 +209,7 @@ export class SemanticSimilaritySettingsApi extends SettingsApi<SemanticSimilarit
   }
 
   schema(type: SemanticSimilarityServiceType): Promise<ProviderSettingsSchema> {
-    return this.api.get<ProviderSettingsSchema>('/api/settings/semantic-similarity/schema', {
+    return this.api.untypedGet<ProviderSettingsSchema>('/api/settings/semantic-similarity/schema', {
       type,
     });
   }
@@ -199,7 +217,7 @@ export class SemanticSimilaritySettingsApi extends SettingsApi<SemanticSimilarit
   /** Scores two texts with the stored config `id`; 422 carries the provider's reason. */
   test(id: number, text1: string, text2: string): Promise<SimilarityTestResponse> {
     const request: SimilarityTestRequest = { text1, text2 };
-    return this.api.post<SimilarityTestResponse>(
+    return this.api.untypedPost<SimilarityTestResponse>(
       `/api/settings/semantic-similarity/${id}/test`,
       request,
     );

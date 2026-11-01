@@ -19,26 +19,26 @@ export class CharactersApi {
 
   /** Every character as a roster row, narrator first then by name. */
   summary(folder: string): Promise<CharacterSummaryDto[]> {
-    return this.api.get<CharacterSummaryDto[]>(`${projectUrl(folder)}/characters/summary`);
+    return this.api.untypedGet<CharacterSummaryDto[]>(`${projectUrl(folder)}/characters/summary`);
   }
 
   /** The items a character speaks, in book order. Empty for an unknown character. */
   lines(folder: string, characterId: Guid): Promise<CharacterLineDto[]> {
-    return this.api.get<CharacterLineDto[]>(
+    return this.api.untypedGet<CharacterLineDto[]>(
       `${projectUrl(folder)}/characters/${characterId}/lines`,
     );
   }
 
   /** A character's voice rules in evaluation order (default first). Empty for an unknown character. */
   voiceRules(folder: string, characterId: Guid): Promise<VoiceRuleDto[]> {
-    return this.api.get<VoiceRuleDto[]>(
+    return this.api.untypedGet<VoiceRuleDto[]>(
       `${projectUrl(folder)}/characters/${characterId}/voice-rules`,
     );
   }
 
   /** The voice the rules pick at the start of every chapter, in book order. */
   voiceRulePreview(folder: string, characterId: Guid): Promise<ChapterVoicePreviewDto[]> {
-    return this.api.get<ChapterVoicePreviewDto[]>(
+    return this.api.untypedGet<ChapterVoicePreviewDto[]>(
       `${projectUrl(folder)}/characters/${characterId}/voice-rules/preview`,
     );
   }
@@ -51,7 +51,7 @@ export class CharactersApi {
     before: number,
     after: number,
   ): Promise<ParagraphContextDto> {
-    return this.api.get<ParagraphContextDto>(
+    return this.api.untypedGet<ParagraphContextDto>(
       `${projectUrl(folder)}/paragraphs/${paragraphId}/context`,
       { chapterId, before, after },
     );

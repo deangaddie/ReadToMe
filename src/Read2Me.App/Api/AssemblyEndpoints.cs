@@ -114,7 +114,7 @@ namespace Read2Me.App.Api
             }
 
             return service.StartAsync(folderId, allowPartial)
-                ? Results.Accepted(value: new { started = true })
+                ? Results.Accepted(value: new StartedResponse(true))
                 : Results.Problem("Assembly is already running.", statusCode: StatusCodes.Status409Conflict);
         }
     }

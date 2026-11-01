@@ -1,6 +1,7 @@
 using System.Threading;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.App.Queueing;
 using Read2Me.Core.IO;
@@ -60,7 +61,6 @@ namespace Read2Me.App.Api
         {
             endpoints.MapGet("/api/projects/{folder}/history", ListAsync)
                 .ReadsLive("History itself is listed as it is now.")
-                .Produces<HistoryDto>()
                 .WithSummary("The project's History: steps newest first (stepId, parentStepId, display sequence, label, summary — what " +
                              "changed, in user terms, or null — author, startedAt, endedAt — its close, or its last change while open — isOpen while its request or Background run runs, note — \"part 2\", \"212 of 340 paragraphs, cancelled\", \"interrupted\", without brackets — or null, kind — request | backgroundRun | restore | started | import, " +
                              "action — what a request's or Background run's step does: edit | editWithAi | insert | split | merge | delete | " +
@@ -69,10 +69,6 @@ namespace Read2Me.App.Api
                              "starts its History. 404 unknown project.");
             endpoints.MapGet("/api/projects/{folder}/history/{stepId:guid}", GetStepAsync)
                 .ReadsLive("a step is described as History lists it now.")
-                .Produces<HistoryStepDto>()
-                .ProducesProblem(StatusCodes.Status404NotFound)
-                .ProducesProblem(StatusCodes.Status409Conflict)
-                .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
                 .WithSummary("One History step, in the shape GET /history lists it, plus restorePreview: { audioDiscardCount } — how many " +
                              "items would lose their audio if the project were restored to it now (their text, speaker or delivery cue " +
                              "differs there, or the step doesn't have them) — or null for a step that can't be opened. 404 unknown project " +
@@ -80,11 +76,6 @@ namespace Read2Me.App.Api
                              "since a busy project can't be viewed at a step; 503 when opening the step failed for a reason that passes (try again).");
             endpoints.MapPost("/api/projects/{folder}/history/{stepId:guid}/restore", RestoreAsync)
                 .RecordsOwnStep()
-                .Produces<RestoreResultDto>()
-                .ProducesProblem(StatusCodes.Status404NotFound)
-                .ProducesProblem(StatusCodes.Status409Conflict)
-                .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
-                .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
                 .WithSummary("Restore: make the project as it stood after the step current, as a new step " +
                              "(\"Restore to 'Split chapter' (14:02)\", restoredFromStepId set) — every later step stays in History. Records keep " +
                              "their ids; items whose text, speaker or delivery cue changes lose their audio and its review, items brought back " +
@@ -97,51 +88,51 @@ namespace Read2Me.App.Api
                              "422 a step that can't be opened; 503 when opening it failed for a reason that passes (try again).");
         }
 
-        private static async Task<IResult> ListAsync(
+        private static async Task<Results<Ok<HistoryDto>, NotFound>> ListAsync(
             string folder, IFileSystem fs, ProjectHistory history, ProjectBusyAnswer busy, ProjectActivity activity, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             var list = await history.ListAsync(folderId, ct);
-            return Results.Ok(new HistoryDto(
+            return TypedResults.Ok(new HistoryDto(
                 list.Steps, list.HeadStepId, busy.For(folderId) is { } b ? new HistoryBusyDto(b.Reason) : null,
                 activity.IsRestoring(folderId)));
         }
 
         /// <summary>The step a client is about to view, with what restoring it would cost.</summary>
-        private static async Task<IResult> GetStepAsync(
+        private static async Task<Results<Ok<HistoryStepDto>, NotFound, ProblemHttpResult>> GetStepAsync(
             string folder, Guid stepId, IFileSystem fs, ProjectHistory history, ProjectActivity activity, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             if (activity.MayViewStep(folderId) is { } refusal)
                 return StepReads.Refused(refusal);
 
             return await history.OpenStepAsync(folderId, stepId, ct) switch
             {
-                StepOpening.Opened opened => Results.Ok(HistoryStepDto.From(
+                StepOpening.Opened opened => TypedResults.Ok(HistoryStepDto.From(
                     opened.State.Step, new RestorePreviewDto(await history.CountRestoreAudioDiscardsAsync(folderId, opened.State, ct)))),
-                StepOpening.CantOpen cantOpen => Results.Ok(HistoryStepDto.From(cantOpen.Step, preview: null)),
+                StepOpening.CantOpen cantOpen => TypedResults.Ok(HistoryStepDto.From(cantOpen.Step, preview: null)),
                 StepOpening.TryAgain => StepReads.TryAgain(stepId),
                 _ => StepReads.UnknownStep(stepId),
             };
         }
 
-        private static async Task<IResult> RestoreAsync(
+        private static async Task<Results<Ok<RestoreResultDto>, NotFound, ProblemHttpResult>> RestoreAsync(
             string folder, Guid stepId, IFileSystem fs, HistoryRestore restore, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
 
             return await restore.RestoreAsync(folderId, stepId, ct) switch
             {
-                RestoreOutcome.Restored restored => Results.Ok(new RestoreResultDto(restored.Step, restored.AudioDiscardCount, restored.NeedsAudioCount)),
+                RestoreOutcome.Restored restored => TypedResults.Ok(new RestoreResultDto(restored.Step, restored.AudioDiscardCount, restored.NeedsAudioCount)),
                 RestoreOutcome.UnknownStep => StepReads.UnknownStep(stepId),
-                RestoreOutcome.CantOpen => Results.Problem(
+                RestoreOutcome.CantOpen => TypedResults.Problem(
                     $"History step {stepId} can't be opened, so it can't be restored.", statusCode: StatusCodes.Status422UnprocessableEntity),
                 RestoreOutcome.TryAgain => StepReads.TryAgain(stepId),
-                RestoreOutcome.Refused refused => Results.Problem(refused.Reason, statusCode: StatusCodes.Status409Conflict),
+                RestoreOutcome.Refused refused => TypedResults.Problem(refused.Reason, statusCode: StatusCodes.Status409Conflict),
                 var other => throw new InvalidOperationException($"Unhandled {other}."),
             };
         }

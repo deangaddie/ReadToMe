@@ -6,6 +6,9 @@ namespace Read2Me.App.Api
 {
     public sealed record CreateProjectResponse(string FolderName);
 
+    /// <summary>A 202 answer for work the host started in the background: progress goes over the live hub.</summary>
+    public sealed record StartedResponse(bool Started);
+
     public sealed record ImportRequest(bool Reread = false);
 
     /// <summary>PATCH body: every field optional; an omitted or null field is left as it is.</summary>

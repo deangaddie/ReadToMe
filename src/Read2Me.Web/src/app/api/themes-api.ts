@@ -8,26 +8,26 @@ export class ThemesApi {
   private readonly base = '/api/settings/themes';
 
   list(): Promise<AppTheme[]> {
-    return this.api.get<AppTheme[]>(this.base);
+    return this.api.untypedGet<AppTheme[]>(this.base);
   }
 
   create(theme: Omit<AppTheme, 'id' | 'isBuiltIn'>): Promise<AppTheme> {
-    return this.api.post<AppTheme>(this.base, theme);
+    return this.api.untypedPost<AppTheme>(this.base, theme);
   }
 
   update(theme: AppTheme): Promise<AppTheme> {
-    return this.api.put<AppTheme>(`${this.base}/${theme.id}`, theme);
+    return this.api.untypedPut<AppTheme>(`${this.base}/${theme.id}`, theme);
   }
 
   delete(id: number): Promise<void> {
-    return this.api.delete(`${this.base}/${id}`);
+    return this.api.untypedDelete(`${this.base}/${id}`);
   }
 
   selection(): Promise<ThemeSelection> {
-    return this.api.get<ThemeSelection>(`${this.base}/selection`);
+    return this.api.untypedGet<ThemeSelection>(`${this.base}/selection`);
   }
 
   setSelection(update: ThemeSelectionUpdate): Promise<ThemeSelection> {
-    return this.api.put<ThemeSelection>(`${this.base}/selection`, update);
+    return this.api.untypedPut<ThemeSelection>(`${this.base}/selection`, update);
   }
 }

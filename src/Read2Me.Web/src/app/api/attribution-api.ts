@@ -16,40 +16,45 @@ export class AttributionApi {
 
   /** 202 with the number of paragraphs queued; 400 on an unknown level. */
   enqueue(folder: string, request: NodeEnqueueRequest): Promise<EnqueueResponse> {
-    return this.api.post<EnqueueResponse>(`${projectUrl(folder)}/attribution/enqueue`, request);
+    return this.api.untypedPost<EnqueueResponse>(
+      `${projectUrl(folder)}/attribution/enqueue`,
+      request,
+    );
   }
 
   /** A selection by id (ticket 12): 202 with how many were queued — ids without dialog are skipped. */
   enqueueParagraphs(folder: string, paragraphIds: Guid[]): Promise<EnqueueResponse> {
     const request: ParagraphsEnqueueRequest = { paragraphIds };
-    return this.api.post<EnqueueResponse>(
+    return this.api.untypedPost<EnqueueResponse>(
       `${projectUrl(folder)}/attribution/enqueue-paragraphs`,
       request,
     );
   }
 
   paragraphStatus(folder: string, paragraphId: Guid): Promise<ParagraphAttributionStatusDto> {
-    return this.api.get<ParagraphAttributionStatusDto>(
+    return this.api.untypedGet<ParagraphAttributionStatusDto>(
       `${projectUrl(folder)}/attribution/paragraphs/${paragraphId}`,
     );
   }
 
   /** Forgets a paragraph's Failed/Unfinished outcome; 204 whether or not one was recorded. */
   clearOutcome(folder: string, paragraphId: Guid): Promise<void> {
-    return this.api.delete(`${projectUrl(folder)}/attribution/paragraphs/${paragraphId}/outcome`);
+    return this.api.untypedDelete(
+      `${projectUrl(folder)}/attribution/paragraphs/${paragraphId}/outcome`,
+    );
   }
 
   queue(): Promise<AttributionQueueSnapshot> {
-    return this.api.get<AttributionQueueSnapshot>('/api/attribution/queue');
+    return this.api.untypedGet<AttributionQueueSnapshot>('/api/attribution/queue');
   }
 
   /** Global: drains every folder's queued attribution work. */
   cancel(): Promise<void> {
-    return this.api.post<void>('/api/attribution/cancel');
+    return this.api.untypedPost<void>('/api/attribution/cancel');
   }
 
   /** Retires the finished run's throughput summary on the host (ticket 14); 200 whether or not one was showing. */
   dismiss(): Promise<void> {
-    return this.api.post<void>('/api/attribution/dismiss');
+    return this.api.untypedPost<void>('/api/attribution/dismiss');
   }
 }

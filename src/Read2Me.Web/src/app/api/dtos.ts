@@ -1,12 +1,10 @@
 /**
  * Wire shapes for the Agent API (spec D8, ticket 05).
  *
- * The host's OpenAPI document describes request bodies and the settings entities, but declares
- * response content only for the book overview (every other endpoint returns `Results.Ok(...)`
- * untyped), so `schema.d.ts` cannot type what comes back. Response DTOs are therefore hand-written
- * here, mirrored from the C# records in `src/Read2Me.App/Api/*.cs`, and every shape that *does*
- * exist in the generated schema is pinned to it in `schema-pins.ts` so a renamed or removed field
- * fails `bun run typecheck`.
+ * A type the host's OpenAPI document declares is an alias, `export type X = Schema['X']`, named as
+ * its C# record (ADR 0017). Endpoints not yet typed (their slice of #171 hasn't landed) answer
+ * untyped, so their response DTOs are still hand-written here, mirrored from the C# records in
+ * `src/Read2Me.App/Api/*.cs`, and any that exist in the schema are pinned to it in `schema-pins.ts`.
  *
  * Conventions: camelCase property names, `Guid` as string, and every enum as its PascalCase member
  * name, in bodies, route segments and dictionary keys alike (#166). A feature that needs an enum's
@@ -1201,53 +1199,16 @@ export type HistoryStepKind = Schema['HistoryStepKind'];
 export type StepAction = Schema['StepAction'];
 
 /** `HistoryStep`: one History step. `sequence` is for display; the line is the `parentStepId` chain from the Head. */
-export interface HistoryStep {
-  stepId: Guid;
-  parentStepId: Guid | null;
-  sequence: number;
-  label: string;
-  /** What changed, in user terms ("4 paragraphs in Chapter 3"), or null when there is nothing to count or place. */
-  summary: string | null;
-  author: string;
-  startedAt: string;
-  /** When it closed or, while open, its last change; an "interrupted" step keeps its last change. */
-  endedAt: string | null;
-  isOpen: boolean;
-  /** "part 2", "212 of 340 paragraphs, cancelled", "interrupted", joined by " · ", without brackets; null when nothing is unusual. */
-  note: string | null;
-  /** What opened the step: a request, a Background run, a Restore, History starting, or an import. */
-  kind: HistoryStepKind;
-  /** What kind of action a request's or Background run's step is; null on the other kinds. */
-  action: StepAction | null;
-  /** The step a Restore step brought back; null for any other step. */
-  restoredFromStepId: Guid | null;
-  /** The step can no longer be opened: its old schema fails to migrate. */
-  cantOpen: boolean;
-}
+export type HistoryStep = Schema['HistoryStep'];
 
 /** `GET /api/projects/{folder}/history`: steps newest first, the Head, the busy reason and the restoring flag. */
-export interface HistoryDto {
-  steps: HistoryStep[];
-  headStepId: Guid | null;
-  busy: { reason: string } | null;
-  restoring: boolean;
-}
+export type HistoryDto = Schema['HistoryDto'];
 
 /** `GET /api/projects/{folder}/history/{stepId}`: the step plus what a Restore to it would cost now. */
-export interface HistoryStepDto extends HistoryStep {
-  /** Items that would lose their audio; null for a step that can't be opened. */
-  restorePreview: { audioDiscardCount: number } | null;
-}
+export type HistoryStepDto = Schema['HistoryStepDto'];
 
-/** `POST /api/projects/{folder}/history/{stepId}/restore`. */
-export interface RestoreResultDto {
-  /** The Restore step added; null when the project already was that state. */
-  step: HistoryStep | null;
-  /** Items whose audio the Restore discarded. */
-  audioDiscardCount: number;
-  /** Items without audio after the Restore, those it brought back included: what needs generating. */
-  needsAudioCount: number;
-}
+/** `POST /api/projects/{folder}/history/{stepId}/restore`: the Restore step (null when nothing changed) and the audio counts. */
+export type RestoreResultDto = Schema['RestoreResultDto'];
 
 // ---- Pronunciations (`PronunciationEndpoints.cs`) ---------------------------------------------------
 
