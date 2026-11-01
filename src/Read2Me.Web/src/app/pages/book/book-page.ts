@@ -666,16 +666,15 @@ export class BookPage extends R2mElement {
     });
   }
 
-  private readonly onTopRow = (e: Event): void => {
-    const row = this.rows()[(e as CustomEvent<number>).detail];
-    if (row) this.reader.topRow(row.chapterId, false);
-  };
+  private readonly onTopRow = (e: Event): void => this.topRow(e, false);
 
   /** The reader took over from an open: the chapter at the top is current again. */
-  private readonly onReaderScroll = (e: Event): void => {
+  private readonly onReaderScroll = (e: Event): void => this.topRow(e, true);
+
+  private topRow(e: Event, byReader: boolean): void {
     const row = this.rows()[(e as CustomEvent<number>).detail];
-    if (row) this.reader.topRow(row.chapterId, true);
-  };
+    if (row) this.reader.topRow(row.chapterId, byReader);
+  }
 
   private readonly refresh = (): void => {
     void this.store.refresh();
