@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { AttributionPromptStyle, LlmApiType, type LlmServerConfig } from '@app/api';
+import type { LlmServerConfig } from '@app/api';
 import {
   EMPTY_LLM_FORM,
   type LlmConfigForm,
@@ -64,7 +64,7 @@ describe('LLM config form', () => {
         temperature: '0.7',
         maxTokens: '512',
         attributionBatchSize: '',
-        promptStyle: AttributionPromptStyle.Simple,
+        promptStyle: 'Simple',
         supportsModelSwitch: true,
       },
       9,
@@ -73,7 +73,7 @@ describe('LLM config form', () => {
     expect(config).toEqual<LlmServerConfig>({
       id: 9,
       name: 'Local',
-      apiType: LlmApiType.OpenAiCompatible,
+      apiType: 'OpenAiCompatible',
       baseUrl: 'http://localhost:8080',
       apiKey: null,
       model: 'gemma-4b',
@@ -83,7 +83,7 @@ describe('LLM config form', () => {
       frequencyPenalty: null,
       presencePenalty: null,
       attributionBatchSize: 1,
-      promptStyle: AttributionPromptStyle.Simple,
+      promptStyle: 'Simple',
       supportsModelSwitch: true,
     });
   });
@@ -92,7 +92,7 @@ describe('LLM config form', () => {
     const config: LlmServerConfig = {
       id: 3,
       name: 'Remote',
-      apiType: LlmApiType.OpenAiCompatible,
+      apiType: 'OpenAiCompatible',
       baseUrl: 'https://api.example.com/v1',
       apiKey: 'sk-1',
       model: null,
@@ -102,7 +102,7 @@ describe('LLM config form', () => {
       frequencyPenalty: null,
       presencePenalty: -1,
       attributionBatchSize: 4,
-      promptStyle: AttributionPromptStyle.Full,
+      promptStyle: 'Full',
       supportsModelSwitch: false,
     };
 
@@ -114,11 +114,11 @@ describe('LLM config form', () => {
   });
 
   it('round-trips the Chapter prompt style', () => {
-    const form = { ...valid, promptStyle: AttributionPromptStyle.Chapter };
+    const form: LlmConfigForm = { ...valid, promptStyle: 'Chapter' };
 
     const config = buildLlmConfig(form, 4);
 
-    expect(config.promptStyle).toBe(AttributionPromptStyle.Chapter);
-    expect(toLlmForm(config).promptStyle).toBe(AttributionPromptStyle.Chapter);
+    expect(config.promptStyle).toBe('Chapter');
+    expect(toLlmForm(config).promptStyle).toBe('Chapter');
   });
 });

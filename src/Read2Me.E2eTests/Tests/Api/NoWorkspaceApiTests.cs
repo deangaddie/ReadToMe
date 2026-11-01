@@ -119,13 +119,13 @@ public class NoWorkspaceApiTests : IDisposable
         var rows = report.GetProperty("rows").EnumerateArray().ToList();
         var workspace = rows[0];
         Assert.Equal("workspace", workspace.GetProperty("id").GetString());
-        Assert.Equal("failed", workspace.GetProperty("result").GetString());
+        Assert.Equal("Failed", workspace.GetProperty("result").GetString());
         if (found is not null)
             Assert.Equal(found, workspace.GetProperty("found").GetString());
         Assert.Contains("restart the app", workspace.GetProperty("fix").GetProperty("text").GetString());
         Assert.All(rows.Skip(1), r =>
         {
-            Assert.Equal("notRun", r.GetProperty("result").GetString());
+            Assert.Equal("NotRun", r.GetProperty("result").GetString());
             Assert.Equal("needs the Workspace", r.GetProperty("found").GetString());
         });
         return workspace;

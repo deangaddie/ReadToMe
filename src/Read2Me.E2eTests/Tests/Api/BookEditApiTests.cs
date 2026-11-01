@@ -65,9 +65,9 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     {
         var overview = JsonDocument.Parse(await Http.GetStringAsync($"{app.BaseUrl}/api/projects/{folder}/book")).RootElement;
         var volumeId = overview.GetProperty("volumes")[0].GetProperty("id").GetGuid();
-        var volumeChildren = await ChildrenAsync(folder, "volume", volumeId);
+        var volumeChildren = await ChildrenAsync(folder, "Volume", volumeId);
         var partId = volumeChildren.GetProperty("parts")[0].GetProperty("id").GetGuid();
-        var chapters = (await ChildrenAsync(folder, "part", partId)).GetProperty("chapters");
+        var chapters = (await ChildrenAsync(folder, "Part", partId)).GetProperty("chapters");
         return chapters.EnumerateArray().Select(c => c.GetProperty("title").GetString()!).ToList();
     }
 

@@ -1,7 +1,7 @@
 import { html, nothing } from 'lit-html';
 import {
-  AttributionPromptStyle,
-  LlmApiType,
+  type AttributionPromptStyle,
+  type LlmApiType,
   type LlmServerConfig,
   LlmSettingsApi,
   toApiError,
@@ -41,15 +41,15 @@ const NUMERIC_FIELDS = [
   { key: 'presencePenalty', label: 'Presence penalty' },
 ] as const;
 
-const API_TYPES = Object.values(LlmApiType).map((value) => ({
+const API_TYPES = (Object.keys(API_TYPE_LABELS) as LlmApiType[]).map((value) => ({
   value,
   label: API_TYPE_LABELS[value],
 }));
 const PROMPT_STYLES = [
-  { value: AttributionPromptStyle.Full, label: 'Full' },
-  { value: AttributionPromptStyle.Simple, label: 'Simple' },
-  { value: AttributionPromptStyle.Chapter, label: 'Chapter' },
-];
+  { value: 'Full', label: 'Full' },
+  { value: 'Simple', label: 'Simple' },
+  { value: 'Chapter', label: 'Chapter' },
+] as const satisfies readonly { value: AttributionPromptStyle; label: string }[];
 
 /** The form fields typed as free text (everything but the API type, style and switch). */
 type TextKey = {
@@ -166,9 +166,7 @@ export class LlmConfigEditor extends R2mElement {
         this.textInput(a, 'name', form.name, { required: true }),
       )}
       ${field({ id: 'llm-api-type', label: 'API type' }, (a) =>
-        this.selectInput(a, String(form.apiType), API_TYPES, (v) =>
-          this.set('apiType', Number(v) as LlmApiType),
-        ),
+        this.selectInput(a, form.apiType, API_TYPES, (v) => this.set('apiType', v as LlmApiType)),
       )}
       ${field({ id: 'llm-base-url', label: 'Base URL' }, (a) =>
         this.textInput(a, 'baseUrl', form.baseUrl, {
@@ -240,8 +238,8 @@ export class LlmConfigEditor extends R2mElement {
           hint: 'Simple: only assigns a speaker when the text explicitly says who speaks ("said X"); otherwise returns unknown so escalation passes the paragraph to a larger model. Full: uses inference heuristics. Chapter: whole chapter, roster-only answers, rules pre-tag and rules-discover. Fast on gemma-12b; the model never creates characters — rules-discover does. Thinking is always off.',
         },
         (a) =>
-          this.selectInput(a, String(form.promptStyle), PROMPT_STYLES, (v) =>
-            this.set('promptStyle', Number(v) as AttributionPromptStyle),
+          this.selectInput(a, form.promptStyle, PROMPT_STYLES, (v) =>
+            this.set('promptStyle', v as AttributionPromptStyle),
           ),
       )}
 

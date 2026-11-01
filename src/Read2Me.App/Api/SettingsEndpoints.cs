@@ -119,8 +119,9 @@ namespace Read2Me.App.Api
                 List: async ctx => Results.Ok(await getAll(Svc(ctx))),
                 Create: async ctx =>
                 {
-                    if (await ctx.Request.ReadFromJsonAsync<TConfig>() is not { } config)
-                        return Results.Problem("Missing config body.", statusCode: StatusCodes.Status400BadRequest);
+                    var (config, invalid) = await ApiJson.ReadBodyAsync<TConfig>(ctx.Request);
+                    if (config is null)
+                        return Results.Problem(invalid ?? "Missing config body.", statusCode: StatusCodes.Status400BadRequest);
                     if (Refusal(config) is { } refusal)
                         return refusal;
                     setId(config, 0);
@@ -129,8 +130,9 @@ namespace Read2Me.App.Api
                 },
                 Update: async (ctx, id) =>
                 {
-                    if (await ctx.Request.ReadFromJsonAsync<TConfig>() is not { } config)
-                        return Results.Problem("Missing config body.", statusCode: StatusCodes.Status400BadRequest);
+                    var (config, invalid) = await ApiJson.ReadBodyAsync<TConfig>(ctx.Request);
+                    if (config is null)
+                        return Results.Problem(invalid ?? "Missing config body.", statusCode: StatusCodes.Status400BadRequest);
                     var svc = Svc(ctx);
                     if ((await getAll(svc)).All(c => getId(c) != id))
                         return Results.NotFound();
@@ -149,8 +151,9 @@ namespace Read2Me.App.Api
                     await getActive(Svc(ctx)) is { } active ? Results.Ok(active) : Results.NotFound(),
                 SetActive: async ctx =>
                 {
-                    if (await ctx.Request.ReadFromJsonAsync<SetActiveRequest>() is not { } request)
-                        return Results.Problem("Missing body.", statusCode: StatusCodes.Status400BadRequest);
+                    var (request, invalid) = await ApiJson.ReadBodyAsync<SetActiveRequest>(ctx.Request);
+                    if (request is null)
+                        return Results.Problem(invalid ?? "Missing body.", statusCode: StatusCodes.Status400BadRequest);
                     var svc = Svc(ctx);
                     if ((await getAll(svc)).All(c => getId(c) != request.Id))
                         return Results.NotFound();
@@ -188,26 +191,26 @@ namespace Read2Me.App.Api
                     TryParseType<ParagraphTtsServiceType>(type, out var t)
                         ? Results.Ok(ProviderSettingsSchema.ParagraphTts(t))
                         : UnknownProviderType(type, typeof(ParagraphTtsServiceType)))
-                .WithSummary("The editable fields of one TTS provider type (?type=VoxCpm2|Chatterbox|Qwen3Base|Breeze, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override.");
+                .WithSummary("The editable fields of one TTS provider type (?type=VoxCpm2|Chatterbox|Qwen3Base|Breeze, member name) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override.");
             endpoints.MapGet("/api/settings/voice-design/schema", (string? type) =>
                     TryParseType<VoiceDesignServiceType>(type, out var t)
                         ? Results.Ok(ProviderSettingsSchema.VoiceDesign(t))
                         : UnknownProviderType(type, typeof(VoiceDesignServiceType)))
-                .WithSummary("The editable fields of one voice-design provider type (?type=VoxCpm2|Qwen3|Breeze, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override.");
+                .WithSummary("The editable fields of one voice-design provider type (?type=VoxCpm2|Qwen3|Breeze, member name) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override.");
             endpoints.MapGet("/api/settings/transcription/schema", (string? type) =>
                     TryParseType<TranscriptionServiceType>(type, out var t)
                         ? Results.Ok(ProviderSettingsSchema.Transcription(t))
                         : UnknownProviderType(type, typeof(TranscriptionServiceType)))
-                .WithSummary("The editable fields of one transcription provider type (?type=LocalWhisper, name or number) beyond its base URL — none today.");
+                .WithSummary("The editable fields of one transcription provider type (?type=LocalWhisper, member name) beyond its base URL — none today.");
             endpoints.MapGet("/api/settings/semantic-similarity/schema", (string? type) =>
                     TryParseType<SemanticSimilarityServiceType>(type, out var t)
                         ? Results.Ok(ProviderSettingsSchema.SemanticSimilarity(t))
                         : UnknownProviderType(type, typeof(SemanticSimilarityServiceType)))
-                .WithSummary("The editable fields of one semantic-similarity provider type (?type=MiniLmL6|MpnetBaseV2, name or number) beyond its base URL: the pass threshold.");
+                .WithSummary("The editable fields of one semantic-similarity provider type (?type=MiniLmL6|MpnetBaseV2, member name) beyond its base URL: the pass threshold.");
         }
 
         private static bool TryParseType<TEnum>(string? raw, out TEnum type) where TEnum : struct, Enum =>
-            Enum.TryParse(raw, ignoreCase: true, out type) && Enum.IsDefined(type);
+            ApiJson.TryParseName(raw, out type);
 
         private static IResult UnknownProviderType(string? raw, Type enumType) =>
             Results.Problem(

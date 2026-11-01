@@ -21,7 +21,7 @@ namespace Read2Me.App.Api
     /// applied (<see cref="AliasCollisions"/>). Advisory; the client recomputes as rows are edited.
     /// </summary>
     public sealed record DiscoveryOutcomeDto(
-        string Status, string? Reason, IReadOnlyList<DiscoveredCharacterDto> Characters, IReadOnlyList<string> Collisions);
+        DiscoveryStatus Status, string? Reason, IReadOnlyList<DiscoveredCharacterDto> Characters, IReadOnlyList<string> Collisions);
     public sealed record ApplyDiscoveryRow(string Name, IReadOnlyList<string>? Aliases);
     public sealed record ApplyDiscoveryResponse(int Applied);
 
@@ -64,7 +64,7 @@ namespace Read2Me.App.Api
                 roster.Select(c => c.ToAliasOwner()));
 
             return Results.Ok(new DiscoveryOutcomeDto(
-                outcome.Status.ToString(), outcome.Reason, rows, collisions.Order().ToList()));
+                outcome.Status, outcome.Reason, rows, collisions.Order().ToList()));
         }
 
         /// Applies the same rows the discovery review dialog applies, through the same seam, so the

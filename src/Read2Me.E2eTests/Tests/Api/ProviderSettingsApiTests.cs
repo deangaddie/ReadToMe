@@ -62,7 +62,7 @@ public class ProviderSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppF
         var created = await CreateAsync("semantic-similarity", new
         {
             name = $"canon-{Guid.NewGuid():N}",
-            type = 0,
+            type = "MiniLmL6",
             settingsJson = """{ "passThreshold": 0.5, "baseUrl": "http://example-sim", "junk": 1 }""",
         });
         var id = created.GetProperty("id").GetInt32();
@@ -75,7 +75,7 @@ public class ProviderSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppF
             {
                 id,
                 name = created.GetProperty("name").GetString(),
-                type = 0,
+                type = "MiniLmL6",
                 settingsJson = """{"PassThreshold":0.9,"BaseUrl":"http://example-sim"}""",
             });
             Assert.Equal(HttpStatusCode.OK, update.StatusCode);
@@ -96,7 +96,7 @@ public class ProviderSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppF
         var created = await CreateAsync("paragraph-tts", new
         {
             name = $"canon-{Guid.NewGuid():N}",
-            type = 3, // Qwen3Base
+            type = "Qwen3Base",
             settingsJson = """{"top_k":40,"baseUrl":"http://example-tts"}""",
         });
         try
@@ -117,27 +117,27 @@ public class ProviderSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppF
     /// the defaults for whatever was not sent.
     /// </summary>
     [Theory]
-    [InlineData("paragraph-tts", 0, """{"baseUrl":"http://x","cfg_value":3.5,"maxChunkChars":350}""",
+    [InlineData("paragraph-tts", "VoxCpm2", """{"baseUrl":"http://x","cfg_value":3.5,"maxChunkChars":350}""",
         """{"baseUrl":"http://x","modelId":"voxcpm2","cfg_value":3.5,"inference_timesteps":10,"min_len":2,"max_len":4096,"retry_badcase":true,"retry_badcase_max_times":3,"retry_badcase_ratio_threshold":6,"seed":null,"maxChunkChars":350,"carrierPrefixEnabled":false,"carrierMaxTargetChars":30}""")]
-    [InlineData("paragraph-tts", 1, """{"baseUrl":"http://x","exaggeration":0.9}""",
+    [InlineData("paragraph-tts", "Chatterbox", """{"baseUrl":"http://x","exaggeration":0.9}""",
         """{"baseUrl":"http://x","modelId":"chatterbox","exaggeration":0.9,"cfg_weight":0.5,"temperature":0.8,"min_p":0.05,"top_p":1,"repetition_penalty":1.2,"seed":null,"maxChunkChars":500,"carrierPrefixEnabled":false,"carrierMaxTargetChars":30}""")]
-    [InlineData("paragraph-tts", 3, """{"baseUrl":"http://x","top_k":40,"language":"en"}""",
+    [InlineData("paragraph-tts", "Qwen3Base", """{"baseUrl":"http://x","top_k":40,"language":"en"}""",
         """{"baseUrl":"http://x","modelId":"qwen3-base","language":"en","temperature":null,"top_p":null,"top_k":40,"repetition_penalty":null,"max_new_tokens":null,"seed":null,"maxChunkChars":500,"carrierPrefixEnabled":false,"carrierMaxTargetChars":30}""")]
-    [InlineData("voice-design", 0, """{"baseUrl":"http://x","inference_timesteps":20}""",
+    [InlineData("voice-design", "VoxCpm2", """{"baseUrl":"http://x","inference_timesteps":20}""",
         """{"baseUrl":"http://x","modelId":"voxcpm2","cfg_value":2,"inference_timesteps":20,"min_len":2,"max_len":4096,"retry_badcase":true,"retry_badcase_max_times":3,"retry_badcase_ratio_threshold":6,"seed":null}""")]
-    [InlineData("voice-design", 1, """{"baseUrl":"http://x","modelId":"qwen3-design-bf16","topK":40,"seed":9}""",
+    [InlineData("voice-design", "Qwen3", """{"baseUrl":"http://x","modelId":"qwen3-design-bf16","topK":40,"seed":9}""",
         """{"BaseUrl":"http://x","ModelId":"qwen3-design-bf16","Language":"auto","Temperature":null,"TopP":null,"TopK":40,"RepetitionPenalty":null,"MaxNewTokens":null,"Seed":9}""")]
     // A stored Qwen3 design config as the web settings form re-sends it on a rename: base URL first,
     // then every schema field under its schema key, the unset knobs as explicit nulls.
-    [InlineData("voice-design", 1, """{"baseUrl":"http://example-qwen:8004","modelId":"qwen3-design-bf16","language":"en","temperature":null,"topP":null,"topK":40,"repetitionPenalty":null,"maxNewTokens":null,"seed":null}""",
+    [InlineData("voice-design", "Qwen3", """{"baseUrl":"http://example-qwen:8004","modelId":"qwen3-design-bf16","language":"en","temperature":null,"topP":null,"topK":40,"repetitionPenalty":null,"maxNewTokens":null,"seed":null}""",
         """{"BaseUrl":"http://example-qwen:8004","ModelId":"qwen3-design-bf16","Language":"en","Temperature":null,"TopP":null,"TopK":40,"RepetitionPenalty":null,"MaxNewTokens":null,"Seed":null}""")]
-    [InlineData("transcription", 0, """{"baseUrl":"http://x"}""",
+    [InlineData("transcription", "LocalWhisper", """{"baseUrl":"http://x"}""",
         """{"BaseUrl":"http://x"}""")]
-    [InlineData("semantic-similarity", 0, """{"baseUrl":"http://x","passThreshold":0.7}""",
+    [InlineData("semantic-similarity", "MiniLmL6", """{"baseUrl":"http://x","passThreshold":0.7}""",
         """{"BaseUrl":"http://x","PassThreshold":0.7}""")]
-    [InlineData("semantic-similarity", 1, """{"baseUrl":"http://x","passThreshold":0.6}""",
+    [InlineData("semantic-similarity", "MpnetBaseV2", """{"baseUrl":"http://x","passThreshold":0.6}""",
         """{"BaseUrl":"http://x","PassThreshold":0.6}""")]
-    public async Task Stored_settingsJson_is_the_providers_canonical_wire_form(string area, int type, string sent, string expected)
+    public async Task Stored_settingsJson_is_the_providers_canonical_wire_form(string area, string type, string sent, string expected)
     {
         var created = await CreateAsync(area, new { name = $"rt-{Guid.NewGuid():N}", type, settingsJson = sent });
         try
@@ -154,7 +154,7 @@ public class ProviderSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppF
     public async Task SettingsJson_that_is_not_the_providers_shape_is_400()
     {
         var response = await Http.PostAsJsonAsync(Url("transcription"),
-            new { name = "bad", type = 0, settingsJson = "{not json" });
+            new { name = "bad", type = "LocalWhisper", settingsJson = "{not json" });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -162,12 +162,11 @@ public class ProviderSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppF
     [Fact]
     public async Task A_paragraph_tts_config_of_the_removed_Chatterbox_Turbo_type_is_400()
     {
-        // Value 2 is reserved (ADR 0010): no new rows may take it.
+        // Removed by ADR 0010: its name is no member, and its reserved value 2 is an integer.
         var response = await Http.PostAsJsonAsync(Url("paragraph-tts"),
-            new { name = "turbo", type = 2, settingsJson = """{"BaseUrl":"http://localhost:8001"}""" });
+            new { name = "turbo", type = "ChatterboxTurbo", settingsJson = """{"BaseUrl":"http://localhost:8001"}""" });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains("Chatterbox Turbo", await response.Content.ReadAsStringAsync());
         Assert.DoesNotContain((await GetJsonAsync("paragraph-tts")).EnumerateArray(),
             c => c.GetProperty("name").GetString() == "turbo");
     }
@@ -189,7 +188,7 @@ public class ProviderSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppF
         var created = await CreateAsync("paragraph-tts", new
         {
             name = $"steps-{Guid.NewGuid():N}",
-            type = 0,
+            type = "VoxCpm2",
             settingsJson = """{"baseUrl":"http://example-tts"}""",
         });
         var id = created.GetProperty("id").GetInt32();
@@ -199,7 +198,7 @@ public class ProviderSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppF
             {
                 id,
                 name = created.GetProperty("name").GetString(),
-                type = 0,
+                type = "VoxCpm2",
                 settingsJson = created.GetProperty("settingsJson").GetString(),
                 enabledStepIds = new[] { "to-sentence-case", stepId },
                 substitutionSteps = new[] { new { id = stepId, fromText = "Dr.", toText = "Doctor", order = 0 } },
@@ -299,7 +298,7 @@ public class ProviderSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppF
         var created = await CreateAsync("semantic-similarity", new
         {
             name = $"down-{Guid.NewGuid():N}",
-            type = 0,
+            type = "MiniLmL6",
             settingsJson = """{"BaseUrl":"http://no-such-similarity","PassThreshold":0.85}""",
         });
         var id = created.GetProperty("id").GetInt32();

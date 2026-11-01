@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
+using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Mutations;
@@ -37,7 +38,7 @@ namespace Read2Me.App.Api
         IReadOnlyList<Guid> VolumeIds,
         IReadOnlyDictionary<string, NodeStatusSummary> Nodes,
         int PauseParagraphs,
-        IReadOnlyDictionary<string, StepCheckpointDto> Checkpoints,
+        IReadOnlyDictionary<PipelineStep, StepCheckpointDto> Checkpoints,
         long Revision);
 
     public static class ProjectStatusEndpoints
@@ -105,8 +106,8 @@ namespace Read2Me.App.Api
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return Results.NotFound();
             var nodeStatus = RollUpFor(folderId, session, liveStatus);
-            if (!Enum.TryParse<BookNodeLevel>(level, ignoreCase: true, out _))
-                return Results.Problem($"Unknown level '{level}'. Expected volume, part or chapter.",
+            if (!ApiJson.TryParseName<BookNodeLevel>(level, out _))
+                return Results.Problem($"Unknown level '{level}'. Expected Volume, Part or Chapter.",
                     statusCode: StatusCodes.Status400BadRequest);
 
             await SeedAsync(folderId, audio, nodeStatus);

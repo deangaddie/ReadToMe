@@ -7,7 +7,7 @@ using Read2Me.Services.Health;
 namespace Read2Me.App.Api
 {
     public sealed record AiServiceDto(string Name, string ContainerName, string BaseUrl, bool UsesGpu);
-    public sealed record AiServiceStatusDto(string Name, string Status);
+    public sealed record AiServiceStatusDto(string Name, AiServiceStatus Status);
 
     /// <summary>
     /// The Docker-hosted AI services: catalog, resolution by base URL, live status, and the manual
@@ -59,7 +59,7 @@ namespace Read2Me.App.Api
             DockerAiServiceRegistry registry, ObservedAiServiceControl control, CancellationToken ct)
         {
             var probes = registry.All
-                .Select(async s => new AiServiceStatusDto(s.Name, (await control.GetStatusAsync(s, ct)).ToString()))
+                .Select(async s => new AiServiceStatusDto(s.Name, await control.GetStatusAsync(s, ct)))
                 .ToList();
             return Results.Ok(await Task.WhenAll(probes));
         }
@@ -72,7 +72,7 @@ namespace Read2Me.App.Api
                 return Results.NotFound();
 
             var status = await control.GetStatusAsync(service, ct);
-            return Results.Ok(new AiServiceStatusDto(service.Name, status.ToString()));
+            return Results.Ok(new AiServiceStatusDto(service.Name, status));
         }
 
         private static IResult StartOp(string name, string op, DockerAiServiceRegistry registry, AiServiceOpCoordinator ops)

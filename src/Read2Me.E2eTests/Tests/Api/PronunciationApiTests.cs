@@ -171,7 +171,7 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         Assert.Equal(HttpStatusCode.Created, (await AddAsync(folder, "stormy", "storm-ee")).StatusCode);
 
         var enqueue = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/audio/enqueue",
-            new { level = "chapter", nodeId = book.ChapterId("ch1"), needsAudioOnly = true });
+            new { level = "Chapter", nodeId = book.ChapterId("ch1"), needsAudioOnly = true });
         Assert.Equal(HttpStatusCode.Accepted, enqueue.StatusCode);
         await app.WaitForQueueDrainAsync("/api/audio/queue", timeoutSeconds: 60);
 
@@ -216,7 +216,7 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
     private async Task<List<string>> WithAudioAsync(string folder, TestUtils.BookHierarchyBuilder book, int items)
     {
         var children = JsonDocument.Parse(await Http.GetStringAsync(
-            $"{app.BaseUrl}/api/projects/{folder}/nodes/chapter/{book.ChapterId("ch1")}/children")).RootElement;
+            $"{app.BaseUrl}/api/projects/{folder}/nodes/Chapter/{book.ChapterId("ch1")}/children")).RootElement;
         var withAudio = children.GetProperty("paragraphs").EnumerateArray()
             .SelectMany(p => p.GetProperty("items").EnumerateArray())
             .Where(i => !string.IsNullOrEmpty(i.GetProperty("audioFileName").GetString()))
@@ -310,7 +310,7 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         Assert.Equal(steps + 1, after.Count);
         var step = after[0];
         Assert.Equal("Pronunciation: delete \"Holmes\"", step.GetProperty("label").GetString());
-        Assert.Equal("delete", step.GetProperty("action").GetString());
+        Assert.Equal("Delete", step.GetProperty("action").GetString());
     }
 
     [Fact]
@@ -324,7 +324,7 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         var steps = await StepsAsync(folder);
         Assert.Equal(["Pronunciation: edit \"rain\"", "Pronunciation: add \"Rain\""],
             steps.Take(2).Select(s => s.GetProperty("label").GetString()));
-        Assert.Equal(["pronunciation", "pronunciation"], steps.Take(2).Select(s => s.GetProperty("action").GetString()));
+        Assert.Equal(["Pronunciation", "Pronunciation"], steps.Take(2).Select(s => s.GetProperty("action").GetString()));
         Assert.Equal("rain", Assert.Single(await ListAsync(folder)).GetProperty("writtenForm").GetString());
     }
 
@@ -479,7 +479,7 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         try
         {
             var enqueue = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/audio/enqueue",
-                new { level = "chapter", nodeId = book.ChapterId("ch1"), needsAudioOnly = true });
+                new { level = "Chapter", nodeId = book.ChapterId("ch1"), needsAudioOnly = true });
             Assert.Equal(HttpStatusCode.Accepted, enqueue.StatusCode);
 
             var add = await AddAsync(folder, "night", "nite");
@@ -741,7 +741,7 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
             {
                 app.FakeAi.HoldSpeech = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 return Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{busy}/audio/enqueue",
-                    new { level = "chapter", nodeId = busyBook.ChapterId("ch1"), needsAudioOnly = true });
+                    new { level = "Chapter", nodeId = busyBook.ChapterId("ch1"), needsAudioOnly = true });
             },
             async () =>
             {
@@ -757,7 +757,7 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
                 app.FakeAi.LlmReply = p => FakeAiResponses.AttributionReply(p, "Alice");
                 app.FakeAi.HoldLlmAfter(0);
                 return Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{busy}/attribution/enqueue",
-                    new { level = "chapter", nodeId = busyBook.ChapterId("ch1"), unprocessedOnly = true });
+                    new { level = "Chapter", nodeId = busyBook.ChapterId("ch1"), unprocessedOnly = true });
             },
             async () =>
             {

@@ -39,8 +39,8 @@ namespace Read2Me.App.Api
     /// </summary>
     public sealed record VoiceRuleDto(
         Guid RuleId, Guid VoiceId, string VoiceName, bool IsDefault,
-        string? FromLevel, Guid? FromNodeId, string? FromTitle, bool FromDangling,
-        string? ToLevel, Guid? ToNodeId, string? ToTitle, bool ToDangling,
+        VoiceAnchorLevel? FromLevel, Guid? FromNodeId, string? FromTitle, bool FromDangling,
+        VoiceAnchorLevel? ToLevel, Guid? ToNodeId, string? ToTitle, bool ToDangling,
         string Order);
 
     /// <summary>The voice a character's rules pick at the start of a chapter; null when none resolves.</summary>
@@ -122,8 +122,8 @@ namespace Read2Me.App.Api
             var rules = await reader.GetCharacterVoiceRulesAsync(folderId, id);
             return Results.Ok(rules.Select(r => new VoiceRuleDto(
                 r.Id, r.VoiceId, r.VoiceName, r.IsDefault,
-                r.FromLevel?.ToString(), r.FromNodeId, r.FromDangling ? null : r.FromDisplayName, r.FromDangling,
-                r.ToLevel?.ToString(), r.ToNodeId, r.ToDangling ? null : r.ToDisplayName, r.ToDangling,
+                r.FromLevel, r.FromNodeId, r.FromDangling ? null : r.FromDisplayName, r.FromDangling,
+                r.ToLevel, r.ToNodeId, r.ToDangling ? null : r.ToDisplayName, r.ToDangling,
                 r.Rank)).ToList());
         }
 

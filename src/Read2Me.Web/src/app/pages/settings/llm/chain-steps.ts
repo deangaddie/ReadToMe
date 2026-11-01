@@ -1,4 +1,4 @@
-import { type AttributionChainStep, AttributionPromptStyle, type LlmServerConfig } from '@app/api';
+import type { AttributionChainStep, AttributionPromptStyle, LlmServerConfig } from '@app/api';
 
 /**
  * Pure edits over the stored attribution chain. Steps
@@ -71,11 +71,11 @@ export function chainRows(
  * always sends thinking off, so a thinking Chapter rung would run exactly like the fast one.
  */
 const VARIANTS: readonly { promptStyle: AttributionPromptStyle; thinking: boolean }[] = [
-  { promptStyle: AttributionPromptStyle.Full, thinking: false },
-  { promptStyle: AttributionPromptStyle.Simple, thinking: false },
-  { promptStyle: AttributionPromptStyle.Chapter, thinking: false },
-  { promptStyle: AttributionPromptStyle.Full, thinking: true },
-  { promptStyle: AttributionPromptStyle.Simple, thinking: true },
+  { promptStyle: 'Full', thinking: false },
+  { promptStyle: 'Simple', thinking: false },
+  { promptStyle: 'Chapter', thinking: false },
+  { promptStyle: 'Full', thinking: true },
+  { promptStyle: 'Simple', thinking: true },
 ];
 
 /**
@@ -100,8 +100,8 @@ export function chainOptions(
 /** Only the non-default halves are suffixed, matching how the walk names rungs in its logs. */
 export function optionLabel(option: ChainOption): string {
   const suffixes = [
-    ...(option.promptStyle === AttributionPromptStyle.Simple ? ['simple'] : []),
-    ...(option.promptStyle === AttributionPromptStyle.Chapter ? ['chapter'] : []),
+    ...(option.promptStyle === 'Simple' ? ['simple'] : []),
+    ...(option.promptStyle === 'Chapter' ? ['chapter'] : []),
     ...(option.thinking ? ['thinking'] : []),
   ];
   return suffixes.length ? `${option.config.name} (${suffixes.join(', ')})` : option.config.name;

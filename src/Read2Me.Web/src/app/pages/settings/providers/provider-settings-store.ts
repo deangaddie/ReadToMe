@@ -1,4 +1,4 @@
-import { type ProviderSettingsSchema, toApiError } from '@app/api';
+import { type ProviderSettingsSchema, type ProviderType, toApiError } from '@app/api';
 import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { LiveService, type Unsubscribe } from '@app/live/live.service';
@@ -65,7 +65,7 @@ export class ProviderSettingsStore {
   }
 
   /** The provider type's tuning fields with ranges and defaults. */
-  schema(type: number): Promise<ProviderSettingsSchema> {
+  schema(type: ProviderType): Promise<ProviderSettingsSchema> {
     return this.api.schema(type);
   }
 

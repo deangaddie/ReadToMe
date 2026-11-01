@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { AttributionPromptStyle, LlmApiType, type LlmServerConfig } from '@app/api';
+import type { LlmServerConfig } from '@app/api';
 import { resetServices } from '@app/core/services';
 import { FakeApi, problem } from '../../../../testing/fake-api';
 import { FakeLive } from '../../../../testing/fake-live';
@@ -10,7 +10,7 @@ import './llm-test-console';
 const FAKE: LlmServerConfig = {
   id: 7,
   name: 'fake',
-  apiType: LlmApiType.OpenAiCompatible,
+  apiType: 'OpenAiCompatible',
   baseUrl: 'http://fake-llm',
   apiKey: null,
   model: null,
@@ -20,7 +20,7 @@ const FAKE: LlmServerConfig = {
   frequencyPenalty: null,
   presencePenalty: null,
   attributionBatchSize: 1,
-  promptStyle: AttributionPromptStyle.Full,
+  promptStyle: 'Full',
   supportsModelSwitch: false,
 };
 

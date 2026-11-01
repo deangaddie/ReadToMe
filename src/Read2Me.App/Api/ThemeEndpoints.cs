@@ -49,8 +49,9 @@ namespace Read2Me.App.Api
 
         private static async Task<IResult> CreateAsync(HttpContext ctx, ThemeService svc)
         {
-            if (await ctx.Request.ReadFromJsonAsync<AppTheme>() is not { } theme)
-                return Results.Problem("Missing theme body.", statusCode: StatusCodes.Status400BadRequest);
+            var (theme, invalid) = await ApiJson.ReadBodyAsync<AppTheme>(ctx.Request);
+            if (theme is null)
+                return Results.Problem(invalid ?? "Missing theme body.", statusCode: StatusCodes.Status400BadRequest);
             if (Validate(theme) is { } problem)
                 return problem;
 
@@ -61,8 +62,9 @@ namespace Read2Me.App.Api
 
         private static async Task<IResult> UpdateAsync(HttpContext ctx, int id, ThemeService svc)
         {
-            if (await ctx.Request.ReadFromJsonAsync<AppTheme>() is not { } theme)
-                return Results.Problem("Missing theme body.", statusCode: StatusCodes.Status400BadRequest);
+            var (theme, invalid) = await ApiJson.ReadBodyAsync<AppTheme>(ctx.Request);
+            if (theme is null)
+                return Results.Problem(invalid ?? "Missing theme body.", statusCode: StatusCodes.Status400BadRequest);
             if (Validate(theme) is { } problem)
                 return problem;
 
@@ -100,8 +102,9 @@ namespace Read2Me.App.Api
 
         private static async Task<IResult> SetSelectionAsync(HttpContext ctx, ThemeService svc)
         {
-            if (await ctx.Request.ReadFromJsonAsync<ThemeSelectionUpdateRequest>() is not { } request)
-                return Results.Problem("Missing body.", statusCode: StatusCodes.Status400BadRequest);
+            var (request, invalid) = await ApiJson.ReadBodyAsync<ThemeSelectionUpdateRequest>(ctx.Request);
+            if (request is null)
+                return Results.Problem(invalid ?? "Missing body.", statusCode: StatusCodes.Status400BadRequest);
 
             if (request.SelectedThemeId is { } themeId)
             {

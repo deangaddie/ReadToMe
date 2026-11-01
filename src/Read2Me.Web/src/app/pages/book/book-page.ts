@@ -25,7 +25,12 @@ import { type HeadingRef, type TreeNode, placeholderTitleClass } from './book-tr
 import { openEditWithAiDialog } from './edit-with-ai/edit-with-ai-dialog';
 import { openManualRereadDialog } from './manual-reread-dialog';
 import { type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
-import type { ActionEntryId, NodeMenuTarget } from './node-menu-entries';
+import {
+  type ActionEntryId,
+  LEVEL_OF_MENU_KIND,
+  MENU_KIND_OF_LEVEL,
+  type NodeMenuTarget,
+} from './node-menu-entries';
 import { paragraphRow } from './paragraph-row';
 import type { PronunciationEditRequest } from './pronunciation-card';
 import { PronunciationMarks } from './pronunciation-marks-store';
@@ -604,9 +609,9 @@ export class BookPage extends R2mElement {
     switch (row.kind) {
       case 'volume':
       case 'part':
-        return this.headingRow(row.kind, row);
+        return this.headingRow(LEVEL_OF_MENU_KIND[row.kind], row);
       case 'chapter':
-        return this.headingRow('chapter', { ...row, id: row.chapterId });
+        return this.headingRow('Chapter', { ...row, id: row.chapterId });
       case 'paragraph':
         return html`<div class="book__row">
           ${paragraphRow(row.paragraph, row.chapterId, this.ctx(), row)}
@@ -646,10 +651,12 @@ export class BookPage extends R2mElement {
     return html`<div class="book__heading-row book__row">
       <div
         class="book__heading"
-        data-chapter-id=${level === 'chapter' ? id : nothing}
-        data-node-id=${level === 'chapter' ? nothing : id}
+        data-chapter-id=${level === 'Chapter' ? id : nothing}
+        data-node-id=${level === 'Chapter' ? nothing : id}
       >
-        <h2 class="book__${level} ${placeholderTitleClass(heading)}">${heading.title}</h2>
+        <h2 class="book__${MENU_KIND_OF_LEVEL[level]} ${placeholderTitleClass(heading)}">
+          ${heading.title}
+        </h2>
         <span class="book__heading-menu"
           >${nodeMenuTrigger(menu.target, { block: menu.block })}</span
         >
@@ -705,10 +712,11 @@ export class BookPage extends R2mElement {
     const request = (e as CustomEvent<NodeMenuRequest>).detail;
     const { target } = request;
     if (target.kind === 'volume' || target.kind === 'part' || target.kind === 'chapter') {
-      const level = target.kind;
+      const kind = target.kind;
+      const level = LEVEL_OF_MENU_KIND[kind];
       const heading = this.store
         .chapters()
-        .map((c) => (level === 'chapter' ? c : c[level]))
+        .map((c) => (kind === 'chapter' ? c : c[kind]))
         .find((h) => h?.id === target.id);
       if (!heading) return;
       const node: ActionNode = { level, id: heading.id, title: heading.title };

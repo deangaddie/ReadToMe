@@ -42,7 +42,7 @@ function node(id: string, level: TreeNode['level'], children: TreeNode[] = []): 
     untitled: false,
     isFirst: true,
     isLast: true,
-    expandable: level !== 'chapter',
+    expandable: level !== 'Chapter',
     loaded: true,
     loadTarget: { level, id },
     children,
@@ -106,7 +106,7 @@ describe('SelectionWorkflow', () => {
     chapters = signal<LoadedChapterView[]>([]);
     detail = signal({ narratorOnlyMode: false });
     const folder = signal('dracula');
-    const tree = signal([node('v1', 'volume', [node('pt1', 'part', [node('c1', 'chapter')])])]);
+    const tree = signal([node('v1', 'Volume', [node('pt1', 'Part', [node('c1', 'Chapter')])])]);
     selection = new SelectionStore();
     audioSelection = new AudioSelectionStore();
     workflow = new SelectionWorkflow(
@@ -167,24 +167,24 @@ describe('SelectionWorkflow', () => {
 
   describe('toggleNode', () => {
     it('reads the node paragraph ids and selects them; unticking removes exactly what it reads', async () => {
-      api.on('GET', `${BASE}/nodes/chapter/c1/paragraph-ids`, [REF('p1'), REF('p2')]);
-      await workflow.toggleNode(node('c1', 'chapter'), true);
+      api.on('GET', `${BASE}/nodes/Chapter/c1/paragraph-ids`, [REF('p1'), REF('p2')]);
+      await workflow.toggleNode(node('c1', 'Chapter'), true);
       expect(selection.ids()).toEqual(['p1', 'p2']);
-      expect(selection.nodeState('chapter', 'c1')).toBe('checked');
+      expect(selection.nodeState('Chapter', 'c1')).toBe('checked');
       expect(workflow.working()).toBe(false);
 
-      api.on('GET', `${BASE}/nodes/chapter/c1/paragraph-ids`, [REF('p1')]);
-      await workflow.toggleNode(node('c1', 'chapter'), false);
+      api.on('GET', `${BASE}/nodes/Chapter/c1/paragraph-ids`, [REF('p1')]);
+      await workflow.toggleNode(node('c1', 'Chapter'), false);
       expect(selection.ids()).toEqual(['p2']);
-      expect(api.calls('GET', `${BASE}/nodes/chapter/c1/paragraph-ids`)).toHaveLength(2);
+      expect(api.calls('GET', `${BASE}/nodes/Chapter/c1/paragraph-ids`)).toHaveLength(2);
     });
 
     it('in Audio mode reads the node item ids into the item selection', async () => {
       mode.set('audio');
-      api.on('GET', `${BASE}/nodes/chapter/c1/item-ids`, [ITEM_REF('i1', 'p1')]);
-      await workflow.toggleNode(node('c1', 'chapter'), true);
+      api.on('GET', `${BASE}/nodes/Chapter/c1/item-ids`, [ITEM_REF('i1', 'p1')]);
+      await workflow.toggleNode(node('c1', 'Chapter'), true);
       expect(audioSelection.ids()).toEqual(['i1']);
-      expect(audioSelection.nodeState('chapter', 'c1')).toBe('checked');
+      expect(audioSelection.nodeState('Chapter', 'c1')).toBe('checked');
       expect(selection.count()).toBe(0);
     });
   });
@@ -210,7 +210,7 @@ describe('SelectionWorkflow', () => {
 
     it('confirms when a selected paragraph has an assigned speaker, reading chapters not in the window', async () => {
       api.on('POST', `${BASE}/attribution/enqueue-paragraphs`, { enqueued: 2 });
-      api.on('GET', `${BASE}/nodes/chapter/c9/children`, {
+      api.on('GET', `${BASE}/nodes/Chapter/c9/children`, {
         paragraphs: [paragraph('p9', item('i9', { characterId: 'harker' }))],
       });
       chapters.set([C1]);
@@ -229,7 +229,7 @@ describe('SelectionWorkflow', () => {
           destructive: true,
         },
       ]);
-      expect(api.calls('GET', `${BASE}/nodes/chapter/c9/children`)).toHaveLength(1);
+      expect(api.calls('GET', `${BASE}/nodes/Chapter/c9/children`)).toHaveLength(1);
       expect(api.calls('POST', `${BASE}/attribution/enqueue-paragraphs`)).toHaveLength(0);
       expect(selection.count()).toBe(2);
 
@@ -253,11 +253,11 @@ describe('SelectionWorkflow', () => {
   });
 
   describe('nodeAction', () => {
-    const C1_NODE = { level: 'chapter', id: 'c1', title: 'Jonathan Harker’s Journal' } as const;
+    const C1_NODE = { level: 'Chapter', id: 'c1', title: 'Jonathan Harker’s Journal' } as const;
 
     it('Select unprocessed and Attribute unprocessed act on the node', async () => {
       api
-        .on('GET', `${BASE}/nodes/chapter/c1/paragraph-ids`, (_body, url) =>
+        .on('GET', `${BASE}/nodes/Chapter/c1/paragraph-ids`, (_body, url) =>
           url.searchParams.get('unprocessedOnly') === 'true' ? [REF('p2')] : [],
         )
         .on('POST', `${BASE}/attribution/enqueue`, { enqueued: 2 });
@@ -268,7 +268,7 @@ describe('SelectionWorkflow', () => {
       await workflow.nodeAction(C1_NODE, 'attribute-node');
       expect(ensureReady).toHaveBeenCalledTimes(1);
       expect(api.calls('POST', `${BASE}/attribution/enqueue`).map((r) => r.body)).toEqual([
-        { level: 'chapter', nodeId: 'c1', unprocessedOnly: true },
+        { level: 'Chapter', nodeId: 'c1', unprocessedOnly: true },
       ]);
       expect(toasts).toEqual(['Queued 2 paragraphs']);
     });
@@ -301,7 +301,7 @@ describe('SelectionWorkflow', () => {
 
     it('Select needs audio reads with the filter and narrator-only flag', async () => {
       detail.set({ narratorOnlyMode: true });
-      api.on('GET', `${BASE}/nodes/chapter/c1/item-ids`, (_body, url) =>
+      api.on('GET', `${BASE}/nodes/Chapter/c1/item-ids`, (_body, url) =>
         url.searchParams.get('needsAudioOnly') === 'true' &&
         url.searchParams.get('narratorOnlyMode') === 'true'
           ? [ITEM_REF('i3', 'p3')]
@@ -313,7 +313,7 @@ describe('SelectionWorkflow', () => {
 
     it('Generate audio for this node hands the node to the generator', async () => {
       await workflow.nodeAction(C1_NODE, 'generate-audio-node');
-      expect(enqueueNode).toHaveBeenCalledWith('chapter', 'c1', false);
+      expect(enqueueNode).toHaveBeenCalledWith('Chapter', 'c1', false);
     });
   });
 

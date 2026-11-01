@@ -7,7 +7,7 @@ export const SETUP_CHECK_PATH = 'settings/setup-check';
 
 /** How many checks in the report failed. */
 export const failedCount = (report: SetupCheckReport | null): number =>
-  report?.rows.filter((r) => r.result === 'failed').length ?? 0;
+  report?.rows.filter((r) => r.result === 'Failed').length ?? 0;
 
 /** The host started without a usable Workspace: every route shows the Setup check until a restart. */
 export const noWorkspace = (report: SetupCheckReport | null): boolean =>
@@ -57,7 +57,7 @@ export function shieldView(report: SetupCheckReport | null): {
 export const landingPath = (report: SetupCheckReport | null): string =>
   report?.firstRun ? SETUP_CHECK_PATH : 'projects';
 
-const LANE_LABEL: Record<SetupCheckLane, string> = { local: 'Local', cpu: 'CPU', gpu: 'GPU' };
+const LANE_LABEL: Record<SetupCheckLane, string> = { Local: 'Local', Cpu: 'CPU', Gpu: 'GPU' };
 
 /** The progress strip: "Full check 1/9 · CPU · Starting read2me-whisper", then "· cancelling" once asked. */
 export function fullRunLabel(run: SetupFullRun): string {

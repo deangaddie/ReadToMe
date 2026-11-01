@@ -14,11 +14,16 @@ namespace Read2Me.App.Api
     /// </summary>
     public static class BookCommandJson
     {
-        private static readonly JsonSerializerOptions Options = new()
+        private static readonly JsonSerializerOptions Options = CreateOptions();
+
+        /// <summary>The wire form (<see cref="ApiJson"/>) plus the folder id as a plain string.</summary>
+        private static JsonSerializerOptions CreateOptions()
         {
-            PropertyNameCaseInsensitive = true,
-            Converters = { new JsonStringEnumConverter(), new ProjectFolderIdJsonConverter() },
-        };
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            ApiJson.Configure(options);
+            options.Converters.Add(new ProjectFolderIdJsonConverter());
+            return options;
+        }
 
         private static readonly Dictionary<string, Type> Map =
             typeof(BookCommand).Assembly.GetTypes()

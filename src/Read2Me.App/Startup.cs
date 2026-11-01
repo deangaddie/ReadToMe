@@ -40,7 +40,8 @@ namespace Read2Me.App
             services.AddAppState();
             services.AddAppDatabase();
 
-            services.AddOpenApi();
+            services.ConfigureHttpJsonOptions(o => ApiJson.Configure(o.SerializerOptions));
+            services.AddOpenApi(o => o.AddSchemaTransformer<EnumSchemaTransformer>());
             services.AddLiveHub();
 
             services.AddHttpClient();

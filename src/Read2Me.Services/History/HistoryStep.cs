@@ -44,42 +44,40 @@ public sealed record HistoryStep(
     bool CantOpen = false);
 
 /// <summary>What opened a History step: a request, a Background run, a Restore, History starting, or an import.</summary>
-[JsonConverter(typeof(JsonStringEnumConverter<HistoryStepKind>))]
 public enum HistoryStepKind
 {
-    [JsonStringEnumMemberName("request")] Request,
-    [JsonStringEnumMemberName("backgroundRun")] BackgroundRun,
-    [JsonStringEnumMemberName("restore")] Restore,
-    [JsonStringEnumMemberName("started")] Started,
-    [JsonStringEnumMemberName("import")] Import,
+    Request,
+    BackgroundRun,
+    Restore,
+    Started,
+    Import,
 }
 
 /// <summary>
 /// The kind of action a request's or Background run's step is, in user terms: the History sheet
 /// draws one icon per action.
 /// </summary>
-[JsonConverter(typeof(JsonStringEnumConverter<StepAction>))]
 public enum StepAction
 {
     /// <summary>Any change no other action names: text, a delivery cue, project details, the cover.</summary>
-    [JsonStringEnumMemberName("edit")] Edit,
-    [JsonStringEnumMemberName("editWithAi")] EditWithAi,
-    [JsonStringEnumMemberName("insert")] Insert,
+    Edit,
+    EditWithAi,
+    Insert,
     /// <summary>Splitting a node, or re-splitting the whole book.</summary>
-    [JsonStringEnumMemberName("split")] Split,
-    [JsonStringEnumMemberName("merge")] Merge,
+    Split,
+    Merge,
     /// <summary>Deleting, removing or clearing anything.</summary>
-    [JsonStringEnumMemberName("delete")] Delete,
-    [JsonStringEnumMemberName("title")] Title,
-    [JsonStringEnumMemberName("pause")] Pause,
+    Delete,
+    Title,
+    Pause,
     /// <summary>Characters, aliases, speakers and the narrator.</summary>
-    [JsonStringEnumMemberName("character")] Character,
+    Character,
     /// <summary>Voices, their audio and voice rules; a Background run of the voice batch alone.</summary>
-    [JsonStringEnumMemberName("voice")] Voice,
+    Voice,
     /// <summary>A Background run with attribution in it.</summary>
-    [JsonStringEnumMemberName("attribution")] Attribution,
+    Attribution,
     /// <summary>Adding or editing a Pronunciation; deleting one is a <see cref="Delete"/>.</summary>
-    [JsonStringEnumMemberName("pronunciation")] Pronunciation,
+    Pronunciation,
 }
 
 /// <summary>A project's History: its steps newest first, and the step the Head points at (null before the first).</summary>

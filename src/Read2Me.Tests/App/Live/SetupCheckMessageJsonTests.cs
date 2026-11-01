@@ -7,13 +7,12 @@ namespace Read2Me.Tests.App.Live;
 
 /// <summary>
 /// A <c>setupCheck</c> message carries the report the web app also reads over REST, so its enums
-/// must keep their camelCase wire names under the hub's options (whose enum converter would
-/// otherwise write member names).
+/// take the one wire form under the hub's options too: their member names.
 /// </summary>
 public class SetupCheckMessageJsonTests
 {
     [Fact]
-    public void The_report_s_enums_are_camelCase_on_the_hub_as_on_the_REST_wire()
+    public void The_report_s_enums_are_member_names_on_the_hub_as_on_the_REST_wire()
     {
         var options = new JsonSerializerOptions();
         LiveServiceCollectionExtensions.ConfigurePayloadJson(options);
@@ -30,9 +29,9 @@ public class SetupCheckMessageJsonTests
 
         var wire = json.GetProperty("report");
         var wireRow = wire.GetProperty("rows")[0];
-        Assert.Equal("workspaceAndTools", wireRow.GetProperty("group").GetString());
-        Assert.Equal("full", wireRow.GetProperty("tier").GetString());
-        Assert.Equal("notConfirmed", wireRow.GetProperty("result").GetString());
-        Assert.Equal("local", wire.GetProperty("fullRun").GetProperty("lane").GetString());
+        Assert.Equal("WorkspaceAndTools", wireRow.GetProperty("group").GetString());
+        Assert.Equal("Full", wireRow.GetProperty("tier").GetString());
+        Assert.Equal("NotConfirmed", wireRow.GetProperty("result").GetString());
+        Assert.Equal("Local", wire.GetProperty("fullRun").GetProperty("lane").GetString());
     }
 }

@@ -74,7 +74,7 @@ export function ancestryFor(
 export function selectedUnder(selection: SelectionMap, level: NodeLevel, nodeId: string): number {
   let n = 0;
   for (const a of Object.values(selection)) {
-    const under = level === 'volume' ? a.volumeId : level === 'part' ? a.partId : a.chapterId;
+    const under = level === 'Volume' ? a.volumeId : level === 'Part' ? a.partId : a.chapterId;
     if (under === nodeId) n++;
   }
   return n;

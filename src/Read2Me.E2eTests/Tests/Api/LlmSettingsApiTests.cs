@@ -159,9 +159,9 @@ public class LlmSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
             {
                 steps = new object[]
                 {
-                    new { configId = b, thinking = true, promptStyle = 1 },
-                    new { configId = a, thinking = false, promptStyle = 0 },
-                    new { configId = b, thinking = true, promptStyle = 1 }, // exact duplicate collapses
+                    new { configId = b, thinking = true, promptStyle = "Simple" },
+                    new { configId = a, thinking = false, promptStyle = "Full" },
+                    new { configId = b, thinking = true, promptStyle = "Simple" }, // exact duplicate collapses
                 },
                 selfConsistency = true,
             });
@@ -173,13 +173,13 @@ public class LlmSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
             Assert.Equal(2, steps.Count);
             Assert.Equal(b, steps[0].GetProperty("configId").GetInt32());
             Assert.True(steps[0].GetProperty("thinking").GetBoolean());
-            Assert.Equal(1, steps[0].GetProperty("promptStyle").GetInt32());
+            Assert.Equal("Simple", steps[0].GetProperty("promptStyle").GetString());
             Assert.Equal(a, steps[1].GetProperty("configId").GetInt32());
 
             var resolved = chain.GetProperty("resolved").EnumerateArray().ToList();
             Assert.Equal(2, resolved.Count);
             Assert.Equal(b, resolved[0].GetProperty("config").GetProperty("id").GetInt32());
-            Assert.Equal(1, resolved[0].GetProperty("promptStyle").GetInt32());
+            Assert.Equal("Simple", resolved[0].GetProperty("promptStyle").GetString());
 
             var available = chain.GetProperty("available").EnumerateArray().Select(c => c.GetProperty("id").GetInt32());
             Assert.Contains(a, available);
@@ -202,7 +202,7 @@ public class LlmSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
     {
         var put = await Http.PutAsJsonAsync(Url("/attribution-chain"), new
         {
-            steps = new[] { new { configId = 999999, thinking = false, promptStyle = 0 } },
+            steps = new[] { new { configId = 999999, thinking = false, promptStyle = "Full" } },
             selfConsistency = false,
         });
 

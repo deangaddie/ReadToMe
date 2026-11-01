@@ -1,12 +1,9 @@
 import {
-  ParagraphTtsServiceType,
   ParagraphTtsSettingsApi,
-  ProviderSettingsSchema,
-  SemanticSimilarityServiceType,
+  type ProviderSettingsSchema,
+  type ProviderType,
   SemanticSimilaritySettingsApi,
-  TranscriptionServiceType,
   TranscriptionSettingsApi,
-  VoiceDesignServiceType,
   VoiceDesignSettingsApi,
 } from '@app/api';
 import type { IconName } from '@app/ui/icons';
@@ -27,11 +24,11 @@ export interface ProviderAreaApi {
   delete(id: number): Promise<void>;
   active(): Promise<ProviderConfig | null>;
   setActive(id: number): Promise<void>;
-  schema(type: number): Promise<ProviderSettingsSchema>;
+  schema(type: ProviderType): Promise<ProviderSettingsSchema>;
 }
 
 export interface ProviderTypeOption {
-  value: number;
+  value: ProviderType;
   label: string;
   /** The base URL placeholder, and the example in its validation message. */
   urlExample: string;
@@ -57,7 +54,7 @@ export interface ProviderArea {
    * Fields the provider schema leaves out because they are per-config, never per-voice (chunking,
    * carrier prefix, credentials); edited ahead of the schema's tuning fields.
    */
-  configFields(type: number, settings: SettingsValues): SettingsField[];
+  configFields(type: ProviderType, settings: SettingsValues): SettingsField[];
   /** Lower-cased keys of the `configFields` every type of the area shares: a Type change keeps them. */
   perConfigKeys: readonly string[];
   /** A problem the field ranges cannot express; null when there is none. */
@@ -102,21 +99,21 @@ export const PARAGRAPH_TTS_AREA: ProviderArea = {
   api: ParagraphTtsSettingsApi,
   types: [
     {
-      value: ParagraphTtsServiceType.VoxCpm2,
+      value: 'VoxCpm2',
       label: 'VoxCpm2',
       urlExample: 'http://localhost:8004',
     },
     {
-      value: ParagraphTtsServiceType.Chatterbox,
+      value: 'Chatterbox',
       label: 'Chatterbox',
       urlExample: 'http://localhost:8004',
     },
     {
-      value: ParagraphTtsServiceType.Qwen3Base,
+      value: 'Qwen3Base',
       label: 'Qwen3Base',
       urlExample: 'http://localhost:8004',
     },
-    { value: ParagraphTtsServiceType.Breeze, label: 'Breeze', urlExample: 'http://localhost:8004' },
+    { value: 'Breeze', label: 'Breeze', urlExample: 'http://localhost:8004' },
   ],
   hasTextProcessing: true,
   perConfigKeys: [MAX_CHUNK_CHARS, CARRIER_PREFIX, CARRIER_MAX_TARGET_CHARS].map((f) =>
@@ -137,12 +134,12 @@ export const VOICE_DESIGN_AREA: ProviderArea = {
   api: VoiceDesignSettingsApi,
   types: [
     {
-      value: VoiceDesignServiceType.VoxCpm2,
+      value: 'VoxCpm2',
       label: 'VoxCpm2',
       urlExample: 'http://localhost:8004',
     },
-    { value: VoiceDesignServiceType.Qwen3, label: 'Qwen3', urlExample: 'http://localhost:8004' },
-    { value: VoiceDesignServiceType.Breeze, label: 'Breeze', urlExample: 'http://localhost:8004' },
+    { value: 'Qwen3', label: 'Qwen3', urlExample: 'http://localhost:8004' },
+    { value: 'Breeze', label: 'Breeze', urlExample: 'http://localhost:8004' },
   ],
   hasTextProcessing: false,
   perConfigKeys: [],
@@ -158,7 +155,7 @@ export const TRANSCRIPTION_AREA: ProviderArea = {
   api: TranscriptionSettingsApi,
   types: [
     {
-      value: TranscriptionServiceType.LocalWhisper,
+      value: 'LocalWhisper',
       label: 'LocalWhisper',
       urlExample: 'http://localhost:9000',
     },
@@ -177,12 +174,12 @@ export const SIMILARITY_AREA: ProviderArea = {
   api: SemanticSimilaritySettingsApi,
   types: [
     {
-      value: SemanticSimilarityServiceType.MiniLmL6,
+      value: 'MiniLmL6',
       label: 'MiniLmL6',
       urlExample: 'http://localhost:8200',
     },
     {
-      value: SemanticSimilarityServiceType.MpnetBaseV2,
+      value: 'MpnetBaseV2',
       label: 'MpnetBaseV2',
       urlExample: 'http://localhost:8201',
     },
@@ -203,8 +200,8 @@ export const SIMILARITY_AREA: ProviderArea = {
   },
 };
 
-/** A stored type no provider offers (e.g. the removed Chatterbox Turbo) keeps its number and says so. */
-export function providerType(area: ProviderArea, type: number): ProviderTypeOption {
+/** A type none of the area's options lists still shows, named as unknown. */
+export function providerType(area: ProviderArea, type: ProviderType): ProviderTypeOption {
   return (
     area.types.find((t) => t.value === type) ?? {
       value: type,

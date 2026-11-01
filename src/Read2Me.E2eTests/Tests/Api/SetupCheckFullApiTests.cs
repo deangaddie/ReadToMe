@@ -36,7 +36,7 @@ public class SetupCheckFullApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
             Assert.Equal(HttpStatusCode.Accepted, started.StatusCode);
             var run = (await ReadAsync(started)).GetProperty("fullRun");
             Assert.Equal(1, run.GetProperty("step").GetInt32());
-            Assert.Equal("local", run.GetProperty("lane").GetString());
+            Assert.Equal("Local", run.GetProperty("lane").GetString());
             Assert.Equal("Encoding a 1 s tone to .m4b", run.GetProperty("label").GetString());
 
             var joined = await Http.PostAsync(Url("/full"), null);
@@ -69,12 +69,12 @@ public class SetupCheckFullApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
 
         var final = await FinishedAsync();
         var ffmpeg = final.GetProperty("rows").EnumerateArray().Single(r => r.GetProperty("id").GetString() == "ffmpeg");
-        Assert.Equal("passed", ffmpeg.GetProperty("result").GetString());
-        Assert.Equal("full", ffmpeg.GetProperty("tier").GetString());
+        Assert.Equal("Passed", ffmpeg.GetProperty("result").GetString());
+        Assert.Equal("Full", ffmpeg.GetProperty("tier").GetString());
         Assert.Equal(JsonValueKind.String, final.GetProperty("fullCheckedAt").ValueKind);
         // Cancelled during the ffmpeg step: the CPU checks never ran, so no container was driven.
         var transcription = final.GetProperty("rows").EnumerateArray().Single(r => r.GetProperty("id").GetString() == "transcription");
-        Assert.Equal("notRun", transcription.GetProperty("result").GetString());
+        Assert.Equal("NotRun", transcription.GetProperty("result").GetString());
         Assert.Equal("Nothing to put back: the check drove no containers.", final.GetProperty("putBack").GetString());
 
         var afterwards = await Http.PostAsync($"{app.BaseUrl}/api/preflight/CharacterAttribution/plan", null);
@@ -111,7 +111,7 @@ public class SetupCheckFullApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
 
         var final = await FinishedAsync();
         var ffmpeg = final.GetProperty("rows").EnumerateArray().Single(r => r.GetProperty("id").GetString() == "ffmpeg");
-        Assert.Equal("passed", ffmpeg.GetProperty("result").GetString());
+        Assert.Equal("Passed", ffmpeg.GetProperty("result").GetString());
         // A re-run isn't a whole Full check: its time stays as it was.
         Assert.Equal(before.GetProperty("fullCheckedAt").ToString(), final.GetProperty("fullCheckedAt").ToString());
         Assert.Equal("Nothing to put back: the check drove no containers.", final.GetProperty("putBack").GetString());

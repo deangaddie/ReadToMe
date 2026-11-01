@@ -8,6 +8,11 @@ and talk to `http://localhost:5000/api/...`. Localhost only, no auth.
 in the OpenAPI document — fetch `GET /openapi/v1.json` first and treat it as the
 source of truth.
 
+**Wire form**: one for every endpoint and the hub. An enum is its C# member name
+(`"Chapter"`, `"Confirmed"`, `"VoxCpm2"`) in bodies, route segments, query values and
+dictionary keys; route and query names match exactly, so `nodes/Chapter/...` is a 400. An
+integer for an enum, or a string for a number (`"3"`), is a 400.
+
 **Errors**: RFC 7807 ProblemDetails. 400 malformed input, 404 unknown folder/entity,
 409 already-running or blocked (assembly carries `audioRemainingCount`), 422 domain
 failure (message in `detail`).
@@ -303,7 +308,7 @@ curl -s http://localhost:5000/api/projects/{folder}/status
 #   review, attributionProcessing, attributionQueued, isDone } },
 #   pauseParagraphs,                                      ← paragraphs: no items, or one pause item
 #   checkpoints: { <step id>: { state, stale, at } }, revision }
-curl -s http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/status   # one node's summary
+curl -s http://localhost:5000/api/projects/{folder}/nodes/Chapter/{chapterId}/status   # one node's summary
 ```
 
 `characters` excludes the seed Narrator row; `charactersWithLines` counts speakers (narration
@@ -312,20 +317,18 @@ have a voice with audio. Both reads reseed the node roll-ups from the database, 
 current even with no UI open, and hub clients receive the corrected `nodeStatus` deltas.
 
 A Pipeline step the user has checked holds a **checkpoint**. `checkpoints` lists only the steps
-that have one, keyed by the camelCase step id (`import | structure | speakers | text | voices |
-titles | pauses | audio | export`). Unlike the PascalCase enum strings elsewhere in this API (an
-enum without a converter, such as a settings config's `type` or a queue `outcome.kind`, goes out
-as its integer), a checkpoint's `state` is lower case too (`confirmed` | `skipped`), because these ids double as the
-route segment and the web's step ids. Set, replace or clear one:
+that have one, keyed by step id (`Import | Structure | Speakers | Text | Voices | Titles |
+Pauses | Audio | Export`), the same name as the route segment; a checkpoint's `state` is
+`Confirmed` or `Skipped`. Set, replace or clear one:
 
 ```bash
-curl -s -X PUT http://localhost:5000/api/projects/{folder}/checkpoints/structure \
-  -H 'Content-Type: application/json' -d '{"state":"confirmed"}'   # confirmed | skipped | open → 204
+curl -s -X PUT http://localhost:5000/api/projects/{folder}/checkpoints/Structure \
+  -H 'Content-Type: application/json' -d '{"state":"Confirmed"}'   # Confirmed | Skipped | Open → 204
 ```
 
-Structure, Text and Titles take `confirmed` or `skipped`, Speakers only `confirmed` and Pauses
-only `skipped`. The other steps are done by their data, so any state on them is a 422, `open`
-included. `open` deletes the row. Repeating the state a row already holds changes nothing and
+Structure, Text and Titles take `Confirmed` or `Skipped`, Speakers only `Confirmed` and Pauses
+only `Skipped`. The other steps are done by their data, so any state on them is a 422, `Open`
+included. `Open` deletes the row. Repeating the state a row already holds changes nothing and
 still answers 204. The same state on a stale row reconfirms it. The refreshed `/status` arrives
 through the `Checkpoints` receipt. A step that isn't one of the nine ids is a 404. A book with no
 content is a 422 "Read the book first", and a body without `state` is a 400. A reread or a clear
@@ -354,14 +357,14 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/characters/discover/
 # queue attribution per chapter (or part/volume):
 curl -s -X POST http://localhost:5000/api/projects/{folder}/attribution/enqueue \
   -H 'content-type: application/json' \
-  -d '{ "level": "chapter", "nodeId": "<chapterId>", "unprocessedOnly": true }'
+  -d '{ "level": "Chapter", "nodeId": "<chapterId>", "unprocessedOnly": true }'
 # or an explicit selection (ids without dialog are ignored; enqueued = what was queued):
 curl -s -X POST http://localhost:5000/api/projects/{folder}/attribution/enqueue-paragraphs \
   -H 'content-type: application/json' \
   -d '{ "paragraphIds": ["<paragraphId>", "<paragraphId>"] }'
 # the Character paragraphs under a node with their chapter/part/volume ids
 # (what a selection holds); unprocessedOnly=true keeps those still unattributed:
-curl -s 'http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/paragraph-ids?unprocessedOnly=true'
+curl -s 'http://localhost:5000/api/projects/{folder}/nodes/Chapter/{chapterId}/paragraph-ids?unprocessedOnly=true'
 # poll /api/attribution/queue; per-paragraph queue state (status + failure/unknown outcome):
 curl -s http://localhost:5000/api/projects/{folder}/attribution/paragraphs/{paragraphId}
 # forget a paragraph's Failed/Unfinished outcome (204):
@@ -370,7 +373,7 @@ curl -s -X DELETE http://localhost:5000/api/projects/{folder}/attribution/paragr
 curl -s -X POST http://localhost:5000/api/attribution/cancel
 curl -s -X POST http://localhost:5000/api/attribution/dismiss
 # the attribution itself is per item — read it off the paragraph's items:
-curl -s http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/children
+curl -s http://localhost:5000/api/projects/{folder}/nodes/Chapter/{chapterId}/children
 # the cast page's reads: every character as a roster row (narrator first; lineCount, voiceCount,
 # readyVoiceCount, isNarrator = the seed row, narratesBook = the linked narrator), a character's
 # lines in book order, and a line's surrounding paragraphs (before/after each 0..10, default 3/2;
@@ -526,7 +529,7 @@ curl -s http://localhost:5000/api/projects/{folder}/characters/{characterId}/voi
 ```bash
 curl -s -X POST http://localhost:5000/api/projects/{folder}/audio/enqueue \
   -H 'content-type: application/json' \
-  -d '{ "level": "chapter", "nodeId": "<chapterId>", "needsAudioOnly": true }'
+  -d '{ "level": "Chapter", "nodeId": "<chapterId>", "needsAudioOnly": true }'
 # or an explicit selection / a single retry (unknown ids ignored; enqueued = what was queued;
 # 409 when no paragraph TTS service is active):
 curl -s -X POST http://localhost:5000/api/projects/{folder}/audio/enqueue-items \
@@ -535,13 +538,13 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/audio/enqueue-items 
 # the speech items under a node that have a speaker to read them, with their
 # paragraph/chapter/part/volume ids (what an audio selection holds); needsAudioOnly=true keeps
 # those still missing a WAV, narratorOnlyMode=true counts unattributed lines as readable:
-curl -s 'http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/item-ids?needsAudioOnly=true'
+curl -s 'http://localhost:5000/api/projects/{folder}/nodes/Chapter/{chapterId}/item-ids?needsAudioOnly=true'
 # poll /api/audio/queue; per-item:
 curl -s http://localhost:5000/api/projects/{folder}/audio/items/{itemId}
 
 # which voice each speech item of a chapter will be spoken in (null voiceName = none resolves;
 # narratedBy = the linked narrator's name on narration items):
-curl -s http://localhost:5000/api/projects/{folder}/nodes/chapter/{chapterId}/voices
+curl -s http://localhost:5000/api/projects/{folder}/nodes/Chapter/{chapterId}/voices
 # → { "<itemId>": { "voiceName": "Deep", "narratedBy": null }, … }
 
 # items whose audio failed normalize/verify (sparse — absent = passed; state NeedsReview | Dismissed):

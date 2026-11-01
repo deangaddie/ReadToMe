@@ -11,7 +11,7 @@ import './setup-check-page';
 const AT_START = '2026-10-28T14:02:00Z';
 const LATER = '2026-10-28T14:09:00Z';
 
-function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'): SetupCheckReport {
+function report(quickCheckedAt: string, ffmpeg: 'Passed' | 'Failed' = 'Failed'): SetupCheckReport {
   return {
     quickCheckedAt,
     fullCheckedAt: null,
@@ -24,10 +24,10 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
     rows: [
       {
         id: 'workspace',
-        group: 'workspaceAndTools',
+        group: 'WorkspaceAndTools',
         name: 'Workspace',
-        tier: 'quick',
-        result: 'passed',
+        tier: 'Quick',
+        result: 'Passed',
         expected: 'An absolute, writable folder (Workspace:FolderPath)',
         found: 'D:\\WS',
         note: "The folder didn't exist, so the app created it.",
@@ -41,9 +41,9 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
       },
       {
         id: 'ffmpeg',
-        group: 'workspaceAndTools',
+        group: 'WorkspaceAndTools',
         name: 'ffmpeg',
-        tier: 'full',
+        tier: 'Full',
         result: ffmpeg,
         expected: 'ffmpeg -version and ffprobe -version from PATH',
         found: 'ffmpeg: The system cannot find the file specified.',
@@ -58,10 +58,10 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
       },
       {
         id: 'docker',
-        group: 'workspaceAndTools',
+        group: 'WorkspaceAndTools',
         name: 'docker CLI',
-        tier: 'quick',
-        result: 'passed',
+        tier: 'Quick',
+        result: 'Passed',
         expected: 'docker on PATH',
         found: 'Docker version 28.4.0',
         note: null,
@@ -71,10 +71,10 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
       },
       {
         id: 'llm',
-        group: 'aiConfigs',
+        group: 'AiConfigs',
         name: 'LLM',
-        tier: 'full',
-        result: 'passed',
+        tier: 'Full',
+        result: 'Passed',
         expected: 'An active config with a parseable base URL',
         found: 'Qwen · http://localhost:8080 · qwen-28b',
         note: null,
@@ -88,10 +88,10 @@ function report(quickCheckedAt: string, ffmpeg: 'passed' | 'failed' = 'failed'):
       },
       {
         id: 'container-llama',
-        group: 'dockerServices',
+        group: 'DockerServices',
         name: 'read2me-llama',
-        tier: 'quick',
-        result: 'notConfirmed',
+        tier: 'Quick',
+        result: 'NotConfirmed',
         expected: 'read2me-llama running and answering at http://localhost:8080',
         found: 'Stopped',
         note: null,
@@ -211,7 +211,7 @@ describe('r2m-setup-check-page', () => {
     const before = page.querySelector('[data-role=summary]')?.textContent;
     expect(before).toContain('1 failed · 3 passed · 1 not confirmed');
 
-    quickAnswer = report(LATER, 'passed');
+    quickAnswer = report(LATER, 'Passed');
     page.querySelector<HTMLButtonElement>('[data-action=run-quick]')?.click();
     await flush(page);
 
@@ -219,7 +219,7 @@ describe('r2m-setup-check-page', () => {
     const after = page.querySelector('[data-role=summary]')?.textContent;
     expect(after).toContain('4 passed · 1 not confirmed');
     expect(after).not.toBe(before);
-    expect(rowOf(page, 'ffmpeg')?.getAttribute('data-result')).toBe('passed');
+    expect(rowOf(page, 'ffmpeg')?.getAttribute('data-result')).toBe('Passed');
   });
 
   it('follows a Full check from the hub: strip, Checking chip, Cancel in place of Run Full check', async () => {
@@ -231,11 +231,11 @@ describe('r2m-setup-check-page', () => {
     running.fullRun = {
       step: 1,
       total: 1,
-      lane: 'local',
+      lane: 'Local',
       label: 'Encoding a 1 s tone to .m4b',
       cancelling: false,
     };
-    running.rows = running.rows.map((r) => (r.id === 'ffmpeg' ? { ...r, result: 'checking' } : r));
+    running.rows = running.rows.map((r) => (r.id === 'ffmpeg' ? { ...r, result: 'Checking' } : r));
     live.emit('setupCheck', { kind: 'progress', report: running });
     await flush(page);
 
@@ -251,7 +251,7 @@ describe('r2m-setup-check-page', () => {
 
     expect(page.querySelector('[data-role=put-back]')).toBeNull();
 
-    const done = report(AT_START, 'passed');
+    const done = report(AT_START, 'Passed');
     done.putBack = 'Put back: read2me-whisper stopped again.';
     live.emit('setupCheck', { kind: 'done', report: done });
     await flush(page);
@@ -300,7 +300,7 @@ describe('r2m-setup-check-page', () => {
     expect(rerunOf('ffmpeg')?.disabled).toBe(false);
 
     const running = report(AT_START);
-    running.fullRun = { step: 1, total: 1, lane: 'local', label: 'Encoding', cancelling: false };
+    running.fullRun = { step: 1, total: 1, lane: 'Local', label: 'Encoding', cancelling: false };
     live.emit('setupCheck', { kind: 'progress', report: running });
     await flush(page);
 

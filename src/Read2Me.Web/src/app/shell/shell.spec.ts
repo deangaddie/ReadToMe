@@ -303,10 +303,10 @@ describe('Setup check surfacing', () => {
   async function loadReport(failed: number, firstRun = false, noWorkspace = false) {
     const rows = Array.from({ length: failed + 1 }, (_, i) => ({
       id: `check-${i}`,
-      group: 'workspaceAndTools',
+      group: 'WorkspaceAndTools',
       name: `Check ${i}`,
-      tier: 'quick',
-      result: i < failed ? 'failed' : 'passed',
+      tier: 'Quick',
+      result: i < failed ? 'Failed' : 'Passed',
       expected: 'e',
       found: 'f',
       note: null,
@@ -365,7 +365,7 @@ describe('Setup check surfacing', () => {
         fullRun: {
           step: 1,
           total: 1,
-          lane: 'local',
+          lane: 'Local',
           label: 'Encoding a 1 s tone to .m4b',
           cancelling: false,
         },
@@ -450,14 +450,14 @@ describe('next-step pill', () => {
 
   const ACT: NextStep = {
     kind: 'act',
-    step: 'titles',
+    step: 'Titles',
     label: 'Next: Titles · Add titles…',
     tint: 'next',
     action: 'addTitles',
     tooltip: 'Usually done after Structure: a reread drops inserted titles.',
     pills: [
-      { id: 'confirm', label: 'Confirm', state: 'confirmed' },
-      { id: 'skip', label: 'Skip', state: 'skipped' },
+      { id: 'confirm', label: 'Confirm', state: 'Confirmed' },
+      { id: 'skip', label: 'Skip', state: 'Skipped' },
     ],
   };
 
@@ -513,9 +513,9 @@ describe('next-step pill', () => {
     shell.querySelectorAll<HTMLElement>('.shell__next-pill').forEach((b) => b.click());
     shell.querySelector<HTMLElement>('.shell__next-overview')?.click();
     expect(calls).toEqual([
-      'act titles:addTitles',
-      'checkpoint titles:confirm',
-      'checkpoint titles:skip',
+      'act Titles:addTitles',
+      'checkpoint Titles:confirm',
+      'checkpoint Titles:skip',
       'overview',
     ]);
     expect(shell.querySelector('.shell__next-overview')?.getAttribute('aria-label')).toBe(
@@ -526,34 +526,34 @@ describe('next-step pill', () => {
   it('a stale step has the warn tint, still runs its action and offers Reconfirm', async () => {
     const { shell } = await mountWith('projects/pride-and-prejudice/book', {
       kind: 'stale',
-      step: 'structure',
+      step: 'Structure',
       label: 'Structure changed since you confirmed',
       tint: 'warn',
       action: 'checkStructure',
       tooltip: null,
-      pills: [{ id: 'reconfirm', label: 'Reconfirm', state: 'confirmed' }],
+      pills: [{ id: 'reconfirm', label: 'Reconfirm', state: 'Confirmed' }],
     });
     expect(pill(shell)?.classList.contains('shell__next--warn')).toBe(true);
     shell.querySelector<HTMLElement>('.shell__next-main')?.click();
     expect(texts(shell, '.shell__next-pill')).toEqual(['Reconfirm']);
-    expect(calls).toEqual(['act structure:checkStructure']);
+    expect(calls).toEqual(['act Structure:checkStructure']);
   });
 
   it('a running or blocked step shows step · chip and its pills; the click opens the Overview with the reason as tooltip', async () => {
     const { shell } = await mountWith('projects/pride-and-prejudice/book', {
       kind: 'waiting',
-      step: 'speakers',
+      step: 'Speakers',
       label: 'Speakers · Review not confirmed',
       tint: 'neutral',
       tooltip: 'Every paragraph has a speaker',
-      pills: [{ id: 'confirm', label: 'Confirm review', state: 'confirmed' }],
+      pills: [{ id: 'confirm', label: 'Confirm review', state: 'Confirmed' }],
     });
     const main = shell.querySelector<HTMLElement>('.shell__next-main');
     expect(pill(shell)?.classList.contains('shell__next--neutral')).toBe(true);
     expect(main?.getAttribute('data-tooltip')).toBe('Every paragraph has a speaker');
     main?.click();
     shell.querySelector<HTMLElement>('.shell__next-pill')?.click();
-    expect(calls).toEqual(['overview', 'checkpoint speakers:confirm']);
+    expect(calls).toEqual(['overview', 'checkpoint Speakers:confirm']);
   });
 
   it('reads “All steps done” beside the Overview icon', async () => {

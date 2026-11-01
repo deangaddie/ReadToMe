@@ -4,7 +4,6 @@ using Read2Me.App.Api;
 namespace Read2Me.App.Services.SetupCheck
 {
     /// <summary>The area a check sits under in the report's one table.</summary>
-    [JsonConverter(typeof(CamelCaseEnumConverter<SetupCheckGroup>))]
     public enum SetupCheckGroup
     {
         WorkspaceAndTools,
@@ -13,7 +12,6 @@ namespace Read2Me.App.Services.SetupCheck
     }
 
     /// <summary>Which check judges the row: the Quick check reads, the Full check sends real requests.</summary>
-    [JsonConverter(typeof(CamelCaseEnumConverter<SetupCheckTier>))]
     public enum SetupCheckTier
     {
         Quick,
@@ -21,7 +19,6 @@ namespace Read2Me.App.Services.SetupCheck
     }
 
     /// <summary>A check's one result. <see cref="Checking"/> is transient, while a run is on that row.</summary>
-    [JsonConverter(typeof(CamelCaseEnumConverter<SetupCheckResult>))]
     public enum SetupCheckResult
     {
         Passed,
@@ -33,7 +30,6 @@ namespace Read2Me.App.Services.SetupCheck
     }
 
     /// <summary>Where a Full check step runs: on this machine, in a CPU container, or in the one GPU container that fits.</summary>
-    [JsonConverter(typeof(CamelCaseEnumConverter<SetupCheckLane>))]
     public enum SetupCheckLane
     {
         Local,
@@ -49,7 +45,7 @@ namespace Read2Me.App.Services.SetupCheck
     public sealed record SetupFullRun(
         int Step,
         int Total,
-        [property: JsonConverter(typeof(CamelCaseEnumConverter<SetupCheckLane>))] SetupCheckLane Lane,
+        SetupCheckLane Lane,
         string Label,
         bool Cancelling);
 
@@ -80,10 +76,10 @@ namespace Read2Me.App.Services.SetupCheck
     /// </summary>
     public sealed record SetupCheckRow(
         string Id,
-        [property: JsonConverter(typeof(CamelCaseEnumConverter<SetupCheckGroup>))] SetupCheckGroup Group,
+        SetupCheckGroup Group,
         string Name,
-        [property: JsonConverter(typeof(CamelCaseEnumConverter<SetupCheckTier>))] SetupCheckTier Tier,
-        [property: JsonConverter(typeof(CamelCaseEnumConverter<SetupCheckResult>))] SetupCheckResult Result,
+        SetupCheckTier Tier,
+        SetupCheckResult Result,
         string Expected,
         string Found,
         string? Note,

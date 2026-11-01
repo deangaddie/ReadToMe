@@ -111,21 +111,21 @@ const SKIPPED: Outcome = { state: 'skipped', label: 'Skipped' };
 
 /** What a row says once the derived conditions before it hold. */
 function rowOutcome(row: StepCheckpointDto): Outcome {
-  if (row.stale) return { state: 'stale', label: `Changed since you ${row.state}` };
-  return row.state === 'confirmed' ? { state: 'confirmed', label: 'Confirmed' } : SKIPPED;
+  if (row.stale) return { state: 'stale', label: `Changed since you ${row.state.toLowerCase()}` };
+  return row.state === 'Confirmed' ? { state: 'confirmed', label: 'Confirmed' } : SKIPPED;
 }
 
-const REOPEN: CheckpointPill = { id: 'reopen', label: 'Reopen', state: 'open' };
+const REOPEN: CheckpointPill = { id: 'reopen', label: 'Reopen', state: 'Open' };
 
 /** The pill set for a Structure / Text / Titles row, and Pauses' skip-only subset of it. */
 function rowPills(row: StepCheckpointDto | undefined, confirmable: boolean): CheckpointPill[] {
-  const confirm: CheckpointPill = { id: 'confirm', label: 'Confirm', state: 'confirmed' };
-  const skip: CheckpointPill = { id: 'skip', label: 'Skip', state: 'skipped' };
+  const confirm: CheckpointPill = { id: 'confirm', label: 'Confirm', state: 'Confirmed' };
+  const skip: CheckpointPill = { id: 'skip', label: 'Skip', state: 'Skipped' };
   if (!row) return confirmable ? [confirm, skip] : [skip];
   if (!row.stale) return [REOPEN];
-  return row.state === 'confirmed'
-    ? [{ id: 'reconfirm', label: 'Reconfirm', state: 'confirmed' }, REOPEN]
-    : [{ id: 'reconfirmSkip', label: 'Reconfirm skip', state: 'skipped' }, REOPEN];
+  return row.state === 'Confirmed'
+    ? [{ id: 'reconfirm', label: 'Reconfirm', state: 'Confirmed' }, REOPEN]
+    : [{ id: 'reconfirmSkip', label: 'Reconfirm skip', state: 'Skipped' }, REOPEN];
 }
 
 function plural(n: number, one: string, many = `${one}s`): string {
@@ -174,7 +174,7 @@ export function derivePipeline(input: PipelineInput): PipelineStep[] {
   const fullBuild = input.lastBuild !== null && !input.lastBuild.isPartial;
 
   const conditional = (
-    id: 'structure' | 'text' | 'titles',
+    id: 'Structure' | 'Text' | 'Titles',
   ): Pick<Draft, 'outcome' | 'checkpoint'> => {
     const row = rows[id];
     return {
@@ -189,7 +189,7 @@ export function derivePipeline(input: PipelineInput): PipelineStep[] {
     };
   };
 
-  const speakersRow = rows.speakers;
+  const speakersRow = rows.Speakers;
   const speakersOutcome = resolve(
     [
       contentCondition,
@@ -216,7 +216,7 @@ export function derivePipeline(input: PipelineInput): PipelineStep[] {
 
   // Pauses: once pauses exist the step is done whatever its row says (spec §2 edge rule).
   // The host allows Pauses only a skip row; anything else is treated as no row rather than mislabelled.
-  const pausesRow = rows.pauses?.state === 'skipped' ? rows.pauses : undefined;
+  const pausesRow = rows.Pauses?.state === 'Skipped' ? rows.Pauses : undefined;
   const pausesOutcome = resolve(
     [
       contentCondition,
@@ -230,7 +230,7 @@ export function derivePipeline(input: PipelineInput): PipelineStep[] {
 
   const steps: Draft[] = [
     {
-      id: 'import',
+      id: 'Import',
       title: 'Import',
       icon: 'upload_file',
       outcome: resolve([contentCondition], done),
@@ -260,10 +260,10 @@ export function derivePipeline(input: PipelineInput): PipelineStep[] {
           ],
     },
     {
-      id: 'structure',
+      id: 'Structure',
       title: 'Structure',
       icon: 'call_split',
-      ...conditional('structure'),
+      ...conditional('Structure'),
       detail: content
         ? 'Check that volumes, parts and chapters split where the book does.'
         : 'Check the chapters once the book is read in.',
@@ -286,7 +286,7 @@ export function derivePipeline(input: PipelineInput): PipelineStep[] {
       ],
     },
     {
-      id: 'speakers',
+      id: 'Speakers',
       title: 'Speakers',
       icon: 'record_voice_over',
       outcome: speakersOutcome,
@@ -294,7 +294,7 @@ export function derivePipeline(input: PipelineInput): PipelineStep[] {
         ? []
         : speakersRow
           ? [REOPEN]
-          : [{ id: 'confirm', label: 'Confirm review', state: 'confirmed' }],
+          : [{ id: 'confirm', label: 'Confirm review', state: 'Confirmed' }],
       detail: content
         ? `${plural(attribution.unassigned, 'paragraph')} with unassigned speakers`
         : 'Assign a speaker to every line.',
@@ -319,10 +319,10 @@ export function derivePipeline(input: PipelineInput): PipelineStep[] {
       ],
     },
     {
-      id: 'text',
+      id: 'Text',
       title: 'Text',
       icon: 'edit',
-      ...conditional('text'),
+      ...conditional('Text'),
       detail: content
         ? 'Read for stray page numbers, footnotes and broken words.'
         : 'Polish the text once the book is read in.',
@@ -344,7 +344,7 @@ export function derivePipeline(input: PipelineInput): PipelineStep[] {
       ],
     },
     {
-      id: 'voices',
+      id: 'Voices',
       title: 'Voices',
       icon: 'graphic_eq',
       outcome: resolve(
@@ -371,10 +371,10 @@ export function derivePipeline(input: PipelineInput): PipelineStep[] {
       ],
     },
     {
-      id: 'titles',
+      id: 'Titles',
       title: 'Titles',
       icon: 'title',
-      ...conditional('titles'),
+      ...conditional('Titles'),
       detail: content
         ? 'Spoken titles announce the book, its volumes, parts and chapters.'
         : 'Add spoken titles once the book is read in.',
@@ -389,7 +389,7 @@ export function derivePipeline(input: PipelineInput): PipelineStep[] {
       ],
     },
     {
-      id: 'pauses',
+      id: 'Pauses',
       title: 'Pauses',
       icon: 'pause',
       outcome: pausesOutcome,
@@ -409,7 +409,7 @@ export function derivePipeline(input: PipelineInput): PipelineStep[] {
       ],
     },
     {
-      id: 'audio',
+      id: 'Audio',
       title: 'Audio',
       icon: 'volume_up',
       outcome: resolve(
@@ -452,7 +452,7 @@ export function derivePipeline(input: PipelineInput): PipelineStep[] {
       ],
     },
     {
-      id: 'export',
+      id: 'Export',
       title: 'Export',
       icon: 'download',
       outcome: resolve(
@@ -538,10 +538,10 @@ function unsettled(steps: readonly PipelineStep[], id: StepId): boolean {
  * titles dialog, so each surface says the same thing.
  */
 export function adviceFor(action: StepActionId, steps: readonly PipelineStep[]): string | null {
-  const structureUnsettled = unsettled(steps, 'structure');
+  const structureUnsettled = unsettled(steps, 'Structure');
   switch (action) {
     case 'generateAudio': {
-      const names = (['text', 'titles', 'pauses'] as const)
+      const names = (['Text', 'Titles', 'Pauses'] as const)
         .filter((id) => unsettled(steps, id))
         .map((id) => steps.find((s) => s.id === id)!.title);
       if (names.length === 0) return null;
@@ -558,7 +558,7 @@ export function adviceFor(action: StepActionId, steps: readonly PipelineStep[]):
     case 'addTitles': {
       const lines = [
         structureUnsettled ? 'Usually done after Structure: a reread drops inserted titles.' : null,
-        steps.find((s) => s.id === 'titles')?.state === 'confirmed'
+        steps.find((s) => s.id === 'Titles')?.state === 'confirmed'
           ? 'You confirmed titles already: adding again inserts a second copy.'
           : null,
       ].filter((l): l is string => l !== null);

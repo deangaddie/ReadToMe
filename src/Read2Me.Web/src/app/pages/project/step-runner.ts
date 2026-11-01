@@ -82,7 +82,7 @@ export class StepRunner {
         return this.run(step, action, async () => {
           if (!(await this.preflight.ensureReady('attribution'))) return;
           await this.enqueueEveryVolume('paragraph', (nodeId) =>
-            this.attribution.enqueue(folder, { level: 'volume', nodeId, unprocessedOnly: true }),
+            this.attribution.enqueue(folder, { level: 'Volume', nodeId, unprocessedOnly: true }),
           );
         });
       case 'generateAudio':
@@ -91,7 +91,7 @@ export class StepRunner {
           const narratorOnlyMode = this.store.detail()?.narratorOnlyMode ?? false;
           await this.enqueueEveryVolume('item', (nodeId) =>
             this.audio.enqueue(folder, {
-              level: 'volume',
+              level: 'Volume',
               nodeId,
               needsAudioOnly: true,
               narratorOnlyMode,

@@ -1,6 +1,6 @@
 import { type Block, type NodeLevel, withLocal } from '@app/api';
 import type { NodeStatusSummary } from '@app/live/live-messages';
-import type { NodeMenuTarget, SelectionKind } from './node-menu-entries';
+import { MENU_KIND_OF_LEVEL, type NodeMenuTarget, type SelectionKind } from './node-menu-entries';
 
 /**
  * What a Volume, Part or Chapter's Node menu offers, decided once for every pane that shows the
@@ -37,7 +37,7 @@ export function structureNodeMenu({
   blocked,
 }: StructureNodeMenuInput): StructureNodeMenu {
   const target: NodeMenuTarget = {
-    kind: node.level,
+    kind: MENU_KIND_OF_LEVEL[node.level],
     id: node.id,
     text: node.rawTitle,
     isFirst: position.isFirst,

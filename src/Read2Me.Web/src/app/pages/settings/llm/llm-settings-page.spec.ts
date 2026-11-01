@@ -1,10 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import {
-  type AttributionChainResponse,
-  AttributionPromptStyle,
-  LlmApiType,
-  type LlmServerConfig,
-} from '@app/api';
+import { type AttributionChainResponse, type LlmServerConfig } from '@app/api';
 import { override, resetServices } from '@app/core/services';
 import { ConfirmService, type ConfirmOptions } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
@@ -22,7 +17,7 @@ function config(id: number, name: string, baseUrl = `http://llm-${id}:8080`): Ll
   return {
     id,
     name,
-    apiType: LlmApiType.OpenAiCompatible,
+    apiType: 'OpenAiCompatible',
     baseUrl,
     apiKey: null,
     model: `${name}-model`,
@@ -32,7 +27,7 @@ function config(id: number, name: string, baseUrl = `http://llm-${id}:8080`): Ll
     frequencyPenalty: null,
     presencePenalty: null,
     attributionBatchSize: 1,
-    promptStyle: AttributionPromptStyle.Full,
+    promptStyle: 'Full',
     supportsModelSwitch: false,
   };
 }
@@ -204,8 +199,8 @@ describe('r2m-llm-settings-page', () => {
 
   it('moving a chain step down PUTs the reordered chain', async () => {
     const steps = [
-      { configId: 1, thinking: false, promptStyle: AttributionPromptStyle.Simple },
-      { configId: 2, thinking: true, promptStyle: AttributionPromptStyle.Full },
+      { configId: 1, thinking: false, promptStyle: 'Simple' as const },
+      { configId: 2, thinking: true, promptStyle: 'Full' as const },
     ];
     const page = await render(chain({ steps }));
 
@@ -230,8 +225,8 @@ describe('r2m-llm-settings-page', () => {
 
   it('removing a chain step asks a red confirm first (guidance-primitives 14), then PUTs without it', async () => {
     const steps = [
-      { configId: 1, thinking: false, promptStyle: AttributionPromptStyle.Simple },
-      { configId: 2, thinking: true, promptStyle: AttributionPromptStyle.Full },
+      { configId: 1, thinking: false, promptStyle: 'Simple' as const },
+      { configId: 2, thinking: true, promptStyle: 'Full' as const },
     ];
     const page = await render(chain({ steps }));
 
@@ -257,8 +252,8 @@ describe('r2m-llm-settings-page', () => {
 
   it('a Chapter rung shows the Chapter chip', async () => {
     const steps = [
-      { configId: 1, thinking: false, promptStyle: AttributionPromptStyle.Chapter },
-      { configId: 2, thinking: true, promptStyle: AttributionPromptStyle.Full },
+      { configId: 1, thinking: false, promptStyle: 'Chapter' as const },
+      { configId: 2, thinking: true, promptStyle: 'Full' as const },
     ];
     const page = await render(chain({ steps }));
 
@@ -346,26 +341,26 @@ describe('r2m-llm-settings-page', () => {
   it.each([
     {
       label: 'small',
-      step: { configId: 1, thinking: false, promptStyle: AttributionPromptStyle.Full },
+      step: { configId: 1, thinking: false, promptStyle: 'Full' as const },
     },
     {
       label: 'small (simple)',
-      step: { configId: 1, thinking: false, promptStyle: AttributionPromptStyle.Simple },
+      step: { configId: 1, thinking: false, promptStyle: 'Simple' as const },
     },
     {
       label: 'small (chapter)',
-      step: { configId: 1, thinking: false, promptStyle: AttributionPromptStyle.Chapter },
+      step: { configId: 1, thinking: false, promptStyle: 'Chapter' as const },
     },
     {
       label: 'big (thinking)',
-      step: { configId: 2, thinking: true, promptStyle: AttributionPromptStyle.Full },
+      step: { configId: 2, thinking: true, promptStyle: 'Full' as const },
     },
     {
       label: 'big (simple, thinking)',
-      step: { configId: 2, thinking: true, promptStyle: AttributionPromptStyle.Simple },
+      step: { configId: 2, thinking: true, promptStyle: 'Simple' as const },
     },
   ])('Add step "$label" PUTs the chain with that variant appended', async ({ label, step }) => {
-    const existing = { configId: 2, thinking: false, promptStyle: AttributionPromptStyle.Chapter };
+    const existing = { configId: 2, thinking: false, promptStyle: 'Chapter' as const };
     const page = await render(chain({ steps: [existing] }));
     api.on('PUT', CHAIN, (body) => chain(body as Partial<AttributionChainResponse>));
 

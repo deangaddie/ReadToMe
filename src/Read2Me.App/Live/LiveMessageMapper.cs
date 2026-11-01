@@ -79,7 +79,7 @@ public static class LiveMessageMapper
 
     public static AssemblyMessage Map(AssemblyEvent e) => e switch
     {
-        AssemblyPhaseStarted p => new AssemblyMessage("phaseStarted", Phase: p.Phase.ToString(), Folder: e.Folder),
+        AssemblyPhaseStarted p => new AssemblyMessage("phaseStarted", Phase: p.Phase, Folder: e.Folder),
         AssemblyEncodeProgress p => new AssemblyMessage("progress", Fraction: p.Fraction, Folder: e.Folder),
         AssemblyCompleted c => new AssemblyMessage("completed", Folder: e.Folder, OutputFileName: c.OutputFileName),
         AssemblyFailed f => new AssemblyMessage("failed", Reason: f.Reason, Folder: e.Folder),
@@ -123,7 +123,7 @@ public static class LiveMessageMapper
         new BookEditMessage("failed", program, Reason: reason);
 
     public static ServiceStatusMessage Map(ServiceStatusChanged c) =>
-        new ServiceStatusMessage(c.Service, c.Status.ToString(), c.Op, c.Ok, c.Error);
+        new ServiceStatusMessage(c.Service, c.Status, c.Op, c.Ok, c.Error);
 
     /// <summary>
     /// The status a probe would report while the watchdog holds this opinion — the same mapping
@@ -131,10 +131,10 @@ public static class LiveMessageMapper
     /// </summary>
     public static ServiceStatusMessage ImpliedStatus(WatchdogEvent e) => e switch
     {
-        RecoveryStarted r => new ServiceStatusMessage(r.Service, nameof(AiServiceStatus.Recovering)),
-        ContainerRestarted c => new ServiceStatusMessage(c.Service, nameof(AiServiceStatus.Recovering)),
-        ServiceHealthy h => new ServiceStatusMessage(h.Service, nameof(AiServiceStatus.Ready)),
-        ServiceDown d => new ServiceStatusMessage(d.Service, nameof(AiServiceStatus.Down)),
+        RecoveryStarted r => new ServiceStatusMessage(r.Service, AiServiceStatus.Recovering),
+        ContainerRestarted c => new ServiceStatusMessage(c.Service, AiServiceStatus.Recovering),
+        ServiceHealthy h => new ServiceStatusMessage(h.Service, AiServiceStatus.Ready),
+        ServiceDown d => new ServiceStatusMessage(d.Service, AiServiceStatus.Down),
         _ => throw new ArgumentOutOfRangeException(nameof(e), e.GetType().Name, "Unmapped WatchdogEvent"),
     };
 

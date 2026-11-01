@@ -59,9 +59,9 @@ describe('AudioGenerator', () => {
   });
 
   it('a node asks for what still needs audio, with the narrator-only flag', async () => {
-    expect(await generator.enqueueNode('chapter', 'c1', true)).toBe(true);
+    expect(await generator.enqueueNode('Chapter', 'c1', true)).toBe(true);
     expect(enqueue).toHaveBeenCalledWith('dracula', {
-      level: 'chapter',
+      level: 'Chapter',
       nodeId: 'c1',
       needsAudioOnly: true,
       narratorOnlyMode: true,
@@ -86,7 +86,7 @@ describe('AudioGenerator', () => {
       { run } as unknown as BookEditor,
       { folder: signal(null) } as unknown as BookStore,
     );
-    expect(await generator.enqueueNode('chapter', 'c1', false)).toBe(false);
+    expect(await generator.enqueueNode('Chapter', 'c1', false)).toBe(false);
     expect(ensureReady).not.toHaveBeenCalled();
   });
 

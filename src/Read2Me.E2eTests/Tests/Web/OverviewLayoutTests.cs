@@ -30,7 +30,7 @@ public class OverviewLayoutTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
         Assert.True(stepperBox.Y + stepperBox.Height <= detailsBox.Y + 1,
             $"details card (y={detailsBox.Y}) should follow the stepper (bottom={stepperBox.Y + stepperBox.Height})");
 
-        var row = Page.Locator(".r2m-pipeline__step[data-step='structure']");
+        var row = Page.Locator(".r2m-pipeline__step[data-step='Structure']");
         var title = row.Locator(".r2m-pipeline__title");
         var help = row.Locator(".r2m-pipeline__help-toggle");
         var pills = row.Locator(".r2m-pipeline__checkpoint");

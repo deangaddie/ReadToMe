@@ -151,8 +151,8 @@ export class SelectionWorkflow {
         await this.generator.enqueueNode(node.level, node.id, this.narratorOnlyMode());
         return;
       case 'release-narration':
-        if (node.level === 'volume') return;
-        await this.release(node.level === 'part' ? 'Part' : 'Chapter', node.id, node.title);
+        if (node.level === 'Volume') return;
+        await this.release(node.level === 'Part' ? 'Part' : 'Chapter', node.id, node.title);
         return;
     }
   }
@@ -244,7 +244,7 @@ export class SelectionWorkflow {
       try {
         const reads = await Promise.all(
           [...missing].map(
-            async (id) => [id, await this.api.children(folder, 'chapter', id)] as const,
+            async (id) => [id, await this.api.children(folder, 'Chapter', id)] as const,
           ),
         );
         for (const [id, children] of reads) chapters.set(id, children.paragraphs ?? []);

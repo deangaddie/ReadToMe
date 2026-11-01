@@ -12,7 +12,7 @@ namespace Read2Me.Tests.App
         {
             var schema = ProviderSettingsSchema.ParagraphTts(ParagraphTtsServiceType.Chatterbox);
 
-            Assert.Equal("Chatterbox", schema.Type);
+            Assert.Equal(ParagraphTtsServiceType.Chatterbox, schema.Type);
             Assert.Equal(
                 ["modelId", "exaggeration", "cfg_weight", "temperature", "min_p", "top_p", "repetition_penalty", "seed"],
                 schema.Fields.Select(f => f.Key));

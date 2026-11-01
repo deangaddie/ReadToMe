@@ -31,7 +31,7 @@ public class AudioSelectionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
         var chapter = book.ChapterId("ch1");
 
         // Only the narration item has a speaker; the three unattributed lines do not.
-        var all = await GetJsonAsync($"/api/projects/{folder}/nodes/chapter/{chapter}/item-ids");
+        var all = await GetJsonAsync($"/api/projects/{folder}/nodes/Chapter/{chapter}/item-ids");
         Assert.Equal(new HashSet<Guid> { book.ItemId("n1") }, Ids(all));
         var first = all.EnumerateArray().First();
         Assert.Equal(book.ParagraphId("p1"), first.GetProperty("paragraphId").GetGuid());
@@ -40,7 +40,7 @@ public class AudioSelectionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
         Assert.NotEqual(Guid.Empty, first.GetProperty("partId").GetGuid());
 
         // Narrator-only mode reads the unattributed lines too.
-        var narratorOnly = await GetJsonAsync($"/api/projects/{folder}/nodes/volume/{book.VolumeId("v1")}/item-ids?narratorOnlyMode=true");
+        var narratorOnly = await GetJsonAsync($"/api/projects/{folder}/nodes/Volume/{book.VolumeId("v1")}/item-ids?narratorOnlyMode=true");
         Assert.Equal(4, narratorOnly.GetArrayLength());
 
         // Attribute one line: it joins the voiced set, and "needs audio" still lists it (no WAV yet).
@@ -50,7 +50,7 @@ public class AudioSelectionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
             new { type = "SetItemCharacter", itemId = book.ItemId("line1"), characterId });
         Assert.Equal(HttpStatusCode.OK, assign.StatusCode);
 
-        var needsAudio = await GetJsonAsync($"/api/projects/{folder}/nodes/chapter/{chapter}/item-ids?needsAudioOnly=true");
+        var needsAudio = await GetJsonAsync($"/api/projects/{folder}/nodes/Chapter/{chapter}/item-ids?needsAudioOnly=true");
         Assert.Equal(new HashSet<Guid> { book.ItemId("n1"), book.ItemId("line1") }, Ids(needsAudio));
 
         var badLevel = await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/nodes/book/{chapter}/item-ids");
@@ -91,7 +91,7 @@ public class AudioSelectionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
     {
         var b = $"{app.BaseUrl}/api/projects/no-such-project-audio-sel";
         Assert.Equal(HttpStatusCode.NotFound,
-            (await Http.GetAsync($"{b}/nodes/chapter/{Guid.NewGuid()}/item-ids")).StatusCode);
+            (await Http.GetAsync($"{b}/nodes/Chapter/{Guid.NewGuid()}/item-ids")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound,
             (await Http.PostAsJsonAsync($"{b}/audio/enqueue-items", new { itemIds = Array.Empty<Guid>() })).StatusCode);
     }

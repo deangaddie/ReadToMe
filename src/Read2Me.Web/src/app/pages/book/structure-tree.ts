@@ -244,7 +244,7 @@ export class StructureTree extends R2mElement {
   /** A click focuses the row and, on a chapter, opens it; a parent's chevron is its toggle. */
   #onNodeClick(node: TreeNode): void {
     this.#focusRow(node.id);
-    if (node.level === 'chapter') this.emit('select-chapter', node.id);
+    if (node.level === 'Chapter') this.emit('select-chapter', node.id);
   }
 
   /** Focus that arrived by any route (a click, a tab, a script) makes that row the tab stop. */
@@ -295,7 +295,7 @@ export class StructureTree extends R2mElement {
       case 'Enter':
       case ' ':
         event.preventDefault();
-        if (node.level === 'chapter') this.emit('select-chapter', node.id);
+        if (node.level === 'Chapter') this.emit('select-chapter', node.id);
         return;
       case '*': {
         event.preventDefault();

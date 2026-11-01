@@ -87,9 +87,9 @@ public class ProjectApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Assert.Equal(3, after.GetProperty("totalChapters").GetInt32());
 
         var volumeId = after.GetProperty("volumes")[0].GetProperty("id").GetGuid();
-        var parts = await GetJsonAsync($"/api/projects/{folder}/nodes/volume/{volumeId}/children");
+        var parts = await GetJsonAsync($"/api/projects/{folder}/nodes/Volume/{volumeId}/children");
         var partId = parts.GetProperty("parts")[0].GetProperty("id").GetGuid();
-        var chapters = (await GetJsonAsync($"/api/projects/{folder}/nodes/part/{partId}/children")).GetProperty("chapters");
+        var chapters = (await GetJsonAsync($"/api/projects/{folder}/nodes/Part/{partId}/children")).GetProperty("chapters");
         Assert.Equal(["I", "II", "III"], chapters.EnumerateArray().Select(c => c.GetProperty("title").GetString()));
     }
 

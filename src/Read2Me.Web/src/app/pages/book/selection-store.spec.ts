@@ -38,13 +38,13 @@ describe('SelectionStore', () => {
 
   it('a node is checked only once its total is known and reached', () => {
     store.toggle('p1', A, true);
-    expect(store.nodeState('chapter', 'c1')).toBe('indeterminate');
-    expect(store.nodeState('part', 'pt1')).toBe('indeterminate');
-    expect(store.nodeState('chapter', 'c2')).toBe('unchecked');
+    expect(store.nodeState('Chapter', 'c1')).toBe('indeterminate');
+    expect(store.nodeState('Part', 'pt1')).toBe('indeterminate');
+    expect(store.nodeState('Chapter', 'c2')).toBe('unchecked');
 
     store.learnTotals({ c1: 1, pt1: 3 });
-    expect(store.nodeState('chapter', 'c1')).toBe('checked');
-    expect(store.nodeState('part', 'pt1')).toBe('indeterminate');
+    expect(store.nodeState('Chapter', 'c1')).toBe('checked');
+    expect(store.nodeState('Part', 'pt1')).toBe('indeterminate');
   });
 
   it('reset forgets the selection and the totals', () => {

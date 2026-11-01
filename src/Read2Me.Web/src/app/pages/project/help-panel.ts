@@ -33,7 +33,7 @@ export function helpPanel(
     <p class="overview__help-foot">
       <a
         class="overview__help-guide"
-        href="${GUIDE_URL}/${step.id}.md"
+        href="${GUIDE_URL}/${step.id.toLowerCase()}.md"
         target="_blank"
         rel="noopener"
         >${icon('open_in_new')} Open the guide</a

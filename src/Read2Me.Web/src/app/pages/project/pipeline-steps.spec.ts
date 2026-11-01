@@ -26,10 +26,10 @@ function node(overrides: Partial<NodeStatusSummary> = {}): NodeStatusSummary {
 }
 
 const AT = '2026-10-17T09:00:00Z';
-const confirmed: StepCheckpointDto = { state: 'confirmed', stale: false, at: AT };
-const skipped: StepCheckpointDto = { state: 'skipped', stale: false, at: AT };
-const staleConfirmed: StepCheckpointDto = { state: 'confirmed', stale: true, at: AT };
-const staleSkipped: StepCheckpointDto = { state: 'skipped', stale: true, at: AT };
+const confirmed: StepCheckpointDto = { state: 'Confirmed', stale: false, at: AT };
+const skipped: StepCheckpointDto = { state: 'Skipped', stale: false, at: AT };
+const staleConfirmed: StepCheckpointDto = { state: 'Confirmed', stale: true, at: AT };
+const staleSkipped: StepCheckpointDto = { state: 'Skipped', stale: true, at: AT };
 
 /** Everything derived holds; only the checkpoint rows are open. */
 function status(overrides: Partial<ProjectStatusDto> = {}): ProjectStatusDto {
@@ -66,7 +66,7 @@ const FULL_BUILD = { date: '19 Sep 2026', isPartial: false };
 
 /** Every step settled: rows on the four conditional steps plus the Speakers review, a full build. */
 const SETTLED = status({
-  checkpoints: { structure: confirmed, speakers: confirmed, text: skipped, titles: confirmed },
+  checkpoints: { Structure: confirmed, Speakers: confirmed, Text: skipped, Titles: confirmed },
 });
 
 function input(s: ProjectStatusDto, overrides: Partial<PipelineInput> = {}): PipelineInput {
@@ -103,15 +103,15 @@ const action = (i: PipelineInput, id: StepId, actionId: StepActionId) =>
 describe('derivePipeline', () => {
   it('lists the nine steps in Pipeline order', () => {
     expect(derivePipeline(input(FRESH)).map((s) => s.id)).toEqual([
-      'import',
-      'structure',
-      'speakers',
-      'text',
-      'voices',
-      'titles',
-      'pauses',
-      'audio',
-      'export',
+      'Import',
+      'Structure',
+      'Speakers',
+      'Text',
+      'Voices',
+      'Titles',
+      'Pauses',
+      'Audio',
+      'Export',
     ]);
   });
 
@@ -125,15 +125,15 @@ describe('derivePipeline', () => {
         name: 'fresh project: nothing started',
         input: input(FRESH),
         expected: {
-          import: 'notStarted neutral:Not started',
-          structure: 'notStarted neutral:Not started',
-          speakers: 'notStarted neutral:Not started',
-          text: 'notStarted neutral:Not started',
-          voices: 'notStarted neutral:Not started',
-          titles: 'notStarted neutral:Not started',
-          pauses: 'notStarted neutral:Not started',
-          audio: 'notStarted neutral:Not started',
-          export: 'notStarted neutral:Not built',
+          Import: 'notStarted neutral:Not started',
+          Structure: 'notStarted neutral:Not started',
+          Speakers: 'notStarted neutral:Not started',
+          Text: 'notStarted neutral:Not started',
+          Voices: 'notStarted neutral:Not started',
+          Titles: 'notStarted neutral:Not started',
+          Pauses: 'notStarted neutral:Not started',
+          Audio: 'notStarted neutral:Not started',
+          Export: 'notStarted neutral:Not built',
         },
       },
       {
@@ -150,35 +150,35 @@ describe('derivePipeline', () => {
           }),
         ),
         expected: {
-          import: 'done ok:Done',
-          structure: 'unconfirmed neutral:Not confirmed',
-          speakers: 'remaining warn:3 paragraphs unassigned',
-          text: 'unconfirmed neutral:Not confirmed',
-          voices: 'remaining warn:0 of 1 speakers voiced',
-          titles: 'unconfirmed neutral:Not confirmed',
-          pauses: 'remaining warn:No pauses yet',
-          audio: 'remaining warn:6 paragraphs missing audio',
-          export: 'notStarted neutral:Not built',
+          Import: 'done ok:Done',
+          Structure: 'unconfirmed neutral:Not confirmed',
+          Speakers: 'remaining warn:3 paragraphs unassigned',
+          Text: 'unconfirmed neutral:Not confirmed',
+          Voices: 'remaining warn:0 of 1 speakers voiced',
+          Titles: 'unconfirmed neutral:Not confirmed',
+          Pauses: 'remaining warn:No pauses yet',
+          Audio: 'remaining warn:6 paragraphs missing audio',
+          Export: 'notStarted neutral:Not built',
         },
       },
       {
         name: 'every derived condition holds and every row is in: all settled',
         input: settled(),
         expected: {
-          structure: 'confirmed ok:Confirmed',
-          speakers: 'confirmed ok:Review confirmed',
-          text: 'skipped neutral:Skipped',
-          voices: 'done ok:Done',
-          titles: 'confirmed ok:Confirmed',
-          pauses: 'done ok:Done',
-          audio: 'done ok:Done',
-          export: 'done ok:Done',
+          Structure: 'confirmed ok:Confirmed',
+          Speakers: 'confirmed ok:Review confirmed',
+          Text: 'skipped neutral:Skipped',
+          Voices: 'done ok:Done',
+          Titles: 'confirmed ok:Confirmed',
+          Pauses: 'done ok:Done',
+          Audio: 'done ok:Done',
+          Export: 'done ok:Done',
         },
       },
       {
         name: 'speakers unassigned at 0 but no review row',
         input: input(status()),
-        expected: { speakers: 'unconfirmed neutral:Review not confirmed' },
+        expected: { Speakers: 'unconfirmed neutral:Review not confirmed' },
       },
       {
         name: 'attribution in flight shows live queued counts',
@@ -193,7 +193,7 @@ describe('derivePipeline', () => {
             },
           }),
         ),
-        expected: { speakers: 'running busy:4 queued · processing' },
+        expected: { Speakers: 'running busy:4 queued · processing' },
       },
       {
         name: 'attribution queued but not yet processing',
@@ -202,19 +202,19 @@ describe('derivePipeline', () => {
             nodes: { [VOL]: node({ attributionRemaining: 5, attributionQueued: 5 }) },
           }),
         ),
-        expected: { speakers: 'running busy:5 queued' },
+        expected: { Speakers: 'running busy:5 queued' },
       },
       {
         name: 'live node deltas win over the bootstrap attribution count',
         input: input(status({ attribution: { remaining: 9, processing: false, queued: 0 } }), {
           nodes: { [VOL]: node({ attributionRemaining: 1 }) },
         }),
-        expected: { speakers: 'remaining warn:1 paragraph unassigned' },
+        expected: { Speakers: 'remaining warn:1 paragraph unassigned' },
       },
       {
         name: 'live folder audio remaining wins over the bootstrap',
         input: input(status({ audio: { remaining: 5 } }), { folderAudioRemaining: 0 }),
-        expected: { audio: 'done ok:Done' },
+        expected: { Audio: 'done ok:Done' },
       },
       {
         name: 'audio items in flight, voice batch and assembly running',
@@ -224,68 +224,68 @@ describe('derivePipeline', () => {
           assemblyRunning: true,
         }),
         expected: {
-          audio: 'running busy:7 in flight',
-          voices: 'running busy:Running',
-          export: 'running busy:Assembling…',
+          Audio: 'running busy:7 in flight',
+          Voices: 'running busy:Running',
+          Export: 'running busy:Assembling…',
         },
       },
       {
         name: 'a read-in book with no audio items has not started Audio',
         input: input(status({ items: { total: 0, withAudio: 0, unattributed: 0 } })),
-        expected: { audio: 'notStarted neutral:Not started' },
+        expected: { Audio: 'notStarted neutral:Not started' },
       },
       {
         name: 'a partial build is not a build',
         input: input(status(), { lastBuild: { date: '19 Sep 2026', isPartial: true } }),
-        expected: { export: 'notStarted neutral:Partial build only' },
+        expected: { Export: 'notStarted neutral:Partial build only' },
       },
       {
         name: 'stale rows say what happened since',
         input: input(
           status({
-            checkpoints: { structure: staleConfirmed, text: staleSkipped, titles: staleConfirmed },
+            checkpoints: { Structure: staleConfirmed, Text: staleSkipped, Titles: staleConfirmed },
           }),
         ),
         expected: {
-          structure: 'stale warn:Changed since you confirmed',
-          text: 'stale warn:Changed since you skipped',
-          titles: 'stale warn:Changed since you confirmed',
+          Structure: 'stale warn:Changed since you confirmed',
+          Text: 'stale warn:Changed since you skipped',
+          Titles: 'stale warn:Changed since you confirmed',
         },
       },
       {
         name: 'Pauses: a skip row with no pauses is skipped; a stale skip row is stale',
-        input: input(status({ pauseParagraphs: 0, checkpoints: { pauses: skipped } })),
-        expected: { pauses: 'skipped neutral:Skipped' },
+        input: input(status({ pauseParagraphs: 0, checkpoints: { Pauses: skipped } })),
+        expected: { Pauses: 'skipped neutral:Skipped' },
       },
       {
         name: 'Pauses: a stale skip row with no pauses',
-        input: input(status({ pauseParagraphs: 0, checkpoints: { pauses: staleSkipped } })),
-        expected: { pauses: 'stale warn:Changed since you skipped' },
+        input: input(status({ pauseParagraphs: 0, checkpoints: { Pauses: staleSkipped } })),
+        expected: { Pauses: 'stale warn:Changed since you skipped' },
       },
       {
         name: 'Pauses: a row outside the host matrix (confirmed) counts as no row',
-        input: input(status({ pauseParagraphs: 0, checkpoints: { pauses: confirmed } })),
-        expected: { pauses: 'remaining warn:No pauses yet' },
+        input: input(status({ pauseParagraphs: 0, checkpoints: { Pauses: confirmed } })),
+        expected: { Pauses: 'remaining warn:No pauses yet' },
       },
       {
         name: 'Pauses edge rule: pauses exist and a skip row (stale or not): derived wins',
-        input: input(status({ pauseParagraphs: 2, checkpoints: { pauses: staleSkipped } })),
-        expected: { pauses: 'done ok:Done' },
+        input: input(status({ pauseParagraphs: 2, checkpoints: { Pauses: staleSkipped } })),
+        expected: { Pauses: 'done ok:Done' },
       },
       {
         name: 'Speakers edge rule: review confirmed, then unassigned rises',
         input: input(
           status({
-            checkpoints: { speakers: confirmed },
+            checkpoints: { Speakers: confirmed },
             nodes: { [VOL]: node({ attributionRemaining: 2 }) },
           }),
         ),
-        expected: { speakers: 'remaining warn:2 paragraphs unassigned' },
+        expected: { Speakers: 'remaining warn:2 paragraphs unassigned' },
       },
       {
         name: 'a rows-only project without content shows nothing started (rows are ignored)',
-        input: input({ ...FRESH, checkpoints: { structure: confirmed } }),
-        expected: { structure: 'notStarted neutral:Not started' },
+        input: input({ ...FRESH, checkpoints: { Structure: confirmed } }),
+        expected: { Structure: 'notStarted neutral:Not started' },
       },
     ];
 
@@ -308,23 +308,23 @@ describe('derivePipeline', () => {
         }),
         { lastBuild: { date: '19 Sep 2026', isPartial: true } },
       );
-      expect(step(i, 'import').detail).toBe('Book read in · 20 items');
-      expect(step(i, 'speakers').detail).toBe('2 paragraphs with unassigned speakers');
-      expect(step(i, 'voices').detail).toBe(
+      expect(step(i, 'Import').detail).toBe('Book read in · 20 items');
+      expect(step(i, 'Speakers').detail).toBe('2 paragraphs with unassigned speakers');
+      expect(step(i, 'Voices').detail).toBe(
         '1 of 4 speakers have a voice with audio · Voice rules on the Cast page',
       );
-      expect(step(i, 'pauses').detail).toBe('3 pause paragraphs');
-      expect(step(i, 'audio').detail).toBe('5 paragraphs missing audio · 15 of 20 items generated');
-      expect(step(i, 'export').detail).toBe('Last build: 19 Sep 2026 (partial)');
+      expect(step(i, 'Pauses').detail).toBe('3 pause paragraphs');
+      expect(step(i, 'Audio').detail).toBe('5 paragraphs missing audio · 15 of 20 items generated');
+      expect(step(i, 'Export').detail).toBe('Last build: 19 Sep 2026 (partial)');
     });
 
     it('describe the step before there is anything to count', () => {
       const i = input(FRESH);
-      expect(step(i, 'import').detail).toBe('Read the book file into chapters and paragraphs.');
-      expect(step(i, 'export').detail).toBe(
+      expect(step(i, 'Import').detail).toBe('Read the book file into chapters and paragraphs.');
+      expect(step(i, 'Export').detail).toBe(
         'Assemble the .m4b audiobook with chapters and cover art.',
       );
-      expect(step(i, 'pauses').detail).toBe(
+      expect(step(i, 'Pauses').detail).toBe(
         'Insert a pause between paragraphs and at the end of every chapter.',
       );
     });
@@ -332,15 +332,15 @@ describe('derivePipeline', () => {
 
   describe('next marker', () => {
     it('is the first step not done, confirmed or skipped, in strict order', () => {
-      expect(nextOf(input(FRESH))).toBe('import');
-      expect(nextOf(input(status()))).toBe('structure');
-      expect(nextOf(input(status({ checkpoints: { structure: skipped } })))).toBe('speakers');
+      expect(nextOf(input(FRESH))).toBe('Import');
+      expect(nextOf(input(status()))).toBe('Structure');
+      expect(nextOf(input(status({ checkpoints: { Structure: skipped } })))).toBe('Speakers');
       expect(nextOf(settled())).toBeNull();
     });
 
     it('a later derived step never jumps a conditional step', () => {
-      const i = input(status({ checkpoints: { speakers: confirmed, text: confirmed } }));
-      expect(nextOf(i)).toBe('structure');
+      const i = input(status({ checkpoints: { Speakers: confirmed, Text: confirmed } }));
+      expect(nextOf(i)).toBe('Structure');
     });
 
     it('stale is next again; running stays next', () => {
@@ -349,37 +349,37 @@ describe('derivePipeline', () => {
           settled({
             status: status({
               ...SETTLED,
-              checkpoints: { ...SETTLED.checkpoints, titles: staleConfirmed },
+              checkpoints: { ...SETTLED.checkpoints, Titles: staleConfirmed },
             }),
           }),
         ),
-      ).toBe('titles');
-      expect(nextOf(settled({ assemblyRunning: true }))).toBe('export');
+      ).toBe('Titles');
+      expect(nextOf(settled({ assemblyRunning: true }))).toBe('Export');
     });
 
     it('the Speakers edge rule makes Speakers next again while unassigned > 0', () => {
       const i = settled({ nodes: { [VOL]: node({ attributionRemaining: 1 }) } });
-      expect(nextOf(i)).toBe('speakers');
+      expect(nextOf(i)).toBe('Speakers');
     });
 
     it('the next step alone counts the later steps already done, never stale ones', () => {
       const i = input({
         ...SETTLED,
-        checkpoints: { speakers: confirmed, text: skipped, titles: staleConfirmed },
+        checkpoints: { Speakers: confirmed, Text: skipped, Titles: staleConfirmed },
       });
       // Structure is next; later: speakers, text, voices, pauses, audio done → 5 (titles stale, export not built).
-      expect(step(i, 'structure').laterDone).toBe(5);
+      expect(step(i, 'Structure').laterDone).toBe(5);
       expect(
         derivePipeline(i)
           .filter((s) => s.laterDone > 0)
           .map((s) => s.id),
-      ).toEqual(['structure']);
-      expect(step(input(FRESH), 'import').laterDone).toBe(0);
+      ).toEqual(['Structure']);
+      expect(step(input(FRESH), 'Import').laterDone).toBe(0);
     });
   });
 
   describe('checkpoint pills', () => {
-    const rowSteps: StepId[] = ['structure', 'text', 'titles'];
+    const rowSteps: StepId[] = ['Structure', 'Text', 'Titles'];
 
     it.each(rowSteps)(
       '%s: Confirm · Skip, Reopen, Reconfirm · Reopen, Reconfirm skip · Reopen',
@@ -396,59 +396,59 @@ describe('derivePipeline', () => {
 
     it('Pauses: Skip only while no pauses, Reopen on a skip row, none once pauses exist', () => {
       const none = status({ pauseParagraphs: 0 });
-      expect(pills(input(none), 'pauses')).toEqual(['skip']);
-      expect(pills(input({ ...none, checkpoints: { pauses: confirmed } }), 'pauses')).toEqual([
+      expect(pills(input(none), 'Pauses')).toEqual(['skip']);
+      expect(pills(input({ ...none, checkpoints: { Pauses: confirmed } }), 'Pauses')).toEqual([
         'skip',
       ]);
-      expect(pills(input({ ...none, checkpoints: { pauses: skipped } }), 'pauses')).toEqual([
+      expect(pills(input({ ...none, checkpoints: { Pauses: skipped } }), 'Pauses')).toEqual([
         'reopen',
       ]);
-      expect(pills(input({ ...none, checkpoints: { pauses: staleSkipped } }), 'pauses')).toEqual([
+      expect(pills(input({ ...none, checkpoints: { Pauses: staleSkipped } }), 'Pauses')).toEqual([
         'reconfirmSkip',
         'reopen',
       ]);
-      expect(pills(input(status()), 'pauses')).toEqual([]);
-      expect(pills(input(status({ checkpoints: { pauses: skipped } })), 'pauses')).toEqual([]);
+      expect(pills(input(status()), 'Pauses')).toEqual([]);
+      expect(pills(input(status({ checkpoints: { Pauses: skipped } })), 'Pauses')).toEqual([]);
     });
 
     it('Speakers: Confirm review, then Reopen; offered while paragraphs are still unassigned', () => {
-      expect(pills(input(status()), 'speakers')).toEqual(['confirm']);
-      expect(pills(input(status({ checkpoints: { speakers: confirmed } })), 'speakers')).toEqual([
+      expect(pills(input(status()), 'Speakers')).toEqual(['confirm']);
+      expect(pills(input(status({ checkpoints: { Speakers: confirmed } })), 'Speakers')).toEqual([
         'reopen',
       ]);
       const unassigned = status({ nodes: { [VOL]: node({ attributionRemaining: 2 }) } });
-      expect(pills(input(unassigned), 'speakers')).toEqual(['confirm']);
+      expect(pills(input(unassigned), 'Speakers')).toEqual(['confirm']);
     });
 
     it('carry their label and the state the PUT sends', () => {
-      const text = step(input(status({ checkpoints: { text: staleSkipped } })), 'text');
+      const text = step(input(status({ checkpoints: { Text: staleSkipped } })), 'Text');
       expect(text.checkpoint).toEqual([
-        { id: 'reconfirmSkip', label: 'Reconfirm skip', state: 'skipped' },
-        { id: 'reopen', label: 'Reopen', state: 'open' },
+        { id: 'reconfirmSkip', label: 'Reconfirm skip', state: 'Skipped' },
+        { id: 'reopen', label: 'Reopen', state: 'Open' },
       ]);
-      const structure = step(input(status()), 'structure');
+      const structure = step(input(status()), 'Structure');
       expect(structure.checkpoint).toEqual([
-        { id: 'confirm', label: 'Confirm', state: 'confirmed' },
-        { id: 'skip', label: 'Skip', state: 'skipped' },
+        { id: 'confirm', label: 'Confirm', state: 'Confirmed' },
+        { id: 'skip', label: 'Skip', state: 'Skipped' },
       ]);
-      expect(step(input(status()), 'speakers').checkpoint[0]).toEqual({
+      expect(step(input(status()), 'Speakers').checkpoint[0]).toEqual({
         id: 'confirm',
         label: 'Confirm review',
-        state: 'confirmed',
+        state: 'Confirmed',
       });
       expect(
-        step(input(status({ checkpoints: { structure: staleConfirmed } })), 'structure')
+        step(input(status({ checkpoints: { Structure: staleConfirmed } })), 'Structure')
           .checkpoint[0],
       ).toEqual({
         id: 'reconfirm',
         label: 'Reconfirm',
-        state: 'confirmed',
+        state: 'Confirmed',
       });
     });
 
     it('are hidden with no content, and absent on Import, Voices, Audio and Export', () => {
       for (const s of derivePipeline(input(FRESH))) expect(s.checkpoint).toEqual([]);
-      for (const id of ['import', 'voices', 'audio', 'export'] as StepId[])
+      for (const id of ['Import', 'Voices', 'Audio', 'Export'] as StepId[])
         expect(pills(input(status()), id)).toEqual([]);
     });
   });
@@ -459,35 +459,35 @@ describe('derivePipeline', () => {
         derivePipeline(input(status())).map((s) => [s.id, s.actions.map((a) => a.id)]),
       );
       expect(ids).toEqual({
-        import: ['reread'],
-        structure: ['checkStructure', 'manualReread'],
-        speakers: ['attribute', 'openSpeakers', 'openCast'],
-        text: ['reviewText', 'editWithAi'],
-        voices: ['openCast'],
-        titles: ['addTitles'],
-        pauses: ['addPauses'],
-        audio: ['generateAudio', 'openAudioMode'],
-        export: ['assemble'],
+        Import: ['reread'],
+        Structure: ['checkStructure', 'manualReread'],
+        Speakers: ['attribute', 'openSpeakers', 'openCast'],
+        Text: ['reviewText', 'editWithAi'],
+        Voices: ['openCast'],
+        Titles: ['addTitles'],
+        Pauses: ['addPauses'],
+        Audio: ['generateAudio', 'openAudioMode'],
+        Export: ['assemble'],
       });
-      expect(step(input(FRESH), 'import').actions.map((a) => a.id)).toEqual(['readBook']);
+      expect(step(input(FRESH), 'Import').actions.map((a) => a.id)).toEqual(['readBook']);
       // Import is done once there is content, so its reread stays a quiet text button.
       for (const s of derivePipeline(input(status())))
         expect(`${s.id} ${s.actions.filter((a) => a.primary).length}`).toBe(
-          `${s.id} ${s.id === 'import' ? 0 : 1}`,
+          `${s.id} ${s.id === 'Import' ? 0 : 1}`,
         );
     });
 
     it('label the rereads and the Book-bound actions as the spec words them', () => {
       const i = input(status());
-      expect(action(i, 'import', 'reread').label).toBe('Reread… (auto splits)');
-      expect(action(i, 'import', 'reread').destructive).toBe(true);
-      expect(action(i, 'structure', 'checkStructure').label).toBe('Check structure');
-      expect(action(i, 'structure', 'manualReread').label).toBe('Reread with split rules…');
-      expect(action(i, 'structure', 'manualReread').destructive).toBe(true);
-      expect(action(i, 'text', 'reviewText').label).toBe('Review text');
-      expect(action(i, 'text', 'editWithAi').label).toBe('Edit with AI…');
-      expect(action(i, 'titles', 'addTitles').label).toBe('Add titles…');
-      expect(action(i, 'pauses', 'addPauses').label).toBe('Add pauses');
+      expect(action(i, 'Import', 'reread').label).toBe('Reread… (auto splits)');
+      expect(action(i, 'Import', 'reread').destructive).toBe(true);
+      expect(action(i, 'Structure', 'checkStructure').label).toBe('Check structure');
+      expect(action(i, 'Structure', 'manualReread').label).toBe('Reread with split rules…');
+      expect(action(i, 'Structure', 'manualReread').destructive).toBe(true);
+      expect(action(i, 'Text', 'reviewText').label).toBe('Review text');
+      expect(action(i, 'Text', 'editWithAi').label).toBe('Edit with AI…');
+      expect(action(i, 'Titles', 'addTitles').label).toBe('Add titles…');
+      expect(action(i, 'Pauses', 'addPauses').label).toBe('Add pauses');
     });
   });
 
@@ -510,19 +510,19 @@ describe('derivePipeline', () => {
         'openAudioMode:Read the book first',
         'assemble:Read the book first',
       ]);
-      expect(action(input(FRESH), 'import', 'readBook').blockedReason).toBeNull();
-      expect(action(input(FRESH), 'speakers', 'openCast').blockedReason).toBeNull();
+      expect(action(input(FRESH), 'Import', 'readBook').blockedReason).toBeNull();
+      expect(action(input(FRESH), 'Speakers', 'openCast').blockedReason).toBeNull();
     });
 
     it('name why nothing is left to queue, and that assembly is running', () => {
       const done = input(status());
-      expect(action(done, 'speakers', 'attribute').blockedReason).toBe(
+      expect(action(done, 'Speakers', 'attribute').blockedReason).toBe(
         'Every paragraph has a speaker',
       );
-      expect(action(done, 'audio', 'generateAudio').blockedReason).toBe('Every item has audio');
-      expect(action(done, 'export', 'assemble').blockedReason).toBeNull();
+      expect(action(done, 'Audio', 'generateAudio').blockedReason).toBe('Every item has audio');
+      expect(action(done, 'Export', 'assemble').blockedReason).toBeNull();
       expect(
-        action(input(status(), { assemblyRunning: true }), 'export', 'assemble').blockedReason,
+        action(input(status(), { assemblyRunning: true }), 'Export', 'assemble').blockedReason,
       ).toBe('Assembling…');
     });
 
@@ -544,7 +544,7 @@ describe('derivePipeline', () => {
         status({
           audio: { remaining: 2 },
           nodes: { [VOL]: node({ attributionRemaining: 1, audioRemaining: 2 }) },
-          checkpoints: { structure: staleConfirmed, text: staleSkipped, titles: staleConfirmed },
+          checkpoints: { Structure: staleConfirmed, Text: staleSkipped, Titles: staleConfirmed },
         }),
       );
       for (const s of derivePipeline(stale))
@@ -600,25 +600,25 @@ describe('adviceFor', () => {
   }[] = [
     {
       name: 'generateAudio names every unsettled one of Text, Titles and Pauses',
-      status: status({ pauseParagraphs: 0, checkpoints: { structure: confirmed } }),
+      status: status({ pauseParagraphs: 0, checkpoints: { Structure: confirmed } }),
       action: 'generateAudio',
       line: "Text, Titles or Pauses aren't settled yet: changes there will need new audio.",
     },
     {
       name: 'generateAudio names one',
-      status: status({ checkpoints: { text: confirmed, titles: staleConfirmed, pauses: skipped } }),
+      status: status({ checkpoints: { Text: confirmed, Titles: staleConfirmed, Pauses: skipped } }),
       action: 'generateAudio',
       line: "Titles aren't settled yet: changes there will need new audio.",
     },
     {
       name: 'generateAudio names Text alone in the singular',
-      status: status({ checkpoints: { titles: confirmed } }),
+      status: status({ checkpoints: { Titles: confirmed } }),
       action: 'generateAudio',
       line: "Text isn't settled yet: changes there will need new audio.",
     },
     {
       name: 'generateAudio names two of three',
-      status: status({ pauseParagraphs: 0, checkpoints: { titles: skipped } }),
+      status: status({ pauseParagraphs: 0, checkpoints: { Titles: skipped } }),
       action: 'generateAudio',
       line: "Text or Pauses aren't settled yet: changes there will need new audio.",
     },
@@ -636,25 +636,25 @@ describe('adviceFor', () => {
     },
     {
       name: 'attribute after Structure is skipped',
-      status: status({ checkpoints: { structure: skipped } }),
+      status: status({ checkpoints: { Structure: skipped } }),
       action: 'attribute',
       line: null,
     },
     {
       name: 'addTitles before Structure is settled',
-      status: status({ checkpoints: { structure: staleConfirmed } }),
+      status: status({ checkpoints: { Structure: staleConfirmed } }),
       action: 'addTitles',
       line: 'Usually done after Structure: a reread drops inserted titles.',
     },
     {
       name: 'addTitles when titles were already confirmed',
-      status: status({ checkpoints: { structure: confirmed, titles: confirmed } }),
+      status: status({ checkpoints: { Structure: confirmed, Titles: confirmed } }),
       action: 'addTitles',
       line: 'You confirmed titles already: adding again inserts a second copy.',
     },
     {
       name: 'addTitles with both conditions holding says both',
-      status: status({ checkpoints: { titles: confirmed } }),
+      status: status({ checkpoints: { Titles: confirmed } }),
       action: 'addTitles',
       line:
         'Usually done after Structure: a reread drops inserted titles. ' +
@@ -668,7 +668,7 @@ describe('adviceFor', () => {
     },
     {
       name: 'addPauses once Structure is confirmed',
-      status: status({ pauseParagraphs: 0, checkpoints: { structure: confirmed } }),
+      status: status({ pauseParagraphs: 0, checkpoints: { Structure: confirmed } }),
       action: 'addPauses',
       line: null,
     },
@@ -693,13 +693,13 @@ describe('adviceFor', () => {
   it('each derived step carries its own advice line, from its actions', () => {
     const rows = steps(status({ pauseParagraphs: 0 }));
     const advice = (id: string) => rows.find((s) => s.id === id)?.advice;
-    expect(advice('titles')).toBe('Usually done after Structure: a reread drops inserted titles.');
-    expect(advice('pauses')).toBe('Usually done after Structure: a reread drops inserted pauses.');
-    expect(advice('import')).toBeNull();
+    expect(advice('Titles')).toBe('Usually done after Structure: a reread drops inserted titles.');
+    expect(advice('Pauses')).toBe('Usually done after Structure: a reread drops inserted pauses.');
+    expect(advice('Import')).toBeNull();
   });
 
   it('a Pauses step that is derived-done counts as settled', () => {
-    const s = status({ checkpoints: { text: confirmed, titles: confirmed } });
+    const s = status({ checkpoints: { Text: confirmed, Titles: confirmed } });
     expect(adviceFor('generateAudio', steps(s))).toBeNull();
   });
 });

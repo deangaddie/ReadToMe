@@ -28,7 +28,8 @@ namespace Read2Me.App.Api
         bool Nullable = false);
 
     /// <summary>The fields a provider type exposes, with the recommended default per field.</summary>
-    public sealed record SettingsSchemaDto(string Type, IReadOnlyList<SettingsFieldDto> Fields);
+    public sealed record SettingsSchemaDto<TType>(TType Type, IReadOnlyList<SettingsFieldDto> Fields)
+        where TType : struct, Enum;
 
     /// <summary>
     /// One static descriptor per TTS / voice-design provider (Angular ticket 16): the tunable fields
@@ -42,9 +43,9 @@ namespace Read2Me.App.Api
             new[] { "auto", "en", "zh", "ja", "ko", "de", "fr", "ru", "pt", "es", "it" }
                 .Select(l => new SettingsOptionDto(l)).ToList();
 
-        public static SettingsSchemaDto ParagraphTts(ParagraphTtsServiceType type) => type switch
+        public static SettingsSchemaDto<ParagraphTtsServiceType> ParagraphTts(ParagraphTtsServiceType type) => type switch
         {
-            ParagraphTtsServiceType.VoxCpm2 => new(type.ToString(), VoxCpm2Fields(
+            ParagraphTtsServiceType.VoxCpm2 => new(type, VoxCpm2Fields(
                 VoxCpm2ParagraphTtsSettings.Recommended.ModelId,
                 VoxCpm2ParagraphTtsSettings.Recommended.CfgValue,
                 VoxCpm2ParagraphTtsSettings.Recommended.InferenceTimesteps,
@@ -53,15 +54,15 @@ namespace Read2Me.App.Api
                 VoxCpm2ParagraphTtsSettings.Recommended.RetryBadcase,
                 VoxCpm2ParagraphTtsSettings.Recommended.RetryBadcaseMaxTimes,
                 VoxCpm2ParagraphTtsSettings.Recommended.RetryBadcaseRatioThreshold)),
-            ParagraphTtsServiceType.Chatterbox => new(type.ToString(), ChatterboxFields()),
-            ParagraphTtsServiceType.Qwen3Base => new(type.ToString(), Qwen3BaseFields()),
-            ParagraphTtsServiceType.Breeze => new(type.ToString(), BreezeFields()),
+            ParagraphTtsServiceType.Chatterbox => new(type, ChatterboxFields()),
+            ParagraphTtsServiceType.Qwen3Base => new(type, Qwen3BaseFields()),
+            ParagraphTtsServiceType.Breeze => new(type, BreezeFields()),
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, "No settings schema for this TTS provider."),
         };
 
-        public static SettingsSchemaDto VoiceDesign(VoiceDesignServiceType type) => type switch
+        public static SettingsSchemaDto<VoiceDesignServiceType> VoiceDesign(VoiceDesignServiceType type) => type switch
         {
-            VoiceDesignServiceType.VoxCpm2 => new(type.ToString(), VoxCpm2Fields(
+            VoiceDesignServiceType.VoxCpm2 => new(type, VoxCpm2Fields(
                 VoxCpm2VoiceDesignSettings.Recommended.ModelId,
                 VoxCpm2VoiceDesignSettings.Recommended.CfgValue,
                 VoxCpm2VoiceDesignSettings.Recommended.InferenceTimesteps,
@@ -70,16 +71,16 @@ namespace Read2Me.App.Api
                 VoxCpm2VoiceDesignSettings.Recommended.RetryBadcase,
                 VoxCpm2VoiceDesignSettings.Recommended.RetryBadcaseMaxTimes,
                 VoxCpm2VoiceDesignSettings.Recommended.RetryBadcaseRatioThreshold)),
-            VoiceDesignServiceType.Qwen3 => new(type.ToString(), Qwen3VoiceDesignFields()),
-            VoiceDesignServiceType.Breeze => new(type.ToString(), BreezeVoiceDesignFields()),
+            VoiceDesignServiceType.Qwen3 => new(type, Qwen3VoiceDesignFields()),
+            VoiceDesignServiceType.Breeze => new(type, BreezeVoiceDesignFields()),
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, "No settings schema for this voice-design provider."),
         };
 
         /// <summary>A Whisper server is its base URL and nothing else.</summary>
-        public static SettingsSchemaDto Transcription(TranscriptionServiceType type) => new(type.ToString(), []);
+        public static SettingsSchemaDto<TranscriptionServiceType> Transcription(TranscriptionServiceType type) => new(type, []);
 
         /// <summary>Both similarity models share one record; the key is its (unnamed, so PascalCase) JSON property.</summary>
-        public static SettingsSchemaDto SemanticSimilarity(SemanticSimilarityServiceType type) => new(type.ToString(),
+        public static SettingsSchemaDto<SemanticSimilarityServiceType> SemanticSimilarity(SemanticSimilarityServiceType type) => new(type,
         [
             new(nameof(SemanticSimilaritySettings.PassThreshold), "Pass Threshold", "number", Min: 0.0, Max: 1.0, Step: 0.01,
                 Default: new SemanticSimilaritySettings().PassThreshold,

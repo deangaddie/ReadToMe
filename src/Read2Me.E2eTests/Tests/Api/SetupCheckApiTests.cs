@@ -32,9 +32,9 @@ public class SetupCheckApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
         Assert.All(app.Services.GetServices<IHostedService>().OfType<WorkspaceHostedService>(), s => Assert.NotNull(s.Running));
 
         var workspace = atStart.GetProperty("rows")[0];
-        Assert.Equal("workspaceAndTools", workspace.GetProperty("group").GetString());
-        Assert.Equal("quick", workspace.GetProperty("tier").GetString());
-        Assert.Equal("passed", workspace.GetProperty("result").GetString());
+        Assert.Equal("WorkspaceAndTools", workspace.GetProperty("group").GetString());
+        Assert.Equal("Quick", workspace.GetProperty("tier").GetString());
+        Assert.Equal("Passed", workspace.GetProperty("result").GetString());
         Assert.Equal(app.WorkspaceDir, workspace.GetProperty("found").GetString());
         Assert.False(string.IsNullOrEmpty(workspace.GetProperty("fix").GetProperty("text").GetString()));
 

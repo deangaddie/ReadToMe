@@ -158,7 +158,7 @@ describe('ProjectStore', () => {
     await settle();
   }
 
-  const exportStep = () => store.pipeline()?.find((s) => s.id === 'export');
+  const exportStep = () => store.pipeline()?.find((s) => s.id === 'Export');
 
   it('loads detail + status, joins the project group and names the breadcrumb', async () => {
     await open();
@@ -234,7 +234,7 @@ describe('ProjectStore', () => {
       STATUS_URL,
       statusDto({
         checkpoints: {
-          structure: { state: 'confirmed', stale: false, at: '2026-10-17T09:00:00Z' },
+          Structure: { state: 'Confirmed', stale: false, at: '2026-10-17T09:00:00Z' },
         },
       }),
     );
@@ -243,7 +243,7 @@ describe('ProjectStore', () => {
     await settle(REFETCH_DEBOUNCE_MS + 20);
 
     expect(api.calls('GET', STATUS_URL)).toHaveLength(2);
-    expect(store.status()?.checkpoints.structure?.state).toBe('confirmed');
+    expect(store.status()?.checkpoints.Structure?.state).toBe('Confirmed');
   });
 
   it('a receipt that only touches voice rules neither refetches nor gaps', async () => {
@@ -410,7 +410,7 @@ describe('ProjectStore', () => {
       expect(store.pipeline()).toBeNull();
       await open();
       expect(store.pipeline()?.map((s) => s.id)).toHaveLength(9);
-      expect(store.pipeline()?.find((s) => s.id === 'speakers')?.chip.label).toBe(
+      expect(store.pipeline()?.find((s) => s.id === 'Speakers')?.chip.label).toBe(
         '2 paragraphs unassigned',
       );
     });
@@ -447,25 +447,25 @@ describe('ProjectStore', () => {
       live.assembly.set({ ...IDLE_ASSEMBLY, isRunning: true, folder: 'dracula' });
       live.voiceBatch.set({ ...IDLE_VOICE_BATCH, isRunning: true });
       expect(exportStep()?.chip.label).toBe('Assembling…');
-      expect(store.pipeline()?.find((s) => s.id === 'voices')?.state).toBe('running');
+      expect(store.pipeline()?.find((s) => s.id === 'Voices')?.state).toBe('running');
     });
 
     it('receipt → refetch → re-derive: a confirmed Structure row reaches the step', async () => {
       await open();
-      expect(store.pipeline()?.find((s) => s.id === 'structure')?.state).toBe('unconfirmed');
+      expect(store.pipeline()?.find((s) => s.id === 'Structure')?.state).toBe('unconfirmed');
       api.on(
         'GET',
         STATUS_URL,
         statusDto({
-          checkpoints: { structure: { state: 'confirmed', stale: false, at: '2026-10-17' } },
+          checkpoints: { Structure: { state: 'Confirmed', stale: false, at: '2026-10-17' } },
         }),
       );
 
       live.receiptsEmitter.emit(receipt(6, 'Checkpoints'));
       await settle(REFETCH_DEBOUNCE_MS + 20);
 
-      expect(store.pipeline()?.find((s) => s.id === 'structure')?.state).toBe('confirmed');
-      expect(store.pipeline()?.find((s) => s.next)?.id).toBe('speakers');
+      expect(store.pipeline()?.find((s) => s.id === 'Structure')?.state).toBe('confirmed');
+      expect(store.pipeline()?.find((s) => s.next)?.id).toBe('Speakers');
     });
   });
 

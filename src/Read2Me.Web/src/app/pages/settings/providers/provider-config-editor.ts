@@ -1,5 +1,5 @@
 import { html, nothing } from 'lit-html';
-import { ParagraphTtsSettingsApi, type TextStep, toApiError } from '@app/api';
+import { ParagraphTtsSettingsApi, type ProviderType, type TextStep, toApiError } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { computed, signal, untracked } from '@app/core/signals';
@@ -62,7 +62,8 @@ export class ProviderConfigEditor extends R2mElement {
     this.#target.set(value);
   }
 
-  readonly form = signal<ProviderForm>(emptyProviderForm(0, false));
+  // A placeholder until a target arrives; opening one resets the form to its type.
+  readonly form = signal<ProviderForm>(emptyProviderForm('VoxCpm2', false));
   readonly error = signal<string | null>(null);
   readonly schemaError = signal<string | null>(null);
   readonly saving = signal(false);
@@ -74,7 +75,7 @@ export class ProviderConfigEditor extends R2mElement {
   });
 
   /** The provider type's tuning fields, per type; a type is asked for once. */
-  private readonly schemas = signal<ReadonlyMap<number, SettingsField[]>>(new Map());
+  private readonly schemas = signal<ReadonlyMap<ProviderType, SettingsField[]>>(new Map());
 
   /** Every field below the base URL; null while the type's schema is on its way. */
   readonly fields = computed<SettingsField[] | null>(() => {
@@ -123,7 +124,7 @@ export class ProviderConfigEditor extends R2mElement {
     if (this.#area()?.hasTextProcessing) void this.loadSteps(target.id);
   }
 
-  private async loadSchema(area: ProviderArea, type: number): Promise<void> {
+  private async loadSchema(area: ProviderArea, type: ProviderType): Promise<void> {
     // Cleared first: a failure belongs to the type that was showing, not to this one.
     this.schemaError.set(null);
     if (this.schemas().has(type)) return;
@@ -162,7 +163,7 @@ export class ProviderConfigEditor extends R2mElement {
    * Another provider type is another settings record: its tuning starts from that type's defaults.
    * What the area holds per config (chunking, carrier prefix) stays.
    */
-  setType(type: number): void {
+  setType(type: ProviderType): void {
     const kept = this.#area()?.perConfigKeys ?? [];
     this.form.update((f) =>
       f.type === type
@@ -227,8 +228,8 @@ export class ProviderConfigEditor extends R2mElement {
             aria-describedby=${a.describedBy}
             aria-invalid=${a.invalid}
             data-field="type"
-            .value=${String(form.type)}
-            @change=${(e: Event) => this.setType(Number(controlValue(e)))}
+            .value=${form.type}
+            @change=${(e: Event) => this.setType(controlValue(e) as ProviderType)}
           >
             ${area.types.map(
               (t) =>

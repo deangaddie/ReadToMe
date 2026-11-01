@@ -139,7 +139,7 @@ describe('r2m-overview-page', () => {
   it('shows the stepper and the project card side by side', async () => {
     const page = await render();
     expect(page.querySelectorAll('.r2m-pipeline__step').length).toBe(9);
-    expect(text(page.querySelector('[data-step="speakers"]'))).toContain('3 paragraphs unassigned');
+    expect(text(page.querySelector('[data-step="Speakers"]'))).toContain('3 paragraphs unassigned');
     const details = page.querySelector('r2m-project-details-panel')!;
     expect(details.textContent).toContain('Narrated by Watson');
     expect(details.textContent).toContain('dracula.epub');
@@ -154,7 +154,7 @@ describe('r2m-overview-page', () => {
     const page = await render(
       status({
         checkpoints: {
-          structure: { state: 'confirmed', stale: false, at: '2026-10-17T09:00:00Z' },
+          Structure: { state: 'Confirmed', stale: false, at: '2026-10-17T09:00:00Z' },
         },
       }),
       [],
@@ -234,7 +234,7 @@ describe('r2m-overview-page', () => {
         items: { total: 0, withAudio: 0, unattributed: 0 },
       }),
     );
-    expect(page.querySelector('[aria-current="step"]')?.getAttribute('data-step')).toBe('import');
+    expect(page.querySelector('[aria-current="step"]')?.getAttribute('data-step')).toBe('Import');
     api.on('POST', `${BASE}/import`, undefined).on('GET', `${BASE}/status`, status());
 
     button(page, 'readBook').click();
@@ -243,7 +243,7 @@ describe('r2m-overview-page', () => {
 
     expect(api.calls('POST', `${BASE}/import`).map((r) => r.body)).toEqual([{ reread: false }]);
     expect(api.calls('GET', `${BASE}/status`)).toHaveLength(2);
-    expect(text(page.querySelector('[data-step="import"]'))).toContain('Done');
+    expect(text(page.querySelector('[data-step="Import"]'))).toContain('Done');
     expect(toasts).toEqual(['Book read in']);
   });
 
@@ -256,8 +256,8 @@ describe('r2m-overview-page', () => {
 
     expect(ensureReady).toHaveBeenCalledWith('attribution');
     expect(api.calls('POST', `${BASE}/attribution/enqueue`).map((r) => r.body)).toEqual([
-      { level: 'volume', nodeId: 'v1', unprocessedOnly: true },
-      { level: 'volume', nodeId: 'v2', unprocessedOnly: true },
+      { level: 'Volume', nodeId: 'v1', unprocessedOnly: true },
+      { level: 'Volume', nodeId: 'v2', unprocessedOnly: true },
     ]);
     expect(api.calls('GET', `${BASE}/status`)).toHaveLength(2);
     expect(toasts).toEqual(['Queued 4 paragraphs']);
@@ -267,8 +267,8 @@ describe('r2m-overview-page', () => {
     const page = await render();
     const step = (name: string) => page.querySelector<HTMLElement>(`[data-step="${name}"]`)!;
     const chip = (name: string) => text(step(name).querySelector('.r2m-pipeline__chip'));
-    expect(step('structure').getAttribute('aria-current')).toBe('step');
-    expect(chip('speakers')).toContain('3 paragraphs unassigned');
+    expect(step('Structure').getAttribute('aria-current')).toBe('step');
+    expect(chip('Speakers')).toContain('3 paragraphs unassigned');
 
     const attributed = {
       attributionRemaining: 0,
@@ -285,12 +285,12 @@ describe('r2m-overview-page', () => {
     });
     await page.rendered();
 
-    expect(chip('speakers')).toContain('Review not confirmed');
+    expect(chip('Speakers')).toContain('Review not confirmed');
     expect(button(page, 'attribute').disabled).toBe(true);
     expect(button(page, 'attribute').closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(
       'Every paragraph has a speaker',
     );
-    expect(step('structure').getAttribute('aria-current')).toBe('step');
+    expect(step('Structure').getAttribute('aria-current')).toBe('step');
   });
 
   it('a cancelled preflight queues nothing', async () => {
@@ -314,8 +314,8 @@ describe('r2m-overview-page', () => {
 
     expect(ensureReady).toHaveBeenCalledWith('audio');
     expect(api.calls('POST', `${BASE}/audio/enqueue`).map((r) => r.body)).toEqual([
-      { level: 'volume', nodeId: 'v1', needsAudioOnly: true, narratorOnlyMode: true },
-      { level: 'volume', nodeId: 'v2', needsAudioOnly: true, narratorOnlyMode: true },
+      { level: 'Volume', nodeId: 'v1', needsAudioOnly: true, narratorOnlyMode: true },
+      { level: 'Volume', nodeId: 'v2', needsAudioOnly: true, narratorOnlyMode: true },
     ]);
     expect(toasts).toEqual(['Queued 2 items']);
   });
@@ -343,7 +343,7 @@ describe('r2m-overview-page', () => {
   it('Reread names the confirmed and skipped steps it clears when a checkpoint row exists (guidance-primitives 14)', async () => {
     const page = await render(
       status({
-        checkpoints: { structure: { state: 'confirmed', stale: false, at: '2026-10-18' } },
+        checkpoints: { Structure: { state: 'Confirmed', stale: false, at: '2026-10-18' } },
       }),
     );
     confirmAnswer = false;
@@ -377,37 +377,37 @@ describe('r2m-overview-page', () => {
     const page = await render();
     const pill = (step: string, id: string) =>
       page.querySelector<HTMLButtonElement>(`[data-step="${step}"] [data-checkpoint="${id}"]`)!;
-    expect(text(page.querySelector('[data-step="structure"] .r2m-pipeline__checkpoint'))).toBe(
+    expect(text(page.querySelector('[data-step="Structure"] .r2m-pipeline__checkpoint'))).toBe(
       'Confirm Skip',
     );
-    api.on('PUT', `${BASE}/checkpoints/structure`, undefined).on(
+    api.on('PUT', `${BASE}/checkpoints/Structure`, undefined).on(
       'GET',
       `${BASE}/status`,
       status({
-        checkpoints: { structure: { state: 'confirmed', stale: false, at: '2026-10-18' } },
+        checkpoints: { Structure: { state: 'Confirmed', stale: false, at: '2026-10-18' } },
       }),
     );
 
-    pill('structure', 'confirm').click();
+    pill('Structure', 'confirm').click();
     await settle();
     await page.rendered();
 
-    expect(api.calls('PUT', `${BASE}/checkpoints/structure`).map((r) => r.body)).toEqual([
-      { state: 'confirmed' },
+    expect(api.calls('PUT', `${BASE}/checkpoints/Structure`).map((r) => r.body)).toEqual([
+      { state: 'Confirmed' },
     ]);
     expect(api.calls('GET', `${BASE}/status`)).toHaveLength(2);
-    expect(text(page.querySelector('[data-step="structure"] .r2m-pipeline__chip'))).toContain(
+    expect(text(page.querySelector('[data-step="Structure"] .r2m-pipeline__chip'))).toContain(
       'Confirmed',
     );
-    expect(text(page.querySelector('[data-step="structure"] .r2m-pipeline__checkpoint'))).toBe(
+    expect(text(page.querySelector('[data-step="Structure"] .r2m-pipeline__checkpoint'))).toBe(
       'Reopen',
     );
 
-    api.on('PUT', `${BASE}/checkpoints/text`, () => problem(422, 'Read the book first'));
-    pill('text', 'skip').click();
+    api.on('PUT', `${BASE}/checkpoints/Text`, () => problem(422, 'Read the book first'));
+    pill('Text', 'skip').click();
     await settle();
-    expect(api.calls('PUT', `${BASE}/checkpoints/text`).map((r) => r.body)).toEqual([
-      { state: 'skipped' },
+    expect(api.calls('PUT', `${BASE}/checkpoints/Text`).map((r) => r.body)).toEqual([
+      { state: 'Skipped' },
     ]);
     expect(toasts).toEqual(['problem: Read the book first']);
   });
@@ -451,10 +451,10 @@ describe('r2m-overview-page', () => {
 
   it('the Titles row carries its advice line while Structure is unsettled', async () => {
     const page = await render();
-    expect(text(page.querySelector('[data-step="titles"] .r2m-advice'))).toBe(
+    expect(text(page.querySelector('[data-step="Titles"] .r2m-advice'))).toBe(
       'Usually done after Structure: a reread drops inserted titles.',
     );
-    expect(page.querySelector('[data-step="import"] .r2m-advice')).toBeNull();
+    expect(page.querySelector('[data-step="Import"] .r2m-advice')).toBeNull();
   });
 
   it('? opens one step’s help in both placements, toggles it off, and switches to another step', async () => {
@@ -471,35 +471,35 @@ describe('r2m-overview-page', () => {
       page.querySelector('.overview__body')?.classList.contains('overview__body--help-open'),
     ).toBe(false);
 
-    toggle('structure').click();
+    toggle('Structure').click();
     await page.rendered();
-    expect(open().sort()).toEqual(['inline:structure', 'side:structure']);
+    expect(open().sort()).toEqual(['inline:Structure', 'side:Structure']);
     expect(
       page.querySelector('.overview__body')?.classList.contains('overview__body--help-open'),
     ).toBe(true);
     expect(
       page
-        .querySelector('[data-step="structure"]')
+        .querySelector('[data-step="Structure"]')
         ?.classList.contains('r2m-pipeline__step--help-open'),
     ).toBe(true);
     expect(page.querySelector('.overview__details .overview__help--side')).not.toBeNull();
     expect(
       page.querySelector(
-        '[data-step="structure"] .r2m-pipeline__help-inline .overview__help--inline',
+        '[data-step="Structure"] .r2m-pipeline__help-inline .overview__help--inline',
       ),
     ).not.toBeNull();
     // The details card is still in the document (CSS hides it at laptop width).
     expect(page.querySelector('r2m-project-details-panel')).not.toBeNull();
 
-    toggle('speakers').click();
+    toggle('Speakers').click();
     await page.rendered();
-    expect(open().sort()).toEqual(['inline:speakers', 'side:speakers']);
+    expect(open().sort()).toEqual(['inline:Speakers', 'side:Speakers']);
 
-    toggle('speakers').click();
+    toggle('Speakers').click();
     await page.rendered();
     expect(open()).toEqual([]);
 
-    toggle('export').click();
+    toggle('Export').click();
     await page.rendered();
     page
       .querySelector<HTMLButtonElement>('.overview__help--side [aria-label="Close help"]')!
@@ -567,7 +567,7 @@ describe('r2m-overview-page', () => {
         isPartial: false,
       },
     ]);
-    const exportStep = page.querySelector('[data-step="export"]')!;
+    const exportStep = page.querySelector('[data-step="Export"]')!;
     expect(text(exportStep)).toContain(`Last build: ${formatBuildDate('2026-09-19T10:00:00Z')}`);
     expect(exportStep.classList.contains('r2m-pipeline__step--done')).toBe(true);
   });

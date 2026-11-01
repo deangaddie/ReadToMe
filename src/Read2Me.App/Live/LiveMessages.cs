@@ -1,7 +1,10 @@
 using Read2Me.App.Services.SetupCheck;
+using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Audio.Assembly;
 using Read2Me.Services.BookEdits;
 using Read2Me.Services.Characters;
+using Read2Me.Services.Health;
 using Read2Me.Services.History;
 using Read2Me.Services.Llm;
 using Read2Me.Services.Mutations;
@@ -75,12 +78,12 @@ public sealed record ReceiptMessage(
 /// (single, global) run belongs to; <c>OutputFileName</c> rides on <c>completed</c>.
 /// </summary>
 public sealed record AssemblyMessage(
-    string Kind, string? Phase = null, double? Fraction = null, string? Reason = null,
+    string Kind, AssemblyPhase? Phase = null, double? Fraction = null, string? Reason = null,
     string? Folder = null, string? OutputFileName = null);
 
 /// <summary>Assembly service state for the connect-time snapshot.</summary>
 public sealed record AssemblyState(
-    bool IsRunning, string? CurrentPhase, double EncodePercent, string? LastError, int AudioRemainingCount,
+    bool IsRunning, AssemblyPhase? CurrentPhase, double EncodePercent, string? LastError, int AudioRemainingCount,
     string? Folder = null, string? OutputFileName = null);
 
 /// <summary><c>kind</c>: started | progress | voiceUpdated | completed | cancelled.</summary>
@@ -113,7 +116,7 @@ public sealed record WatchdogMessage(string Kind, string Service, string? Reason
 /// when a lifecycle op produced the observation — that is what a client toasts.
 /// </summary>
 public sealed record ServiceStatusMessage(
-    string Name, string Status, string? Op = null, bool? Ok = null, string? Error = null);
+    string Name, AiServiceStatus Status, string? Op = null, bool? Ok = null, string? Error = null);
 
 /// <summary>
 /// <c>kind</c>: stage | done — one pre-flight run (Angular ticket 25), sent to the connection that
@@ -215,10 +218,10 @@ public sealed record HistoryMessage(
 /// back after missing the push have to be the same shape, or a review screen would need two.
 /// </summary>
 public sealed record BookEditRowDto(
-    string Kind, Guid Id, string DisplayPath, string OldValue, string? NewValue, string Status, string? FailureReason)
+    BookEditTargetKind Kind, Guid Id, string DisplayPath, string OldValue, string? NewValue, ProposalStatus Status, string? FailureReason)
 {
     public static BookEditRowDto From(ProposedEdit p) =>
-        new(p.Kind.ToString(), p.Id, p.DisplayPath, p.OldValue, p.NewValue, p.Status.ToString(), p.FailureReason);
+        new(p.Kind, p.Id, p.DisplayPath, p.OldValue, p.NewValue, p.Status, p.FailureReason);
 }
 
 /// <summary>
@@ -243,6 +246,6 @@ public sealed record LiveSnapshot(
     AssemblyState Assembly,
     VoiceBatchState VoiceBatch,
     IReadOnlyDictionary<string, string> Watchdog,
-    IReadOnlyDictionary<string, string> ServiceStatus,
+    IReadOnlyDictionary<string, AiServiceStatus> ServiceStatus,
     ThroughputSnapshot Throughput,
     IReadOnlyDictionary<string, ProjectSnapshot> Projects);

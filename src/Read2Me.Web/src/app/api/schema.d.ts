@@ -501,7 +501,7 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    limit?: number | string;
+                    limit?: number;
                 };
                 header?: never;
                 path?: never;
@@ -999,7 +999,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Queue LLM character attribution for the paragraphs under a node (level: volume|part|chapter). Poll /api/attribution/queue. */
+        /** Queue LLM character attribution for the paragraphs under a node (level: Volume|Part|Chapter). Poll /api/attribution/queue. */
         post: {
             parameters: {
                 query?: never;
@@ -1159,7 +1159,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Queue TTS audio generation for the items under a node (level: volume|part|chapter). Poll /api/audio/queue. */
+        /** Queue TTS audio generation for the items under a node (level: Volume|Part|Chapter). Poll /api/audio/queue. */
         post: {
             parameters: {
                 query?: never;
@@ -2346,7 +2346,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Confirm, skip or reopen a Pipeline step (state: confirmed | skipped | open). 204 on success, including a repeat that changed nothing; the refreshed /status arrives through the Checkpoints receipt. 404 unknown step; 422 when the step does not take that state or the book has no content; 400 without a state. */
+        /** Confirm, skip or reopen a Pipeline step (state: Confirmed | Skipped | Open). 204 on success, including a repeat that changed nothing; the refreshed /status arrives through the Checkpoints receipt. 404 unknown step; 422 when the step does not take that state or the book has no content; 400 without a state. */
         put: {
             parameters: {
                 query?: never;
@@ -2830,7 +2830,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/projects/{folder}/nodes/chapter/{id}/voices": {
+    "/api/projects/{folder}/nodes/Chapter/{id}/voices": {
         parameters: {
             query?: never;
             header?: never;
@@ -2915,7 +2915,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Ordered children of a node. level=volume gives parts, part gives chapters, chapter gives paragraphs with their items. */
+        /** Ordered children of a node. Volume gives parts, Part gives chapters, Chapter gives paragraphs with their items. */
         get: {
             parameters: {
                 query?: {
@@ -2994,7 +2994,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The speech items under a node (level: volume|part|chapter) that have a speaker to read them, with their paragraph/chapter/part/volume ids; needsAudioOnly=true keeps those still missing a WAV; narratorOnlyMode=true counts unattributed lines as readable. What an audio tree checkbox or 'Select needs audio' selects. */
+        /** The speech items under a node (level: Volume|Part|Chapter) that have a speaker to read them, with their paragraph/chapter/part/volume ids; needsAudioOnly=true keeps those still missing a WAV; narratorOnlyMode=true counts unattributed lines as readable. What an audio tree checkbox or 'Select needs audio' selects. */
         get: {
             parameters: {
                 query?: {
@@ -3075,7 +3075,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The Character paragraphs under a node (level: volume|part|chapter) with their chapter/part/volume ids; unprocessedOnly=true keeps those still holding an unattributed line. What 'Select unprocessed' selects. */
+        /** The Character paragraphs under a node (level: Volume|Part|Chapter) with their chapter/part/volume ids; unprocessedOnly=true keeps those still holding an unattributed line. What 'Select unprocessed' selects. */
         get: {
             parameters: {
                 query?: {
@@ -3239,8 +3239,8 @@ export interface paths {
             parameters: {
                 query: {
                     chapterId: string;
-                    before?: number | string;
-                    after?: number | string;
+                    before?: number;
+                    after?: number;
                     /** @description A History step id: read the project as it stood after that step instead of now. 404 unknown step, 409 while the project is busy (detail says why), 422 a step that can't be opened. */
                     at?: string;
                 };
@@ -5038,7 +5038,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The editable fields of one TTS provider type (?type=VoxCpm2|Chatterbox|Qwen3Base|Breeze, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override. */
+        /** The editable fields of one TTS provider type (?type=VoxCpm2|Chatterbox|Qwen3Base|Breeze, member name) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override. */
         get: {
             parameters: {
                 query?: {
@@ -5450,7 +5450,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The editable fields of one semantic-similarity provider type (?type=MiniLmL6|MpnetBaseV2, name or number) beyond its base URL: the pass threshold. */
+        /** The editable fields of one semantic-similarity provider type (?type=MiniLmL6|MpnetBaseV2, member name) beyond its base URL: the pass threshold. */
         get: {
             parameters: {
                 query?: {
@@ -5870,7 +5870,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The editable fields of one transcription provider type (?type=LocalWhisper, name or number) beyond its base URL — none today. */
+        /** The editable fields of one transcription provider type (?type=LocalWhisper, member name) beyond its base URL — none today. */
         get: {
             parameters: {
                 query?: {
@@ -6170,7 +6170,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The editable fields of one voice-design provider type (?type=VoxCpm2|Qwen3|Breeze, name or number) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override. */
+        /** The editable fields of one voice-design provider type (?type=VoxCpm2|Qwen3|Breeze, member name) with ranges and recommended defaults. Keys are the settingsJson property names, so a sparse object of them is a valid per-voice override. */
         get: {
             parameters: {
                 query?: {
@@ -6594,7 +6594,7 @@ export interface components {
             background?: null | string;
             drawerBackground?: null | string;
             /** Format: int32 */
-            id?: number | string;
+            id?: number;
             isBuiltIn?: boolean;
             isDark?: boolean;
             name?: string;
@@ -6622,13 +6622,14 @@ export interface components {
         };
         AttributionChainStepDto: {
             /** Format: int32 */
-            configId: number | string;
+            configId: number;
             promptStyle?: null | components["schemas"]["AttributionPromptStyle"];
             thinking: boolean;
         };
-        AttributionPromptStyle: number;
+        /** @enum {unknown} */
+        AttributionPromptStyle: "Full" | "Simple" | "Chapter";
         AudioEnqueueRequest: {
-            level: string;
+            level: components["schemas"]["BookNodeLevel"];
             /** @default false */
             narratorOnlyMode: boolean;
             /** @default true */
@@ -6643,23 +6644,25 @@ export interface components {
         };
         AudioProcessingUpdateRequest: {
             /** Format: int32 */
-            audioMaxAttempts?: null | number | string;
+            audioMaxAttempts?: null | number;
             /** Format: int32 */
-            chunkPauseMs?: null | number | string;
+            chunkPauseMs?: null | number;
             ffmpegPath?: null | string;
             /** Format: double */
-            werThreshold?: null | number | string;
+            werThreshold?: null | number;
         };
+        /** @enum {unknown} */
+        BookNodeLevel: "Volume" | "Part" | "Chapter";
         BookOverviewDto: {
             characters: components["schemas"]["CharacterDto"][];
             hasContent: boolean;
             /** Format: int64 */
-            revision: number | string;
+            revision: number;
             structureRules: components["schemas"]["StructureRuleDto"][];
             /** Format: int32 */
-            totalChapters: number | string;
+            totalChapters: number;
             /** Format: int32 */
-            totalParts: number | string;
+            totalParts: number;
             volumes: components["schemas"]["NodeDto"][];
         };
         BulkAssignPreviewRequest: {
@@ -6677,7 +6680,7 @@ export interface components {
             name: string;
         };
         /** @enum {unknown} */
-        CheckpointRequestState: "confirmed" | "skipped" | "open" | null;
+        CheckpointRequestState: "Confirmed" | "Skipped" | "Open";
         FfmpegTestRequest: {
             ffmpegPath?: null | string;
         };
@@ -6710,7 +6713,7 @@ export interface components {
             /** Format: uuid */
             restoredFromStepId?: null | string;
             /** Format: int32 */
-            sequence: number | string;
+            sequence: number;
             /** Format: date-time */
             startedAt: string;
             /** Format: uuid */
@@ -6733,7 +6736,7 @@ export interface components {
             /** Format: uuid */
             restoredFromStepId: null | string;
             /** Format: int32 */
-            sequence: number | string;
+            sequence: number;
             /** Format: date-time */
             startedAt: string;
             /** Format: uuid */
@@ -6741,7 +6744,7 @@ export interface components {
             summary: null | string;
         };
         /** @enum {unknown} */
-        HistoryStepKind: "request" | "backgroundRun" | "restore" | "started" | "import";
+        HistoryStepKind: "Request" | "BackgroundRun" | "Restore" | "Started" | "Import";
         ImportRequest: {
             /** @default false */
             reread: boolean;
@@ -6751,29 +6754,30 @@ export interface components {
         };
         JsonElement: unknown;
         JsonObject: Record<string, never>;
-        LlmApiType: number;
+        /** @enum {unknown} */
+        LlmApiType: "OpenAiCompatible";
         LlmServerConfig: {
             apiKey?: null | string;
             apiType?: components["schemas"]["LlmApiType"];
             /** Format: int32 */
-            attributionBatchSize?: number | string;
+            attributionBatchSize?: number;
             baseUrl?: string;
             /** Format: double */
-            frequencyPenalty?: null | number | string;
+            frequencyPenalty?: null | number;
             /** Format: int32 */
-            id?: number | string;
+            id?: number;
             /** Format: int32 */
-            maxTokens?: null | number | string;
+            maxTokens?: null | number;
             model?: null | string;
             name?: string;
             /** Format: double */
-            presencePenalty?: null | number | string;
+            presencePenalty?: null | number;
             promptStyle?: components["schemas"]["AttributionPromptStyle"];
             supportsModelSwitch?: boolean;
             /** Format: double */
-            temperature?: null | number | string;
+            temperature?: null | number;
             /** Format: double */
-            topP?: null | number | string;
+            topP?: null | number;
         };
         LlmTestRequest: {
             connectionId?: null | string;
@@ -6802,7 +6806,7 @@ export interface components {
             title: null | string;
         };
         NodeEnqueueRequest: {
-            level: string;
+            level: components["schemas"]["BookNodeLevel"];
             /** Format: uuid */
             nodeId: string;
             /** @default true */
@@ -6813,28 +6817,29 @@ export interface components {
         ParagraphTtsServiceConfig: {
             enabledStepIds?: string[];
             /** Format: int32 */
-            id?: number | string;
+            id?: number;
             name?: string;
             settingsJson?: string;
             substitutionSteps?: components["schemas"]["TextSubstitutionStep"][];
             toSentenceCaseConfig?: null | components["schemas"]["ToSentenceCaseConfig"];
             type?: components["schemas"]["ParagraphTtsServiceType"];
         };
-        ParagraphTtsServiceType: number;
+        /** @enum {unknown} */
+        ParagraphTtsServiceType: "VoxCpm2" | "Chatterbox" | "Qwen3Base" | "Breeze";
         ParagraphsEnqueueRequest: {
             paragraphIds: string[];
         };
         PauseDurationsDto: {
             /** Format: int32 */
-            chapterMs: number | string;
+            chapterMs: number;
             /** Format: int32 */
-            paragraphMs: number | string;
+            paragraphMs: number;
             /** Format: int32 */
-            partMs: number | string;
+            partMs: number;
             /** Format: int32 */
-            pauseMs: number | string;
+            pauseMs: number;
             /** Format: int32 */
-            volumeMs: number | string;
+            volumeMs: number;
         };
         /** @enum {unknown} */
         Placement: "Before" | "After" | "AtStart" | "AtEnd";
@@ -6862,7 +6867,7 @@ export interface components {
             detail?: null | string;
             instance?: null | string;
             /** Format: int32 */
-            status?: null | number | string;
+            status?: null | number;
             title?: null | string;
             type?: null | string;
         };
@@ -6874,9 +6879,9 @@ export interface components {
         };
         PronunciationDeleted: {
             /** Format: int32 */
-            audioDiscardCount: number | string;
+            audioDiscardCount: number;
             /** Format: int32 */
-            needsAudioCount: number | string;
+            needsAudioCount: number;
         };
         PronunciationDraftRequest: {
             /** @default false */
@@ -6888,16 +6893,16 @@ export interface components {
         };
         PronunciationImpactReport: {
             /** Format: int32 */
-            audioDiscardCount: number | string;
+            audioDiscardCount: number;
             duplicateOf: null | components["schemas"]["PronunciationRef"];
             /** Format: int32 */
-            itemCount: number | string;
+            itemCount: number;
             /** Format: int32 */
-            matchCount: number | string;
+            matchCount: number;
             matches: components["schemas"]["PronunciationMatchInBook"][];
             overlaps: components["schemas"]["PronunciationOverlap"][];
             /** Format: int32 */
-            withAudioCount: number | string;
+            withAudioCount: number;
         };
         PronunciationMatchInBook: {
             /** Format: uuid */
@@ -6907,17 +6912,17 @@ export interface components {
             /** Format: uuid */
             itemId: string;
             /** Format: int32 */
-            matchLength: number | string;
+            matchLength: number;
             /** Format: int32 */
-            matchStart: number | string;
+            matchStart: number;
             sentence: string;
             /** Format: int32 */
-            sentenceStart: number | string;
+            sentenceStart: number;
             speaker: null | string;
             /** Format: int32 */
-            spokenMatchLength: number | string;
+            spokenMatchLength: number;
             /** Format: int32 */
-            spokenMatchStart: number | string;
+            spokenMatchStart: number;
             spokenSentence: string;
         };
         PronunciationOverlap: {
@@ -6935,31 +6940,31 @@ export interface components {
         };
         PronunciationSaved: {
             /** Format: int32 */
-            audioDiscardCount: number | string;
+            audioDiscardCount: number;
             /** Format: uuid */
             id: string;
             /** Format: int32 */
-            itemCount: number | string;
+            itemCount: number;
             /** Format: int32 */
-            matchCount: number | string;
+            matchCount: number;
             /** Format: int32 */
-            needsAudioCount: number | string;
+            needsAudioCount: number;
             spokenForm: string;
             /** Format: int32 */
-            withAudioCount: number | string;
+            withAudioCount: number;
             writtenForm: string;
         };
         PronunciationSpan: {
             /** Format: uuid */
             itemId: string;
             /** Format: int32 */
-            length: number | string;
+            length: number;
             /** Format: uuid */
             pronunciationId: string;
             /** Format: int32 */
-            sentenceStart: number | string;
+            sentenceStart: number;
             /** Format: int32 */
-            start: number | string;
+            start: number;
         };
         PronunciationSpanReport: {
             pronunciations: components["schemas"]["PronunciationRef"][];
@@ -6979,26 +6984,27 @@ export interface components {
         };
         RestorePreviewDto: {
             /** Format: int32 */
-            audioDiscardCount: number | string;
+            audioDiscardCount: number;
         };
         RestoreResultDto: {
             /** Format: int32 */
-            audioDiscardCount: number | string;
+            audioDiscardCount: number;
             /** Format: int32 */
-            needsAudioCount: number | string;
+            needsAudioCount: number;
             step: null | components["schemas"]["HistoryStep"];
         };
         SemanticSimilarityServiceConfig: {
             /** Format: int32 */
-            id?: number | string;
+            id?: number;
             name?: string;
             settingsJson?: string;
             type?: components["schemas"]["SemanticSimilarityServiceType"];
         };
-        SemanticSimilarityServiceType: number;
+        /** @enum {unknown} */
+        SemanticSimilarityServiceType: "MiniLmL6" | "MpnetBaseV2";
         SetActiveRequest: {
             /** Format: int32 */
-            id: number | string;
+            id: number;
         };
         SetCheckpointRequest: {
             state: null | components["schemas"]["CheckpointRequestState"];
@@ -7008,16 +7014,16 @@ export interface components {
             writtenForm: null | string;
         };
         /** @enum {unknown} */
-        SetupCheckGroup: "workspaceAndTools" | "aiConfigs" | "dockerServices";
+        SetupCheckGroup: "WorkspaceAndTools" | "AiConfigs" | "DockerServices";
         /** @enum {unknown} */
-        SetupCheckLane: "local" | "cpu" | "gpu";
+        SetupCheckLane: "Local" | "Cpu" | "Gpu";
         SetupCheckReport: {
             firstRun: boolean;
             /**
              * Format: int32
              * @default 0
              */
-            fullCheckEstimateSeconds: number | string;
+            fullCheckEstimateSeconds: number;
             /** Format: date-time */
             fullCheckedAt: null | string;
             fullRun?: null | components["schemas"]["SetupFullRun"];
@@ -7030,7 +7036,7 @@ export interface components {
             startedAt: string;
         };
         /** @enum {unknown} */
-        SetupCheckResult: "passed" | "failed" | "notConfirmed" | "notRun" | "notUsed" | "checking";
+        SetupCheckResult: "Passed" | "Failed" | "NotConfirmed" | "NotRun" | "NotUsed" | "Checking";
         SetupCheckRow: {
             expected: string;
             fix: components["schemas"]["SetupFixHint"];
@@ -7045,7 +7051,7 @@ export interface components {
             tier: components["schemas"]["SetupCheckTier"];
         };
         /** @enum {unknown} */
-        SetupCheckTier: "quick" | "full";
+        SetupCheckTier: "Quick" | "Full";
         SetupFixHint: {
             copy?: null | string;
             link?: null | components["schemas"]["SetupSettingsLink"];
@@ -7056,9 +7062,9 @@ export interface components {
             label: string;
             lane: components["schemas"]["SetupCheckLane"];
             /** Format: int32 */
-            step: number | string;
+            step: number;
             /** Format: int32 */
-            total: number | string;
+            total: number;
         };
         SetupRerun: {
             gpu: boolean;
@@ -7076,7 +7082,7 @@ export interface components {
             prefix?: null | string;
         };
         /** @enum {unknown} */
-        StepAction: "edit" | "editWithAi" | "insert" | "split" | "merge" | "delete" | "title" | "pause" | "character" | "voice" | "attribution" | "pronunciation" | null;
+        StepAction: "Edit" | "EditWithAi" | "Insert" | "Split" | "Merge" | "Delete" | "Title" | "Pause" | "Character" | "Voice" | "Attribution" | "Pronunciation";
         StepPreviewRequest: {
             sample: null | components["schemas"]["PreviewSampleRef"];
             settings: null | components["schemas"]["JsonElement"];
@@ -7091,7 +7097,7 @@ export interface components {
         StructureRuleDto: {
             anchor: components["schemas"]["StructureAnchor"];
             /** Format: int32 */
-            minimumCount: number | string;
+            minimumCount: number;
             nodeKind: components["schemas"]["NodeKind"];
             placements: components["schemas"]["StructurePlacementDto"][];
         };
@@ -7099,41 +7105,42 @@ export interface components {
             fromText?: string;
             id?: string;
             /** Format: int32 */
-            order?: number | string;
+            order?: number;
             /** Format: int32 */
-            paragraphTtsServiceConfigId?: number | string;
+            paragraphTtsServiceConfigId?: number;
             toText?: string;
         };
         ThemeSelectionUpdateRequest: {
             followSystemPreference?: null | boolean;
             /** Format: int32 */
-            selectedThemeId?: null | number | string;
+            selectedThemeId?: null | number;
         };
         ToSentenceCaseConfig: {
             /** Format: int32 */
-            id?: number | string;
+            id?: number;
             paragraphEnabled?: boolean;
             /** Format: int32 */
-            paragraphTtsServiceConfigId?: number | string;
+            paragraphTtsServiceConfigId?: number;
             wordEnabled?: boolean;
             /** Format: int32 */
-            wordMinLength?: number | string;
+            wordMinLength?: number;
         };
         TranscriptionServiceConfig: {
             /** Format: int32 */
-            id?: number | string;
+            id?: number;
             name?: string;
             settingsJson?: string;
             type?: components["schemas"]["TranscriptionServiceType"];
         };
-        TranscriptionServiceType: number;
+        /** @enum {unknown} */
+        TranscriptionServiceType: "LocalWhisper";
         TryPronunciationRequest: {
             asWritten: boolean;
             draft: null | components["schemas"]["PronunciationDraftRequest"];
             /** Format: uuid */
             itemId: string;
             /** Format: int32 */
-            sentenceStart: number | string;
+            sentenceStart: number;
             voice: null | components["schemas"]["JsonElement"];
         };
         UpdateProjectRequest: {
@@ -7150,12 +7157,13 @@ export interface components {
         };
         VoiceDesignServiceConfig: {
             /** Format: int32 */
-            id?: number | string;
+            id?: number;
             name?: string;
             settingsJson?: string;
             type?: components["schemas"]["VoiceDesignServiceType"];
         };
-        VoiceDesignServiceType: number;
+        /** @enum {unknown} */
+        VoiceDesignServiceType: "VoxCpm2" | "Qwen3" | "Breeze";
         VoiceDesignTestRequest: {
             prompt?: null | string;
         };

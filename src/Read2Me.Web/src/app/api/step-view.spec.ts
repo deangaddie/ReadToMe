@@ -74,8 +74,8 @@ describe('StepView', () => {
   it('matches a folder name that needed encoding', () => {
     use(StepView).view('my book', 's1');
     expect(readsAtStep('/api/projects/my%20book/characters')).toBe('s1');
-    expect(readsAtStep('/api/projects/my%20book/nodes/chapter/c1/children')).toBe('s1');
-    expect(readsAtStep('/api/projects/my%20book/nodes/chapter/c1/children/extra')).toBeNull();
+    expect(readsAtStep('/api/projects/my%20book/nodes/Chapter/c1/children')).toBe('s1');
+    expect(readsAtStep('/api/projects/my%20book/nodes/Chapter/c1/children/extra')).toBeNull();
   });
 
   it('reads state files at the viewed step; item takes, which are not Project state, never', () => {

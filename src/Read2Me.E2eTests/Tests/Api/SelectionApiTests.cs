@@ -30,7 +30,7 @@ public class SelectionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         var chapter = book.ChapterId("ch1");
 
         // Narration-only p1 is not a Character paragraph; the three dialog paragraphs are.
-        var all = await GetJsonAsync($"/api/projects/{folder}/nodes/chapter/{chapter}/paragraph-ids");
+        var all = await GetJsonAsync($"/api/projects/{folder}/nodes/Chapter/{chapter}/paragraph-ids");
         Assert.Equal(
             new HashSet<Guid> { book.ParagraphId("p2"), book.ParagraphId("p3"), book.ParagraphId("p4") },
             all.EnumerateArray().Select(r => r.GetProperty("id").GetGuid()).ToHashSet());
@@ -40,7 +40,7 @@ public class SelectionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Assert.NotEqual(Guid.Empty, first.GetProperty("partId").GetGuid());
 
         // The same refs answer at the volume level, so a tree root selects without loading chapters.
-        var byVolume = await GetJsonAsync($"/api/projects/{folder}/nodes/volume/{book.VolumeId("v1")}/paragraph-ids");
+        var byVolume = await GetJsonAsync($"/api/projects/{folder}/nodes/Volume/{book.VolumeId("v1")}/paragraph-ids");
         Assert.Equal(3, byVolume.GetArrayLength());
 
         // Attribute one; "unprocessed" then leaves it out.
@@ -51,7 +51,7 @@ public class SelectionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Assert.Equal(HttpStatusCode.OK, assign.StatusCode);
 
         var unprocessed = await GetJsonAsync(
-            $"/api/projects/{folder}/nodes/chapter/{chapter}/paragraph-ids?unprocessedOnly=true");
+            $"/api/projects/{folder}/nodes/Chapter/{chapter}/paragraph-ids?unprocessedOnly=true");
         Assert.Equal(
             new HashSet<Guid> { book.ParagraphId("p3"), book.ParagraphId("p4") },
             unprocessed.EnumerateArray().Select(r => r.GetProperty("id").GetGuid()).ToHashSet());
@@ -78,7 +78,7 @@ public class SelectionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 
         await app.WaitForQueueDrainAsync("/api/attribution/queue");
 
-        var paragraphs = (await GetJsonAsync($"/api/projects/{folder}/nodes/chapter/{book.ChapterId("ch1")}/children"))
+        var paragraphs = (await GetJsonAsync($"/api/projects/{folder}/nodes/Chapter/{book.ChapterId("ch1")}/children"))
             .GetProperty("paragraphs").EnumerateArray().ToDictionary(p => p.GetProperty("id").GetGuid());
         Guid? SpeakerOf(string name) =>
             paragraphs[book.ParagraphId(name)].GetProperty("items")[0].GetProperty("characterId") is { ValueKind: JsonValueKind.String } id
@@ -126,7 +126,7 @@ public class SelectionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             new { type = "ReleaseNarration", scope = "Chapter", nodeId = chapter });
         Assert.Equal(HttpStatusCode.OK, release.StatusCode);
 
-        var ids = (await GetJsonAsync($"/api/projects/{folder}/nodes/chapter/{chapter}/paragraph-ids?unprocessedOnly=true"))
+        var ids = (await GetJsonAsync($"/api/projects/{folder}/nodes/Chapter/{chapter}/paragraph-ids?unprocessedOnly=true"))
             .EnumerateArray().Select(r => r.GetProperty("id").GetGuid()).ToList();
         Assert.Contains(book.ParagraphId("pq1"), ids);
         Assert.DoesNotContain(book.ParagraphId("pplain"), ids);
@@ -184,7 +184,7 @@ public class SelectionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     {
         var b = $"{app.BaseUrl}/api/projects/no-such-project-sel";
         Assert.Equal(HttpStatusCode.NotFound,
-            (await Http.GetAsync($"{b}/nodes/chapter/{Guid.NewGuid()}/paragraph-ids")).StatusCode);
+            (await Http.GetAsync($"{b}/nodes/Chapter/{Guid.NewGuid()}/paragraph-ids")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound,
             (await Http.PostAsJsonAsync($"{b}/attribution/enqueue-paragraphs", new { paragraphIds = Array.Empty<Guid>() })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound,

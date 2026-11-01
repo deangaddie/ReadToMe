@@ -1,4 +1,5 @@
-// `bun run help`: renders docs/guide/<step>.md (one file per Pipeline step, README.md ignored)
+// `bun run help`: renders docs/guide/<step>.md (one file per Pipeline step, named by its id in lower
+// case, README.md ignored)
 // into src/app/help/help.generated.ts, failing on a missing or extra step file and on unsafe
 // markdown (see help-render.ts). `bun run help:check` (--check): fails when the module is stale.
 // Authoring loop, from the repo root: `bun --watch src/Read2Me.Web/scripts/help.ts`. The pages are
@@ -17,8 +18,9 @@ async function build(): Promise<string> {
   const present = readdirSync(guideDir)
     .filter((name) => name.endsWith('.md') && name !== 'README.md')
     .map((name) => basename(name, '.md'));
-  const extra = present.filter((id) => !(STEP_IDS as readonly string[]).includes(id));
-  const missing = STEP_IDS.filter((id) => !present.includes(id));
+  const files = STEP_IDS.map((id) => id.toLowerCase());
+  const extra = present.filter((name) => !files.includes(name));
+  const missing = files.filter((name) => !present.includes(name));
   if (extra.length > 0 || missing.length > 0) {
     throw new Error(
       'help: docs/guide must hold exactly one <step>.md per Pipeline step.' +
@@ -28,8 +30,10 @@ async function build(): Promise<string> {
   }
   const entries: Record<string, HelpEntry> = {};
   for (const id of STEP_IDS) {
-    const file = `docs/guide/${id}.md`;
-    const page = (await import(join(guideDir, `${id}.md`), { with: { type: 'text' } })) as {
+    const file = `docs/guide/${id.toLowerCase()}.md`;
+    const page = (await import(join(guideDir, `${id.toLowerCase()}.md`), {
+      with: { type: 'text' },
+    })) as {
       default: string;
     };
     entries[id] = renderHelp(page.default, file);

@@ -10,6 +10,7 @@ using Read2Me.App.Services;
 using Read2Me.Core.Audio;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
+using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.VoiceDesign;
@@ -30,7 +31,7 @@ namespace Read2Me.App.Api
     /// <see cref="ReferenceWarning"/> is set when it is over the Reference Limit's soft limit.
     /// </summary>
     public sealed record VoiceDto(
-        Guid Id, Guid CharacterId, string Name, string? Description, string Source,
+        Guid Id, Guid CharacterId, string Name, string? Description, VoiceSource Source,
         string? DesignPrompt, string? Transcript, string? AudioFileName, bool IsEdited,
         string? VoiceDesignSettingsOverrideJson, string? TtsSettingsOverrideJson,
         double? ReferenceSeconds, string? ReferenceWarning);
@@ -128,7 +129,7 @@ namespace Read2Me.App.Api
         {
             var durationMs = WavHeader.TryReadDurationMs(fs, folderId, v.AudioFileName);
             return new(
-                v.Id, v.CharacterId, v.Name, v.Description, v.Source.ToString(),
+                v.Id, v.CharacterId, v.Name, v.Description, v.Source,
                 v.DesignPrompt, v.Transcript, v.AudioFileName,
                 originals.Exists(folderId, v.CharacterId, v.Id),
                 v.VoiceDesignSettingsOverrideJson, v.TtsSettingsOverrideJson,

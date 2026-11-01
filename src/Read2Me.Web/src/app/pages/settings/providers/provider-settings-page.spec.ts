@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { ProviderSettingsField, TextStep } from '@app/api';
+import type { ProviderSettingsField, ProviderType, TextStep } from '@app/api';
 import { override, resetServices } from '@app/core/services';
 import { ConfirmService, type ConfirmOptions } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
@@ -21,17 +21,25 @@ const num = (key: string, label: string, extra: Partial<ProviderSettingsField> =
 
 /** A cut of what the host's schema endpoints answer per provider type. */
 const SCHEMAS: Record<string, ProviderSettingsField[]> = {
-  'paragraph-tts:0': [num('cfg_value', 'CFG Value', { min: 1, max: 5, step: 0.1, default: 2 })],
-  'paragraph-tts:1': [num('exaggeration', 'Exaggeration', { min: 0, max: 2, default: 0.5 })],
-  'paragraph-tts:2': [num('temperature', 'Temperature', { min: 0, max: 2, default: 0.8 })],
-  'paragraph-tts:3': [num('top_k', 'Top K', { min: 1, step: 1, default: null, nullable: true })],
-  'voice-design:0': [num('inference_timesteps', 'LocDiT Steps', { min: 1, max: 50, step: 1 })],
-  'voice-design:1': [num('topK', 'Top K', { min: 1, step: 1, default: null, nullable: true })],
-  'transcription:0': [],
-  'semantic-similarity:0': [
+  'paragraph-tts:VoxCpm2': [
+    num('cfg_value', 'CFG Value', { min: 1, max: 5, step: 0.1, default: 2 }),
+  ],
+  'paragraph-tts:Chatterbox': [
+    num('exaggeration', 'Exaggeration', { min: 0, max: 2, default: 0.5 }),
+  ],
+  'paragraph-tts:Qwen3Base': [num('temperature', 'Temperature', { min: 0, max: 2, default: 0.8 })],
+  'paragraph-tts:Breeze': [
+    num('top_k', 'Top K', { min: 1, step: 1, default: null, nullable: true }),
+  ],
+  'voice-design:VoxCpm2': [
+    num('inference_timesteps', 'LocDiT Steps', { min: 1, max: 50, step: 1 }),
+  ],
+  'voice-design:Qwen3': [num('topK', 'Top K', { min: 1, step: 1, default: null, nullable: true })],
+  'transcription:LocalWhisper': [],
+  'semantic-similarity:MiniLmL6': [
     num('PassThreshold', 'Pass Threshold', { min: 0, max: 1, step: 0.01, default: 0.85 }),
   ],
-  'semantic-similarity:1': [
+  'semantic-similarity:MpnetBaseV2': [
     num('PassThreshold', 'Pass Threshold', { min: 0, max: 1, step: 0.01, default: 0.85 }),
   ],
 };
@@ -46,7 +54,12 @@ const STEPS: TextStep[] = [
   },
 ];
 
-function config(id: number, name: string, type: number, settingsJson: string): ProviderConfig {
+function config(
+  id: number,
+  name: string,
+  type: ProviderType,
+  settingsJson: string,
+): ProviderConfig {
   return { id, name, type, settingsJson };
 }
 
@@ -105,7 +118,7 @@ async function flush(page: ProviderSettingsPage) {
 }
 
 /** Renders `area` with one saved config of `type`, open in the editor. */
-async function render(area: ProviderAreaKey, type: number, settings: object = {}) {
+async function render(area: ProviderAreaKey, type: ProviderType, settings: object = {}) {
   const saved = config(1, 'main', type, JSON.stringify({ baseUrl: 'http://svc:1', ...settings }));
   if (area === 'voice-design')
     api.on('GET', '/api/settings/voice-design/sample-text', {
@@ -137,9 +150,9 @@ async function check(page: ProviderSettingsPage, selector: string, checked = tru
   await flush(page);
 }
 
-async function setType(page: ProviderSettingsPage, value: number) {
+async function setType(page: ProviderSettingsPage, value: ProviderType) {
   const select = page.querySelector<HTMLSelectElement>('select[data-field="type"]')!;
-  select.value = String(value);
+  select.value = value;
   select.dispatchEvent(new Event('change'));
   await flush(page);
 }
@@ -156,16 +169,16 @@ const error = (el: Element) => el.querySelector('.provider-editor__error')?.text
 
 describe('r2m-provider-settings-page', () => {
   describe('schema → form', () => {
-    const cases: [ProviderAreaKey, number, string[]][] = [
-      ['paragraph-tts', 0, ['maxChunkChars', 'carrierPrefixEnabled', 'cfg_value']],
-      ['paragraph-tts', 1, ['maxChunkChars', 'carrierPrefixEnabled', 'exaggeration']],
-      ['paragraph-tts', 2, ['maxChunkChars', 'carrierPrefixEnabled', 'temperature']],
-      ['paragraph-tts', 3, ['maxChunkChars', 'carrierPrefixEnabled', 'top_k']],
-      ['voice-design', 0, ['inference_timesteps']],
-      ['voice-design', 1, ['topK']],
-      ['transcription', 0, []],
-      ['semantic-similarity', 0, ['PassThreshold']],
-      ['semantic-similarity', 1, ['PassThreshold']],
+    const cases: [ProviderAreaKey, ProviderType, string[]][] = [
+      ['paragraph-tts', 'VoxCpm2', ['maxChunkChars', 'carrierPrefixEnabled', 'cfg_value']],
+      ['paragraph-tts', 'Chatterbox', ['maxChunkChars', 'carrierPrefixEnabled', 'exaggeration']],
+      ['paragraph-tts', 'Qwen3Base', ['maxChunkChars', 'carrierPrefixEnabled', 'temperature']],
+      ['paragraph-tts', 'Breeze', ['maxChunkChars', 'carrierPrefixEnabled', 'top_k']],
+      ['voice-design', 'VoxCpm2', ['inference_timesteps']],
+      ['voice-design', 'Qwen3', ['topK']],
+      ['transcription', 'LocalWhisper', []],
+      ['semantic-similarity', 'MiniLmL6', ['PassThreshold']],
+      ['semantic-similarity', 'MpnetBaseV2', ['PassThreshold']],
     ];
 
     for (const [area, providerType, keys] of cases) {
@@ -180,7 +193,7 @@ describe('r2m-provider-settings-page', () => {
     }
 
     it('shows the stored value over the schema default, whatever case its key is stored in', async () => {
-      const { page } = await render('semantic-similarity', 0, { PassThreshold: 0.6 });
+      const { page } = await render('semantic-similarity', 'MiniLmL6', { PassThreshold: 0.6 });
 
       const box = page.querySelector<HTMLInputElement>(
         '[data-key="PassThreshold"] input[type=number]',
@@ -190,9 +203,9 @@ describe('r2m-provider-settings-page', () => {
     });
 
     it('asks for the new type’s schema and starts its tuning from that type’s defaults', async () => {
-      const { page } = await render('voice-design', 0, { inference_timesteps: 30 });
+      const { page } = await render('voice-design', 'VoxCpm2', { inference_timesteps: 30 });
 
-      await setType(page, 1);
+      await setType(page, 'Qwen3');
 
       expect(fieldKeys(page)).toEqual(['topK']);
       expect(page.querySelector<HTMLInputElement>('[data-key="topK"] input')?.value).toBe('');
@@ -202,9 +215,12 @@ describe('r2m-provider-settings-page', () => {
 
   describe('type change', () => {
     it('keeps what the area holds per config and drops the old type’s tuning', async () => {
-      const { page } = await render('paragraph-tts', 0, { maxChunkChars: 350, cfg_value: 4 });
+      const { page } = await render('paragraph-tts', 'VoxCpm2', {
+        maxChunkChars: 350,
+        cfg_value: 4,
+      });
 
-      await setType(page, 1);
+      await setType(page, 'Chatterbox');
 
       expect(page.querySelector<HTMLInputElement>('[data-key="maxChunkChars"] input')?.value).toBe(
         '350',
@@ -222,24 +238,24 @@ describe('r2m-provider-settings-page', () => {
     });
 
     it('a schema that fails does not leave its message on a type that loaded', async () => {
-      const { page } = await render('voice-design', 0);
+      const { page } = await render('voice-design', 'VoxCpm2');
       api.on('GET', '/api/settings/voice-design/schema', (_body: unknown, url: URL) =>
-        url.searchParams.get('type') === '1'
+        url.searchParams.get('type') === 'Qwen3'
           ? problem(500, 'no schema')
-          : { type: '0', fields: SCHEMAS['voice-design:0'] },
+          : { type: 'VoxCpm2', fields: SCHEMAS['voice-design:VoxCpm2'] },
       );
 
-      await setType(page, 1);
+      await setType(page, 'Qwen3');
       expect(error(page)).toContain('could not be loaded');
 
-      await setType(page, 0);
+      await setType(page, 'VoxCpm2');
       expect(error(page)).toBeUndefined();
     });
   });
 
   describe('TTS', () => {
     it('offers the carrier length only while the carrier prefix is on', async () => {
-      const { page } = await render('paragraph-tts', 0);
+      const { page } = await render('paragraph-tts', 'VoxCpm2');
       expect(fieldKeys(page)).not.toContain('carrierMaxTargetChars');
 
       await check(page, '[data-key="carrierPrefixEnabled"] input[role=switch]');
@@ -248,7 +264,7 @@ describe('r2m-provider-settings-page', () => {
     });
 
     it('saves text-processing options and edited substitution rows', async () => {
-      const { page, saved } = await render('paragraph-tts', 0);
+      const { page, saved } = await render('paragraph-tts', 'VoxCpm2');
 
       await check(page, '[data-step="to-sentence-case"] input');
       page.querySelector<HTMLButtonElement>('[data-action="add-substitution"]')!.click();
@@ -286,7 +302,7 @@ describe('r2m-provider-settings-page', () => {
     });
 
     it('removing a substitution row drops it from the draft', async () => {
-      const { page } = await render('paragraph-tts', 0);
+      const { page } = await render('paragraph-tts', 'VoxCpm2');
       page.querySelector<HTMLButtonElement>('[data-action="add-substitution"]')!.click();
       await flush(page);
       expect(page.querySelectorAll('[data-role="substitution"]').length).toBe(1);
@@ -299,7 +315,7 @@ describe('r2m-provider-settings-page', () => {
     });
 
     it('refuses a chunk size below 1', async () => {
-      const { page } = await render('paragraph-tts', 0);
+      const { page } = await render('paragraph-tts', 'VoxCpm2');
 
       await type(page, '[data-key="maxChunkChars"] input', '0');
       button(page, 'Save').click();
@@ -314,7 +330,7 @@ describe('r2m-provider-settings-page', () => {
     const other = config(
       2,
       'other',
-      0,
+      'MiniLmL6',
       JSON.stringify({ BaseUrl: 'http://svc:2', PassThreshold: 0.8 }),
     );
 
@@ -323,7 +339,7 @@ describe('r2m-provider-settings-page', () => {
       const main = config(
         1,
         'main',
-        0,
+        'MiniLmL6',
         JSON.stringify({ BaseUrl: 'http://svc:1', PassThreshold: 0.85 }),
       );
       routeLoad('semantic-similarity', [main, other], main);
@@ -357,14 +373,19 @@ describe('r2m-provider-settings-page', () => {
       await type(page, '[data-field="name"]', 'fresh');
       await type(page, '[data-field="baseUrl"]', 'http://fresh:8200');
       await type(page, '[data-key="PassThreshold"] input[type=number]', '0.7');
-      const fresh = config(3, 'fresh', 0, '{"BaseUrl":"http://fresh:8200","PassThreshold":0.7}');
+      const fresh = config(
+        3,
+        'fresh',
+        'MiniLmL6',
+        '{"BaseUrl":"http://fresh:8200","PassThreshold":0.7}',
+      );
       api.on('POST', SIM, fresh);
       routeLoad('semantic-similarity', [main, other, fresh], main);
       button(page, 'Save').click();
       await flush(page);
 
       const body = api.calls('POST', SIM)[0]!.body as ProviderConfig;
-      expect(body).toMatchObject({ id: 0, name: 'fresh', type: 0 });
+      expect(body).toMatchObject({ id: 0, name: 'fresh', type: 'MiniLmL6' });
       expect(JSON.parse(body.settingsJson)).toEqual({
         baseUrl: 'http://fresh:8200',
         PassThreshold: 0.7,
@@ -429,7 +450,7 @@ describe('r2m-provider-settings-page', () => {
         default: 'The default sentence.',
         maxLength: 40,
       });
-      routeLoad('voice-design', [config(1, 'stored', 1, JSON.stringify(stored))]);
+      routeLoad('voice-design', [config(1, 'stored', 'Qwen3', JSON.stringify(stored))]);
       routeSchemas('voice-design');
       const page = document.createElement(
         PROVIDER_PAGE_TAGS['voice-design'],
@@ -445,7 +466,7 @@ describe('r2m-provider-settings-page', () => {
       await flush(page);
 
       const body = api.calls('PUT', '/api/settings/voice-design/1')[0]!.body as ProviderConfig;
-      expect(body).toMatchObject({ id: 1, name: 'renamed', type: 1 });
+      expect(body).toMatchObject({ id: 1, name: 'renamed', type: 'Qwen3' });
       // The host rewrites key case; every stored key and value must reach it.
       const lowered = (o: object) =>
         Object.fromEntries(Object.entries(o).map(([k, v]) => [k.toLowerCase(), v]));
@@ -455,7 +476,7 @@ describe('r2m-provider-settings-page', () => {
 
   describe('validation', () => {
     it('every page asks for a name and an absolute base URL before it sends anything', async () => {
-      const { page } = await render('transcription', 0);
+      const { page } = await render('transcription', 'LocalWhisper');
 
       await type(page, '[data-field="name"]', ' ');
       button(page, 'Save').click();
@@ -473,7 +494,7 @@ describe('r2m-provider-settings-page', () => {
     });
 
     it('similarity wants its threshold strictly between 0 and 1', async () => {
-      const { page } = await render('semantic-similarity', 0);
+      const { page } = await render('semantic-similarity', 'MiniLmL6');
 
       await type(page, '[data-key="PassThreshold"] input[type=number]', '1');
       button(page, 'Save').click();
@@ -489,7 +510,7 @@ describe('r2m-provider-settings-page', () => {
 
   describe('test actions', () => {
     it('similarity compares two texts and reports the verdict', async () => {
-      const { page } = await render('semantic-similarity', 0);
+      const { page } = await render('semantic-similarity', 'MiniLmL6');
       api.on('POST', '/api/settings/semantic-similarity/1/test', {
         score: 0.9123,
         threshold: 0.85,
@@ -511,7 +532,7 @@ describe('r2m-provider-settings-page', () => {
     });
 
     it('reports a provider that is down with its reason', async () => {
-      const { page } = await render('voice-design', 0);
+      const { page } = await render('voice-design', 'VoxCpm2');
       api.on('POST', '/api/settings/voice-design/1/test', problem(422, 'Connection refused'));
 
       await type(page, '[data-field="prompt"]', 'A warm old man');
@@ -524,7 +545,7 @@ describe('r2m-provider-settings-page', () => {
     });
 
     it('voice design plays the designed audio', async () => {
-      const { page } = await render('voice-design', 0);
+      const { page } = await render('voice-design', 'VoxCpm2');
       api.on('POST', '/api/settings/voice-design/1/test', {
         audioBase64: 'UklGRg==',
         contentType: 'audio/wav',
@@ -538,7 +559,7 @@ describe('r2m-provider-settings-page', () => {
     });
 
     it('transcription POSTs a dropped file as FormData and shows the transcript', async () => {
-      const { page } = await render('transcription', 0);
+      const { page } = await render('transcription', 'LocalWhisper');
       api.on('POST', '/api/settings/transcription/1/test', { transcript: 'Hello there.' });
       const clip = new File([new Uint8Array([1, 2, 3, 4])], 'clip.wav', { type: 'audio/wav' });
 
@@ -556,7 +577,7 @@ describe('r2m-provider-settings-page', () => {
     });
 
     it('TTS has no test action', async () => {
-      const { page } = await render('paragraph-tts', 0);
+      const { page } = await render('paragraph-tts', 'VoxCpm2');
 
       expect(page.querySelector('[data-action="test"]')).toBeNull();
     });
@@ -564,7 +585,7 @@ describe('r2m-provider-settings-page', () => {
 
   describe('voice-design sample text', () => {
     it('Save is dirty-gated and Reset to default refills the draft', async () => {
-      const { page } = await render('voice-design', 0);
+      const { page } = await render('voice-design', 'VoxCpm2');
       const save = page.querySelector<HTMLButtonElement>('[data-action="save-sample-text"]')!;
       expect(save.disabled).toBe(true);
 
@@ -592,7 +613,7 @@ describe('r2m-provider-settings-page', () => {
     });
 
     it('is busy while a save is in flight and settles when it lands', async () => {
-      const { page } = await render('voice-design', 0);
+      const { page } = await render('voice-design', 'VoxCpm2');
       const card = page.querySelector('r2m-voice-design-sample-text')!;
       expect(card.hasAttribute('aria-busy')).toBe(false);
 
@@ -621,7 +642,7 @@ describe('r2m-provider-settings-page', () => {
     });
 
     it('counts the draft against the host’s cap and will not save past it', async () => {
-      const { page } = await render('voice-design', 0);
+      const { page } = await render('voice-design', 'VoxCpm2');
       const save = page.querySelector<HTMLButtonElement>('[data-action="save-sample-text"]')!;
       const count = () =>
         page.querySelector('[data-testid="sample-text-count"]')?.textContent?.trim();
@@ -639,7 +660,7 @@ describe('r2m-provider-settings-page', () => {
 
   describe('live', () => {
     it('reloads on settingsChanged for its area only and follows a config edited elsewhere', async () => {
-      const { page, saved } = await render('transcription', 0);
+      const { page, saved } = await render('transcription', 'LocalWhisper');
       const elsewhere = { ...saved, settingsJson: JSON.stringify({ baseUrl: 'http://svc:2' }) };
       routeLoad('transcription', [elsewhere]);
 

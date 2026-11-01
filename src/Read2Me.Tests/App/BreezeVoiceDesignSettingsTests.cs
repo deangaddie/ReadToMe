@@ -19,7 +19,7 @@ namespace Read2Me.Tests.App
         {
             var schema = ProviderSettingsSchema.VoiceDesign(VoiceDesignServiceType.Breeze);
 
-            Assert.Equal("Breeze", schema.Type);
+            Assert.Equal(VoiceDesignServiceType.Breeze, schema.Type);
             Assert.Equal(["modelId", "guidanceScale", "seed"], schema.Fields.Select(f => f.Key));
         }
 

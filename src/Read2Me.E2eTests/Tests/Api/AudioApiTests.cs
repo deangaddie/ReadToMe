@@ -32,7 +32,7 @@ public class AudioApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 
         var enqueue = await Http.PostAsJsonAsync(
             $"{app.BaseUrl}/api/projects/{folder}/audio/enqueue",
-            new { level = "chapter", nodeId = chapterId, needsAudioOnly = true });
+            new { level = "Chapter", nodeId = chapterId, needsAudioOnly = true });
         Assert.Equal(HttpStatusCode.Accepted, enqueue.StatusCode);
         var enqueued = JsonDocument.Parse(await enqueue.Content.ReadAsStringAsync())
             .RootElement.GetProperty("enqueued").GetInt32();
@@ -52,7 +52,7 @@ public class AudioApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         // The reader's player addresses the take through the workspace mount, by the file name the
         // chapter children carry and cache-busted by its version (workspace-url.ts).
         var children = JsonDocument.Parse(await Http.GetStringAsync(
-            $"{app.BaseUrl}/api/projects/{folder}/nodes/chapter/{chapterId}/children"));
+            $"{app.BaseUrl}/api/projects/{folder}/nodes/Chapter/{chapterId}/children"));
         var audioFileName = children.RootElement.GetProperty("paragraphs").EnumerateArray()
             .SelectMany(p => p.GetProperty("items").EnumerateArray())
             .Single(i => i.GetProperty("id").GetGuid() == itemId)
@@ -102,7 +102,7 @@ public class AudioApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 
             var enqueue = await Http.PostAsJsonAsync(
                 $"{app.BaseUrl}/api/projects/{folder}/audio/enqueue",
-                new { level = "chapter", nodeId = builder.ChapterId("ch1"), needsAudioOnly = true });
+                new { level = "Chapter", nodeId = builder.ChapterId("ch1"), needsAudioOnly = true });
             Assert.Equal(HttpStatusCode.Accepted, enqueue.StatusCode);
 
             await app.WaitForQueueDrainAsync("/api/audio/queue", timeoutSeconds: 60);
@@ -149,7 +149,7 @@ public class AudioApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         {
             var enqueue = await Http.PostAsJsonAsync(
                 $"{app.BaseUrl}/api/projects/{folder}/audio/enqueue",
-                new { level = "chapter", nodeId = builder.ChapterId("ch1"), needsAudioOnly = true });
+                new { level = "Chapter", nodeId = builder.ChapterId("ch1"), needsAudioOnly = true });
             Assert.Equal(HttpStatusCode.Accepted, enqueue.StatusCode);
             await app.WaitForQueueDrainAsync("/api/audio/queue", timeoutSeconds: 60);
         }
@@ -179,7 +179,7 @@ public class AudioApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     {
         var response = await Http.PostAsJsonAsync(
             $"{app.BaseUrl}/api/projects/nope-audio/audio/enqueue",
-            new { level = "chapter", nodeId = Guid.NewGuid() });
+            new { level = "Chapter", nodeId = Guid.NewGuid() });
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
