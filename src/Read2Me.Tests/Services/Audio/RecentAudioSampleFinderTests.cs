@@ -102,7 +102,7 @@ namespace Read2Me.Tests.Services.Audio
         {
             _catalog.GetProjects().Returns(projects.Select(p => p.Folder).ToList());
             _catalog.GetProjectSummariesAsync().Returns(
-                projects.Select(p => new ProjectSummary(p.Folder, p.Title)).ToList());
+                projects.Select(p => new ProjectSummary(p.Folder, p.Title, null, null, 0, 0, null)).ToList());
         }
 
         private async Task<Guid> SeedItemAsync(string folder, string character, string text)

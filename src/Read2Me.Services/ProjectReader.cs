@@ -40,7 +40,7 @@ namespace Read2Me.Services
                 var project = await GetProjectAsync(folder);
                 if (project is null)
                 {
-                    summaries.Add(new ProjectSummary(folder, folder));
+                    summaries.Add(ProjectSummary.Unreadable(folder));
                     continue;
                 }
 

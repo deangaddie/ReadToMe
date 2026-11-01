@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace Read2Me.App.Api
 {
@@ -12,7 +13,7 @@ namespace Read2Me.App.Api
     {
         public sealed record Accepted(IFormFile File, string FileName, string Extension);
 
-        public static async Task<(Accepted? File, IResult? Refusal)> ReadAsync(
+        public static async Task<(Accepted? File, ProblemHttpResult? Refusal)> ReadAsync(
             HttpRequest request, IReadOnlySet<string> extensions, long maxBytes, string sizeMessage,
             CancellationToken ct = default)
         {
@@ -42,7 +43,7 @@ namespace Read2Me.App.Api
             return (new Accepted(file, fileName, extension), null);
         }
 
-        private static IResult Refuse(string message) =>
-            Results.Problem(message, statusCode: StatusCodes.Status400BadRequest);
+        private static ProblemHttpResult Refuse(string message) =>
+            TypedResults.Problem(message, statusCode: StatusCodes.Status400BadRequest);
     }
 }

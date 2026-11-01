@@ -45,7 +45,7 @@ export class AttributionApi {
   }
 
   queue(): Promise<AttributionQueueSnapshot> {
-    return this.api.untypedGet<AttributionQueueSnapshot>('/api/attribution/queue');
+    return this.api.get('/api/attribution/queue');
   }
 
   /** Global: drains every folder's queued attribution work. */

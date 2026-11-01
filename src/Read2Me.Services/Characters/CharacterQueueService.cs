@@ -22,7 +22,7 @@ namespace Read2Me.Services.Characters
 
     public sealed record ParagraphOutcome(ParagraphOutcomeKind Kind, string? Reason);
 
-    public sealed record QueueSnapshot(
+    public sealed record AttributionQueueSnapshot(
         int QueuedCount,
         int ProcessingCount,
         double AverageSecondsPerParagraph,
@@ -274,14 +274,14 @@ namespace Read2Me.Services.Characters
                 : new BusySource(BusySourceKind.CharacterQueue, $"Attribution: {BusySource.Plural(left, "paragraph")} left");
         }
 
-        public QueueSnapshot Snapshot()
+        public AttributionQueueSnapshot Snapshot()
         {
             var (queuedCount, processingCount) = _store.CountStatuses();
             var (completed, avg) = _store.Metrics();
             double eta = avg > 0 ? queuedCount * avg : 0;
             var elapsed = _store.CurrentElapsedSeconds();
 
-            return new QueueSnapshot(
+            return new AttributionQueueSnapshot(
                 QueuedCount: queuedCount,
                 ProcessingCount: processingCount,
                 AverageSecondsPerParagraph: avg,

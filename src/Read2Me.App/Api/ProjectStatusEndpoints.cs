@@ -1,6 +1,7 @@
 using System.Threading;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
@@ -12,6 +13,22 @@ using Read2Me.Services.NodeStatus;
 
 namespace Read2Me.App.Api
 {
+    /// <summary>
+    /// <see cref="NodeStatusSummary"/> on the wire: paragraph counts under one volume/part/chapter. The
+    /// service's value is a struct, which the document can only describe with every field optional.
+    /// </summary>
+    public sealed record NodeStatusSummaryDto(
+        int AttributionRemaining,
+        int AudioRemaining,
+        int Review,
+        bool AttributionProcessing,
+        int AttributionQueued,
+        bool IsDone)
+    {
+        public static NodeStatusSummaryDto From(NodeStatusSummary s) =>
+            new(s.AttributionRemaining, s.AudioRemaining, s.Review, s.AttributionProcessing, s.AttributionQueued, s.IsDone);
+    }
+
     public sealed record ItemCountsDto(int Total, int WithAudio, int Unattributed);
 
     /// <summary>Paragraphs still needing attribution, plus what the queue has in flight for this project.</summary>
@@ -36,7 +53,7 @@ namespace Read2Me.App.Api
         AudioCountsDto Audio,
         int Review,
         IReadOnlyList<Guid> VolumeIds,
-        IReadOnlyDictionary<string, NodeStatusSummary> Nodes,
+        IReadOnlyDictionary<string, NodeStatusSummaryDto> Nodes,
         int PauseParagraphs,
         IReadOnlyDictionary<PipelineStep, StepCheckpointDto> Checkpoints,
         long Revision);
@@ -55,13 +72,13 @@ namespace Read2Me.App.Api
                 .WithSummary("Roll-up for one volume/part/chapter: attribution/audio/review paragraphs remaining and attribution in flight. A node with no speech paragraphs answers zeros.");
         }
 
-        private static async Task<IResult> GetProjectStatusAsync(
+        private static async Task<Results<Ok<ProjectStatusDto>, NotFound>> GetProjectStatusAsync(
             string folder, IFileSystem fs, IProjectCatalogReader catalog, IBookContentReader content, IAudioItemReader audio,
             ICharacterReader characters, NodeStatusService liveStatus, ProjectDbSession session, BookRevisionSequence revisions,
             CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             var nodeStatus = RollUpFor(folderId, session, liveStatus);
 
             // Stamped before the reads, like a projection snapshot: a mutation that commits during
@@ -80,7 +97,7 @@ namespace Read2Me.App.Api
                 .ToList();
 
             var total = volumeIds.Sum(id => itemCounts.GetValueOrDefault(id));
-            return Results.Ok(new ProjectStatusDto(
+            return TypedResults.Ok(new ProjectStatusDto(
                 HasContent: await content.HasBookContentAsync(folderId),
                 Characters: cast.Characters,
                 CharactersWithLines: cast.CharactersWithLines,
@@ -93,25 +110,25 @@ namespace Read2Me.App.Api
                 Audio: new AudioCountsDto(nodeStatus.AudioRemainingForFolder(folderId)),
                 Review: seed.Count(r => r.Review > 0),
                 VolumeIds: volumeIds,
-                Nodes: nodes,
+                Nodes: nodes.ToDictionary(n => n.Key, n => NodeStatusSummaryDto.From(n.Value)),
                 PauseParagraphs: await content.CountPauseParagraphsAsync(folderId, ct),
                 Checkpoints: CheckpointEndpoints.StatusMap(await catalog.GetStepCheckpointsAsync(folderId, ct)),
                 Revision: revision));
         }
 
-        private static async Task<IResult> GetNodeStatusAsync(
+        private static async Task<Results<Ok<NodeStatusSummaryDto>, NotFound, ProblemHttpResult>> GetNodeStatusAsync(
             string folder, string level, Guid id, IFileSystem fs, IAudioItemReader audio, NodeStatusService liveStatus,
             ProjectDbSession session)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
-                return Results.NotFound();
+                return TypedResults.NotFound();
             var nodeStatus = RollUpFor(folderId, session, liveStatus);
             if (!ApiJson.TryParseName<BookNodeLevel>(level, out _))
-                return Results.Problem($"Unknown level '{level}'. Expected Volume, Part or Chapter.",
+                return TypedResults.Problem($"Unknown level '{level}'. Expected Volume, Part or Chapter.",
                     statusCode: StatusCodes.Status400BadRequest);
 
             await SeedAsync(folderId, audio, nodeStatus);
-            return Results.Ok(nodeStatus.StatusForNode(folderId, id));
+            return TypedResults.Ok(NodeStatusSummaryDto.From(nodeStatus.StatusForNode(folderId, id)));
         }
 
         /// <summary>

@@ -97,7 +97,7 @@ export type SetupCheckKind = (typeof LIVE_KINDS.setupCheck)[number];
 
 // ---- queue (group global, debounced) ------------------------------------------------------------
 
-/** `CharacterQueueService.QueueSnapshot`. */
+/** `AttributionQueueSnapshot` (`CharacterQueueService.cs`). */
 export interface AttributionQueueState {
   queuedCount: number;
   processingCount: number;

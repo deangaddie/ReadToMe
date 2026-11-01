@@ -149,12 +149,86 @@
         ],
         "type": "object"
       },
+      "AttributionCountsDto": {
+        "properties": {
+          "processing": {
+            "type": "boolean"
+          },
+          "queued": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "remaining": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "remaining",
+          "processing",
+          "queued"
+        ],
+        "type": "object"
+      },
       "AttributionPromptStyle": {
         "enum": [
           "Full",
           "Simple",
           "Chapter"
         ]
+      },
+      "AttributionQueueSnapshot": {
+        "properties": {
+          "averageSecondsPerParagraph": {
+            "format": "double",
+            "type": "number"
+          },
+          "completedCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "currentItemElapsedSeconds": {
+            "format": "double",
+            "type": "number"
+          },
+          "estimatedSecondsRemaining": {
+            "format": "double",
+            "type": "number"
+          },
+          "isBusy": {
+            "type": "boolean"
+          },
+          "processingCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "queuedCount": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "queuedCount",
+          "processingCount",
+          "averageSecondsPerParagraph",
+          "estimatedSecondsRemaining",
+          "completedCount",
+          "currentItemElapsedSeconds",
+          "isBusy"
+        ],
+        "type": "object"
+      },
+      "AudioCountsDto": {
+        "properties": {
+          "remaining": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "remaining"
+        ],
+        "type": "object"
       },
       "AudioEnqueueRequest": {
         "properties": {
@@ -237,6 +311,49 @@
           }
         },
         "type": "object"
+      },
+      "AudioQueueSnapshot": {
+        "properties": {
+          "averageSecondsPerItem": {
+            "format": "double",
+            "type": "number"
+          },
+          "completedCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "currentItemElapsedSeconds": {
+            "format": "double",
+            "type": "number"
+          },
+          "estimatedSecondsRemaining": {
+            "format": "double",
+            "type": "number"
+          },
+          "processingCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "queuedCount": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "queuedCount",
+          "processingCount",
+          "averageSecondsPerItem",
+          "estimatedSecondsRemaining",
+          "completedCount",
+          "currentItemElapsedSeconds"
+        ],
+        "type": "object"
+      },
+      "BookFileType": {
+        "enum": [
+          "Text",
+          "Epub"
+        ]
       },
       "BookNodeLevel": {
         "enum": [
@@ -352,6 +469,34 @@
           "Skipped",
           "Open"
         ]
+      },
+      "CheckpointState": {
+        "enum": [
+          "Confirmed",
+          "Skipped"
+        ]
+      },
+      "CoverImageResponse": {
+        "properties": {
+          "coverImage": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "coverImage"
+        ],
+        "type": "object"
+      },
+      "CreateProjectResponse": {
+        "properties": {
+          "folderName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "folderName"
+        ],
+        "type": "object"
       },
       "FfmpegTestRequest": {
         "properties": {
@@ -633,6 +778,28 @@
         },
         "type": "object"
       },
+      "ItemCountsDto": {
+        "properties": {
+          "total": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "unattributed": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "withAudio": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "withAudio",
+          "unattributed"
+        ],
+        "type": "object"
+      },
       "ItemsEnqueueRequest": {
         "properties": {
           "itemIds": {
@@ -820,6 +987,26 @@
           "Paragraph"
         ]
       },
+      "NarratorDto": {
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "isLinked": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "characterId",
+          "displayName",
+          "isLinked"
+        ],
+        "type": "object"
+      },
       "NarratorOnlyModeRequest": {
         "properties": {
           "enabled": {
@@ -878,6 +1065,41 @@
           "Paragraph",
           "ParagraphItem"
         ]
+      },
+      "NodeStatusSummaryDto": {
+        "properties": {
+          "attributionProcessing": {
+            "type": "boolean"
+          },
+          "attributionQueued": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "attributionRemaining": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "audioRemaining": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "isDone": {
+            "type": "boolean"
+          },
+          "review": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "attributionRemaining",
+          "audioRemaining",
+          "review",
+          "attributionProcessing",
+          "attributionQueued",
+          "isDone"
+        ],
+        "type": "object"
       },
       "ParagraphTtsServiceConfig": {
         "properties": {
@@ -1106,6 +1328,182 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "ProjectDetailDto": {
+        "properties": {
+          "author": {
+            "type": "string"
+          },
+          "bookTitle": {
+            "type": "string"
+          },
+          "coverImage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fileType": {
+            "$ref": "#/components/schemas/BookFileType"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "folderName": {
+            "type": "string"
+          },
+          "narrator": {
+            "$ref": "#/components/schemas/NarratorDto"
+          },
+          "narratorOnlyMode": {
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "folderName",
+          "title",
+          "bookTitle",
+          "author",
+          "filename",
+          "fileType",
+          "coverImage",
+          "narratorOnlyMode",
+          "narrator"
+        ],
+        "type": "object"
+      },
+      "ProjectStatusDto": {
+        "properties": {
+          "attribution": {
+            "$ref": "#/components/schemas/AttributionCountsDto"
+          },
+          "audio": {
+            "$ref": "#/components/schemas/AudioCountsDto"
+          },
+          "characters": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "charactersWithLines": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "checkpoints": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/StepCheckpointDto"
+            },
+            "type": "object"
+          },
+          "hasContent": {
+            "type": "boolean"
+          },
+          "items": {
+            "$ref": "#/components/schemas/ItemCountsDto"
+          },
+          "nodes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/NodeStatusSummaryDto"
+            },
+            "type": "object"
+          },
+          "pauseParagraphs": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "readyVoices": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "review": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "volumeIds": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "hasContent",
+          "characters",
+          "charactersWithLines",
+          "readyVoices",
+          "items",
+          "attribution",
+          "audio",
+          "review",
+          "volumeIds",
+          "nodes",
+          "pauseParagraphs",
+          "checkpoints",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "ProjectSummary": {
+        "properties": {
+          "audioItemDone": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "audioItemTotal": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "audioPercent": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "author": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "coverImage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fileType": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BookFileType"
+              }
+            ]
+          },
+          "folderName": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "folderName",
+          "title",
+          "author",
+          "coverImage",
+          "audioItemTotal",
+          "audioItemDone",
+          "fileType",
+          "audioPercent"
+        ],
         "type": "object"
       },
       "PromptPreviewRequest": {
@@ -1883,6 +2281,26 @@
           "Pronunciation"
         ]
       },
+      "StepCheckpointDto": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/components/schemas/CheckpointState"
+          }
+        },
+        "required": [
+          "state",
+          "stale",
+          "at"
+        ],
+        "type": "object"
+      },
       "StepPreviewRequest": {
         "properties": {
           "sample": {
@@ -2490,6 +2908,13 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttributionQueueSnapshot"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -2536,6 +2961,13 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioQueueSnapshot"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -2747,6 +3179,16 @@
       "get": {
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectSummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
             "description": "OK"
           },
           "default": {
@@ -2767,8 +3209,15 @@
       },
       "post": {
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateProjectResponse"
+                }
+              }
+            },
+            "description": "Created"
           },
           "default": {
             "content": {
@@ -2800,8 +3249,11 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -2841,7 +3293,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetailDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -2888,7 +3350,17 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetailDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -4355,8 +4827,11 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -4431,8 +4906,11 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -4463,7 +4941,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverImageResponse"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -4658,8 +5146,11 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -4672,7 +5163,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes.",
+        "summary": "Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. 204 on success, An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes.",
         "tags": [
           "ProjectEndpoints"
         ]
@@ -4707,8 +5198,11 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -4799,8 +5293,11 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -5111,7 +5608,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeStatusSummaryDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {
@@ -5744,7 +6251,17 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectStatusDto"
+                }
+              }
+            },
             "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           },
           "default": {
             "content": {

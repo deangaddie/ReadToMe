@@ -28,7 +28,7 @@ public static class LiveGroups
 
 /// <summary>Both queues' roll-ups plus the attribution escalation banner (debounced, group <c>global</c>).</summary>
 public sealed record QueueMessage(
-    QueueSnapshot Attribution,
+    AttributionQueueSnapshot Attribution,
     AudioQueueSnapshot Audio,
     EscalationState? Escalation);
 
