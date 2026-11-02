@@ -4735,6 +4735,297 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every series with its books (folder, position) in position order. Merge with GET /api/projects to show them. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SeriesDto"][];
+                    };
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Create a series { name, folder? }; with a folder, that book joins as Book 1. 400 blank name; 404 unknown folder; 409 name taken (ignoring case) or the book is in another series. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["CreateSeriesRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreateSeriesResponse"];
+                    };
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a series: every book leaves and keeps its Voices, and the registry folder goes. 404 unknown series. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Rename a series { name }. 400 blank; 404 unknown series; 409 name taken (ignoring case). */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["RenameSeriesRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SeriesDto"];
+                    };
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/api/series/{id}/books/{folder}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Join a book { move? }: it gets the next whole number after the series' highest; already a member answers its position. A book in another series is 409 naming it, unless move is true (Move to: leave that one, then join). 404 unknown series or folder. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["JoinSeriesRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["JoinSeriesResponse"];
+                    };
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /** A book leaves the series; nobody is renumbered and an empty series stays. 404 unknown series or folder, or a book not in it. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series/{id}/positions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save the whole position set { positions: { folder: number } }, checked together. 400 under 0 or more than two decimals; 409 when the keys are not exactly the members (out of date) or two books share a number (naming both). 404 unknown series. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["SeriesPositionsRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SeriesDto"];
+                    };
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/audio-processing": {
         parameters: {
             query?: never;
@@ -8239,6 +8530,14 @@ export interface components {
         CreateProjectResponse: {
             folderName: string;
         };
+        CreateSeriesRequest: {
+            folder?: null | string;
+            name?: null | string;
+        };
+        CreateSeriesResponse: {
+            /** Format: uuid */
+            id: string;
+        };
         DiscoveredCharacterDto: {
             aliases: string[];
             /** Format: uuid */
@@ -8355,6 +8654,14 @@ export interface components {
         };
         ItemsEnqueueRequest: {
             itemIds: string[];
+        };
+        JoinSeriesRequest: {
+            /** @default false */
+            move: boolean;
+        };
+        JoinSeriesResponse: {
+            /** Format: double */
+            position: number;
         };
         JsonElement: unknown;
         JsonObject: Record<string, unknown>;
@@ -8609,7 +8916,15 @@ export interface components {
             folderName: string;
             narrator: components["schemas"]["NarratorDto"];
             narratorOnlyMode: boolean;
+            series: null | components["schemas"]["ProjectSeries"];
             title: string;
+        };
+        ProjectSeries: {
+            name: string;
+            /** Format: double */
+            position: number;
+            /** Format: uuid */
+            seriesId: string;
         };
         ProjectStatusDto: {
             attribution: components["schemas"]["AttributionCountsDto"];
@@ -8647,6 +8962,7 @@ export interface components {
             coverImage: null | string;
             fileType: null | components["schemas"]["BookFileType"];
             folderName: string;
+            series: null | components["schemas"]["ProjectSeries"];
             title: string;
         };
         PromptCatalogEntry: {
@@ -8797,6 +9113,9 @@ export interface components {
             text: string;
             voiceName: null | string;
         };
+        RenameSeriesRequest: {
+            name?: null | string;
+        };
         RenderedDesignPromptResponse: {
             prompt: string;
         };
@@ -8828,6 +9147,22 @@ export interface components {
         SemanticSimilaritySettingsSchema: {
             fields: components["schemas"]["SettingsFieldDto"][];
             type: components["schemas"]["SemanticSimilarityServiceType"];
+        };
+        SeriesBookDto: {
+            folder: string;
+            /** Format: double */
+            position: number;
+        };
+        SeriesDto: {
+            books: components["schemas"]["SeriesBookDto"][];
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        SeriesPositionsRequest: {
+            positions?: null | {
+                [key: string]: number;
+            };
         };
         SetActiveRequest: {
             /** Format: int32 */

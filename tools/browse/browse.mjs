@@ -122,6 +122,8 @@ export async function throwawayProject(text, { title = `browse-${Date.now().toSt
 /** The Project Gutenberg epubs in `books/`, by project folder name. */
 export const BOOKS = {
   'alices-adventures-in-wonderland': { title: "Alice's Adventures in Wonderland", author: 'Lewis Carroll' },
+  'a-study-in-scarlet': { title: 'A Study in Scarlet', author: 'Arthur Conan Doyle' },
+  'the-sign-of-the-four': { title: 'The Sign of the Four', author: 'Arthur Conan Doyle' },
   'the-adventures-of-sherlock-holmes': { title: 'The Adventures of Sherlock Holmes', author: 'Arthur Conan Doyle' },
   'pride-and-prejudice': { title: 'Pride and Prejudice', author: 'Jane Austen' },
   dracula: { title: 'Dracula', author: 'Bram Stoker' },

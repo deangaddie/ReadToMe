@@ -24,6 +24,7 @@ namespace Read2Me.App.Live;
 /// <list type="bullet">
 /// <item>Pass-through: receipts, History steps and Restores (project group), watchdog, assembly phases, voice batch control,
 /// LLM control events and every audio-gen phase (stream groups), settings changes.</item>
+/// <item><see cref="Debouncer"/> per series: the <c>series</c> re-read signal, 250 ms.</item>
 /// <item><see cref="DeltaBatcher"/>: LLM thinking/content text, one message per 100 ms.</item>
 /// <item><see cref="Debouncer"/>: queue roll-ups and per-project node/item status, 250 ms.</item>
 /// <item><see cref="ProgressStepper"/>: encode progress at ≥ 1 % steps.</item>
@@ -45,6 +46,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private sealed record HistoryItem(HistoryStepEvent Event) : Item;
     private sealed record RestoreItem(RestoreEvent Event) : Item;
     private sealed record SettingsItem(SettingsChanged Change) : Item;
+    private sealed record SeriesItem(SeriesChanged Change) : Item;
     private sealed record QueuePulse : Item;
     private sealed record StatusPulse : Item;
 
@@ -70,6 +72,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private readonly EventBroadcaster<HistoryStepEvent> _history;
     private readonly EventBroadcaster<RestoreEvent> _restores;
     private readonly EventBroadcaster<SettingsChanged> _settings;
+    private readonly EventBroadcaster<SeriesChanged> _series;
     private readonly CharacterQueueService _attributionQueue;
     private readonly AudioQueueService _audioQueue;
     private readonly NodeStatusService _nodeStatus;
@@ -95,6 +98,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private readonly Debouncer _batchProgressDebounce = new();
     private readonly ProgressStepper _encodeSteps = new();
     private readonly ThroughputTicker _throughputTicker = new();
+    private readonly Dictionary<Guid, (Debouncer Window, SeriesChangeKind Kind)> _pendingSeries = new();
     private VoiceBatchMessage? _pendingBatchProgress;
     private readonly Dictionary<string, LastSent> _lastSent = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _watchdogLast = new(StringComparer.OrdinalIgnoreCase);
@@ -120,6 +124,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         EventBroadcaster<HistoryStepEvent> history,
         EventBroadcaster<RestoreEvent> restores,
         EventBroadcaster<SettingsChanged> settings,
+        EventBroadcaster<SeriesChanged> series,
         CharacterQueueService attributionQueue,
         AudioQueueService audioQueue,
         NodeStatusService nodeStatus,
@@ -145,6 +150,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         _history = history;
         _restores = restores;
         _settings = settings;
+        _series = series;
         _attributionQueue = attributionQueue;
         _audioQueue = audioQueue;
         _nodeStatus = nodeStatus;
@@ -167,6 +173,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         _history.Event += OnHistory;
         _restores.Event += OnRestore;
         _settings.Event += OnSettings;
+        _series.Event += OnSeries;
         _attributionQueue.Changed += OnQueueChanged;
         _audioQueue.Changed += OnQueueChanged;
         _nodeStatus.Changed += OnStatusChanged;
@@ -202,6 +209,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private void OnHistory(HistoryStepEvent e) => Post(new HistoryItem(e));
     private void OnRestore(RestoreEvent e) => Post(new RestoreItem(e));
     private void OnSettings(SettingsChanged c) => Post(new SettingsItem(c));
+    private void OnSeries(SeriesChanged c) => Post(new SeriesItem(c));
     private void OnProgressChanged() => Post(new QueuePulse());
 
     // A queue moving changes both the roll-up and per-item status.
@@ -260,6 +268,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         _history.Event -= OnHistory;
         _restores.Event -= OnRestore;
         _settings.Event -= OnSettings;
+        _series.Event -= OnSeries;
         _attributionQueue.Changed -= OnQueueChanged;
         _audioQueue.Changed -= OnQueueChanged;
         _nodeStatus.Changed -= OnStatusChanged;
@@ -321,6 +330,8 @@ public sealed class LiveRelay : IHostedService, IDisposable
         Consider(_statusDebounce.DueAt);
         Consider(_batchProgressDebounce.DueAt);
         Consider(_throughputTicker.DueAt);
+        foreach (var (window, _) in _pendingSeries.Values)
+            Consider(window.DueAt);
         return due;
     }
 
@@ -402,6 +413,13 @@ public sealed class LiveRelay : IHostedService, IDisposable
                 await SendAsync(() => _hub.Clients.Group(LiveGroups.Global).SettingsChanged(new SettingsChangedMessage(c.Area)));
                 break;
 
+            case SeriesItem { Change: var c }:
+                var pending = _pendingSeries.TryGetValue(c.SeriesId, out var open) ? open : (Window: new Debouncer(), Kind: c.Kind);
+                pending.Window.Mark(now);
+                // Deleted is final: a change after it in the same window (none should come) does not undo it.
+                _pendingSeries[c.SeriesId] = (pending.Window, pending.Kind == SeriesChangeKind.Deleted ? pending.Kind : c.Kind);
+                break;
+
             case QueuePulse:
                 _queueDebounce.Mark(now);
                 break;
@@ -419,6 +437,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         if (_statusDebounce.TryFlush(now))
             await SendStatusDeltasAsync();
         await FlushBatchProgressAsync(now, force: false);
+        await FlushSeriesAsync(now);
         if (_throughputTicker.TryTick(now))
             await SendAsync(() => _hub.Clients.Group(LiveGroups.Global).Throughput(_throughput.Snapshot));
     }
@@ -434,6 +453,16 @@ public sealed class LiveRelay : IHostedService, IDisposable
         if (!_batchProgressDebounce.TryFlush(now, force) || _pendingBatchProgress is not { } progress) return;
         _pendingBatchProgress = null;
         await SendAsync(() => _hub.Clients.Group(LiveGroups.Global).VoiceBatch(progress));
+    }
+
+    private async Task FlushSeriesAsync(DateTimeOffset now)
+    {
+        foreach (var (seriesId, (window, kind)) in _pendingSeries.ToList())
+        {
+            if (!window.TryFlush(now)) continue;
+            _pendingSeries.Remove(seriesId);
+            await SendAsync(() => _hub.Clients.Group(LiveGroups.Global).Series(new SeriesMessage(seriesId, kind)));
+        }
     }
 
     /// <summary>

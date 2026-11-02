@@ -10,6 +10,7 @@ using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.History;
 using Read2Me.Services.Mutations;
+using Read2Me.Services.Series;
 using Read2Me.Services.UseCases;
 
 namespace Read2Me.App.Api
@@ -25,7 +26,7 @@ namespace Read2Me.App.Api
             endpoints.MapGet("/api/projects/{folder}", GetAsync)
                 .ReadsAt()
                 .WithSummary("Project metadata for one folder.");
-            endpoints.MapDelete("/api/projects/{folder}", Delete)
+            endpoints.MapDelete("/api/projects/{folder}", DeleteAsync)
                 .RecordsNoStep("Removes the project, History and all.")
                 .WithSummary("Delete a project folder and everything in it.");
             endpoints.MapPost("/api/projects/{folder}/import", ImportAsync)
@@ -54,12 +55,17 @@ namespace Read2Me.App.Api
         private static readonly HashSet<string> CoverExtensions = new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".webp" };
         private const long MaxCoverBytes = 10L * 1024 * 1024;
 
-        private static async Task<Results<Ok<IReadOnlyList<ProjectSummary>>, ProblemHttpResult>> ListAsync(ProjectUseCases useCases)
+        private static async Task<Results<Ok<IReadOnlyList<ProjectSummary>>, ProblemHttpResult>> ListAsync(
+            ProjectUseCases useCases, SeriesRegistry series, CancellationToken ct)
         {
             var result = await useCases.GetSummariesAsync();
-            return result.IsSuccess
-                ? TypedResults.Ok(result.Value)
-                : TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+            if (!result.IsSuccess)
+                return TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+
+            var memberships = await series.MembershipsAsync(ct);
+            return TypedResults.Ok<IReadOnlyList<ProjectSummary>>(result.Value!
+                .Select(s => s with { Series = memberships.GetValueOrDefault(s.FolderName) })
+                .ToList());
         }
 
         private static async Task<Results<Created<CreateProjectResponse>, ProblemHttpResult>> CreateAsync(HttpRequest request, ProjectUseCases useCases)
@@ -88,30 +94,37 @@ namespace Read2Me.App.Api
         }
 
         private static async Task<Results<Ok<ProjectDetailDto>, NotFound, ProblemHttpResult>> GetAsync(
-            string folder, IFileSystem fs, IProjectCatalogReader reader, ProjectHistory history, CancellationToken ct)
+            string folder, IFileSystem fs, IProjectCatalogReader reader, ProjectHistory history, SeriesRegistry series, CancellationToken ct)
         {
             if (!TryResolve(folder, fs, out var folderId))
                 return TypedResults.NotFound();
 
             // Opening a project is when an existing one meets History: "History started" (ADR 0016).
             await history.StartAsync(folderId, ct);
-            return await DetailAsync(folderId, reader, ct);
+            return await DetailAsync(folderId, reader, series, ct);
         }
 
-        private static Results<NoContent, NotFound, ProblemHttpResult> Delete(string folder, IFileSystem fs, ProjectUseCases useCases)
+        private static async Task<Results<NoContent, NotFound, ProblemHttpResult>> DeleteAsync(
+            string folder, IFileSystem fs, IProjectCatalogReader reader, ProjectUseCases useCases, SeriesRegistry series, CancellationToken ct)
         {
             if (!TryResolve(folder, fs, out var folderId))
                 return TypedResults.NotFound();
 
+            // Its series entry goes at once (#206), by the Id read while the folder is still there.
+            var projectId = (await reader.GetProjectAsync(folderId))?.Id;
+
             var result = useCases.DeleteProject(folderId.Value);
-            return result.IsSuccess
-                ? TypedResults.NoContent()
-                : TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+            if (!result.IsSuccess)
+                return TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+
+            if (projectId is { } id)
+                await series.ForgetProjectAsync(id, ct);
+            return TypedResults.NoContent();
         }
 
         private static async Task<Results<Ok<ProjectDetailDto>, NotFound, ProblemHttpResult>> UpdateAsync(
             string folder, UpdateProjectRequest? body, IFileSystem fs, IProjectCatalogReader reader,
-            ProjectUseCases useCases, CancellationToken ct)
+            ProjectUseCases useCases, SeriesRegistry series, CancellationToken ct)
         {
             if (!TryResolve(folder, fs, out var folderId))
                 return TypedResults.NotFound();
@@ -131,7 +144,7 @@ namespace Read2Me.App.Api
             if (!result.IsSuccess)
                 return TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
 
-            return await DetailAsync(folderId, reader, ct);
+            return await DetailAsync(folderId, reader, series, ct);
         }
 
         private static async Task<Results<NoContent, NotFound, ProblemHttpResult>> SetNarratorOnlyModeAsync(
@@ -179,13 +192,14 @@ namespace Read2Me.App.Api
                 : TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
         }
 
-        private static async Task<Results<Ok<ProjectDetailDto>, NotFound, ProblemHttpResult>> DetailAsync(ProjectFolderId folderId, IProjectCatalogReader reader, CancellationToken ct)
+        private static async Task<Results<Ok<ProjectDetailDto>, NotFound, ProblemHttpResult>> DetailAsync(
+            ProjectFolderId folderId, IProjectCatalogReader reader, SeriesRegistry series, CancellationToken ct)
         {
             var project = await reader.GetProjectAsync(folderId);
             if (project is null) return TypedResults.NotFound();
 
             var narrator = await reader.GetNarratorAsync(folderId, ct);
-            return TypedResults.Ok(ProjectDetailDto.From(folderId.Value, project, narrator));
+            return TypedResults.Ok(ProjectDetailDto.From(folderId.Value, project, narrator, await series.MembershipOfAsync(folderId, ct)));
         }
 
         private static async Task<Results<NoContent, NotFound, ProblemHttpResult>> ImportAsync(

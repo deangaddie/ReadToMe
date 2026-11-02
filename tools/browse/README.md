@@ -39,10 +39,14 @@ The books are Project Gutenberg epubs in `books/`, committed with the tools; `BO
 | Book | Source |
 |---|---|
 | `alices-adventures-in-wonderland` | <https://www.gutenberg.org/ebooks/11> |
-| `the-adventures-of-sherlock-holmes` | <https://www.gutenberg.org/ebooks/1661> |
+| `a-study-in-scarlet` | <https://www.gutenberg.org/ebooks/244> (the no-images epub; Holmes Book 1) |
+| `the-sign-of-the-four` | <https://www.gutenberg.org/ebooks/2097> (the no-images epub; Holmes Book 2) |
+| `the-adventures-of-sherlock-holmes` | <https://www.gutenberg.org/ebooks/1661> (Holmes Book 3) |
 | `pride-and-prejudice` | <https://www.gutenberg.org/ebooks/1342> (the no-images epub) |
 | `dracula` | <https://www.gutenberg.org/ebooks/345> |
 | `the-call-of-the-wild` | <https://www.gutenberg.org/ebooks/215> |
+
+The three Holmes books are the sample series (#209): Holmes and Watson recur in all three.
 
 Only add public-domain books from Project Gutenberg here. `bookProject('dracula')` imports one as a
 throwaway project; `throwawayProject(text)` builds one from a string.

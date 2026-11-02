@@ -1,6 +1,7 @@
 using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
+using Read2Me.Services.Series;
 
 namespace Read2Me.App.Api
 {
@@ -38,10 +39,11 @@ namespace Read2Me.App.Api
         BookFileType FileType,
         string? CoverImage,
         bool NarratorOnlyMode,
-        NarratorDto Narrator)
+        NarratorDto Narrator,
+        ProjectSeries? Series)
     {
-        public static ProjectDetailDto From(string folderName, Project p, NarratorIdentity narrator) => new(
+        public static ProjectDetailDto From(string folderName, Project p, NarratorIdentity narrator, ProjectSeries? series) => new(
             folderName, p.Title, p.BookTitle, p.Author, p.Filename,
-            p.Type, p.CoverImage, p.NarratorOnlyMode, NarratorDto.From(narrator));
+            p.Type, p.CoverImage, p.NarratorOnlyMode, NarratorDto.From(narrator), series);
     }
 }

@@ -17,6 +17,7 @@ const dracula: ProjectSummary = {
   audioItemTotal: 100,
   audioItemDone: 40,
   audioPercent: 40,
+  series: null,
   fileType: 'Epub',
 };
 const emma: ProjectSummary = {
@@ -27,6 +28,7 @@ const emma: ProjectSummary = {
   audioItemTotal: 0,
   audioItemDone: 0,
   audioPercent: 0,
+  series: null,
   fileType: 'Text',
 };
 

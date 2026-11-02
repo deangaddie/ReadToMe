@@ -35,6 +35,7 @@ function detail(linked = false): ProjectDetailDto {
     fileType: 'Epub',
     coverImage: null,
     narratorOnlyMode: false,
+    series: null,
     narrator: linked
       ? { characterId: 'arthur', displayName: 'Arthur', isLinked: true }
       : { characterId: 'narrator', displayName: 'Narrator', isLinked: false },

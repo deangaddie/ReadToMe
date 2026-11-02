@@ -1274,6 +1274,35 @@
         ],
         "type": "object"
       },
+      "CreateSeriesRequest": {
+        "properties": {
+          "folder": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "CreateSeriesResponse": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
       "DiscoveredCharacterDto": {
         "properties": {
           "aliases": {
@@ -1753,6 +1782,27 @@
         },
         "required": [
           "itemIds"
+        ],
+        "type": "object"
+      },
+      "JoinSeriesRequest": {
+        "properties": {
+          "move": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "JoinSeriesResponse": {
+        "properties": {
+          "position": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "position"
         ],
         "type": "object"
       },
@@ -2794,6 +2844,16 @@
           "narratorOnlyMode": {
             "type": "boolean"
           },
+          "series": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProjectSeries"
+              }
+            ]
+          },
           "title": {
             "type": "string"
           }
@@ -2807,7 +2867,29 @@
           "fileType",
           "coverImage",
           "narratorOnlyMode",
-          "narrator"
+          "narrator",
+          "series"
+        ],
+        "type": "object"
+      },
+      "ProjectSeries": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "format": "double",
+            "type": "number"
+          },
+          "seriesId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seriesId",
+          "name",
+          "position"
         ],
         "type": "object"
       },
@@ -2925,6 +3007,16 @@
           "folderName": {
             "type": "string"
           },
+          "series": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProjectSeries"
+              }
+            ]
+          },
           "title": {
             "type": "string"
           }
@@ -2937,6 +3029,7 @@
           "audioItemTotal",
           "audioItemDone",
           "fileType",
+          "series",
           "audioPercent"
         ],
         "type": "object"
@@ -3455,6 +3548,17 @@
         ],
         "type": "object"
       },
+      "RenameSeriesRequest": {
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "RenderedDesignPromptResponse": {
         "properties": {
           "prompt": {
@@ -3571,6 +3675,60 @@
           "type",
           "fields"
         ],
+        "type": "object"
+      },
+      "SeriesBookDto": {
+        "properties": {
+          "folder": {
+            "type": "string"
+          },
+          "position": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "folder",
+          "position"
+        ],
+        "type": "object"
+      },
+      "SeriesDto": {
+        "properties": {
+          "books": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesBookDto"
+            },
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "books"
+        ],
+        "type": "object"
+      },
+      "SeriesPositionsRequest": {
+        "properties": {
+          "positions": {
+            "additionalProperties": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": [
+              "null",
+              "object"
+            ]
+          }
+        },
         "type": "object"
       },
       "SetActiveRequest": {
@@ -9425,6 +9583,334 @@
         ]
       }
     },
+    "/api/series": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SeriesDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "Every series with its books (folder, position) in position order. Merge with GET /api/projects to show them.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CreateSeriesRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSeriesResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "Create a series { name, folder? }; with a folder, that book joins as Book 1. 400 blank name; 404 unknown folder; 409 name taken (ignoring case) or the book is in another series.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      }
+    },
+    "/api/series/{id}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "Delete a series: every book leaves and keeps its Voices, and the registry folder goes. 404 unknown series.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RenameSeriesRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesDto"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "Rename a series { name }. 400 blank; 404 unknown series; 409 name taken (ignoring case).",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      }
+    },
+    "/api/series/{id}/books/{folder}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "A book leaves the series; nobody is renumbered and an empty series stays. 404 unknown series or folder, or a book not in it.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      },
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/JoinSeriesRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JoinSeriesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "Join a book { move? }: it gets the next whole number after the series' highest; already a member answers its position. A book in another series is 409 naming it, unless move is true (Move to: leave that one, then join). 404 unknown series or folder.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      }
+    },
+    "/api/series/{id}/positions": {
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SeriesPositionsRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesDto"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "Save the whole position set { positions: { folder: number } }, checked together. 400 under 0 or more than two decimals; 409 when the keys are not exactly the members (out of date) or two books share a number (naming both). 404 unknown series.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      }
+    },
     "/api/settings/audio-processing": {
       "get": {
         "responses": {
@@ -12124,6 +12610,9 @@
   "tags": [
     {
       "name": "ProjectEndpoints"
+    },
+    {
+      "name": "SeriesEndpoints"
     },
     {
       "name": "ProjectStatusEndpoints"

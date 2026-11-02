@@ -4,6 +4,7 @@ using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Assembly;
 using Read2Me.Services.BookEdits;
 using Read2Me.Services.Characters;
+using Read2Me.Services.Events;
 using Read2Me.Services.Health;
 using Read2Me.Services.History;
 using Read2Me.Services.Llm;
@@ -249,3 +250,10 @@ public sealed record LiveSnapshot(
     IReadOnlyDictionary<string, AiServiceStatus> ServiceStatus,
     ThroughputSnapshot Throughput,
     IReadOnlyDictionary<string, ProjectSnapshot> Projects);
+
+/// <summary>
+/// A series registry changed, or the series was deleted (#213): a "read again" signal with no
+/// payload, debounced 250 ms per series, sent to every client (group <c>global</c>). A delete inside
+/// the window wins over the changes before it.
+/// </summary>
+public sealed record SeriesMessage(Guid SeriesId, SeriesChangeKind Kind);

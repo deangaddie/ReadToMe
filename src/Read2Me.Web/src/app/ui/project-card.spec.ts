@@ -11,6 +11,7 @@ const base: ProjectSummary = {
   audioItemTotal: 0,
   audioItemDone: 0,
   audioPercent: 0,
+  series: null,
   fileType: 'Epub',
 };
 
@@ -46,6 +47,7 @@ describe('projectCard()', () => {
       audioItemTotal: 40,
       audioItemDone: 10,
       audioPercent: 25,
+      series: null,
     });
     const img = el.querySelector<HTMLImageElement>('.r2m-project-card__image')!;
     expect(img.getAttribute('src')).toBe('/workspace/pride-and-prejudice/cover.png');

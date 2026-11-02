@@ -32,6 +32,7 @@ export const LIVE_FAMILIES = [
   'audioGen',
   'throughput',
   'settingsChanged',
+  'series',
   'bookEdit',
   'llmTest',
   'history',
@@ -434,6 +435,14 @@ export interface SettingsChangedMessage {
   area: string;
 }
 
+// ---- series (group global) ---------------------------------------------------------------------
+
+/** A series registry changed or the series was deleted: read `/api/series` again. Debounced 250 ms per series. */
+export interface SeriesMessage {
+  seriesId: string;
+  kind: 'Changed' | 'Deleted';
+}
+
 // ---- bookEdit (one connection) ------------------------------------------------------------------
 
 /**
@@ -561,6 +570,7 @@ export interface LiveMessageMap {
   audioGen: AudioGenMessage;
   throughput: ThroughputSnapshot;
   settingsChanged: SettingsChangedMessage;
+  series: SeriesMessage;
   bookEdit: BookEditMessage;
   llmTest: LlmTestMessage;
   history: HistoryMessage;
