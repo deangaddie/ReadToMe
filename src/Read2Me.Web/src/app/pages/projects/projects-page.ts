@@ -13,6 +13,10 @@ import { ToastService } from '@app/ui/toast';
 import { openNewProjectDialog } from './new-project-dialog';
 import { ProjectsStore } from './projects-store';
 import projectsCss from './projects-page.css' with { type: 'text' };
+// PROTOTYPE — Projects page series variants (#207, throwaway branch).
+import '@app/prototype/series/proto-views';
+
+const PROTO = true as boolean;
 
 adoptStyles(projectsCss);
 
@@ -39,6 +43,11 @@ export class ProjectsPage extends R2mElement {
   }
 
   protected template() {
+    // PROTOTYPE — the fake series shelf replaces the real one on this branch (#207).
+    if (PROTO) {
+      return html`<r2m-proto-projects></r2m-proto-projects
+        ><r2m-proto-series-switcher></r2m-proto-series-switcher>`;
+    }
     const error = this.store.error();
     const projects = this.store.projects();
     const newButton = html`<button
