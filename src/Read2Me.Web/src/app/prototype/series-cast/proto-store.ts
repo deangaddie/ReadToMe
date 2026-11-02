@@ -317,15 +317,23 @@ function seriesCopy(scId: string, voiceId: string, exceptFolder: string): Voice 
 
 export function differs(folder: string, c: Character): boolean {
   if (!c.link) return false;
-  const others = linkedPairs(c.link).filter((p) => p.book.folder !== folder);
-  if (!others.length) return false;
-  const ref = others[0]!.character.voices;
-  if (ref.length !== c.voices.length) return true;
-  return c.voices.some((x) => {
-    const s = seriesCopy(c.link!, x.id, folder);
-    return !s || s.name !== x.name || s.description !== x.description || s.audio !== x.audio;
-  });
+  const pairs = linkedPairs(c.link);
+  if (pairs.length < 2) return false;
+  // The series copy is the one most linked books hold (ties: the lowest Series position).
+  const counts = new Map<string, number>();
+  for (const p of pairs)
+    counts.set(signature(p.character.voices), (counts.get(signature(p.character.voices)) ?? 0) + 1);
+  const best = pairs
+    .map((p) => signature(p.character.voices))
+    .reduce((a, b) => ((counts.get(b) ?? 0) > (counts.get(a) ?? 0) ? b : a));
+  return signature(c.voices) !== best;
 }
+
+const signature = (vs: Voice[]) =>
+  vs
+    .map((x) => `${x.id}|${x.name}|${x.description}|${x.audio}`)
+    .sort()
+    .join(';');
 
 /** What each side would gain if `c` links to `sc` (Voices are merged by Voice Id). */
 export function mergePreview(
@@ -475,4 +483,68 @@ export function take(folder: string, characterId: string): void {
     return { ...x, voices, rules: x.rules.filter((r) => voices.some((y) => y.id === r.voiceId)) };
   });
   log(`Took the series' Voices into ${bookByFolder(folder).title}`);
+}
+
+// --- Series Voice editor (variant B, after feedback) ------------------------------------------
+
+/** The series character open in the board's Voice editor. */
+export const editing = signal<string | null>(null);
+
+/** The series' Voices: the copy in the lowest-positioned linked book that doesn't differ. */
+export function seriesVoices(scId: string): { voices: Voice[]; from: Book | null } {
+  const pairs = linkedPairs(scId);
+  const clean = pairs.find((p) => !differs(p.book.folder, p.character)) ?? pairs[0];
+  return { voices: clean?.character.voices ?? [], from: clean?.book ?? null };
+}
+
+/** Where the edit is made from: the source book's Character, so the usual write order applies. */
+function source(scId: string): { folder: string; character: Character } {
+  const { from } = seriesVoices(scId);
+  const p = linkedPairs(scId).find((x) => x.book.folder === from!.folder)!;
+  return { folder: p.book.folder, character: p.character };
+}
+
+let voiceSeq = 1;
+export function addSeriesVoice(scId: string, name: string, description: string): string[] {
+  const { voices } = seriesVoices(scId);
+  const titles = writeSeriesVoices(scId, [
+    ...voices,
+    { id: `v-new-${voiceSeq++}`, name, description, audio: `new-${voiceSeq}` },
+  ]);
+  log(`Added Voice "${name}" to ${titles.join(', ')}`);
+  return titles;
+}
+
+export function renameSeriesVoice(scId: string, voiceId: string, name: string): string[] {
+  const s = source(scId);
+  return editVoice(s.folder, s.character.id, voiceId, name);
+}
+
+export function seriesDeleteBlockers(scId: string, voiceId: string): string[] {
+  return linkedPairs(scId)
+    .filter((p) => p.character.rules.some((r) => r.kind === 'positional' && r.voiceId === voiceId))
+    .map(
+      (p) =>
+        `${p.book.title} (${p.character.rules.find((r) => r.kind === 'positional' && r.voiceId === voiceId)!.where})`,
+    );
+}
+
+export function deleteSeriesVoice(scId: string, voiceId: string): string[] {
+  const s = source(scId);
+  return deleteVoice(s.folder, s.character.id, voiceId);
+}
+
+/** Sets one book's default rule: still that book's own rule, just set from the series board. */
+export function setDefault(folder: string, characterId: string, voiceId: string): void {
+  updateCharacter(folder, characterId, (c) => ({
+    ...c,
+    rules: [{ kind: 'default', voiceId }, ...c.rules.filter((r) => r.kind !== 'default')],
+  }));
+  log(
+    `${bookByFolder(folder).title}: default Voice is now "${
+      bookByFolder(folder)
+        .characters.find((c) => c.id === characterId)!
+        .voices.find((v) => v.id === voiceId)?.name
+    }"`,
+  );
 }

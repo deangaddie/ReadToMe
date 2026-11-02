@@ -377,8 +377,20 @@ function boardB() {
       <tbody>
         ${scs.map(
           (sc) =>
-            html`<tr>
-              <th scope="row">${sc.label}</th>
+            html`<tr class=${S.editing() === sc.id ? 'sx-tr--open' : ''}>
+              <th scope="row">
+                <button
+                  type="button"
+                  class="sx-rowhead"
+                  aria-expanded=${S.editing() === sc.id}
+                  @click=${() => S.editing.set(S.editing() === sc.id ? null : sc.id)}
+                >
+                  ${icon(S.editing() === sc.id ? 'expand_less' : 'expand_more')} ${sc.label}
+                  <span class="sx-muted sx-small"
+                    >${S.seriesVoices(sc.id).voices.length} Voices</span
+                  >
+                </button>
+              </th>
               ${books.map((b) => {
                 const linked = b.characters.find((c) => c.link === sc.id);
                 if (linked)
@@ -436,6 +448,7 @@ function boardB() {
         )}
       </tbody>
     </table>
+    ${S.editing() && S.seriesChars().some((x) => x.id === S.editing()) ? seriesVoiceEditor(S.editing()!) : nothing}
     <p class="sx-muted sx-small">
       To add a row, share a Character:
       <button
@@ -445,6 +458,166 @@ function boardB() {
       >
         Share ${S.character().name} (${S.book().title})…
       </button>
+    </p>
+  </section>`;
+}
+
+// --- Series Voice editor (B) -------------------------------------------------------------------
+
+async function addSeriesVoice(scId: string): Promise<void> {
+  const name = await use(PromptService).text({
+    title: `New Voice for ${S.seriesChar(scId).label}`,
+    label: 'Name',
+    required: true,
+    confirmLabel: 'Add Voice',
+    hint: `Added to ${list(S.linkedPairs(scId).map((p) => p.book.title))}. Design or upload its audio next, as on the Cast page.`,
+  });
+  if (!name) return;
+  const titles = S.addSeriesVoice(scId, name, 'New Voice: no audio yet');
+  toast().success(`Added to ${titles.length} books`);
+}
+
+async function renameSeriesVoice(scId: string, voice: S.Voice): Promise<void> {
+  const name = await use(PromptService).text({
+    title: 'Rename Voice',
+    label: 'Name',
+    initial: voice.name,
+    required: true,
+    confirmLabel: 'Rename',
+    hint: `Saved in ${list(S.linkedPairs(scId).map((p) => p.book.title))}.`,
+  });
+  if (!name || name === voice.name) return;
+  toast().success(`Saved in ${S.renameSeriesVoice(scId, voice.id, name).length} books`);
+}
+
+async function deleteSeriesVoice(scId: string, voice: S.Voice): Promise<void> {
+  const titles = S.linkedPairs(scId).map((p) => p.book.title);
+  const ok = await confirm().confirm({
+    title: `Delete "${voice.name}" from ${titles.length} books?`,
+    message: `It is removed from ${list(titles)}. Each book's History can bring it back in that book only. A book whose default it is moves to its oldest remaining Voice.`,
+    destructive: true,
+    confirmLabel: 'Delete Voice',
+  });
+  if (ok) S.deleteSeriesVoice(scId, voice.id);
+}
+
+function seriesVoiceEditor(scId: string) {
+  const sc = S.seriesChar(scId);
+  const { voices, from } = S.seriesVoices(scId);
+  const pairs = S.linkedPairs(scId);
+  const differing = pairs.filter((p) => S.differs(p.book.folder, p.character));
+  return html`<section class="sx-editor" aria-label=${`${sc.label} Voices`}>
+    <header class="sx-editor__head">
+      <h3 class="sx-h3">${icon('record_voice_over')} ${sc.label}: series Voices</h3>
+      <span class="sx-muted sx-small"
+        >Every change is saved in each linked book, as a History step there.</span
+      >
+      <span class="sx-spacer"></span>
+      <button
+        type="button"
+        class="r2m-button r2m-button--filled"
+        @click=${() => void addSeriesVoice(scId)}
+      >
+        ${icon('add')} Add Voice
+      </button>
+      <button
+        type="button"
+        class="r2m-icon-button"
+        aria-label="Close"
+        @click=${() => S.editing.set(null)}
+      >
+        ${icon('close')}
+      </button>
+    </header>
+    ${
+      differing.length
+        ? html`<div class="sx-callout sx-callout--warn">
+            ${icon('sync_problem')}
+            <div>
+              <strong>${list(differing.map((p) => p.book.title))} differs from series.</strong>
+              Shown here is the copy in ${from?.title}. Edits here are written to every book, which
+              also brings the differing book back in line.
+              <div class="sx-callout__actions">
+                ${differing.map(
+                  (p) =>
+                    html`<button
+                      type="button"
+                      class="r2m-button"
+                      @click=${() => void push(p.book.folder, p.character)}
+                    >
+                      Use ${p.book.title}'s copy for all
+                    </button>`,
+                )}
+              </div>
+            </div>
+          </div>`
+        : nothing
+    }
+    <table class="sx-table sx-vtable">
+      <thead>
+        <tr>
+          <th>Voice</th>
+          ${pairs.map((p) => html`<th class="sx-center">Default in Book ${p.book.position}<br /><span class="sx-muted sx-small">as ${p.character.name}</span></th>`)}
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${voices.map((voice) => {
+          const blockers = S.seriesDeleteBlockers(scId, voice.id);
+          return html`<tr>
+            <td>
+              <strong>${voice.name}</strong>
+              <div class="sx-muted sx-small">${voice.description}</div>
+              ${blockers.length ? html`<div class="sx-advice sx-small">${icon('info')} Can't delete: Voice Rules in ${list(blockers)} use it.</div>` : nothing}
+            </td>
+            ${pairs.map((p) => {
+              const has = p.character.voices.some((x) => x.id === voice.id);
+              const isDefault = p.character.rules.some(
+                (r) => r.kind === 'default' && r.voiceId === voice.id,
+              );
+              return html`<td class="sx-center">
+                <input
+                  type="radio"
+                  name=${`default-${p.book.folder}-${scId}`}
+                  aria-label=${`Default in ${p.book.title}`}
+                  .checked=${isDefault}
+                  ?disabled=${!has}
+                  @change=${() => S.setDefault(p.book.folder, p.character.id, voice.id)}
+                />
+              </td>`;
+            })}
+            <td class="sx-nowrap">
+              <button type="button" class="r2m-icon-button" aria-label="Play">
+                ${icon('play_arrow')}
+              </button>
+              <button type="button" class="r2m-icon-button" aria-label="Edit">
+                ${icon('tune')}
+              </button>
+              <button
+                type="button"
+                class="r2m-icon-button"
+                aria-label="Rename"
+                @click=${() => void renameSeriesVoice(scId, voice)}
+              >
+                ${icon('edit')}
+              </button>
+              <button
+                type="button"
+                class="r2m-icon-button"
+                aria-label="Delete"
+                ?disabled=${blockers.length > 0 || voices.length === 1}
+                @click=${() => void deleteSeriesVoice(scId, voice)}
+              >
+                ${icon('delete')}
+              </button>
+            </td>
+          </tr>`;
+        })}
+      </tbody>
+    </table>
+    <p class="sx-muted sx-small">
+      Each book's default is that book's own Voice Rule, set here for convenience. Positional rules
+      (e.g. "Part 1, chapter 7") stay on each book's Cast page.
     </p>
   </section>`;
 }

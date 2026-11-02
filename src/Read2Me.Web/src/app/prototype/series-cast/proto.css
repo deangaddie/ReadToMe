@@ -386,3 +386,50 @@ li:last-child .sx-row {
   max-height: 5.2em;
   overflow: hidden;
 }
+.sx-rowhead {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.sx-rowhead .sx-muted {
+  font-weight: 400;
+  margin-left: 4px;
+}
+.sx-tr--open > * {
+  background: color-mix(in srgb, var(--r2m-accent) 8%, transparent);
+}
+.sx-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r2m-space-3);
+  border: 1px solid var(--r2m-accent);
+  border-radius: var(--r2m-radius-lg);
+  padding: var(--r2m-space-3);
+  background: var(--r2m-surface-low);
+}
+.sx-editor__head {
+  display: flex;
+  align-items: center;
+  gap: var(--r2m-space-3);
+  flex-wrap: wrap;
+}
+.sx-editor__head .sx-h3 {
+  margin: 0;
+}
+.sx-center {
+  text-align: center !important;
+}
+.sx-nowrap {
+  white-space: nowrap;
+  text-align: right !important;
+}
+.sx-vtable td {
+  vertical-align: top;
+}
