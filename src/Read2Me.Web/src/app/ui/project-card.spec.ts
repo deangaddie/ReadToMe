@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { render } from 'lit-html';
+import { html, render } from 'lit-html';
 import type { ProjectSummary } from '@app/api';
 import { placeholderGradient, projectCard, projectInitials } from './project-card';
 
@@ -69,6 +69,34 @@ describe('projectCard()', () => {
     expect(more.getAttribute('aria-label')).toBe('Actions for Pride and Prejudice');
     menu.querySelector<HTMLButtonElement>('.r2m-project-card__delete')!.click();
     expect(counts.deleted).toBe(1);
+  });
+
+  it('adds the series line, the cover badge and menu entries between Open and Delete', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    render(
+      projectCard(base, {
+        onOpen: () => undefined,
+        onDelete: () => undefined,
+        seriesLine: 'Austen · Book 2',
+        badge: 'Book 2',
+        menuEntries: html`<button role="menuitem" data-action="extra">Extra</button>`,
+      }),
+      host,
+    );
+    expect(host.querySelector('.r2m-project-card__series span:not(.r2m-icon)')?.textContent).toBe(
+      'Austen · Book 2',
+    );
+    expect(host.querySelector('.r2m-project-card__badge')?.textContent).toBe('Book 2');
+    expect(
+      Array.from(host.querySelectorAll('[role=menuitem]'), (m) =>
+        m.classList.contains('r2m-project-card__open')
+          ? 'open'
+          : m.classList.contains('r2m-project-card__delete')
+            ? 'delete'
+            : m.getAttribute('data-action'),
+      ),
+    ).toEqual(['open', 'extra', 'delete']);
   });
 
   it('derives initials and a stable gradient', () => {

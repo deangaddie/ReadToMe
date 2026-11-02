@@ -12,6 +12,7 @@ beforeEach(() => {
   resetServices();
   api = new FakeApi();
   api.install();
+  api.on('GET', '/api/series', []);
 });
 afterEach(() => document.body.replaceChildren());
 

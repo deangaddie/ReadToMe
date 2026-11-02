@@ -7,11 +7,29 @@ import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import { ConfirmService } from '@app/ui/dialogs';
+import { menuItem } from '@app/ui/menu';
 import { emptyState, icon, statusChip } from '@app/ui/partials';
 import { projectCard } from '@app/ui/project-card';
 import { ToastService } from '@app/ui/toast';
 import { openNewProjectDialog } from './new-project-dialog';
+import {
+  type DraftRow,
+  draftPositions,
+  draftRows,
+  positionsProblem,
+  saveBlockedReason,
+} from './positions-draft';
 import { ProjectsStore } from './projects-store';
+import { SeriesActions } from './series-actions';
+import { seriesCard, seriesPanel } from './series-card';
+import { deleteProjectConfirm } from './series-confirms';
+import {
+  bookLabel,
+  type Membership,
+  panelAfter,
+  type SeriesMember,
+  type SeriesView,
+} from './series-shelf';
 import projectsCss from './projects-page.css' with { type: 'text' };
 
 adoptStyles(projectsCss);
@@ -19,40 +37,125 @@ adoptStyles(projectsCss);
 /** Skeleton cards drawn while the first load is in flight. */
 const SKELETONS = [0, 1, 2, 3, 4, 5];
 
+export type ProjectsView = 'books' | 'series';
+
+/** The Books / Series toggle, remembered per browser (#207, 1). */
+const VIEW_KEY = 'r2m.projects.view';
+
+function readView(): ProjectsView {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'series' ? 'series' : 'books';
+  } catch {
+    return 'books';
+  }
+}
+
 /**
- * `/projects` (design §6.1): the shelf. Card grid over {@link ProjectsStore}, the New project
- * dialog, and delete with a destructive confirm. Opening a card navigates to the overview.
+ * `/projects` (design §6.1): the shelf over {@link ProjectsStore}. The Books view is the grid of
+ * every book, a member's card naming its series and number. The Series view (#207, variant D)
+ * puts series cards among the books in no series, sorted by name; clicking one opens its panel
+ * full width after the last card in its row, where the book numbers are edited as one set. The
+ * New project dialog, delete with a destructive confirm, and the series flows in
+ * {@link SeriesActions}. Both views read again on the hub's `series` signal.
  */
 export class ProjectsPage extends R2mElement {
   private readonly store = use(ProjectsStore);
+  private readonly actions = use(SeriesActions);
   private readonly router = use(Router);
   private readonly confirm = use(ConfirmService);
   private readonly toast = use(ToastService);
 
   /** Folder of the project whose delete is in flight; its card is disabled meanwhile. */
   private readonly deleting = signal<string | null>(null);
+  private readonly view = signal<ProjectsView>(readView());
+  /** The series whose panel is open; one at a time. */
+  private readonly openSeries = signal<string | null>(null);
+  /** Edit book numbers: the open series' draft, while it is on. */
+  private readonly draft = signal<{ seriesId: string; rows: DraftRow[] } | null>(null);
+  private readonly saving = signal(false);
+  /** Read once per render in {@link template}, so cards built inside `repeat` stay tracked. */
+  private membership: ReadonlyMap<string, Membership> = new Map();
+  /** Columns in the Series grid, measured after each render and on resize. */
+  private readonly columns = signal(1);
 
   protected override connected(): void {
     this.classList.add('projects');
+    this.onDisconnect(this.store.follow());
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => this.measure());
+      observer.observe(this);
+      this.onDisconnect(() => observer.disconnect());
+    }
     // Refresh on every visit; a failure surfaces through the store's error signal, not a toast.
     void this.store.load().catch(() => undefined);
   }
 
+  protected override updated(): void {
+    this.measure();
+  }
+
+  private measure(): void {
+    const grid = this.querySelector('.projects__grid--series');
+    if (!grid) return;
+    const tracks = getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length;
+    const columns = Math.max(1, tracks);
+    if (columns !== this.columns()) this.columns.set(columns);
+  }
+
+  setView(view: ProjectsView): void {
+    this.view.set(view);
+    try {
+      localStorage.setItem(VIEW_KEY, view);
+    } catch {
+      // storage unavailable — keep the in-memory value
+    }
+  }
+
   protected template() {
     const error = this.store.error();
-    const projects = this.store.projects();
-    const newButton = html`<button
-      type="button"
-      class="r2m-button r2m-button--filled projects__new"
-      @click=${() => void this.create()}
-    >
-      ${icon('add')} New project
-    </button>`;
+    const view = this.view();
+    this.membership = this.store.membership();
     return html`
       <header class="r2m-page-header projects__header">
         <h1 class="r2m-page-header__title">Projects</h1>
-        <p class="r2m-page-header__subtitle">Every audiobook in the workspace.</p>
-        <span class="projects__actions">${newButton}</span>
+        <p class="r2m-page-header__subtitle">
+          ${view === 'books' ? 'Every audiobook in the workspace.' : 'Books grouped into series.'}
+        </p>
+        <span class="projects__actions">
+          <fieldset class="r2m-segmented projects__view" role="radiogroup" aria-label="Show">
+            ${(['books', 'series'] as const).map(
+              (v) =>
+                html`<label>
+                  <input
+                    type="radio"
+                    name="projects-view"
+                    .value=${v}
+                    .checked=${view === v}
+                    @change=${() => this.setView(v)}
+                  />
+                  ${v === 'books' ? 'Books' : 'Series'}
+                </label>`,
+            )}
+          </fieldset>
+          ${
+            view === 'series'
+              ? html`<button
+                  type="button"
+                  class="r2m-button r2m-button--stroked projects__new-series"
+                  @click=${() => void this.actions.newSeries()}
+                >
+                  ${icon('add')} New series
+                </button>`
+              : nothing
+          }
+          <button
+            type="button"
+            class="r2m-button r2m-button--filled projects__new"
+            @click=${() => void this.create()}
+          >
+            ${icon('add')} New project
+          </button>
+        </span>
       </header>
 
       ${
@@ -62,39 +165,213 @@ export class ProjectsPage extends R2mElement {
       }
       ${
         this.store.loading() && !this.store.loaded()
-          ? html`<div class="projects__grid" aria-busy="true" aria-label="Loading projects">
-              ${SKELETONS.map(
-                () =>
-                  html`<div class="projects__skeleton">
-                    <div class="projects__skeleton-cover"></div>
-                    <div class="projects__skeleton-line projects__skeleton-line--title"></div>
-                    <div class="projects__skeleton-line"></div>
-                  </div>`,
-              )}
-            </div>`
-          : projects.length === 0 && !error
-            ? emptyState(
-                {
-                  icon: 'library_books',
-                  headline: 'No projects yet',
-                  hint: 'Import an epub or text file to create your first audiobook project.',
-                },
-                [{ label: 'New project', icon: 'add', run: () => void this.create() }],
-              )
-            : html`<div class="projects__grid">
-                ${repeat(
-                  projects,
-                  (p) => p.folderName,
-                  (p) =>
-                    projectCard(p, {
-                      onOpen: () => this.open(p),
-                      onDelete: () => void this.delete(p),
-                      deleting: this.deleting() === p.folderName,
-                    }),
-                )}
-              </div>`
+          ? this.skeletons()
+          : view === 'books'
+            ? this.booksView(error)
+            : this.seriesView()
       }
     `;
+  }
+
+  private skeletons() {
+    return html`<div class="projects__grid" aria-busy="true" aria-label="Loading projects">
+      ${SKELETONS.map(
+        () =>
+          html`<div class="projects__skeleton">
+            <div class="projects__skeleton-cover"></div>
+            <div class="projects__skeleton-line projects__skeleton-line--title"></div>
+            <div class="projects__skeleton-line"></div>
+          </div>`,
+      )}
+    </div>`;
+  }
+
+  private booksView(error: string | null) {
+    const projects = this.store.projects();
+    if (projects.length === 0 && !error)
+      return emptyState(
+        {
+          icon: 'library_books',
+          headline: 'No projects yet',
+          hint: 'Import an epub or text file to create your first audiobook project.',
+        },
+        [{ label: 'New project', icon: 'add', run: () => void this.create() }],
+      );
+    const membership = this.membership;
+    const deleting = this.deleting();
+    return html`<div class="projects__grid">
+      ${repeat(
+        projects,
+        (p) => p.folderName,
+        (p) => {
+          const m = membership.get(p.folderName);
+          return this.bookCard(p, deleting, {
+            seriesLine: m ? `${m.name} · ${bookLabel(m.position)}` : undefined,
+          });
+        },
+      )}
+    </div>`;
+  }
+
+  private seriesView() {
+    const items = this.store.shelf();
+    const series = this.store.series();
+    const openId = this.openSeries();
+    const openIndex = items.findIndex((i) => i.kind === 'series' && i.series.id === openId);
+    const after = panelAfter(items.length, openIndex, this.columns());
+    const open = series.find((s) => s.id === openId);
+    const deleting = this.deleting();
+    const draft = this.draft();
+    const saving = this.saving();
+    const empty =
+      series.length === 0
+        ? emptyState(
+            {
+              icon: 'library_books',
+              headline: 'No series yet',
+              hint:
+                'A series groups books that share characters, so their Voices can be shared ' +
+                'and the books read in order. Make one here, or use "Add to series…" on a book.',
+            },
+            [{ label: 'New series', icon: 'add', run: () => void this.actions.newSeries() }],
+          )
+        : nothing;
+    return html`${empty}
+    ${
+      items.length > 0
+        ? html`<div class="projects__grid projects__grid--series">
+            ${repeat(
+              items,
+              (item) => item.key,
+              (item, i) =>
+                html`${
+                  item.kind === 'series'
+                    ? seriesCard(item.series, {
+                        open: item.series.id === openId,
+                        onToggle: () => this.toggle(item.series.id),
+                        onAddBook: () => void this.actions.addBook(item.series),
+                        onRename: () => void this.actions.rename(item.series),
+                        onDelete: () => void this.deleteSeries(item.series),
+                      })
+                    : this.bookCard(item.project, deleting)
+                }${
+                  i === after && open
+                    ? this.panel(
+                        open,
+                        draft?.seriesId === open.id ? draft.rows : null,
+                        saving,
+                        deleting,
+                      )
+                    : nothing
+                }`,
+            )}
+          </div>`
+        : nothing
+    }`;
+  }
+
+  private panel(
+    series: SeriesView,
+    rows: DraftRow[] | null,
+    saving: boolean,
+    deleting: string | null,
+  ) {
+    return seriesPanel(series, {
+      editing: rows
+        ? { blocked: saveBlockedReason(rows), problem: positionsProblem(rows), saving }
+        : null,
+      onEdit: () => this.draft.set({ seriesId: series.id, rows: draftRows(series) }),
+      onCancel: () => this.draft.set(null),
+      onSave: () => void this.saveNumbers(series),
+      onAddBook: () => void this.actions.addBook(series),
+      book: (member: SeriesMember) =>
+        this.bookCard(member.project, deleting, {
+          badge: rows ? undefined : bookLabel(member.position),
+          extra: rows ? this.numberBox(member, rows) : undefined,
+        }),
+    });
+  }
+
+  private numberBox(member: SeriesMember, rows: DraftRow[]) {
+    const folder = member.project.folderName;
+    const row = rows.find((r) => r.folder === folder);
+    return html`<label class="projects__number">
+      Book
+      <input
+        class="projects__number-input"
+        inputmode="decimal"
+        data-folder=${folder}
+        aria-label=${`Book number of ${member.project.title}`}
+        .value=${row?.text ?? ''}
+        @input=${(e: Event) => this.type(folder, (e.target as HTMLInputElement).value)}
+      />
+    </label>`;
+  }
+
+  private bookCard(
+    project: ProjectSummary,
+    deleting: string | null,
+    options: { seriesLine?: string | undefined; badge?: string | undefined; extra?: unknown } = {},
+  ) {
+    const m = this.membership.get(project.folderName);
+    const entries = m
+      ? html`${menuItem({
+          label: 'Move to another series…',
+          icon: 'compare_arrows',
+          action: 'move-series',
+          run: () => void this.actions.addToSeries(project),
+        })}${menuItem({
+          label: `Remove from ${m.name}`,
+          icon: 'close',
+          action: 'leave-series',
+          run: () => void this.actions.leave(project),
+        })}`
+      : menuItem({
+          label: 'Add to series…',
+          icon: 'library_books',
+          action: 'add-to-series',
+          run: () => void this.actions.addToSeries(project),
+        });
+    return projectCard(project, {
+      onOpen: () => this.open(project),
+      onDelete: () => void this.delete(project),
+      deleting: deleting === project.folderName,
+      menuEntries: entries,
+      ...options,
+    });
+  }
+
+  private toggle(id: string): void {
+    this.draft.set(null);
+    this.openSeries.set(this.openSeries() === id ? null : id);
+  }
+
+  private type(folder: string, text: string): void {
+    const draft = this.draft();
+    if (!draft) return;
+    this.draft.set({
+      ...draft,
+      rows: draft.rows.map((r) => (r.folder === folder ? { ...r, text } : r)),
+    });
+  }
+
+  async saveNumbers(series: SeriesView): Promise<void> {
+    const draft = this.draft();
+    if (draft?.seriesId !== series.id || saveBlockedReason(draft.rows) !== null) return;
+    this.saving.set(true);
+    try {
+      await this.store.savePositions(series.id, draftPositions(draft.rows));
+      this.draft.set(null);
+    } catch (error) {
+      this.toast.problem(toApiError(error).toProblem());
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  private async deleteSeries(series: SeriesView): Promise<void> {
+    if ((await this.actions.deleteSeries(series)) && this.openSeries() === series.id)
+      this.openSeries.set(null);
   }
 
   open(project: ProjectSummary): void {
@@ -109,14 +386,8 @@ export class ProjectsPage extends R2mElement {
   }
 
   async delete(project: ProjectSummary): Promise<void> {
-    const ok = await this.confirm.confirm({
-      title: `Delete ${project.title}?`,
-      message:
-        'The project folder and everything in it are removed: the book file, characters, ' +
-        'voices and generated audio. This cannot be undone.',
-      destructive: true,
-      confirmLabel: 'Delete project',
-    });
+    const membership = this.store.membership().get(project.folderName);
+    const ok = await this.confirm.confirm(deleteProjectConfirm(project.title, membership));
     if (!ok) return;
     this.deleting.set(project.folderName);
     try {

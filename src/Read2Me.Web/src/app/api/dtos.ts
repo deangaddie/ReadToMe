@@ -49,6 +49,14 @@ export type UpdateProjectRequest = Schema['UpdateProjectRequest'];
 
 export type NarratorOnlyModeRequest = Schema['NarratorOnlyModeRequest'];
 
+// ---- Series (`SeriesEndpoints.cs`) ----------------------------------------------------------------
+
+/** One item of `GET /api/series`: its books (folder, position) in position order. */
+export type SeriesDto = Schema['SeriesDto'];
+export type SeriesBookDto = Schema['SeriesBookDto'];
+/** `ProjectSummary.series`: the project's series, or null. */
+export type ProjectSeries = Schema['ProjectSeries'];
+
 /**
  * `PipelineStep`: the nine stepper step ids, which are also the checkpoint route segment and the
  * keys of {@link ProjectStatusDto.checkpoints}.

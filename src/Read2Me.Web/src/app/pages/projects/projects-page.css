@@ -1,4 +1,5 @@
-/* The projects shelf (design §6.1): header with the New button, the card grid, load skeletons. */
+/* The projects shelf (design §6.1): header with the view toggle and New buttons, the card grid,
+   the Series view's series cards and panel (#207), load skeletons. */
 @scope (r2m-projects-page) {
   :scope {
     display: block;
@@ -10,6 +11,151 @@
   .projects__actions {
     margin-left: auto;
     align-self: center;
+  }
+  .projects__actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--r2m-space-2);
+  }
+  .projects__grid--series {
+    margin-top: var(--r2m-space-4);
+  }
+  .r2m-empty-state + .projects__grid--series {
+    margin-top: var(--r2m-space-5);
+  }
+
+  /* A series card (#207, variant D): a stacked poster with the Series chip, then the card body. */
+  .projects__series-card {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-lg);
+    background: var(--r2m-surface-low);
+    transition: box-shadow 120ms ease;
+
+    &:hover {
+      box-shadow: var(--r2m-shadow-2);
+    }
+  }
+  .projects__series-card--open {
+    outline: 2px solid var(--r2m-accent);
+    outline-offset: -1px;
+  }
+  .projects__series-open {
+    position: relative;
+    display: block;
+    padding: var(--r2m-space-2) var(--r2m-space-2) 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid var(--r2m-accent);
+      outline-offset: -2px;
+    }
+  }
+  /* The placeholder poster until the series poster slice: stripes and the name. */
+  .projects__poster {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 3 / 4;
+    width: 100%;
+    border-radius: var(--r2m-radius-md);
+    background: repeating-linear-gradient(
+      45deg,
+      var(--r2m-surface-low),
+      var(--r2m-surface-low) 10px,
+      var(--r2m-surface-container) 10px,
+      var(--r2m-surface-container) 20px
+    );
+    box-shadow:
+      4px -4px 0 -1px var(--r2m-surface-container),
+      8px -8px 0 -2px var(--r2m-outline);
+    color: var(--r2m-text-muted);
+  }
+  .projects__poster-name {
+    padding: var(--r2m-space-2);
+    text-align: center;
+    font-weight: 700;
+    font-size: var(--r2m-text-lg);
+  }
+  .projects__series-chip {
+    position: absolute;
+    top: calc(var(--r2m-space-2) + 6px);
+    left: calc(var(--r2m-space-2) + 6px);
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgb(0 0 0 / 70%);
+    color: #fff;
+    font-size: var(--r2m-text-xs);
+    font-weight: 600;
+
+    & .r2m-icon {
+      font-size: 14px;
+    }
+  }
+
+  /* The open series' panel: full width, after the last card in its row. */
+  .projects__panel {
+    grid-column: 1 / -1;
+    padding: var(--r2m-space-3);
+    border: 1px solid var(--r2m-accent);
+    border-radius: var(--r2m-radius-lg);
+    background: var(--r2m-surface-container);
+  }
+  .projects__panel-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--r2m-space-2);
+    margin-bottom: var(--r2m-space-3);
+  }
+  .projects__panel-summary,
+  .projects__panel-empty {
+    color: var(--r2m-text-muted);
+  }
+  .projects__panel-empty {
+    margin: 0;
+  }
+  .projects__panel-spacer {
+    flex: 1 1 auto;
+  }
+  .projects__panel-problem {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--r2m-status-error);
+    font-size: var(--r2m-text-sm);
+
+    & .r2m-icon {
+      font-size: 16px;
+    }
+  }
+  .projects__panel-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: var(--r2m-space-4);
+  }
+  .projects__number {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 4px 0;
+    font-size: var(--r2m-text-sm);
+    font-weight: 600;
+  }
+  .projects__number-input {
+    width: 5em;
+    padding: 4px 6px;
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-sm);
+    background: var(--r2m-surface);
+    color: var(--r2m-text);
+    font: inherit;
   }
   .projects__grid {
     display: grid;
