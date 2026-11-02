@@ -1,45 +1,60 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { ProjectSummary } from '@app/api';
+import type { ProjectSummary, SeriesDto } from '@app/api';
 import { Router } from '@app/core/router';
 import { override, resetServices } from '@app/core/services';
 import { ToastService } from '@app/ui/toast';
 import { FakeApi, problem } from '../../../testing/fake-api';
+import { FakeLive } from '../../../testing/fake-live';
 import { type FakeNavigation, installNavigation, settle } from '../../../testing/fake-navigation';
 import type { NewProjectDialog } from './new-project-dialog';
 import type { ProjectsPage } from './projects-page';
 import './projects-page';
 
-const dracula: ProjectSummary = {
-  folderName: 'dracula',
-  title: 'Dracula',
+const book = (folderName: string, title: string, extra: Partial<ProjectSummary> = {}) =>
+  ({
+    folderName,
+    title,
+    author: null,
+    coverImage: null,
+    audioItemTotal: 0,
+    audioItemDone: 0,
+    audioPercent: 0,
+    series: null,
+    fileType: 'Epub',
+    ...extra,
+  }) satisfies ProjectSummary;
+
+const dracula = book('dracula', 'Dracula', {
   author: 'Bram Stoker',
   coverImage: 'cover.jpg',
   audioItemTotal: 100,
   audioItemDone: 40,
   audioPercent: 40,
-  series: null,
-  fileType: 'Epub',
-};
-const emma: ProjectSummary = {
-  folderName: 'emma',
-  title: 'Emma',
-  author: null,
-  coverImage: null,
-  audioItemTotal: 0,
-  audioItemDone: 0,
-  audioPercent: 0,
-  series: null,
-  fileType: 'Text',
+});
+const emma = book('emma', 'Emma', { fileType: 'Text' });
+const scarlet = book('scarlet', 'A Study in Scarlet');
+const four = book('four', 'The Sign of the Four');
+
+const holmes: SeriesDto = {
+  id: 'h',
+  name: 'Sherlock Holmes',
+  books: [
+    { folder: 'scarlet', position: 1 },
+    { folder: 'four', position: 2 },
+  ],
 };
 
 let api: FakeApi;
+let live: FakeLive;
 let navigation: FakeNavigation;
 let toasts: string[];
 
 beforeEach(() => {
   resetServices();
+  localStorage.clear();
   api = new FakeApi();
   api.install();
+  live = new FakeLive().install();
   navigation = installNavigation('projects');
   const router = new Router();
   override(Router, router);
@@ -52,23 +67,83 @@ beforeEach(() => {
 });
 afterEach(() => document.body.replaceChildren());
 
-/** Mounts the page over a pending list, checks the skeletons, then answers the list. */
-async function render(projects: ProjectSummary[]) {
+/** Lets a dialog's close land: happy-dom fires the dialog's close event on a later task. */
+async function flush() {
+  await settle();
+  await new Promise((r) => setTimeout(r, 0));
+  await settle();
+}
+
+/** Mounts the page over a pending list, checks the skeletons, then answers both reads. */
+async function render(projects: ProjectSummary[], series: SeriesDto[] = []) {
   let answer!: (value: ProjectSummary[]) => void;
   api.on('GET', '/api/projects', () => new Promise<ProjectSummary[]>((r) => (answer = r)));
+  api.on('GET', '/api/series', series);
   const page = document.createElement('r2m-projects-page');
   document.body.append(page);
   await page.rendered();
   await settle();
   expect(page.querySelectorAll('.projects__skeleton').length).toBeGreaterThan(0);
   answer(projects);
+  api.on('GET', '/api/projects', projects);
   await settle();
   await page.rendered();
   return page;
 }
 
+const text = (el: Element | null) => el!.textContent!.replace(/\s+/g, ' ').trim();
+
 const cards = (page: ProjectsPage) =>
   Array.from(page.querySelectorAll('.r2m-project-card'), (c) => c.getAttribute('data-folder'));
+
+/** The Series grid's cards in order: `series:<id>` or the book's folder, and `panel:<id>`. */
+const shelf = (page: ProjectsPage) =>
+  Array.from(page.querySelector('.projects__grid--series')!.children, (c) =>
+    c.classList.contains('projects__series-card')
+      ? `series:${c.getAttribute('data-series-id')}`
+      : c.classList.contains('projects__panel')
+        ? `panel:${c.getAttribute('data-series-id')}`
+        : c.getAttribute('data-folder'),
+  );
+
+const card = (page: ProjectsPage, folder: string) =>
+  page.querySelector<HTMLElement>(`.r2m-project-card[data-folder="${folder}"]`)!;
+
+/** The menu entries of a book card, by label. */
+const menuLabels = (el: HTMLElement) =>
+  Array.from(el.querySelectorAll('[role=menu] [role=menuitem]'), (item) =>
+    text(item.querySelector('span:not(.r2m-icon)')),
+  );
+
+async function showSeries(page: ProjectsPage) {
+  page.querySelector<HTMLInputElement>('.projects__view input[value="series"]')!.click();
+  await page.rendered();
+}
+
+async function confirmDialog(choice: 'confirm' | 'cancel') {
+  await settle();
+  const dialog = document.querySelector('r2m-confirm-dialog')!;
+  await dialog.rendered();
+  const body = {
+    title: text(dialog.querySelector('.r2m-dialog__title')),
+    message: text(dialog.querySelector('.r2m-confirm-dialog__message')),
+  };
+  dialog.querySelector<HTMLButtonElement>(`.r2m-confirm-dialog__${choice}`)!.click();
+  await flush();
+  return body;
+}
+
+async function answerPrompt(value: string) {
+  await settle();
+  const prompt = document.querySelector('r2m-text-prompt-dialog')!;
+  await prompt.rendered();
+  const input = prompt.querySelector<HTMLInputElement>('.r2m-text-prompt-dialog__input')!;
+  input.value = value;
+  input.dispatchEvent(new Event('input'));
+  await prompt.rendered();
+  prompt.querySelector<HTMLButtonElement>('.r2m-text-prompt-dialog__confirm')!.click();
+  await flush();
+}
 
 describe('r2m-projects-page', () => {
   it('shows skeletons, then a card per project sorted by title', async () => {
@@ -88,6 +163,7 @@ describe('r2m-projects-page', () => {
 
   it('shows the load failure as an error chip, not a toast', async () => {
     api.on('GET', '/api/projects', () => problem(500, 'disk gone'));
+    api.on('GET', '/api/series', []);
     const page = document.createElement('r2m-projects-page');
     document.body.append(page);
     await settle();
@@ -127,10 +203,7 @@ describe('r2m-projects-page', () => {
     dialog.onFiles([new File(['Chapter 1'], 'shelf-upload.txt')]);
     await dialog.rendered();
     dialog.querySelector<HTMLButtonElement>('.new-project__create')!.click();
-    await settle();
-    // happy-dom fires the dialog's close event on a later task.
-    await new Promise((r) => setTimeout(r, 0));
-    await settle();
+    await flush();
 
     expect(api.calls('POST', '/api/projects')).toHaveLength(1);
     expect(navigation.calls.map((c) => c.url)).toEqual([
@@ -139,11 +212,11 @@ describe('r2m-projects-page', () => {
     expect(toasts).toEqual(['Project created']);
   });
 
-  it('delete asks for confirmation, then DELETEs and drops the card', async () => {
+  it('asks for confirmation, then DELETEs and drops the card', async () => {
     const page = await render([dracula, emma]);
-    api.on('DELETE', '/api/projects/dracula', undefined);
+    api.on('DELETE', '/api/projects/dracula', undefined).on('GET', '/api/projects', [emma]);
 
-    page.querySelector<HTMLButtonElement>('.r2m-project-card__delete')!.click();
+    card(page, 'dracula').querySelector<HTMLButtonElement>('.r2m-project-card__delete')!.click();
     await settle();
     const dialog = document.querySelector('r2m-confirm-dialog')!;
     await dialog.rendered();
@@ -152,7 +225,7 @@ describe('r2m-projects-page', () => {
       'r2m-button--danger',
     );
     dialog.querySelector<HTMLButtonElement>('.r2m-confirm-dialog__confirm')!.click();
-    await settle();
+    await flush();
     await page.rendered();
 
     expect(api.calls('DELETE', '/api/projects/dracula')).toHaveLength(1);
@@ -164,14 +237,274 @@ describe('r2m-projects-page', () => {
     const page = await render([dracula]);
 
     page.querySelector<HTMLButtonElement>('.r2m-project-card__delete')!.click();
-    await settle();
-    const dialog = document.querySelector('r2m-confirm-dialog')!;
-    await dialog.rendered();
-    dialog.querySelector<HTMLButtonElement>('.r2m-confirm-dialog__cancel')!.click();
-    await settle();
+    await confirmDialog('cancel');
     await page.rendered();
 
     expect(api.calls('DELETE', '/api/projects/dracula')).toHaveLength(0);
     expect(cards(page)).toEqual(['dracula']);
+  });
+});
+
+describe('r2m-projects-page Books view', () => {
+  it('names a member’s series and number, and offers the series entries', async () => {
+    const page = await render([emma, four, scarlet], [holmes]);
+    expect(
+      text(card(page, 'four').querySelector('.r2m-project-card__series span:not(.r2m-icon)')),
+    ).toBe('Sherlock Holmes · Book 2');
+    expect(card(page, 'emma').querySelector('.r2m-project-card__series')).toBeNull();
+    expect(menuLabels(card(page, 'four'))).toEqual([
+      'Open',
+      'Move to another series…',
+      'Remove from Sherlock Holmes',
+      'Delete',
+    ]);
+    expect(menuLabels(card(page, 'emma'))).toEqual(['Open', 'Add to series…', 'Delete']);
+  });
+
+  it('the project delete confirm adds the series line for a member', async () => {
+    const page = await render([four, scarlet], [holmes]);
+    card(page, 'four').querySelector<HTMLButtonElement>('.r2m-project-card__delete')!.click();
+    const { message } = await confirmDialog('cancel');
+    expect(message).toEndWith(
+      'Part of Sherlock Holmes (Book 2); the other books keep their Voices.',
+    );
+  });
+
+  it('Add to series… joins the picked series and toasts the assigned number', async () => {
+    const page = await render([emma, four, scarlet], [holmes]);
+    api.on('PUT', '/api/series/h/books/emma', { position: 3 });
+
+    card(page, 'emma').querySelector<HTMLButtonElement>('[data-action="add-to-series"]')!.click();
+    await settle();
+    const picker = document.querySelector('r2m-series-picker')!;
+    await picker.rendered();
+    picker.querySelector<HTMLButtonElement>('[data-series-id="h"]')!.click();
+    await flush();
+
+    expect(api.calls('PUT', '/api/series/h/books/emma').map((r) => r.body)).toEqual([
+      { move: false },
+    ]);
+    expect(toasts).toEqual([
+      'Emma is Book 3 of Sherlock Holmes. Edit the number if it belongs elsewhere.',
+    ]);
+  });
+
+  it('Add to series… → New series… creates it with the book as Book 1', async () => {
+    const page = await render([emma], []);
+    api.on('POST', '/api/series', { id: 'n' });
+
+    card(page, 'emma').querySelector<HTMLButtonElement>('[data-action="add-to-series"]')!.click();
+    await settle();
+    const picker = document.querySelector('r2m-series-picker')!;
+    await picker.rendered();
+    picker.querySelector<HTMLButtonElement>('[data-action="new-series"]')!.click();
+    await flush();
+    await answerPrompt('Austen');
+
+    expect(api.calls('POST', '/api/series').map((r) => r.body)).toEqual([
+      { name: 'Austen', folder: 'emma' },
+    ]);
+    expect(toasts).toEqual(['Emma is Book 1 of Austen. Edit the number if it belongs elsewhere.']);
+  });
+
+  it('Move to another series… asks Leave’s confirm, then joins with move', async () => {
+    const other: SeriesDto = { id: 'x', name: 'Holmes novels', books: [] };
+    const page = await render([four, scarlet], [holmes, other]);
+    api.on('PUT', '/api/series/x/books/four', { position: 1 });
+
+    card(page, 'four').querySelector<HTMLButtonElement>('[data-action="move-series"]')!.click();
+    await settle();
+    const picker = document.querySelector('r2m-series-picker')!;
+    await picker.rendered();
+    picker.querySelector<HTMLButtonElement>('[data-series-id="x"]')!.click();
+    await flush();
+    const { title } = await confirmDialog('confirm');
+
+    expect(title).toBe('Move The Sign of the Four to Holmes novels?');
+    expect(api.calls('PUT', '/api/series/x/books/four').map((r) => r.body)).toEqual([
+      { move: true },
+    ]);
+  });
+
+  it('Remove from <series> asks first, then leaves', async () => {
+    const page = await render([four, scarlet], [holmes]);
+    api.on('DELETE', '/api/series/h/books/four', undefined);
+
+    card(page, 'four').querySelector<HTMLButtonElement>('[data-action="leave-series"]')!.click();
+    const { title } = await confirmDialog('confirm');
+
+    expect(title).toBe('Remove The Sign of the Four from Sherlock Holmes?');
+    expect(api.calls('DELETE', '/api/series/h/books/four')).toHaveLength(1);
+    expect(toasts).toEqual(['Removed The Sign of the Four from Sherlock Holmes']);
+  });
+
+  it('reads both lists again on the hub’s series signal', async () => {
+    const page = await render([emma, four, scarlet], []);
+    api.on('GET', '/api/series', [holmes]);
+
+    live.emit('series', { seriesId: 'h', kind: 'Changed' });
+    await settle();
+    await page.rendered();
+
+    expect(api.calls('GET', '/api/projects')).toHaveLength(2);
+    expect(text(card(page, 'four').querySelector('.r2m-project-card__series'))).toContain(
+      'Sherlock Holmes · Book 2',
+    );
+  });
+});
+
+describe('r2m-projects-page Series view', () => {
+  it('is remembered per browser', async () => {
+    const page = await render([emma], []);
+    await showSeries(page);
+    expect(localStorage.getItem('r2m.projects.view')).toBe('series');
+    page.remove();
+
+    const again = document.createElement('r2m-projects-page');
+    document.body.append(again);
+    await settle();
+    await again.rendered();
+    expect(again.querySelector('.projects__grid--series')).not.toBeNull();
+    expect(again.querySelector('.projects__new-series')).not.toBeNull();
+  });
+
+  it('puts series cards among the books in no series, by name', async () => {
+    const page = await render([emma, dracula, four, scarlet], [holmes]);
+    await showSeries(page);
+    expect(shelf(page)).toEqual(['dracula', 'emma', 'series:h']);
+    expect(text(page.querySelector('.projects__series-summary'))).toBe('2 books · Books 1–2');
+  });
+
+  it('with no series, shows the empty state with New series over the books', async () => {
+    const page = await render([emma], []);
+    await showSeries(page);
+    expect(text(page.querySelector('.r2m-empty-state'))).toContain('No series yet');
+    expect(text(page.querySelector('.r2m-empty-state__action'))).toContain('New series');
+    expect(shelf(page)).toEqual(['emma']);
+  });
+
+  it('clicking a series card opens its panel with the books in number order', async () => {
+    const page = await render([emma, four, scarlet], [holmes]);
+    await showSeries(page);
+    page.querySelector<HTMLButtonElement>('.projects__series-open')!.click();
+    await page.rendered();
+
+    // One column in happy-dom: the panel follows the clicked card.
+    expect(shelf(page)).toEqual(['emma', 'series:h', 'panel:h']);
+    const panel = page.querySelector('.projects__panel')!;
+    expect(
+      Array.from(panel.querySelectorAll('.r2m-project-card'), (c) => [
+        c.getAttribute('data-folder'),
+        text(c.querySelector('.r2m-project-card__badge')),
+      ]),
+    ).toEqual([
+      ['scarlet', 'Book 1'],
+      ['four', 'Book 2'],
+    ]);
+
+    page.querySelector<HTMLButtonElement>('.projects__series-open')!.click();
+    await page.rendered();
+    expect(page.querySelector('.projects__panel')).toBeNull();
+  });
+
+  it('Edit book numbers saves the set, and Save is off on a tie or when unchanged', async () => {
+    const page = await render([four, scarlet], [holmes]);
+    await showSeries(page);
+    page.querySelector<HTMLButtonElement>('.projects__series-open')!.click();
+    await page.rendered();
+    page.querySelector<HTMLButtonElement>('[data-action="edit-numbers"]')!.click();
+    await page.rendered();
+
+    const save = () => page.querySelector<HTMLButtonElement>('[data-action="save-numbers"]')!;
+    const typeIn = async (folder: string, value: string) => {
+      const input = page.querySelector<HTMLInputElement>(`input[data-folder="${folder}"]`)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+      await page.rendered();
+    };
+    expect(save().disabled).toBe(true);
+
+    await typeIn('scarlet', '2');
+    expect(save().disabled).toBe(true);
+    expect(text(page.querySelector('.projects__panel-problem'))).toContain(
+      'A Study in Scarlet and The Sign of the Four are both Book 2.',
+    );
+
+    await typeIn('four', '1');
+    expect(save().disabled).toBe(false);
+    api.on('PUT', '/api/series/h/positions', holmes);
+    save().click();
+    await settle();
+    await page.rendered();
+
+    expect(api.calls('PUT', '/api/series/h/positions').map((r) => r.body)).toEqual([
+      { positions: { scarlet: 2, four: 1 } },
+    ]);
+    expect(page.querySelector('[data-action="save-numbers"]')).toBeNull();
+  });
+
+  it('New series asks for a name and creates an empty series', async () => {
+    const page = await render([emma], []);
+    await showSeries(page);
+    api.on('POST', '/api/series', { id: 'n' });
+
+    page.querySelector<HTMLButtonElement>('.projects__new-series')!.click();
+    await answerPrompt('Austen');
+
+    expect(api.calls('POST', '/api/series').map((r) => r.body)).toEqual([
+      { name: 'Austen', folder: null },
+    ]);
+  });
+
+  it('a taken name asks again with the typed name', async () => {
+    const page = await render([emma], [holmes]);
+    await showSeries(page);
+    api.on('PATCH', '/api/series/h', () => problem(409, 'There is already a series called Oz.'));
+
+    page.querySelector<HTMLButtonElement>('[data-action="rename-series"]')!.click();
+    await answerPrompt('Oz');
+
+    expect(toasts).toEqual(['problem: There is already a series called Oz.']);
+    const prompt = document.querySelector('r2m-text-prompt-dialog')!;
+    expect(prompt.querySelector<HTMLInputElement>('.r2m-text-prompt-dialog__input')!.value).toBe(
+      'Oz',
+    );
+  });
+
+  it('Add book… groups the other books and joins the picked one', async () => {
+    const page = await render([emma, four, scarlet], [holmes]);
+    await showSeries(page);
+    api.on('PUT', '/api/series/h/books/emma', { position: 3 });
+
+    page.querySelector<HTMLButtonElement>('[data-action="add-book"]')!.click();
+    await settle();
+    const picker = document.querySelector('r2m-book-picker')!;
+    await picker.rendered();
+    expect(
+      Array.from(picker.querySelectorAll('[data-folder]'), (r) => r.getAttribute('data-folder')),
+    ).toEqual(['emma']);
+    picker.querySelector<HTMLButtonElement>('[data-folder="emma"]')!.click();
+    await flush();
+
+    expect(api.calls('PUT', '/api/series/h/books/emma').map((r) => r.body)).toEqual([
+      { move: false },
+    ]);
+    expect(toasts).toEqual([
+      'Emma is Book 3 of Sherlock Holmes. Edit the number if it belongs elsewhere.',
+    ]);
+  });
+
+  it('Delete series names the books in a red confirm, then deletes', async () => {
+    const page = await render([four, scarlet], [holmes]);
+    await showSeries(page);
+    api.on('DELETE', '/api/series/h', undefined).on('GET', '/api/series', []);
+
+    page.querySelector<HTMLButtonElement>('[data-action="delete-series"]')!.click();
+    const { title, message } = await confirmDialog('confirm');
+
+    expect(title).toBe('Delete series Sherlock Holmes?');
+    expect(message).toContain('A Study in Scarlet and The Sign of the Four');
+    expect(api.calls('DELETE', '/api/series/h')).toHaveLength(1);
+    expect(toasts).toEqual(['Deleted series Sherlock Holmes']);
   });
 });

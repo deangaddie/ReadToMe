@@ -1,0 +1,50 @@
+/* Add to series… and Add book… (#207, 7): one column of pick rows, grouped. */
+@scope (r2m-series-picker, r2m-book-picker) {
+  .series-picker {
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-1);
+    min-width: min(420px, 80vw);
+  }
+  .series-picker__current,
+  .book-picker__note,
+  .book-picker__empty {
+    margin: 0 0 var(--r2m-space-2);
+    color: var(--r2m-text-muted);
+  }
+  .book-picker__group {
+    margin: var(--r2m-space-2) 0 0;
+    font-size: var(--r2m-text-sm);
+    font-weight: 500;
+    color: var(--r2m-text-muted);
+  }
+  .series-picker__row {
+    display: flex;
+    align-items: center;
+    gap: var(--r2m-space-2);
+    padding: var(--r2m-space-2) var(--r2m-space-3);
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-md);
+    background: var(--r2m-surface-low);
+    color: var(--r2m-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+      border-color: var(--r2m-accent);
+    }
+  }
+  .series-picker__row--new {
+    border-style: dashed;
+  }
+  .series-picker__name {
+    flex: 1 1 auto;
+    font-weight: 500;
+  }
+  .series-picker__meta {
+    font-size: var(--r2m-text-sm);
+    color: var(--r2m-text-muted);
+  }
+}

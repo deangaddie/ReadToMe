@@ -1,4 +1,4 @@
-import { html } from 'lit-html';
+import { html, nothing } from 'lit-html';
 import { styleMap } from 'lit-html/directives/style-map.js';
 import { type ProjectSummary, workspaceUrl } from '@app/api';
 import { closeMenuOf } from './menu';
@@ -17,10 +17,21 @@ function menuIdFor(folder: string): string {
  * placeholder art), title, author, the audio pipeline bar or "Not read in yet", and an overflow
  * menu with Open / Delete. Clicking the cover or title calls `onOpen`; the card never navigates
  * itself. `deleting` dims the card and blocks its pointer while the delete is in flight.
+ * A book in a series adds `seriesLine` ("Sherlock Holmes · Book 2") or, inside its series' panel,
+ * a "Book N" `badge` on the cover; `menuEntries` sit between Open and Delete, and `extra`
+ * (the panel's number box) under the author.
  */
 export function projectCard(
   project: ProjectSummary,
-  options: { onOpen: () => void; onDelete: () => void; deleting?: boolean },
+  options: {
+    onOpen: () => void;
+    onDelete: () => void;
+    deleting?: boolean;
+    seriesLine?: string | undefined;
+    badge?: string | undefined;
+    menuEntries?: unknown;
+    extra?: unknown;
+  },
 ) {
   const coverUrl = project.coverImage ? workspaceUrl(project.folderName, project.coverImage) : null;
   const percent =
@@ -58,6 +69,7 @@ export function projectCard(
               >${projectInitials(project.title)}</span
             >`
       }
+      ${options.badge ? html`<span class="r2m-project-card__badge">${options.badge}</span>` : nothing}
     </button>
 
     <div class="r2m-project-card__body">
@@ -94,6 +106,7 @@ export function projectCard(
           >
             ${icon('open_in_new')}<span>Open</span>
           </button>
+          ${options.menuEntries ?? nothing}
           <button
             type="button"
             class="r2m-menu__item r2m-menu__item--destructive r2m-project-card__delete"
@@ -105,7 +118,14 @@ export function projectCard(
         </div>
       </div>
       <p class="r2m-project-card__author">${project.author || 'Unknown author'}</p>
-
+      ${
+        options.seriesLine
+          ? html`<p class="r2m-project-card__series" data-tooltip=${options.seriesLine}>
+              ${icon('library_books')}<span>${options.seriesLine}</span>
+            </p>`
+          : nothing
+      }
+      ${options.extra ?? nothing}
       ${
         project.audioItemTotal > 0
           ? html`<div

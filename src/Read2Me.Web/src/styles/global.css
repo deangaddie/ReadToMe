@@ -1874,6 +1874,37 @@ progress {
   font-variant-numeric: tabular-nums;
 }
 
+.r2m-project-card__series {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  min-width: 0;
+  font-size: var(--r2m-text-xs);
+  color: var(--r2m-accent);
+
+  & .r2m-icon {
+    font-size: 14px;
+  }
+  & span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+.r2m-project-card__badge {
+  position: absolute;
+  top: var(--r2m-space-2);
+  left: var(--r2m-space-2);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 70%);
+  color: #fff;
+  font-size: var(--r2m-text-xs);
+  font-weight: 600;
+  pointer-events: none;
+}
+
 /* ---- pipeline stepper (design §6.2) --------------------------------------------------------- */
 .r2m-pipeline {
   list-style: none;
