@@ -4,7 +4,7 @@ import { use } from '@app/core/services';
 import { ConfirmService, PromptService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
 import { ProjectsStore } from './projects-store';
-import { deleteSeriesConfirm, leaveConfirm, moveConfirm } from './series-confirms';
+import { deleteSeriesConfirm, leaveConfirm, moveConfirm } from './permanent-changes';
 import type { SeriesPick } from './series-pickers';
 import { bookLabel, type SeriesView } from './series-shelf';
 import './series-pickers';
@@ -100,11 +100,13 @@ export class SeriesActions {
   /** Add to series… (or Move to another series…) for a book: pick a series, or make a new one. */
   async addToSeries(project: ProjectSummary): Promise<void> {
     const picker = document.createElement('r2m-series-picker');
-    picker.book = { folder: project.folderName, title: project.title };
-    picker.series = [...this.store.series()].sort((a, b) =>
-      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
-    );
-    picker.membership = this.store.membership();
+    picker.data = {
+      book: { folder: project.folderName, title: project.title },
+      series: [...this.store.series()].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      ),
+      membership: this.store.membership(),
+    };
     const pick = await openDialog<SeriesPick>(picker);
     if (!pick) return;
     if ('newSeries' in pick) {
@@ -118,9 +120,11 @@ export class SeriesActions {
   /** Add book… from a series: pick a book; one in another series moves, behind Leave's confirm. */
   async addBook(series: SeriesView): Promise<void> {
     const picker = document.createElement('r2m-book-picker');
-    picker.target = series;
-    picker.projects = this.store.projects();
-    picker.membership = this.store.membership();
+    picker.data = {
+      target: series,
+      projects: this.store.projects(),
+      membership: this.store.membership(),
+    };
     const folder = await openDialog<string>(picker);
     if (!folder) return;
     const project = this.store.projects().find((p) => p.folderName === folder);
@@ -138,9 +142,16 @@ export class SeriesActions {
     });
   }
 
-  /** New series… from a book's picker: it becomes Book 1, leaving its old series first. */
+  /**
+   * New series… from a book's picker: it becomes Book 1. A book in another series is asked to
+   * move first; the new series is then created on its own (a taken name asks again) and the book
+   * moves into it, so a refused name never leaves the book half moved.
+   */
   private async newSeriesWith(project: ProjectSummary): Promise<void> {
     const current = this.store.membership().get(project.folderName);
+    if (current && !(await this.confirmMove(project, current.name, 'a new series'))) return;
+    // Set inside the prompt's write; a holder, since TypeScript doesn't follow the callback.
+    const created: { series?: { id: string; name: string } } = {};
     await this.withName(
       {
         title: 'New series',
@@ -148,17 +159,19 @@ export class SeriesActions {
         hint: `${project.title} becomes Book 1.`,
       },
       async (name) => {
-        if (current) {
-          if (!(await this.confirmMove(project, current.name, name))) return;
-          const id = await this.store.createSeries(name);
-          const position = await this.store.join(id, project.folderName, true);
-          this.joinedToast(project, position, name);
-          return;
+        if (current) created.series = { id: await this.store.createSeries(name), name };
+        else {
+          await this.store.createSeries(name, project.folderName);
+          this.joinedToast(project, 1, name);
         }
-        await this.store.createSeries(name, project.folderName);
-        this.joinedToast(project, 1, name);
       },
     );
+    const target = created.series;
+    if (!target) return;
+    await this.run(async () => {
+      const position = await this.store.join(target.id, project.folderName, true);
+      this.joinedToast(project, position, target.name);
+    });
   }
 
   private confirmMove(project: ProjectSummary, from: string, to: string): Promise<boolean> {

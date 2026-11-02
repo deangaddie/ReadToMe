@@ -4,7 +4,7 @@ import {
   deleteSeriesConfirm,
   leaveConfirm,
   moveConfirm,
-} from './series-confirms';
+} from './permanent-changes';
 
 describe('leaveConfirm()', () => {
   it('says no Character loses a link when none is linked', () => {

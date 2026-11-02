@@ -326,6 +326,34 @@ describe('r2m-projects-page Books view', () => {
     ]);
   });
 
+  it('New series… for a member asks to move first, then creates it and moves the book in', async () => {
+    const page = await render([four, scarlet], [holmes]);
+    api
+      .on('POST', '/api/series', { id: 'n' })
+      .on('PUT', '/api/series/n/books/four', { position: 1 });
+
+    card(page, 'four').querySelector<HTMLButtonElement>('[data-action="move-series"]')!.click();
+    await settle();
+    const picker = document.querySelector('r2m-series-picker')!;
+    await picker.rendered();
+    picker.querySelector<HTMLButtonElement>('[data-action="new-series"]')!.click();
+    await flush();
+    const { title } = await confirmDialog('confirm');
+    await answerPrompt('Holmes novels');
+    await flush();
+
+    expect(title).toBe('Move The Sign of the Four to a new series?');
+    expect(api.calls('POST', '/api/series').map((r) => r.body)).toEqual([
+      { name: 'Holmes novels', folder: null },
+    ]);
+    expect(api.calls('PUT', '/api/series/n/books/four').map((r) => r.body)).toEqual([
+      { move: true },
+    ]);
+    expect(toasts).toEqual([
+      'The Sign of the Four is Book 1 of Holmes novels. Edit the number if it belongs elsewhere.',
+    ]);
+  });
+
   it('Remove from <series> asks first, then leaves', async () => {
     const page = await render([four, scarlet], [holmes]);
     api.on('DELETE', '/api/series/h/books/four', undefined);
@@ -441,6 +469,36 @@ describe('r2m-projects-page Series view', () => {
       { positions: { scarlet: 2, four: 1 } },
     ]);
     expect(page.querySelector('[data-action="save-numbers"]')).toBeNull();
+  });
+
+  it('a re-read while editing follows the members and keeps what was typed', async () => {
+    const page = await render([four, scarlet, emma], [holmes]);
+    await showSeries(page);
+    page.querySelector<HTMLButtonElement>('.projects__series-open')!.click();
+    await page.rendered();
+    page.querySelector<HTMLButtonElement>('[data-action="edit-numbers"]')!.click();
+    await page.rendered();
+    const input = page.querySelector<HTMLInputElement>('input[data-folder="four"]')!;
+    input.value = '7';
+    input.dispatchEvent(new Event('input'));
+    await page.rendered();
+
+    api.on('GET', '/api/series', [
+      { ...holmes, books: [...holmes.books, { folder: 'emma', position: 3 }] },
+    ]);
+    live.emit('series', { seriesId: 'h', kind: 'Changed' });
+    await settle();
+    await page.rendered();
+
+    const boxes = Array.from(
+      page.querySelectorAll<HTMLInputElement>('.projects__panel input[data-folder]'),
+      (i) => [i.getAttribute('data-folder'), i.value],
+    );
+    expect(boxes).toEqual([
+      ['scarlet', '1'],
+      ['four', '7'],
+      ['emma', '3'],
+    ]);
   });
 
   it('New series asks for a name and creates an empty series', async () => {

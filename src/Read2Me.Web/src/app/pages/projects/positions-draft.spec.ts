@@ -5,6 +5,7 @@ import {
   draftPositions,
   draftRows,
   positionsProblem,
+  rebaseDraft,
   saveBlockedReason,
 } from './positions-draft';
 import type { SeriesView } from './series-shelf';
@@ -70,6 +71,22 @@ describe('saveBlockedReason()', () => {
     );
     expect(saveBlockedReason(typed([]))).toBe('No book number has changed.');
     expect(saveBlockedReason(typed(['3', '1']))).toBeNull();
+  });
+});
+
+describe('rebaseDraft()', () => {
+  it('follows the members after a re-read, keeping what was typed for the books still there', () => {
+    const reread: SeriesView = {
+      ...holmes,
+      members: [
+        { project: project('four', 'The Sign of the Four'), position: 2 },
+        { project: project('adventures', 'The Adventures of Sherlock Holmes'), position: 3 },
+      ],
+    };
+    expect(rebaseDraft(typed(['4', '1']), reread)).toEqual([
+      { folder: 'four', title: 'The Sign of the Four', position: 2, text: '1' },
+      { folder: 'adventures', title: 'The Adventures of Sherlock Holmes', position: 3, text: '3' },
+    ]);
   });
 });
 

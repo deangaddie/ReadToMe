@@ -2,9 +2,12 @@ import type { ConfirmOptions } from '@app/ui/dialogs';
 import { bookLabel, type Membership } from './series-shelf';
 
 /**
- * The Projects page's series confirms, worded per Series lifecycle (#206). Joining, creating,
- * renaming and saving numbers ask nothing; Leave and Move to ask (neutral: every book keeps its
- * Voices), deleting a series asks in red, and deleting a member project adds a line.
+ * The Projects page's permanent-change confirms (web.md conventions 12), worded per Series
+ * lifecycle (#206). Joining, creating, renaming and saving numbers ask nothing; Leave and Move to
+ * ask (neutral: every book keeps its Voices), deleting a series asks in red, and deleting a member
+ * project adds a line. Like `rereadConfirm`, each keeps its own title and button label, which a
+ * `PermanentChange`'s "Action?" title cannot say ("Remove Emma from Austen?"), so each returns
+ * `ConfirmOptions`.
  */
 
 /** "A", "A and B", "A, B and C". */
