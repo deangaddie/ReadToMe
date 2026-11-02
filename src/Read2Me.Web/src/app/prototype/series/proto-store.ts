@@ -8,7 +8,7 @@
 import type { ProjectSummary } from '@app/api';
 import { computed, signal } from '@app/core/signals';
 
-export type Variant = 'A' | 'B' | 'C';
+export type Variant = 'A' | 'B' | 'C' | 'D';
 export type View = 'books' | 'series';
 export type Scenario = 'mixed' | 'none' | 'many';
 
@@ -16,6 +16,7 @@ export const VARIANTS: Record<Variant, string> = {
   A: 'Series cards that expand in place',
   B: 'Series cards that open a series page',
   C: 'Shelves: one row per series',
+  D: 'A, with series inline among the books',
 };
 
 export const SCENARIOS: Record<Scenario, string> = {

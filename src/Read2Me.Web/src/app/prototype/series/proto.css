@@ -497,3 +497,20 @@ r2m-proto-projects .projects__grid {
   max-height: 5.2em;
   overflow: hidden;
 }
+.ps-series-chip {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 70%);
+  color: white;
+  font-size: var(--r2m-text-xs);
+  font-weight: 600;
+}
+.ps-series-chip .r2m-icon {
+  font-size: 14px;
+}

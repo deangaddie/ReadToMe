@@ -209,6 +209,66 @@ const noSeries = () =>
     [{ label: 'New series', icon: 'add', run: () => void F.newSeries() }],
   );
 
+function seriesCard(s: S.Series) {
+  const open = S.openSeries() === s.id;
+  const toggle = () => S.openSeries.set(open ? null : s.id);
+  return html`<article class="ps-series-card ${open ? 'ps-series-card--open' : ''}">
+    <button type="button" class="ps-series-card__open" aria-expanded=${open} @click=${toggle}>
+      <div class="ps-stack">
+        ${poster(s, 'card')}<span class="ps-series-chip">${icon('library_books')} Series</span>
+      </div>
+    </button>
+    <div class="r2m-project-card__body">
+      <div class="r2m-project-card__heading">
+        <button type="button" class="r2m-project-card__title" @click=${toggle}>${s.name}</button>
+        ${seriesMenu(s)}
+      </div>
+      <p class="r2m-project-card__author">${seriesSummary(s)}</p>
+      <p class="ps-expand-hint">
+        ${icon(open ? 'expand_less' : 'expand_more')} ${open ? 'Hide books' : 'Show books'}
+      </p>
+    </div>
+  </article>`;
+}
+
+// --- Variant D: A, with series cards inline among the loose books -----------------------------
+
+type ShelfItem =
+  | { kind: 'series'; key: string; name: string; series: S.Series }
+  | { kind: 'book'; key: string; name: string; book: ProjectSummary };
+
+function variantD(page: ProtoProjects) {
+  const items: ShelfItem[] = [
+    ...S.series().map((s) => ({
+      kind: 'series' as const,
+      key: `s:${s.id}`,
+      name: s.name,
+      series: s,
+    })),
+    ...S.looseBooks().map((b) => ({
+      kind: 'book' as const,
+      key: `b:${b.folderName}`,
+      name: b.title,
+      book: b,
+    })),
+  ].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  if (!items.length) return noSeries();
+  // The open series' panel goes after the last card of its row, so the sort order is never broken.
+  const cols = Math.max(1, page.cols());
+  const openIndex = items.findIndex((i) => i.kind === 'series' && i.series.id === S.openSeries());
+  const panelAfter =
+    openIndex < 0 ? -1 : Math.min(items.length - 1, Math.ceil((openIndex + 1) / cols) * cols - 1);
+  const open =
+    openIndex < 0 ? undefined : (items[openIndex] as Extract<ShelfItem, { kind: 'series' }>).series;
+  return html`<div class="projects__grid ps-grid-d">
+    ${items.map(
+      (item, i) =>
+        html`${item.kind === 'series' ? seriesCard(item.series) : bookCard(item.book)}
+        ${i === panelAfter && open ? expandedA(page, open) : nothing}`,
+    )}
+  </div>`;
+}
+
 // --- Variant A: series cards that expand in place ---------------------------------------------
 
 function variantA(page: ProtoProjects) {
@@ -216,38 +276,7 @@ function variantA(page: ProtoProjects) {
   if (!all.length) return html`${noSeries()} ${looseSection('Books not in a series')}`;
   return html`
     <div class="projects__grid ps-grid-a">
-      ${all.map((s) => {
-        const open = S.openSeries() === s.id;
-        return html`
-          <article class="ps-series-card ${open ? 'ps-series-card--open' : ''}">
-            <button
-              type="button"
-              class="ps-series-card__open"
-              aria-expanded=${open}
-              @click=${() => S.openSeries.set(open ? null : s.id)}
-            >
-              <div class="ps-stack">${poster(s, 'card')}</div>
-            </button>
-            <div class="r2m-project-card__body">
-              <div class="r2m-project-card__heading">
-                <button
-                  type="button"
-                  class="r2m-project-card__title"
-                  @click=${() => S.openSeries.set(open ? null : s.id)}
-                >
-                  ${s.name}
-                </button>
-                ${seriesMenu(s)}
-              </div>
-              <p class="r2m-project-card__author">${seriesSummary(s)}</p>
-              <p class="ps-expand-hint">
-                ${icon(open ? 'expand_less' : 'expand_more')} ${open ? 'Hide books' : 'Show books'}
-              </p>
-            </div>
-          </article>
-          ${open ? expandedA(page, s) : nothing}
-        `;
-      })}
+      ${all.map((s) => html`${seriesCard(s)} ${S.openSeries() === s.id ? expandedA(page, s) : nothing}`)}
     </div>
     ${looseSection('Books not in a series')}
   `;
@@ -523,6 +552,8 @@ async function editPositionsC(id: string): Promise<void> {
 
 export class ProtoProjects extends R2mElement {
   readonly editingA = signal<string | null>(null);
+  /** Variant D: columns in the shelf grid, so the panel can open after the clicked card's row. */
+  readonly cols = signal(4);
   private readonly editors = new Map<string, F.PositionsEditor>();
 
   editorFor(id: string): F.PositionsEditor {
@@ -537,11 +568,23 @@ export class ProtoProjects extends R2mElement {
   }
 
   protected override connected(): void {
+    const measure = () => {
+      const grid = this.querySelector('.ps-grid-d');
+      if (grid) this.cols.set(getComputedStyle(grid).gridTemplateColumns.split(' ').length);
+    };
+    addEventListener('resize', measure);
+    this.onDisconnect(() => removeEventListener('resize', measure));
+    this.afterRender = measure;
     // Drafts follow the store when it changes elsewhere (join, leave, scenario).
     this.effect(() => {
       S.series();
       for (const [id, e] of this.editors) if (S.seriesById(id) && !e.dirty()) e.reset();
     });
+  }
+
+  private afterRender = () => {};
+  protected override updated(): void {
+    this.afterRender();
   }
 
   protected template() {
@@ -594,11 +637,13 @@ export class ProtoProjects extends R2mElement {
                 (b) => bookCard(b, { seriesLine: true }),
               )}
             </div>`
-          : S.variant() === 'A'
-            ? variantA(this)
-            : S.variant() === 'B'
-              ? variantB(this)
-              : variantC()
+          : S.variant() === 'D'
+            ? variantD(this)
+            : S.variant() === 'A'
+              ? variantA(this)
+              : S.variant() === 'B'
+                ? variantB(this)
+                : variantC()
       }
     `;
   }
