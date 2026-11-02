@@ -122,6 +122,10 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         // Process-wide settings-change signal for the live hub relay (the settings services are scoped).
         services.TryAddSingleton<Events.EventBroadcaster<Events.SettingsChanged>>();
+        // Series registries (ADR 0018): no Book mutation and no History; one lock across them all.
+        services.TryAddSingleton<Events.EventBroadcaster<Events.SeriesChanged>>();
+        services.TryAddSingleton<Series.SeriesRegistryLock>();
+        services.AddScoped<Series.SeriesRegistry>();
         services.AddOptions<Mutations.BookMutationOptions>();
         services.TryAddSingleton<Events.EventBroadcaster<Mutations.BookMutationReceipt>>();
         services.AddScoped<Mutations.BookMutations>();

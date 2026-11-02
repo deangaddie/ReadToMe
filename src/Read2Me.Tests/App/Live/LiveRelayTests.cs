@@ -40,6 +40,7 @@ public class LiveRelayTests : IAsyncLifetime
     private readonly EventBroadcaster<HistoryStepEvent> _history = new();
     private readonly EventBroadcaster<RestoreEvent> _restores = new();
     private readonly EventBroadcaster<SettingsChanged> _settings = new();
+    private readonly EventBroadcaster<SeriesChanged> _series = new();
     private readonly ProjectActivity _activity = NeverBusy.Activity();
     private readonly CharacterQueueService _attribution;
     private readonly AudioQueueService _audio;
@@ -65,7 +66,7 @@ public class LiveRelayTests : IAsyncLifetime
         var status = new ProjectStatusSource(_nodes, _attribution, _audio, _reviews, new BookRevisionSequence());
 
         _relay = new LiveRelay(_hub, _registry, status, _llm, _audioGen, _assembly, _voiceBatch, _watchdog, _serviceStatus, _receipts, _history, _restores,
-            _settings, _attribution, _audio, _nodes, _reviews, progress, assemblyService, batchRunner, throughput,
+            _settings, _series, _attribution, _audio, _nodes, _reviews, progress, assemblyService, batchRunner, throughput,
             new ProjectBusyAnswer(_attribution, _audio, batchRunner, assemblyService), NullLogger<LiveRelay>.Instance);
         await _relay.StartAsync(CancellationToken.None);
     }
@@ -308,6 +309,32 @@ public class LiveRelayTests : IAsyncLifetime
         Assert.Equal("recoveryStarted", snapshot.Watchdog["llama"]);
         Assert.False(snapshot.Assembly.IsRunning);
         Assert.Empty(snapshot.Projects);
+    }
+
+    /// <summary>
+    /// A series signal is debounced per series (250 ms): a burst of registry writes is one re-read
+    /// signal, and a delete inside the window wins over the changes before it.
+    /// </summary>
+    [Fact]
+    public async Task Series_changes_are_debounced_per_series_to_the_global_group()
+    {
+        var holmes = Guid.NewGuid();
+        var other = Guid.NewGuid();
+        _series.Publish(new SeriesChanged(holmes, SeriesChangeKind.Changed));
+        _series.Publish(new SeriesChanged(holmes, SeriesChangeKind.Changed));
+        _series.Publish(new SeriesChanged(other, SeriesChangeKind.Changed));
+        _series.Publish(new SeriesChanged(holmes, SeriesChangeKind.Changed));
+        _series.Publish(new SeriesChanged(other, SeriesChangeKind.Deleted));
+
+        await WaitForAsync(() => _hub.Method("series").Count == 2);
+        await Task.Delay(400);
+
+        var sent = _hub.Method("series");
+        Assert.All(sent, s => Assert.Equal("global", s.Target));
+        Assert.Equal(
+            new[] { new SeriesMessage(holmes, SeriesChangeKind.Changed), new SeriesMessage(other, SeriesChangeKind.Deleted) }
+                .OrderBy(m => m.SeriesId),
+            sent.Select(s => Assert.IsType<SeriesMessage>(s.Payload)).OrderBy(m => m.SeriesId));
     }
 
     private static QueuedParagraph Paragraph(ProjectFolderId folder) =>

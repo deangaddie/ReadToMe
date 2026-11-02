@@ -94,6 +94,7 @@ Server → client, method name = event family, payload carries `kind`:
 | `llm`, `audioGen` | stream events (control + batched deltas / phase events; `audioGen` `modelLoading` carries an all-zero (`Guid.Empty`) id — the TTS gate sits below any item) | stream group |
 | `throughput` | `ThroughputSnapshot` once a second while a run is active | everyone |
 | `settingsChanged` | `{ area }` | everyone |
+| `series` | `{ seriesId, kind: Changed \| Deleted }`, debounced 250 ms per series: read `/api/series` again | everyone |
 
 A voice's Reference Limit state (`context/voice-rules.md`) reaches the page from `VoiceDto` or a live `voiceUpdated`; the voice card and the voice editor show `referenceWarning` as a warn chip labelled with `referenceSeconds`, and the voice-design sample-text card counts against the API's `maxLength`.
 

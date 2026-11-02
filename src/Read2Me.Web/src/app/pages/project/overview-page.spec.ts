@@ -30,6 +30,7 @@ const DETAIL: ProjectDetailDto = {
   fileType: 'Epub',
   coverImage: null,
   narratorOnlyMode: true,
+  series: null,
   narrator: { characterId: 'w', displayName: 'Watson', isLinked: true },
 };
 

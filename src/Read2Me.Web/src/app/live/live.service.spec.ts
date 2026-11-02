@@ -260,6 +260,7 @@ describe('LiveService', () => {
         'preflight',
         'queue',
         'receipt',
+        'series',
         'serviceStatus',
         'settingsChanged',
         'setupCheck',

@@ -1,0 +1,58 @@
+using System.Globalization;
+
+namespace Read2Me.Services.Series
+{
+    /// <summary>How the API answers a refusal (#213): a malformed request (400), something unknown (404), a state refusal (409), or a domain failure (422).</summary>
+    public enum SeriesRefusalKind
+    {
+        Malformed,
+        NotFound,
+        Blocked,
+        Failed,
+    }
+
+    /// <summary>Why a registry call was refused, with the <see cref="Detail"/> that names the thing.</summary>
+    public sealed record SeriesRefusal(SeriesRefusalKind Kind, string Detail)
+    {
+        public static readonly SeriesRefusal BlankName = new(SeriesRefusalKind.Malformed, "Series name cannot be blank.");
+        public static readonly SeriesRefusal UnknownSeries = new(SeriesRefusalKind.NotFound, "No such series.");
+        public static readonly SeriesRefusal OutOfDate = new(SeriesRefusalKind.Blocked,
+            "The series' books have changed since its positions were read: read the series again.");
+        public static readonly SeriesRefusal Unreadable = new(SeriesRefusalKind.Failed, "The series' registry could not be read.");
+        public static readonly SeriesRefusal RulesUnchecked = new(SeriesRefusalKind.Failed,
+            "A series registry in the Workspace could not be read, so names and memberships can't be checked.");
+        public static readonly SeriesRefusal MemberUnreadable = new(SeriesRefusalKind.Failed,
+            "A book in this series could not be read, so its positions can't be saved.");
+
+        public static SeriesRefusal UnknownFolder(string folder) => new(SeriesRefusalKind.NotFound, $"No project '{folder}'.");
+
+        public static SeriesRefusal NotAMember(string title, string series) =>
+            new(SeriesRefusalKind.NotFound, $"'{title}' is not in the series '{series}'.");
+
+        public static SeriesRefusal NameTaken(string holder) =>
+            new(SeriesRefusalKind.Blocked, $"There is already a series called '{holder}'.");
+
+        public static SeriesRefusal InAnotherSeries(string title, string series) =>
+            new(SeriesRefusalKind.Blocked, $"'{title}' is already in the series '{series}'. Move it to join this one.");
+
+        public static SeriesRefusal MalformedPosition(string folder, decimal position) =>
+            new(SeriesRefusalKind.Malformed,
+                $"Position {position.ToString(CultureInfo.InvariantCulture)} for '{folder}' must be 0 or more, with at most two decimal places.");
+
+        public static SeriesRefusal Tie(string first, string second, decimal position) =>
+            new(SeriesRefusalKind.Blocked,
+                $"'{first}' and '{second}' are both Book {position.ToString(CultureInfo.InvariantCulture)}: two books can't share a number.");
+    }
+
+    /// <summary>A registry call's value, or why it was refused.</summary>
+    public readonly struct SeriesResult<T>
+    {
+        private SeriesResult(T? value, SeriesRefusal? refusal) => (Value, Refusal) = (value, refusal);
+
+        public T? Value { get; }
+        public SeriesRefusal? Refusal { get; }
+
+        public static implicit operator SeriesResult<T>(T value) => new(value, null);
+        public static implicit operator SeriesResult<T>(SeriesRefusal refusal) => new(default, refusal);
+    }
+}

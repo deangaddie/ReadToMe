@@ -21,7 +21,7 @@ a number (`"3"`), is a 400 too.
 
 **Errors**: every non-2xx is an RFC 7807 ProblemDetails (`application/problem+json`),
 declared once as the `default` response of every operation in the document rather than
-per status. 400 malformed input, 404 unknown folder/entity, 409 already-running or blocked
+per status. 400 malformed input, 404 unknown folder/entity, 409 already-running, blocked or refused by state (e.g. a series name taken)
 (assembly carries `audioRemainingCount`), 422 domain failure (message in `detail`).
 
 **Polling pattern**: the four long operations (attribution, audio, voice batch,
@@ -303,6 +303,34 @@ curl -s -X DELETE http://localhost:5000/api/projects/{folder}          # → 204
 
 The cover is served at `/workspace/{folder}/{coverImage}`; `GET /api/projects` lists
 `coverImage` and `fileType` (`Epub` | `Text`) per project alongside the audio counters.
+`GET /api/projects` and `GET /api/projects/{folder}` also carry `series: { seriesId, name, position } | null`.
+
+### Series
+
+A **Series** groups existing projects, each at a typed **Series position** (`context/series.md`, ADR 0018).
+The registry is `{workspace}/.series/{id}/series.db`; books are addressed by folder. Registry writes change no
+project: they make no History step and ignore `X-Origin-Id`, and each sends the `series` hub signal instead.
+
+```bash
+curl -s http://localhost:5000/api/series        # [{ id, name, books: [{ folder, position }] }], books in position order
+curl -s -X POST http://localhost:5000/api/series -H 'content-type: application/json' \
+  -d '{ "name": "Sherlock Holmes", "folder": "a-study-in-scarlet" }'   # → 201 { id }; with folder, that book is Book 1
+curl -s -X PATCH http://localhost:5000/api/series/{id} -H 'content-type: application/json' -d '{ "name": "Holmes" }'   # → the series
+curl -s -X PUT http://localhost:5000/api/series/{id}/books/{folder} -H 'content-type: application/json' -d '{}'   # join → { position }
+curl -s -X PUT http://localhost:5000/api/series/{id}/books/{folder} -H 'content-type: application/json' -d '{ "move": true }'   # Move to
+curl -s -X DELETE http://localhost:5000/api/series/{id}/books/{folder}   # leave → 204
+curl -s -X PUT http://localhost:5000/api/series/{id}/positions -H 'content-type: application/json' \
+  -d '{ "positions": { "a-study-in-scarlet": 1, "the-sign-of-the-four": 2 } }'   # the whole set → the series
+curl -s -X DELETE http://localhost:5000/api/series/{id}           # → 204; every book keeps its Voices
+```
+
+Names are trimmed, can't be blank (400) and are unique in the Workspace ignoring case (409). A position is 0 or
+more with at most two decimals (else 400). A joining book gets the next whole number after the series' highest
+(an empty series → 1; joining again answers its position); nothing is ever renumbered, and an empty series stays
+until deleted. A book in another series is 409 naming it unless `move` is true. The position set's keys must be
+exactly the members (else 409, out of date), and a tie is 409 naming both books. 404: unknown series or folder, or
+a book not in the series. Deleting a project removes its registry entry; a folder gone outside the app is dropped
+the next time its series is read.
 
 Where the project stands, in one read:
 
@@ -824,6 +852,7 @@ multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.A
 | server → client | `bookEdit` | one AI book-edit proposal run (`progress`, `done`, `failed`), sent only to the `connectionId` that started it; `done` carries every row it landed, and `cancelled` says whether a cancel cut it short |
 | server → client | `serviceStatus` | `{ name, status, op?, ok?, error? }` — a managed service's last observed `AiServiceStatus`, after every probe, lifecycle op (then `op` names it with its outcome) and watchdog transition; everyone |
 | server → client | `preflight` | one pre-flight run (`stage` with `name` + `stage` + `error?`, then `done` with `ok` + `reason?`), sent only to the `connectionId` that started it; every message carries the `run` id the 202 answered |
+| server → client | `series` | `{ seriesId, kind: Changed \| Deleted }`, a "read again" signal with no payload, debounced 250 ms per series, sent on every registry write; everyone |
 | server → client | `setupCheck` | the Setup check's Full check: `progress` then `done`, each carrying the whole `report` (the current step's rows `checking`, `fullRun` where the run is; null on `done`); sent to every client |
 
 Invalid folders and unknown stream kinds fail the invocation with a `HubException`. Node status is
