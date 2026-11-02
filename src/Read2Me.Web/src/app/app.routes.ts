@@ -142,6 +142,13 @@ export const routes: RouteDef[] = [
       },
     ],
   },
+  // PROTOTYPE — series character linking (#208, throwaway branch).
+  {
+    path: 'series-cast',
+    title: 'Series cast (prototype)',
+    tag: 'r2m-proto-series-cast',
+    load: () => import('@app/prototype/series-cast/proto-views'),
+  },
   {
     path: '*',
     title: 'Not found',
