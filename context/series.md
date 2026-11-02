@@ -4,7 +4,7 @@ Use these terms exactly in code, tests, and discussion.
 
 - **Series** — a named, ordered group of book projects in one Workspace, with an optional **poster**. Each book stays its own project, with its own folder, book, Characters and History; the series only groups them. A project is in at most one series, and series don't nest.
   _Avoid_: "collection", "saga", "universe" (no nesting)
-- **Series position** — a book's place in its series, set by the user and shown as "Book N". Never parsed from the title.
+- **Series position** — a book's number in its series, typed by the user and shown as "Book N": 0 or more, with up to two decimal places, so a novella between two books can be "Book 1.5". No two books in a series share a number; gaps are allowed. Never parsed from the title.
   _Avoid_: "book number" for a number read from the title
 - **Poster** — the series' picture on the Projects page. Uploaded by the user; without one, the cover of the book at the lowest Series position is shown.
   _Avoid_: "cover" (a single book's picture, exported into its m4b)
