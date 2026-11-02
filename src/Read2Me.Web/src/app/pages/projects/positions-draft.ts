@@ -26,6 +26,16 @@ export function draftRows(series: SeriesView): DraftRow[] {
   }));
 }
 
+/**
+ * The draft after the series was read again (another tab joined, left or renumbered): the rows
+ * follow the members, a book still there keeps what was typed for it, a new one starts at its
+ * saved number. Without this the set would be out of date and the host would refuse it.
+ */
+export function rebaseDraft(rows: DraftRow[], series: SeriesView): DraftRow[] {
+  const typed = new Map(rows.map((r) => [r.folder, r.text]));
+  return draftRows(series).map((r) => ({ ...r, text: typed.get(r.folder) ?? r.text }));
+}
+
 /** The first problem with the set (a bad format, then a tie naming both books), or null. */
 export function positionsProblem(rows: DraftRow[]): string | null {
   const seen = new Map<number, string>();

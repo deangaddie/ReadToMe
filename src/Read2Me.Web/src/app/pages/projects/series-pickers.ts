@@ -8,6 +8,20 @@ import pickersCss from './series-pickers.css' with { type: 'text' };
 
 adoptStyles(pickersCss);
 
+export interface SeriesPickerData {
+  book: { folder: string; title: string };
+  /** Every series, sorted by name. */
+  series: SeriesView[];
+  membership: ReadonlyMap<string, Membership>;
+}
+
+export interface BookPickerData {
+  /** The series the book joins. */
+  target: SeriesView;
+  projects: ProjectSummary[];
+  membership: ReadonlyMap<string, Membership>;
+}
+
 /** What Add to series… picked: a series, or New series. */
 export type SeriesPick = { seriesId: string } | { newSeries: true };
 
@@ -27,16 +41,14 @@ const cancel = (close: () => void) =>
  * asks first. Closes with a {@link SeriesPick}, or undefined on Cancel.
  */
 export class SeriesPicker extends R2mElement {
-  book!: { folder: string; title: string };
-  /** Every series, sorted by name. */
-  series: SeriesView[] = [];
-  membership = new Map<string, Membership>();
+  data!: SeriesPickerData;
 
   protected template() {
-    const current = this.membership.get(this.book.folder);
-    const options = this.series.filter((s) => s.id !== current?.seriesId);
+    const { book, series, membership } = this.data;
+    const current = membership.get(book.folder);
+    const options = series.filter((s) => s.id !== current?.seriesId);
     return html`
-      <h2 class="r2m-dialog__title">Add ${this.book.title} to a series</h2>
+      <h2 class="r2m-dialog__title">Add ${book.title} to a series</h2>
       <div class="r2m-dialog__content series-picker">
         ${
           current
@@ -80,18 +92,17 @@ define('r2m-series-picker', SeriesPicker);
  * another series" (moving asks first). Closes with the picked folder, or undefined on Cancel.
  */
 export class BookPicker extends R2mElement {
-  target!: SeriesView;
-  projects: ProjectSummary[] = [];
-  membership = new Map<string, Membership>();
+  data!: BookPickerData;
 
   protected template() {
-    const candidates = this.projects
-      .filter((p) => this.membership.get(p.folderName)?.seriesId !== this.target.id)
+    const { target, projects, membership } = this.data;
+    const candidates = projects
+      .filter((p) => membership.get(p.folderName)?.seriesId !== target.id)
       .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
-    const loose = candidates.filter((p) => !this.membership.has(p.folderName));
-    const elsewhere = candidates.filter((p) => this.membership.has(p.folderName));
+    const loose = candidates.filter((p) => !membership.has(p.folderName));
+    const elsewhere = candidates.filter((p) => membership.has(p.folderName));
     const row = (p: ProjectSummary) => {
-      const where = this.membership.get(p.folderName);
+      const where = membership.get(p.folderName);
       return html`<button
         type="button"
         class="series-picker__row"
@@ -116,16 +127,16 @@ export class BookPicker extends R2mElement {
             ${books.map(row)}`
         : nothing;
     return html`
-      <h2 class="r2m-dialog__title">Add a book to ${this.target.name}</h2>
+      <h2 class="r2m-dialog__title">Add a book to ${target.name}</h2>
       <div class="r2m-dialog__content series-picker">
         ${
           candidates.length === 0
             ? html`<p class="book-picker__empty">
-                Every book in the workspace is already in ${this.target.name}.
+                Every book in the workspace is already in ${target.name}.
               </p>`
             : html`<p class="book-picker__note">
-                  It joins as ${bookLabel(nextPosition(this.target))}; edit the number afterwards if
-                  it belongs elsewhere.
+                  It joins as ${bookLabel(nextPosition(target))}; edit the number afterwards if it
+                  belongs elsewhere.
                 </p>
                 ${group('Not in a series', loose)} ${group('In another series', elsewhere)}`
         }

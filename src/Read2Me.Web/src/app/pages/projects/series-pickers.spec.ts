@@ -46,9 +46,8 @@ const rowText = (el: HTMLElement, selector: string) =>
 describe('r2m-series-picker', () => {
   async function mount(folder: string, title: string) {
     const el = document.createElement('r2m-series-picker') as SeriesPicker;
-    el.book = { folder, title };
-    el.series = [austen, ozBooks, holmes];
-    el.membership = membershipOf(el.series);
+    const series = [austen, ozBooks, holmes];
+    el.data = { book: { folder, title }, series, membership: membershipOf(series) };
     document.body.append(el);
     await el.rendered();
     return el;
@@ -87,9 +86,7 @@ describe('r2m-series-picker', () => {
 describe('r2m-book-picker', () => {
   async function mount(target: SeriesView, projects: ProjectSummary[]) {
     const el = document.createElement('r2m-book-picker') as BookPicker;
-    el.target = target;
-    el.projects = projects;
-    el.membership = membershipOf([holmes, ozBooks, austen]);
+    el.data = { target, projects, membership: membershipOf([holmes, ozBooks, austen]) };
     document.body.append(el);
     await el.rendered();
     return el;

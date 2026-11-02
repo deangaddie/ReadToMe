@@ -4,7 +4,7 @@ import { type ProjectSummary, toApiError } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
-import { signal } from '@app/core/signals';
+import { signal, untracked } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import { ConfirmService } from '@app/ui/dialogs';
 import { menuItem } from '@app/ui/menu';
@@ -17,12 +17,13 @@ import {
   draftPositions,
   draftRows,
   positionsProblem,
+  rebaseDraft,
   saveBlockedReason,
 } from './positions-draft';
 import { ProjectsStore } from './projects-store';
 import { SeriesActions } from './series-actions';
 import { seriesCard, seriesPanel } from './series-card';
-import { deleteProjectConfirm } from './series-confirms';
+import { deleteProjectConfirm } from './permanent-changes';
 import {
   bookLabel,
   type Membership,
@@ -38,6 +39,13 @@ adoptStyles(projectsCss);
 const SKELETONS = [0, 1, 2, 3, 4, 5];
 
 export type ProjectsView = 'books' | 'series';
+
+/** What every book card reads, taken once per render. */
+interface CardState {
+  /** Folder of the project whose delete is in flight. */
+  deleting: string | null;
+  membership: ReadonlyMap<string, Membership>;
+}
 
 /** The Books / Series toggle, remembered per browser (#207, 1). */
 const VIEW_KEY = 'r2m.projects.view';
@@ -73,14 +81,21 @@ export class ProjectsPage extends R2mElement {
   /** Edit book numbers: the open series' draft, while it is on. */
   private readonly draft = signal<{ seriesId: string; rows: DraftRow[] } | null>(null);
   private readonly saving = signal(false);
-  /** Read once per render in {@link template}, so cards built inside `repeat` stay tracked. */
-  private membership: ReadonlyMap<string, Membership> = new Map();
   /** Columns in the Series grid, measured after each render and on resize. */
   private readonly columns = signal(1);
 
   protected override connected(): void {
     this.classList.add('projects');
     this.onDisconnect(this.store.follow());
+    // A re-read (this tab's write or the hub's series signal) rebases an open number draft, so it
+    // never saves a stale set; a deleted series drops it.
+    this.effect(() => {
+      const series = this.store.series();
+      const draft = untracked(() => this.draft());
+      if (!draft) return;
+      const open = series.find((s) => s.id === draft.seriesId);
+      this.draft.set(open ? { seriesId: open.id, rows: rebaseDraft(draft.rows, open) } : null);
+    });
     if (typeof ResizeObserver !== 'undefined') {
       const observer = new ResizeObserver(() => this.measure());
       observer.observe(this);
@@ -114,7 +129,8 @@ export class ProjectsPage extends R2mElement {
   protected template() {
     const error = this.store.error();
     const view = this.view();
-    this.membership = this.store.membership();
+    // Read here, not inside `repeat`'s item templates, so the cards stay tracked (web.md, Gotchas).
+    const cards: CardState = { deleting: this.deleting(), membership: this.store.membership() };
     return html`
       <header class="r2m-page-header projects__header">
         <h1 class="r2m-page-header__title">Projects</h1>
@@ -167,8 +183,8 @@ export class ProjectsPage extends R2mElement {
         this.store.loading() && !this.store.loaded()
           ? this.skeletons()
           : view === 'books'
-            ? this.booksView(error)
-            : this.seriesView()
+            ? this.booksView(error, cards)
+            : this.seriesView(cards)
       }
     `;
   }
@@ -186,7 +202,7 @@ export class ProjectsPage extends R2mElement {
     </div>`;
   }
 
-  private booksView(error: string | null) {
+  private booksView(error: string | null, cards: CardState) {
     const projects = this.store.projects();
     if (projects.length === 0 && !error)
       return emptyState(
@@ -197,15 +213,13 @@ export class ProjectsPage extends R2mElement {
         },
         [{ label: 'New project', icon: 'add', run: () => void this.create() }],
       );
-    const membership = this.membership;
-    const deleting = this.deleting();
     return html`<div class="projects__grid">
       ${repeat(
         projects,
         (p) => p.folderName,
         (p) => {
-          const m = membership.get(p.folderName);
-          return this.bookCard(p, deleting, {
+          const m = cards.membership.get(p.folderName);
+          return this.bookCard(p, cards, {
             seriesLine: m ? `${m.name} · ${bookLabel(m.position)}` : undefined,
           });
         },
@@ -213,14 +227,13 @@ export class ProjectsPage extends R2mElement {
     </div>`;
   }
 
-  private seriesView() {
+  private seriesView(cards: CardState) {
     const items = this.store.shelf();
     const series = this.store.series();
     const openId = this.openSeries();
     const openIndex = items.findIndex((i) => i.kind === 'series' && i.series.id === openId);
     const after = panelAfter(items.length, openIndex, this.columns());
     const open = series.find((s) => s.id === openId);
-    const deleting = this.deleting();
     const draft = this.draft();
     const saving = this.saving();
     const empty =
@@ -253,14 +266,14 @@ export class ProjectsPage extends R2mElement {
                         onRename: () => void this.actions.rename(item.series),
                         onDelete: () => void this.deleteSeries(item.series),
                       })
-                    : this.bookCard(item.project, deleting)
+                    : this.bookCard(item.project, cards)
                 }${
                   i === after && open
                     ? this.panel(
                         open,
                         draft?.seriesId === open.id ? draft.rows : null,
                         saving,
-                        deleting,
+                        cards,
                       )
                     : nothing
                 }`,
@@ -270,12 +283,7 @@ export class ProjectsPage extends R2mElement {
     }`;
   }
 
-  private panel(
-    series: SeriesView,
-    rows: DraftRow[] | null,
-    saving: boolean,
-    deleting: string | null,
-  ) {
+  private panel(series: SeriesView, rows: DraftRow[] | null, saving: boolean, cards: CardState) {
     return seriesPanel(series, {
       editing: rows
         ? { blocked: saveBlockedReason(rows), problem: positionsProblem(rows), saving }
@@ -285,7 +293,7 @@ export class ProjectsPage extends R2mElement {
       onSave: () => void this.saveNumbers(series),
       onAddBook: () => void this.actions.addBook(series),
       book: (member: SeriesMember) =>
-        this.bookCard(member.project, deleting, {
+        this.bookCard(member.project, cards, {
           badge: rows ? undefined : bookLabel(member.position),
           extra: rows ? this.numberBox(member, rows) : undefined,
         }),
@@ -310,10 +318,10 @@ export class ProjectsPage extends R2mElement {
 
   private bookCard(
     project: ProjectSummary,
-    deleting: string | null,
+    cards: CardState,
     options: { seriesLine?: string | undefined; badge?: string | undefined; extra?: unknown } = {},
   ) {
-    const m = this.membership.get(project.folderName);
+    const m = cards.membership.get(project.folderName);
     const entries = m
       ? html`${menuItem({
           label: 'Move to another series…',
@@ -335,7 +343,7 @@ export class ProjectsPage extends R2mElement {
     return projectCard(project, {
       onOpen: () => this.open(project),
       onDelete: () => void this.delete(project),
-      deleting: deleting === project.folderName,
+      deleting: cards.deleting === project.folderName,
       menuEntries: entries,
       ...options,
     });
