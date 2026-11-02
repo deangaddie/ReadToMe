@@ -378,80 +378,80 @@ function boardB() {
         ${scs.map(
           (sc) =>
             html`<tr class=${S.isEditing(sc.id) ? 'sx-tr--open' : ''}>
-              <th scope="row">
-                <button
-                  type="button"
-                  class="sx-rowhead"
-                  aria-expanded=${S.isEditing(sc.id)}
-                  @click=${() => S.toggleEditing(sc.id)}
-                >
-                  ${icon(S.isEditing(sc.id) ? 'expand_less' : 'expand_more')} ${sc.label}
-                  <span class="sx-muted sx-small"
-                    >${S.seriesVoices(sc.id).voices.length} Voices</span
+                <th scope="row">
+                  <button
+                    type="button"
+                    class="sx-rowhead"
+                    aria-expanded=${S.isEditing(sc.id)}
+                    @click=${() => S.toggleEditing(sc.id)}
                   >
-                </button>
-              </th>
-              ${books.map((b) => {
-                const linked = b.characters.find((c) => c.link === sc.id);
-                if (linked)
-                  return html`<td>
-                    <span class="sx-cell"
-                      >${icon('link')} ${linked.name}
-                      ${S.differs(b.folder, linked) ? html`<span class="sx-chip sx-chip--warn" data-tooltip="Differs from series">${icon('sync_problem')}</span>` : nothing}
+                    ${icon(S.isEditing(sc.id) ? 'expand_less' : 'expand_more')} ${sc.label}
+                    <span class="sx-muted sx-small"
+                      >${S.seriesVoices(sc.id).voices.length} Voices</span
+                    >
+                  </button>
+                </th>
+                ${books.map((b) => {
+                  const linked = b.characters.find((c) => c.link === sc.id);
+                  if (linked)
+                    return html`<td>
+                      <span class="sx-cell"
+                        >${icon('link')} ${linked.name}
+                        ${S.differs(b.folder, linked) ? html`<span class="sx-chip sx-chip--warn" data-tooltip="Differs from series">${icon('sync_problem')}</span>` : nothing}
+                        <button
+                          type="button"
+                          class="r2m-icon-button sx-cell__x"
+                          aria-label=${`Unlink ${linked.name}`}
+                          @click=${() => void unlink(b.folder, linked)}
+                        >
+                          ${icon('close')}
+                        </button>
+                      </span>
+                    </td>`;
+                  const sugg = S.suggestionsFor(b.folder).find((s) => s.sc.id === sc.id);
+                  if (sugg)
+                    return html`<td class="sx-td--sugg">
+                      ${icon('auto_awesome')} ${sugg.character.name}?
                       <button
                         type="button"
-                        class="r2m-icon-button sx-cell__x"
-                        aria-label=${`Unlink ${linked.name}`}
-                        @click=${() => void unlink(b.folder, linked)}
+                        class="r2m-button"
+                        @click=${() => void linkTo(b.folder, sugg.character, sc.id)}
+                      >
+                        Link
+                      </button>
+                      <button
+                        type="button"
+                        class="r2m-icon-button"
+                        aria-label="Not the same"
+                        @click=${() => S.dismiss(b.folder, sugg.character.id)}
                       >
                         ${icon('close')}
                       </button>
-                    </span>
-                  </td>`;
-                const sugg = S.suggestionsFor(b.folder).find((s) => s.sc.id === sc.id);
-                if (sugg)
-                  return html`<td class="sx-td--sugg">
-                    ${icon('auto_awesome')} ${sugg.character.name}?
-                    <button
-                      type="button"
-                      class="r2m-button"
-                      @click=${() => void linkTo(b.folder, sugg.character, sc.id)}
+                    </td>`;
+                  return html`<td>
+                    <select
+                      class="sx-select"
+                      aria-label=${`Link a ${b.title} Character to ${sc.label}`}
+                      @change=${(e: Event) => {
+                        const id = (e.target as HTMLSelectElement).value;
+                        (e.target as HTMLSelectElement).value = '';
+                        const c = b.characters.find((x) => x.id === id);
+                        if (c) void linkTo(b.folder, c, sc.id);
+                      }}
                     >
-                      Link
-                    </button>
-                    <button
-                      type="button"
-                      class="r2m-icon-button"
-                      aria-label="Not the same"
-                      @click=${() => S.dismiss(b.folder, sugg.character.id)}
-                    >
-                      ${icon('close')}
-                    </button>
+                      <option value="">— link…</option>
+                      ${b.characters.filter((x) => !x.link).map((x) => html`<option value=${x.id}>${x.name}</option>`)}
+                    </select>
                   </td>`;
-                return html`<td>
-                  <select
-                    class="sx-select"
-                    aria-label=${`Link a ${b.title} Character to ${sc.label}`}
-                    @change=${(e: Event) => {
-                      const id = (e.target as HTMLSelectElement).value;
-                      (e.target as HTMLSelectElement).value = '';
-                      const c = b.characters.find((x) => x.id === id);
-                      if (c) void linkTo(b.folder, c, sc.id);
-                    }}
-                  >
-                    <option value="">— link…</option>
-                    ${b.characters.filter((x) => !x.link).map((x) => html`<option value=${x.id}>${x.name}</option>`)}
-                  </select>
-                </td>`;
-              })}
-            </tr>
-            ${
-              S.isEditing(sc.id)
-                ? html`<tr class="sx-tr-editor">
-                    <td colspan=${books.length + 1}>${seriesVoiceEditor(sc.id)}</td>
-                  </tr>`
-                : nothing
-            }`,
+                })}
+              </tr>
+              ${
+                S.isEditing(sc.id)
+                  ? html`<tr class="sx-tr-editor">
+                      <td colspan=${books.length + 1}>${seriesVoiceEditor(sc.id)}</td>
+                    </tr>`
+                  : nothing
+              }`,
         )}
       </tbody>
     </table>

@@ -73,6 +73,7 @@ function holmesBooks(s: Scenario): { books: Book[]; series: SeriesCharacter[] } 
     v('v-watson-1', 'Warm narrator', 'Steady, kindly, a little weary'),
     v('v-watson-2', 'Watson, alarmed', 'Breathless, higher, faster'),
   ];
+  const narratorV = [v('v-narr', 'Even narrator', 'Unhurried, Victorian, faintly dry')];
   const lestradeV = [v('v-lestrade-1', 'Sharp Londoner', 'Terse, ferrety, defensive')];
   const linked = s !== 'joined';
   const ch = (
@@ -97,7 +98,7 @@ function holmesBooks(s: Scenario): { books: Book[]; series: SeriesCharacter[] } 
     title: 'A Study in Scarlet',
     position: 1,
     characters: [
-      ch('c1-narr', 'Narrator', [], 812, [v('v-n1', 'Narrator', 'Even, unhurried')], null),
+      ch('c1-narr', 'Narrator', [], 812, narratorV, 'sc-narrator'),
       ch('c1-holmes', 'Sherlock Holmes', ['Holmes', 'Mr. Holmes'], 402, holmesV, 'sc-holmes'),
       ch(
         'c1-watson',
@@ -127,7 +128,16 @@ function holmesBooks(s: Scenario): { books: Book[]; series: SeriesCharacter[] } 
     title: 'The Sign of the Four',
     position: 2,
     characters: [
-      ch('c2-narr', 'Narrator', [], 760, [v('v-n2', 'Narrator', 'Even, unhurried')], null),
+      linked
+        ? ch('c2-narr', 'Narrator', [], 760, narratorV, 'sc-narrator')
+        : ch(
+            'c2-narr',
+            'Narrator',
+            [],
+            760,
+            [v('v-n2', 'Default narrator', 'Neutral, made at import')],
+            null,
+          ),
       linked
         ? ch('c2-holmes', 'Sherlock Holmes', ['Holmes'], 377, holmesV, 'sc-holmes')
         : ch(
@@ -198,7 +208,7 @@ function holmesBooks(s: Scenario): { books: Book[]; series: SeriesCharacter[] } 
     title: 'The Adventures of Sherlock Holmes',
     position: 3,
     characters: [
-      ch('c3-narr', 'Narrator', [], 1500, [v('v-n3', 'Narrator', 'Even, unhurried')], null),
+      ch('c3-narr', 'Narrator', [], 1500, narratorV, 'sc-narrator'),
       ch('c3-holmes', 'Holmes', ['Sherlock Holmes'], 920, holmesV, 'sc-holmes'),
       ch('c3-watson', 'Watson', ['Dr. Watson', 'Doctor'], 610, watsonV, 'sc-watson'),
       ch('c3-lestrade', 'Inspector Lestrade', ['Lestrade'], 40, lestradeV, 'sc-lestrade'),
@@ -215,6 +225,7 @@ function holmesBooks(s: Scenario): { books: Book[]; series: SeriesCharacter[] } 
   return {
     books: [book1, book2, book3],
     series: [
+      { id: 'sc-narrator', label: 'Narrator' },
       { id: 'sc-holmes', label: 'Sherlock Holmes' },
       { id: 'sc-watson', label: 'John Watson' },
       { id: 'sc-lestrade', label: 'Lestrade' },
@@ -290,7 +301,7 @@ export function suggestionsFor(
   const b = bookByFolder(folder);
   const out: { character: Character; sc: SeriesCharacter; via: string }[] = [];
   for (const c of b.characters) {
-    if (c.link || c.name === 'Narrator' || dismissed().has(`${folder}|${c.id}`)) continue;
+    if (c.link || dismissed().has(`${folder}|${c.id}`)) continue;
     for (const sc of seriesChars()) {
       if (b.characters.some((x) => x.link === sc.id)) continue;
       const hit = linkedPairs(sc.id).find((p) =>
