@@ -488,7 +488,13 @@ export function take(folder: string, characterId: string): void {
 // --- Series Voice editor (variant B, after feedback) ------------------------------------------
 
 /** The series character open in the board's Voice editor. */
-export const editing = signal<string | null>(null);
+export const editing = signal<ReadonlySet<string>>(new Set());
+export const isEditing = (id: string) => editing().has(id);
+export function toggleEditing(id: string): void {
+  const next = new Set(editing());
+  if (!next.delete(id)) next.add(id);
+  editing.set(next);
+}
 
 /** The series' Voices: the copy in the lowest-positioned linked book that doesn't differ. */
 export function seriesVoices(scId: string): { voices: Voice[]; from: Book | null } {

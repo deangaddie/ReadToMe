@@ -433,3 +433,10 @@ li:last-child .sx-row {
 .sx-vtable td {
   vertical-align: top;
 }
+.sx-tr-editor > td {
+  padding: 0 0 var(--r2m-space-3) var(--r2m-space-5, 24px) !important;
+  background: color-mix(in srgb, var(--r2m-accent) 8%, transparent);
+}
+.sx-tr--open > * {
+  border-bottom: 0 !important;
+}

@@ -377,15 +377,15 @@ function boardB() {
       <tbody>
         ${scs.map(
           (sc) =>
-            html`<tr class=${S.editing() === sc.id ? 'sx-tr--open' : ''}>
+            html`<tr class=${S.isEditing(sc.id) ? 'sx-tr--open' : ''}>
               <th scope="row">
                 <button
                   type="button"
                   class="sx-rowhead"
-                  aria-expanded=${S.editing() === sc.id}
-                  @click=${() => S.editing.set(S.editing() === sc.id ? null : sc.id)}
+                  aria-expanded=${S.isEditing(sc.id)}
+                  @click=${() => S.toggleEditing(sc.id)}
                 >
-                  ${icon(S.editing() === sc.id ? 'expand_less' : 'expand_more')} ${sc.label}
+                  ${icon(S.isEditing(sc.id) ? 'expand_less' : 'expand_more')} ${sc.label}
                   <span class="sx-muted sx-small"
                     >${S.seriesVoices(sc.id).voices.length} Voices</span
                   >
@@ -444,11 +444,17 @@ function boardB() {
                   </select>
                 </td>`;
               })}
-            </tr>`,
+            </tr>
+            ${
+              S.isEditing(sc.id)
+                ? html`<tr class="sx-tr-editor">
+                    <td colspan=${books.length + 1}>${seriesVoiceEditor(sc.id)}</td>
+                  </tr>`
+                : nothing
+            }`,
         )}
       </tbody>
     </table>
-    ${S.editing() && S.seriesChars().some((x) => x.id === S.editing()) ? seriesVoiceEditor(S.editing()!) : nothing}
     <p class="sx-muted sx-small">
       To add a row, share a Character:
       <button
@@ -524,7 +530,7 @@ function seriesVoiceEditor(scId: string) {
         type="button"
         class="r2m-icon-button"
         aria-label="Close"
-        @click=${() => S.editing.set(null)}
+        @click=${() => S.toggleEditing(scId)}
       >
         ${icon('close')}
       </button>
