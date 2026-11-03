@@ -7,6 +7,7 @@ import { signal } from '@app/core/signals';
 import { blockable, emptyState, icon } from '@app/ui/partials';
 import { CastStore } from '../cast-store';
 import { openAddVoiceDialog } from './add-voice-dialog';
+import { seriesBoardPath } from '../cast-path';
 import './voice-card';
 
 /**
@@ -35,12 +36,24 @@ export class VoicesSection extends R2mElement {
     if (!character) return nothing;
     const voices = this.store.voices();
     const busy = this.store.busy();
-    const readOnly = this.store.readOnly();
+    const readOnly = this.store.voicesReadOnly();
+    const link = this.store.seriesEditor ? null : character.seriesLink;
     return html`
       <div class="voices-section__header">
         <h3 class="voices-section__heading">
           Voices <span class="voices-section__count">${voices.voices.length}</span>
         </h3>
+        ${
+          link
+            ? html`<a
+                class="r2m-button r2m-button--stroked"
+                data-action="edit-on-board"
+                href=${seriesBoardPath(link.seriesId, link.seriesCharacterId)}
+              >
+                ${icon('library_books')} Edit on the series cast board
+              </a>`
+            : nothing
+        }
         ${blockable(
           readOnly,
           html`<button

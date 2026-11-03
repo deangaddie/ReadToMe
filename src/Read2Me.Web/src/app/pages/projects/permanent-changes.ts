@@ -11,7 +11,7 @@ import { bookLabel, type Membership } from './series-shelf';
  */
 
 /** "A", "A and B", "A, B and C". */
-function list(names: readonly string[]): string {
+export function list(names: readonly string[]): string {
   if (names.length <= 1) return names.join('');
   return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
@@ -190,5 +190,26 @@ export function shareConfirm(input: {
     message: `A series character is made from the Voices of ${input.name} in ${input.title}.`,
     confirmLabel: 'Share as new',
     destructive: false,
+  };
+}
+
+/**
+ * Delete a shared Voice from the inline series Voice editor (#221), in red: it goes from every
+ * linked book, each of whose History can bring it back there only.
+ */
+export function deleteSeriesVoiceConfirm(
+  voiceName: string,
+  titles: readonly string[],
+): ConfirmOptions {
+  return {
+    title:
+      titles.length > 1
+        ? `Delete "${voiceName}" from ${titles.length} books?`
+        : `Delete "${voiceName}"?`,
+    message:
+      `It is removed from ${list(titles)}. Each book's History can bring it back in that book ` +
+      'only. A book whose default it is moves to its oldest remaining Voice.',
+    confirmLabel: 'Delete Voice',
+    destructive: true,
   };
 }

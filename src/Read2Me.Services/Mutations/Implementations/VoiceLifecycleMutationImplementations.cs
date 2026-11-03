@@ -555,3 +555,47 @@ public sealed class GainSeriesVoicesMutationImplementation : IBookMutationImplem
         return VoiceEffects.Exact(BookFacets.Voices | BookFacets.VoiceRules);
     }
 }
+
+/// <summary>
+/// Writes a shared Voice's whole state into this book (ADR 0018): added under its Id when absent
+/// (with the default rule when it is the Character's first Voice), every shared field overwritten
+/// when present. The Voice Rules stay this book's own.
+/// </summary>
+public sealed class CopySeriesVoiceMutationImplementation : IBookMutationImplementation<CopySeriesVoiceMutation>
+{
+    public async Task<BookMutationEffects> ApplyAsync(
+        CopySeriesVoiceMutation mutation, ProjectDbContext db, CancellationToken ct)
+    {
+        if (!await db.Characters.AnyAsync(c => c.Id == mutation.CharacterId, ct))
+            throw VoiceEffects.NotFound("character", mutation.CharacterId);
+
+        var copy = mutation.Voice;
+        var voice = await db.Voices.Include(v => v.Character).FirstOrDefaultAsync(v => v.Id == copy.Id, ct);
+        if (voice is not null && voice.CharacterId != mutation.CharacterId)
+            throw new BookMutationRejectedException(BookMutationRejection.Conflict,
+                $"{voice.Character.Name} in this book already holds this series Voice. Merge the two Characters first.");
+
+        var facets = BookFacets.Voices;
+        if (voice is null)
+        {
+            if (!await db.Voices.AnyAsync(v => v.CharacterId == mutation.CharacterId, ct))
+            {
+                db.VoiceRules.Add(VoiceEffects.NewDefaultRule(mutation.CharacterId, copy.Id));
+                facets |= BookFacets.VoiceRules;
+            }
+            voice = new VoiceEntity { Id = copy.Id, CharacterId = mutation.CharacterId, CreatedUtc = copy.CreatedUtc };
+            db.Voices.Add(voice);
+        }
+
+        voice.Name = copy.Name;
+        voice.Description = copy.Description;
+        voice.Source = copy.Source;
+        voice.DesignPrompt = copy.DesignPrompt;
+        voice.Transcript = copy.Transcript;
+        voice.AudioFileName = copy.AudioFileName;
+        voice.VoiceDesignSettingsOverrideJson = copy.VoiceDesignSettingsOverrideJson;
+        voice.TtsSettingsOverrideJson = copy.TtsSettingsOverrideJson;
+        // A row that already matched still counts: the audio under the same name may be new.
+        return VoiceEffects.Exact(facets);
+    }
+}

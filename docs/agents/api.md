@@ -374,6 +374,29 @@ Series character, folder or Character, a book not in the series, or (unlink) not
 409: the Character is already linked, the book already links another Character to that Series character (merge
 them first), or a Voice of the series is held by another Character of the book. 400: a body without its ids.
 
+**Shared Voice edits** (#221). After any commit that changes a Voice of a series-linked Character through a
+per-book route (`/commands` CreateVoice, UpdateVoice, DeleteVoice, the design prompt, settings overrides,
+transcript, source; `generate-audio`, `upload`, `transcribe`, the editor's apply and restore-original), the host
+copies that Voice's whole state, reference audio included, into every other linked book in the same request, in
+Series position order, under the same Voice Id. Each copy is a History step there with the edit's label ("Edit
+voice", "Generate voice audio", …); a failed copy is logged and the rest carry on. A History Restore is never
+copied. Deleting a shared Voice deletes it in every linked book and moves each book's default to its oldest
+remaining Voice; it is 409 when another book's positional Voice Rules target it, or when it is that book's last
+Voice, with `reason` (`PositionalRules` | `LastVoice`) and `books: [{ folder, title, ruleCount }]` extensions.
+`DeleteCharacter` on a linked Character unlinks it first; its Voices go in that book only. `MergeCharacters` whose
+merged (removed) Character is linked is 409 ("Unlink … first, or merge the other way"). Any commit in a member book
+that changes its Characters, aliases, Voices or Voice Rules sends the `series` signal for its series.
+
+```bash
+curl -s http://localhost:5000/api/series/{id}/characters/{scId}   # the inline series Voice editor's read
+```
+
+It answers `{ seriesCopyFolder, voices: [VoiceDto], books: [{ folder, title, position, characterId,
+characterName, defaultVoiceId, differs }], deleteBlocks: { "<voiceId>": { reason, books } } }`, books in Series
+position order. The series copy is the lowest-positioned linked book's Character (until *differs from series*
+lands); the editor writes through that book's per-book routes and the copies carry each edit to the rest. 404:
+unknown series or Series character.
+
 Where the project stands, in one read:
 
 ```bash
@@ -894,7 +917,7 @@ multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.A
 | server → client | `bookEdit` | one AI book-edit proposal run (`progress`, `done`, `failed`), sent only to the `connectionId` that started it; `done` carries every row it landed, and `cancelled` says whether a cancel cut it short |
 | server → client | `serviceStatus` | `{ name, status, op?, ok?, error? }` — a managed service's last observed `AiServiceStatus`, after every probe, lifecycle op (then `op` names it with its outcome) and watchdog transition; everyone |
 | server → client | `preflight` | one pre-flight run (`stage` with `name` + `stage` + `error?`, then `done` with `ok` + `reason?`), sent only to the `connectionId` that started it; every message carries the `run` id the 202 answered |
-| server → client | `series` | `{ seriesId, kind: Changed \| Deleted }`, a "read again" signal with no payload, debounced 250 ms per series, sent on every registry write; everyone |
+| server → client | `series` | `{ seriesId, kind: Changed \| Deleted }`, a "read again" signal with no payload, debounced 250 ms per series, sent on every registry write and on a member book's commit to its Characters, aliases, Voices or Voice Rules; everyone |
 | server → client | `setupCheck` | the Setup check's Full check: `progress` then `done`, each carrying the whole `report` (the current step's rows `checking`, `fullRun` where the run is; null on `done`); sent to every client |
 
 Invalid folders and unknown stream kinds fail the invocation with a `HubException`. Node status is

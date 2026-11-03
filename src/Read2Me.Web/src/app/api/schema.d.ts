@@ -5073,6 +5073,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/series/{id}/characters/{seriesCharacterId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The inline series Voice editor's read: the series copy's folder and its Voices (edit them through that book's per-book routes; each commit is copied into every other linked book), each linked book in position order with its Character and default Voice, and deleteBlocks by Voice Id (PositionalRules or LastVoice, naming the books). 404 unknown series or Series character. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    seriesCharacterId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SeriesCharacterDto"];
+                    };
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/series/{id}/characters/{seriesCharacterId}/links/{folder}": {
         parameters: {
             query?: never;
@@ -9543,6 +9591,26 @@ export interface components {
             /** Format: uuid */
             seriesCharacterId: string;
         };
+        SeriesCharacterBookDto: {
+            /** Format: uuid */
+            characterId: string;
+            characterName: string;
+            /** Format: uuid */
+            defaultVoiceId: null | string;
+            differs: boolean;
+            folder: string;
+            /** Format: double */
+            position: number;
+            title: string;
+        };
+        SeriesCharacterDto: {
+            books: components["schemas"]["SeriesCharacterBookDto"][];
+            deleteBlocks: {
+                [key: string]: components["schemas"]["SeriesVoiceDeleteBlockDto"];
+            };
+            seriesCopyFolder: string;
+            voices: components["schemas"]["VoiceDto"][];
+        };
         SeriesCharacterRefDto: {
             /** Format: uuid */
             characterId: string;
@@ -9595,6 +9663,18 @@ export interface components {
             name: string;
             nameMatches: string[];
         };
+        SeriesVoiceDeleteBlockDto: {
+            books: components["schemas"]["SeriesVoiceDeleteBookDto"][];
+            reason: components["schemas"]["SeriesVoiceDeleteReason"];
+        };
+        SeriesVoiceDeleteBookDto: {
+            folder: string;
+            /** Format: int32 */
+            ruleCount: number;
+            title: string;
+        };
+        /** @enum {unknown} */
+        SeriesVoiceDeleteReason: "PositionalRules" | "LastVoice";
         SetActiveRequest: {
             /** Format: int32 */
             id: number;

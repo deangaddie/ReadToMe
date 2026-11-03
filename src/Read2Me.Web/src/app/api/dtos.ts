@@ -70,6 +70,11 @@ export type SeriesUnlinkedCharacterDto = Schema['SeriesUnlinkedCharacterDto'];
 export type SeriesLinkPreviewDto = Schema['SeriesLinkPreviewDto'];
 /** `CharacterSummaryDto.seriesLink`: the Character's Series character, or null. */
 export type CharacterSeriesLinkDto = Schema['CharacterSeriesLinkDto'];
+/** `GET /api/series/{id}/characters/{scId}`: the inline series Voice editor (the series copy's Voices, each linked book, the refused deletes). */
+export type SeriesCharacterDto = Schema['SeriesCharacterDto'];
+export type SeriesCharacterBookDto = Schema['SeriesCharacterBookDto'];
+export type SeriesVoiceDeleteBlockDto = Schema['SeriesVoiceDeleteBlockDto'];
+export type SeriesVoiceDeleteReason = Schema['SeriesVoiceDeleteReason'];
 
 /**
  * `PipelineStep`: the nine stepper step ids, which are also the checkpoint route segment and the

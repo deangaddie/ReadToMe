@@ -297,6 +297,17 @@ export class CastPage extends R2mElement {
                     )}
                     <span class="cast__name">${displayName(row, narrator)}</span>
                     ${
+                      row.seriesLink
+                        ? html`<span
+                            class="cast__series"
+                            data-testid="series-badge"
+                            data-tooltip=${`Linked in ${row.seriesLink.seriesName}: its Voices are shared`}
+                            aria-label=${`Linked in ${row.seriesLink.seriesName}`}
+                            >${icon('link')}</span
+                          >`
+                        : nothing
+                    }
+                    ${
                       row.aliases.length > 0
                         ? html`<span
                             class="cast__aliases"

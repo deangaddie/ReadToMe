@@ -3,6 +3,9 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
+using Read2Me.Core.IO;
+using Read2Me.Core.Models;
+using Read2Me.Services.Audio;
 using Read2Me.Services.Series;
 
 namespace Read2Me.App.Api
@@ -56,6 +59,10 @@ namespace Read2Me.App.Api
                              "404 unknown series, Series character, folder, a book not in the series, or nothing of the book linked to it.");
             endpoints.MapGet("/api/series/{id:guid}/characters/{seriesCharacterId:guid}/links/{folder}/preview", PreviewLinkAsync)
                 .WithSummary("What linking characterId would copy, for the Link confirm: { bookGains, seriesGains } (Voice names). Refused as the link itself would be.");
+            endpoints.MapGet("/api/series/{id:guid}/characters/{seriesCharacterId:guid}", CharacterAsync)
+                .WithSummary("The inline series Voice editor's read: the series copy's folder and its Voices (edit them through that book's per-book routes; " +
+                             "each commit is copied into every other linked book), each linked book in position order with its Character and default Voice, " +
+                             "and deleteBlocks by Voice Id (PositionalRules or LastVoice, naming the books). 404 unknown series or Series character.");
         }
 
         private static async Task<Results<PhysicalFileHttpResult, NotFound, ProblemHttpResult>> GetPosterAsync(
@@ -187,6 +194,25 @@ namespace Read2Me.App.Api
                 : TypedResults.Ok(new SeriesLinkPreviewDto(result.Value!.BookGains, result.Value.SeriesGains));
         }
 
+        private static async Task<Results<Ok<SeriesCharacterDto>, ProblemHttpResult>> CharacterAsync(
+            Guid id, Guid seriesCharacterId, SeriesRegistry registry, IVoiceOriginalStore originals, IFileSystem fs, CancellationToken ct)
+        {
+            var result = await registry.CharacterAsync(id, seriesCharacterId, ct);
+            if (result.Refusal is { } refusal) return Refused(refusal);
+            var view = result.Value!;
+            var copyFolder = new ProjectFolderId(view.SeriesCopyFolder);
+            return TypedResults.Ok(new SeriesCharacterDto(
+                view.SeriesCopyFolder,
+                view.Voices.Select(v => VoiceEndpoints.ToDto(copyFolder, v, originals, fs)).ToList(),
+                view.Books.Select(b => new SeriesCharacterBookDto(
+                    b.Folder, b.Title, b.Position, b.CharacterId, b.CharacterName, b.DefaultVoiceId, Differs: false)).ToList(),
+                view.DeleteBlocks.ToDictionary(
+                    d => d.Key.ToString(),
+                    d => new SeriesVoiceDeleteBlockDto(
+                        d.Value.Reason,
+                        d.Value.Books.Select(b => new SeriesVoiceDeleteBookDto(b.Folder, b.Title, b.RuleCount)).ToList()))));
+        }
+
         private static ProblemHttpResult Refused(SeriesRefusal refusal) => TypedResults.Problem(
             refusal.Detail,
             statusCode: refusal.Kind switch
@@ -285,6 +311,25 @@ namespace Read2Me.App.Api
 
     /// <summary>A Character's series link on the Cast page's roster; <see cref="Differs"/> stays false until #222.</summary>
     public sealed record CharacterSeriesLinkDto(Guid SeriesId, Guid SeriesCharacterId, string SeriesName, int BookCount, bool Differs);
+
+    /// <summary>
+    /// The inline series Voice editor (#213): <see cref="Voices"/> come from the series copy, whose
+    /// folder takes the editor's writes; <see cref="DeleteBlocks"/> is keyed by Voice Id.
+    /// </summary>
+    public sealed record SeriesCharacterDto(
+        string SeriesCopyFolder,
+        IReadOnlyList<VoiceDto> Voices,
+        IReadOnlyList<SeriesCharacterBookDto> Books,
+        IReadOnlyDictionary<string, SeriesVoiceDeleteBlockDto> DeleteBlocks);
+
+    /// <summary>A linked book, its Character and its own default Voice; <see cref="Differs"/> stays false until #222.</summary>
+    public sealed record SeriesCharacterBookDto(
+        string Folder, string Title, decimal Position, Guid CharacterId, string CharacterName, Guid? DefaultVoiceId, bool Differs);
+
+    /// <summary>Why a Voice can't be deleted, and the books that stop it.</summary>
+    public sealed record SeriesVoiceDeleteBlockDto(SeriesVoiceDeleteReason Reason, IReadOnlyList<SeriesVoiceDeleteBookDto> Books);
+
+    public sealed record SeriesVoiceDeleteBookDto(string Folder, string Title, int RuleCount);
 
     public sealed record SeriesPositionsRequest(IReadOnlyDictionary<string, decimal>? Positions = null);
 }

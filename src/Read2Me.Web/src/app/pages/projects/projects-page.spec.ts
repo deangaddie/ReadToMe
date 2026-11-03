@@ -8,6 +8,7 @@ import { FakeLive } from '../../../testing/fake-live';
 import { type FakeNavigation, installNavigation, settle } from '../../../testing/fake-navigation';
 import type { NewProjectDialog } from './new-project-dialog';
 import type { ProjectsPage } from './projects-page';
+import type { SeriesVoiceEditor } from './series-voice-editor';
 import './projects-page';
 
 const book = (folderName: string, title: string, extra: Partial<ProjectSummary> = {}) =>
@@ -787,8 +788,8 @@ describe('r2m-projects-page series cast board', () => {
       'Book 2The Sign of the Four',
     ]);
     expect(Array.from(el.querySelectorAll('tbody th[scope=row]'), text)).toEqual([
-      'record_voice_over Narrator',
-      'person Sherlock Holmes',
+      'expand_more record_voice_over Narrator',
+      'expand_more person Sherlock Holmes',
       'person_add Share as new',
     ]);
     expect(cellOf(el, 'sc-holmes', 'scarlet').dataset.cell).toBe('linked');
@@ -908,6 +909,98 @@ describe('r2m-projects-page series cast board', () => {
     const { message } = await confirmDialog('cancel');
 
     expect(message).toContain('the links of Narrator and Sherlock Holmes are removed');
+  });
+
+  describe('inline series Voice editors (#221)', () => {
+    const detailOf = (label: string) => ({
+      seriesCopyFolder: 'scarlet',
+      voices: [],
+      books: [
+        {
+          folder: 'scarlet',
+          title: 'A Study in Scarlet',
+          position: 1,
+          characterId: `s-${label}`,
+          characterName: label,
+          defaultVoiceId: null,
+          differs: false,
+        },
+      ],
+      deleteBlocks: {},
+    });
+
+    function routeEditors() {
+      for (const id of ['sc-narrator', 'sc-holmes'])
+        api.on('GET', `/api/series/h/characters/${id}`, detailOf(id));
+      for (const path of ['summary']) api.on('GET', `/api/projects/scarlet/characters/${path}`, []);
+    }
+
+    const toggle = (el: Element, row: string) =>
+      el.querySelector<HTMLButtonElement>(
+        `tr[data-series-character="${row}"] [data-action=voices]`,
+      )!;
+
+    it('a row’s label opens its editor directly under it, several at once, and closes it again', async () => {
+      routeEditors();
+      const { el } = await openBoard();
+
+      toggle(el, 'sc-narrator').click();
+      await el.rendered();
+      toggle(el, 'sc-holmes').click();
+      await el.rendered();
+      await settle();
+
+      const rows = Array.from(
+        el.querySelectorAll(':scope tbody > tr'),
+        (tr) =>
+          tr.getAttribute('data-series-character') ??
+          `editor:${tr.getAttribute('data-editor-for')}`,
+      );
+      expect(rows.slice(0, 4)).toEqual([
+        'sc-narrator',
+        'editor:sc-narrator',
+        'sc-holmes',
+        'editor:sc-holmes',
+      ]);
+      expect(toggle(el, 'sc-narrator').getAttribute('aria-expanded')).toBe('true');
+      const editor = el.querySelector<SeriesVoiceEditor>(
+        'tr[data-editor-for="sc-holmes"] r2m-series-voice-editor',
+      )!;
+      expect(editor.seriesId).toBe('h');
+      expect(editor.label).toBe('Sherlock Holmes');
+
+      toggle(el, 'sc-narrator').click();
+      await el.rendered();
+      expect(el.querySelector('tr[data-editor-for="sc-narrator"]')).toBeNull();
+      expect(el.querySelector('tr[data-editor-for="sc-holmes"]')).not.toBeNull();
+    });
+
+    it('arriving from the Cast page opens the series’ Characters tab with that row’s editor open', async () => {
+      routeEditors();
+      api.on('GET', '/api/series/h/cast', board());
+      navigation = installNavigation('projects?series=h&character=sc-holmes');
+      const router = new Router();
+      override(Router, router);
+      router.start([{ path: 'projects', tag: 'x-nothing' }], async () => true);
+
+      const page = await render([four, scarlet], [holmes]);
+      api.on('GET', '/api/series/h/cast', board());
+      await settle();
+      await page.rendered();
+      const el = page.querySelector('r2m-series-cast-board')!;
+      await el.rendered();
+      await el.load(); // render() routed an empty cast before this one
+      await settle();
+      await el.rendered();
+
+      expect(
+        page.querySelector('[role=tab][data-tab="characters"]')?.getAttribute('aria-selected'),
+      ).toBe('true');
+      expect(
+        el.querySelector('tr[data-editor-for="sc-holmes"] r2m-series-voice-editor'),
+      ).not.toBeNull();
+      expect(el.querySelector('tr[data-editor-for="sc-narrator"]')).toBeNull();
+    });
   });
 });
 

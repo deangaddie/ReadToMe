@@ -1,6 +1,6 @@
 /* The series cast board (#208, variant B): the Characters tab of a series panel. One row per
    Series character, one column per book in Series position order. */
-@scope (r2m-series-cast-board) {
+@scope (r2m-series-cast-board) to (r2m-series-voice-editor) {
   :scope {
     display: block;
   }
@@ -72,5 +72,33 @@
   }
   .series-cast__none {
     color: var(--r2m-text-muted);
+  }
+}
+
+/* A row's toggle for its inline series Voice editor (#221), and the editor's row under it. */
+@scope (r2m-series-cast-board) to (r2m-series-voice-editor) {
+  .series-cast__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 4px;
+    border: 0;
+    border-radius: var(--r2m-radius-sm);
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+
+    &:hover {
+      background: var(--r2m-status-neutral-soft);
+    }
+  }
+  .series-cast__count {
+    font-weight: 400;
+    color: var(--r2m-text-muted);
+  }
+  .series-cast__editor-row > td {
+    padding: 0 0 var(--r2m-space-3) var(--r2m-space-4);
   }
 }

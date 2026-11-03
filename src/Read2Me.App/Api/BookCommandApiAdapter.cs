@@ -65,6 +65,11 @@ namespace Read2Me.App.Api
                 BookMutationOutcome.Rejected { Reason: BookMutationRejection.Restoring } restoring
                     => TypedResults.Problem(restoring.Message, statusCode: StatusCodes.Status409Conflict),
 
+                // Another linked book can't take the write (ADR 0018): a state refusal, naming its books.
+                BookMutationOutcome.Rejected { Reason: BookMutationRejection.Blocked } blocked
+                    => TypedResults.Problem(blocked.Message, statusCode: StatusCodes.Status409Conflict,
+                        extensions: blocked.Extensions?.ToDictionary(e => e.Key, e => e.Value)),
+
                 // Every other expected refusal the command did not soften: the same 422 an agent has
                 // always seen, now carrying the mutation's own reason as the message.
                 BookMutationOutcome.Rejected rejected

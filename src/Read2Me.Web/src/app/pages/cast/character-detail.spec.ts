@@ -8,7 +8,7 @@ import { FakeApi } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';
 import { type FakeNavigation, installNavigation, settle } from '../../../testing/fake-navigation';
 import { CastStore } from './cast-store';
-import { linkedNarratorDeleteMessage } from './character-detail';
+import { linkedNarratorDeleteMessage, seriesChipLabel } from './character-detail';
 import type { MergeDialog } from './merge-dialog';
 import './character-detail';
 
@@ -263,5 +263,46 @@ describe('r2m-character-detail', () => {
     await detail.rename('Bob');
     expect(toasts).toEqual(['problem: Name taken']);
     expect(store.selected()?.name).toBe('Alice');
+  });
+
+  describe('a series-linked Character (#221)', () => {
+    const LINK = {
+      seriesId: 'h',
+      seriesCharacterId: 'sc-watson',
+      seriesName: 'Sherlock Holmes',
+      bookCount: 3,
+      differs: false,
+    };
+    const WATSON = row('Watson', { seriesLink: LINK });
+
+    it('shows the series chip and the way to the series cast board', async () => {
+      const detail = await mount(WATSON, [row('Narrator'), WATSON]);
+      const line = detail.querySelector('[data-testid=series-link]')!;
+      expect(line.textContent).toContain(seriesChipLabel(LINK));
+      expect(line.textContent).toContain('Sherlock Holmes · 3 books');
+      expect(button(detail, 'series-board').getAttribute('href')).toBe(
+        'projects?series=h&character=sc-watson',
+      );
+    });
+
+    it('an unlinked Character shows no series line', async () => {
+      const detail = await mount(ALICE);
+      expect(detail.querySelector('[data-testid=series-link]')).toBeNull();
+    });
+
+    it('the delete confirm says the other books keep their Voices', async () => {
+      const detail = await mount(WATSON, [row('Narrator'), WATSON]);
+      button(detail, 'delete').click();
+      await settle();
+      const confirm = document.querySelector('r2m-confirm-dialog')!;
+      await confirm.rendered();
+      expect(confirm.textContent).toContain(
+        'Linked to Watson in Sherlock Holmes; the other books keep their Voices.',
+      );
+      expect(confirm.textContent).toContain('the other books keep their Voices');
+      confirm.querySelector<HTMLButtonElement>('.r2m-confirm-dialog__cancel')!.click();
+      await settle();
+      expect(commands()).toEqual([]);
+    });
   });
 });

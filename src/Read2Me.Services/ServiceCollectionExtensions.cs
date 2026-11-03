@@ -126,6 +126,8 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<Events.EventBroadcaster<Events.SeriesChanged>>();
         services.TryAddSingleton<Series.SeriesRegistryLock>();
         services.AddScoped<Series.SeriesRegistry>();
+        // Shared Voice edits (ADR 0018): copied into the other linked books after each commit.
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<Mutations.IBookCommitHook, Series.SeriesVoiceCopier>());
         services.AddOptions<Mutations.BookMutationOptions>();
         services.TryAddSingleton<Events.EventBroadcaster<Mutations.BookMutationReceipt>>();
         services.AddScoped<Mutations.BookMutations>();
@@ -332,6 +334,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.GainSeriesVoicesMutation>,
             Mutations.Implementations.GainSeriesVoicesMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.CopySeriesVoiceMutation>,
+            Mutations.Implementations.CopySeriesVoiceMutationImplementation>();
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.CreateVoiceRuleMutation>,
             Mutations.Implementations.CreateVoiceRuleMutationImplementation>();

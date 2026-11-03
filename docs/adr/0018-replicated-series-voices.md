@@ -13,6 +13,7 @@ A book series shares Characters, and the user wants those Characters to share Vo
 **Each linked book keeps its own full copy of every shared Voice, under the same Voice Id. A Series records only which books and Characters are linked.**
 
 - An edit to a shared Voice commits in the book where it was made, then in each other linked book in Series position order, as an ordinary Book mutation and History step in each. A failure doesn't roll anything back: that book is left **differs from series**.
+  This is carried out as **copy-after-commit** (#221): a Book commit hook (`IBookCommitHook`, run by `BookMutations` after the edit's own commit) copies the Voice's whole state into each other linked book within the same request. Every per-book route that writes a Voice is covered without knowing about series, and a copy never triggers another copy.
 - A Restore stays local to its book. If it brings back an older shared Voice, the book is **differs from series**, the same as a failed write. The user then pushes this book's Voices or takes the series' Voices. Nothing resolves it silently.
 - The series registry lives in a dot-folder, `{workspace}/.series/{seriesId}/`, holding `series.db` (name, member project Ids with their Series positions, Series characters and their linked `(projectId, characterId)` pairs) and the poster. A dot-folder is never listed as a project. Membership is recorded only there; a missing project's entry is skipped and cleaned up. The registry has no History.
 

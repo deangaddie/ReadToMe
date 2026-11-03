@@ -75,6 +75,13 @@
     white-space: nowrap;
     text-overflow: ellipsis;
   }
+  .cast__series {
+    display: inline-flex;
+    color: var(--r2m-accent);
+  }
+  .cast__series .r2m-icon {
+    font-size: 18px;
+  }
   .cast__aliases {
     font-size: var(--r2m-text-xs);
     padding: 0 var(--r2m-space-2);
@@ -195,6 +202,14 @@
   }
   .character-detail__delete {
     color: var(--r2m-status-error);
+  }
+  .character-detail__series {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--r2m-space-2);
+    margin: 0;
+    font-size: var(--r2m-text-sm);
   }
   .character-detail__section {
     display: flex;

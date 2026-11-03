@@ -1,6 +1,6 @@
 import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
-import type { SeriesCastDto, SeriesDto, SeriesLinkPreviewDto } from './dtos';
+import type { SeriesCastDto, SeriesCharacterDto, SeriesDto, SeriesLinkPreviewDto } from './dtos';
 
 /**
  * `SeriesEndpoints.cs`: the series registry and its lifecycle (Series lifecycle, #206). Books are
@@ -105,6 +105,19 @@ export class SeriesApi {
     return this.api.get('/api/series/{id}/characters/{seriesCharacterId}/links/{folder}/preview', {
       path: { id, seriesCharacterId, folder },
       query: { characterId },
+    });
+  }
+
+  // ---- Shared Voices (#221) ----
+
+  /**
+   * The inline series Voice editor's read: the series copy's folder and Voices, each linked book with
+   * its Character and default, and the refused deletes. Its writes go to the per-book routes of
+   * `seriesCopyFolder`; the host copies each into the other linked books.
+   */
+  character(id: string, seriesCharacterId: string): Promise<SeriesCharacterDto> {
+    return this.api.get('/api/series/{id}/characters/{seriesCharacterId}', {
+      path: { id, seriesCharacterId },
     });
   }
 }
