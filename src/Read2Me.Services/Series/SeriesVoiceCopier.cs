@@ -8,9 +8,10 @@ namespace Read2Me.Services.Series
     /// The series' part in every Book commit (ADR 0018, #213 "Shared Voices"):
     /// <list type="bullet">
     /// <item>A Voice edit of a series-linked Character (<see cref="SeriesVoiceEdits"/>) is copied,
-    /// once it commits, into every other linked book, in the same request.</item>
+    /// once it commits, into every other linked book, in the same request. Made in the book holding
+    /// the series copy, it brings each book that differs back in line: that book takes the whole set.</item>
     /// <item>Deleting a shared Voice is refused while another book's positional rules use it, or
-    /// while it is the last Voice and other books are linked.</item>
+    /// while it is the last Voice of another linked book that holds it.</item>
     /// <item><c>MergeCharacters</c> with a linked merged Character is refused; <c>DeleteCharacter</c>
     /// of a linked one unlinks it, and its Voices go in that book only.</item>
     /// <item>A member book's commit to Characters, the narrator, Voices or Voice Rules sends the
@@ -47,7 +48,12 @@ namespace Read2Me.Services.Series
                 if (edit is SeriesVoiceEdits.Deleted deleted
                     && await DeleteRefusalAsync(mutation, peers, deleted.VoiceId) is { } refusal)
                     return BookCommitPlan.Refuse(refusal);
-                return BookCommitPlan.After(change => CopyAsync(mutation, edit, peers, change));
+                // Which books differed from this one is read before the edit changes it (#222): an edit
+                // made in the series copy brings them back in line. A delete removes one Voice only.
+                var differing = edit is SeriesVoiceEdits.Deleted
+                    ? new HashSet<string>()
+                    : await Registry.DifferingPeersAsync(peers);
+                return BookCommitPlan.After(change => CopyAsync(mutation, edit, peers, differing, change));
             }
 
             return BookCommitPlan.After(change =>
@@ -71,8 +77,8 @@ namespace Read2Me.Services.Series
         private async Task<BookMutationOutcome.Rejected?> DeleteRefusalAsync(BookMutation mutation, SeriesPeers peers, Guid voiceId)
         {
             if (await characters.GetVoiceAsync(mutation.FolderId, voiceId) is not { } voice) return null;
-            var (name, characterId) = (voice.Name, voice.CharacterId);
-            if (await Registry.VoiceDeleteBlockAsync(peers, mutation.FolderId, characterId, voiceId) is not { } block) return null;
+            var name = voice.Name;
+            if (await Registry.VoiceDeleteBlockAsync(peers, voiceId) is not { } block) return null;
             return new BookMutationOutcome.Rejected(BookMutationRejection.Blocked, SeriesVoiceDeleteRules.Describe(name, block))
             {
                 Extensions = new Dictionary<string, object?>
@@ -83,7 +89,7 @@ namespace Read2Me.Services.Series
             };
         }
 
-        private async Task CopyAsync(BookMutation mutation, SeriesVoiceEdits.Edit edit, SeriesPeers peers, CommittedBookChange change)
+        private async Task CopyAsync(BookMutation mutation, SeriesVoiceEdits.Edit edit, SeriesPeers peers, IReadOnlySet<string> differing, CommittedBookChange change)
         {
             // A results-only commit has no step; every Voice edit is a state one, so this is a fallback.
             var label = change.StepLabel ?? ProjectHistory.LabelOf(mutation);
@@ -97,10 +103,10 @@ namespace Read2Me.Services.Series
                         await Registry.CopyDeleteAsync(peers, deleted.VoiceId, label, action);
                         break;
                     case SeriesVoiceEdits.Changed changed:
-                        await Registry.CopyVoiceAsync(peers, mutation.FolderId, changed.VoiceId, label, action);
+                        await Registry.CopyVoiceAsync(peers, changed.VoiceId, label, action, differing);
                         break;
                     case SeriesVoiceEdits.Created when change.Receipt.Effects.CreatedId is { } created:
-                        await Registry.CopyVoiceAsync(peers, mutation.FolderId, created, label, action);
+                        await Registry.CopyVoiceAsync(peers, created, label, action, differing);
                         break;
                 }
             }

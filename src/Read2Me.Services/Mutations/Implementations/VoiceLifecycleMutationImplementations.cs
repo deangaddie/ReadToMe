@@ -599,3 +599,76 @@ public sealed class CopySeriesVoiceMutationImplementation : IBookMutationImpleme
         return VoiceEffects.Exact(facets);
     }
 }
+
+/// <summary>
+/// Makes a linked Character's Voices exactly the pushed or taken set (#222); see
+/// <see cref="ReplaceSeriesVoicesMutation"/>.
+/// </summary>
+public sealed class ReplaceSeriesVoicesMutationImplementation : IBookMutationImplementation<ReplaceSeriesVoicesMutation>
+{
+    public async Task<BookMutationEffects> ApplyAsync(
+        ReplaceSeriesVoicesMutation mutation, ProjectDbContext db, CancellationToken ct)
+    {
+        if (!await db.Characters.AnyAsync(c => c.Id == mutation.CharacterId, ct))
+            throw VoiceEffects.NotFound("character", mutation.CharacterId);
+
+        var ids = mutation.Voices.Select(v => v.Id).ToHashSet();
+        if (await db.Voices.Where(v => ids.Contains(v.Id) && v.CharacterId != mutation.CharacterId)
+                .Select(v => v.Character.Name).FirstOrDefaultAsync(ct) is { } holder)
+            throw new BookMutationRejectedException(BookMutationRejection.Conflict,
+                $"{holder} in this book already holds a Voice of this series character. Merge the two Characters first.");
+
+        var held = await db.Voices.Where(v => v.CharacterId == mutation.CharacterId).ToListAsync(ct);
+        foreach (var copy in mutation.Voices)
+        {
+            var voice = held.FirstOrDefault(v => v.Id == copy.Id);
+            if (voice is null)
+            {
+                voice = new VoiceEntity { Id = copy.Id, CharacterId = mutation.CharacterId };
+                db.Voices.Add(voice);
+            }
+            voice.Name = copy.Name;
+            voice.Description = copy.Description;
+            voice.Source = copy.Source;
+            voice.DesignPrompt = copy.DesignPrompt;
+            voice.Transcript = copy.Transcript;
+            voice.AudioFileName = copy.AudioFileName;
+            voice.VoiceDesignSettingsOverrideJson = copy.VoiceDesignSettingsOverrideJson;
+            voice.TtsSettingsOverrideJson = copy.TtsSettingsOverrideJson;
+            voice.CreatedUtc = copy.CreatedUtc;
+        }
+
+        var facets = BookFacets.Voices;
+        var removed = held.Where(v => !ids.Contains(v.Id)).Select(v => v.Id).ToList();
+        var rules = await db.VoiceRules.Where(r => r.CharacterId == mutation.CharacterId).ToListAsync(ct);
+        var dropped = rules.Where(r => !r.IsDefault && removed.Contains(r.VoiceId)).ToList();
+        if (dropped.Count > 0)
+        {
+            db.VoiceRules.RemoveRange(dropped);
+            facets |= BookFacets.VoiceRules;
+        }
+
+        // The default stays the book's own unless its Voice goes, or the Character had none.
+        var oldest = mutation.Voices.OrderBy(v => v.CreatedUtc).Select(v => (Guid?)v.Id).FirstOrDefault();
+        var defaultRule = rules.FirstOrDefault(r => r.IsDefault);
+        if (defaultRule is null && oldest is { } first)
+        {
+            db.VoiceRules.Add(VoiceEffects.NewDefaultRule(mutation.CharacterId, first));
+            facets |= BookFacets.VoiceRules;
+        }
+        else if (defaultRule is not null && !ids.Contains(defaultRule.VoiceId))
+        {
+            if (oldest is { } survivor) defaultRule.VoiceId = survivor;
+            else db.VoiceRules.Remove(defaultRule);
+            facets |= BookFacets.VoiceRules;
+        }
+
+        if (removed.Count > 0)
+        {
+            // The rules stop naming the removed Voices before the rows go (foreign keys).
+            await db.SaveChangesAsync(ct);
+            await db.Voices.Where(v => removed.Contains(v.Id)).ExecuteDeleteAsync(ct);
+        }
+        return VoiceEffects.Exact(facets);
+    }
+}

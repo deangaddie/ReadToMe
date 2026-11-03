@@ -125,6 +125,7 @@ public static class ServiceCollectionExtensions
         // Series registries (ADR 0018): no Book mutation and no History; one lock across them all.
         services.TryAddSingleton<Events.EventBroadcaster<Events.SeriesChanged>>();
         services.TryAddSingleton<Series.SeriesRegistryLock>();
+        services.TryAddSingleton<Series.VoiceAudioHashes>();
         services.AddScoped<Series.SeriesRegistry>();
         // Shared Voice edits (ADR 0018): copied into the other linked books after each commit.
         services.TryAddEnumerable(ServiceDescriptor.Scoped<Mutations.IBookCommitHook, Series.SeriesVoiceCopier>());
@@ -337,6 +338,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.CopySeriesVoiceMutation>,
             Mutations.Implementations.CopySeriesVoiceMutationImplementation>();
+        services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.ReplaceSeriesVoicesMutation>,
+            Mutations.Implementations.ReplaceSeriesVoicesMutationImplementation>();
         services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.CreateVoiceRuleMutation>,
             Mutations.Implementations.CreateVoiceRuleMutationImplementation>();

@@ -5,8 +5,10 @@ import {
   leaveConfirm,
   linkConfirm,
   moveConfirm,
+  pushSeriesVoicesConfirm,
   removePosterConfirm,
   shareConfirm,
+  takeSeriesVoicesConfirm,
   unlinkConfirm,
 } from './permanent-changes';
 
@@ -269,5 +271,46 @@ describe('leaveConfirm() without the cast read', () => {
       'Any of its Characters linked to the series lose their link. This book keeps its own ' +
         'copy of their Voices. The other books in S keep their numbers.',
     );
+  });
+});
+
+describe('pushSeriesVoicesConfirm()', () => {
+  it('names what is replaced in which books and where the History steps go', () => {
+    expect(
+      pushSeriesVoicesConfirm({
+        label: 'Dr. Watson',
+        title: 'A Study in Scarlet',
+        otherTitles: ['The Sign of the Four', 'The Adventures of Sherlock Holmes'],
+      }),
+    ).toEqual({
+      title: 'Use A Study in Scarlet’s copy for all?',
+      message:
+        'Dr. Watson’s Voices in The Sign of the Four and The Adventures of Sherlock Holmes are ' +
+        'replaced by the copy in A Study in Scarlet. Each of those books records a “Push series ' +
+        'voices” History step, which can bring its own copy back. Voice Rules stay each book’s ' +
+        'own, apart from those on a Voice that goes.',
+      confirmLabel: 'Use this copy for all',
+      destructive: false,
+    });
+  });
+});
+
+describe('takeSeriesVoicesConfirm()', () => {
+  it('names what is replaced, from where, and the History step in this book', () => {
+    expect(
+      takeSeriesVoicesConfirm({
+        label: 'Dr. Watson',
+        title: 'A Study in Scarlet',
+        copyTitle: 'The Sign of the Four',
+      }),
+    ).toEqual({
+      title: 'Use the series copy in A Study in Scarlet?',
+      message:
+        'Dr. Watson’s Voices in A Study in Scarlet are replaced by the series copy, from The Sign ' +
+        'of the Four. A Study in Scarlet records a “Take series voices” History step, which can ' +
+        'bring its own copy back. Voice Rules stay each book’s own, apart from those on a Voice that goes.',
+      confirmLabel: 'Use the series copy',
+      destructive: false,
+    });
   });
 });

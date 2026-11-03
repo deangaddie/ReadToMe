@@ -213,3 +213,50 @@ export function deleteSeriesVoiceConfirm(
     destructive: true,
   };
 }
+
+const RULES_STAY = 'Voice Rules stay each book’s own, apart from those on a Voice that goes.';
+
+/**
+ * Push (#222): a book that differs from series copies its Voices into every other linked book.
+ * Neutral: each replaced book's History can bring its own copy back.
+ */
+export function pushSeriesVoicesConfirm(input: {
+  /** The Series character's label. */
+  label: string;
+  /** The book whose copy is pushed. */
+  title: string;
+  /** The other linked books, whose Voices are replaced. */
+  otherTitles: readonly string[];
+}): ConfirmOptions {
+  const many = input.otherTitles.length > 1;
+  return {
+    title: `Use ${input.title}’s copy for all?`,
+    message:
+      `${input.label}’s Voices in ${list(input.otherTitles)} are replaced by the copy in ` +
+      `${input.title}. ${many ? 'Each of those books records' : 'That book records'} a ` +
+      '“Push series voices” History step, which can bring its own copy back. ' +
+      RULES_STAY,
+    confirmLabel: 'Use this copy for all',
+    destructive: false,
+  };
+}
+
+/** Take (#222): the series copy replaces this book's Voices. Neutral, as push. */
+export function takeSeriesVoicesConfirm(input: {
+  label: string;
+  /** The book that differs, whose Voices are replaced. */
+  title: string;
+  /** The book the series copy is read from. */
+  copyTitle: string;
+}): ConfirmOptions {
+  return {
+    title: `Use the series copy in ${input.title}?`,
+    message:
+      `${input.label}’s Voices in ${input.title} are replaced by the series copy, from ` +
+      `${input.copyTitle}. ${input.title} records a “Take series voices” History step, which can ` +
+      'bring its own copy back. ' +
+      RULES_STAY,
+    confirmLabel: 'Use the series copy',
+    destructive: false,
+  };
+}

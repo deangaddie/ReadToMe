@@ -5080,7 +5080,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The inline series Voice editor's read: the series copy's folder and its Voices (edit them through that book's per-book routes; each commit is copied into every other linked book), each linked book in position order with its Character and default Voice, and deleteBlocks by Voice Id (PositionalRules or LastVoice, naming the books). 404 unknown series or Series character. */
+        /** The inline series Voice editor's read: the series copy's folder and its Voices (edit them through that book's per-book routes; each commit is copied into every other linked book; one made here brings each differing book back in line), each linked book in position order with its Character, default Voice and differs (its Voices are not the series copy: the version most linked books hold, ties to the lowest position), and deleteBlocks by Voice Id (PositionalRules or LastVoice, naming the books). 404 unknown series or Series character. */
         get: {
             parameters: {
                 query?: never;
@@ -5248,6 +5248,106 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series/{id}/characters/{seriesCharacterId}/push": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Push { folder }: that book's Voices of the Series character are copied into every other linked book, each a "Push series voices" History step there. Only Voices, never Voice Rules. 404 unknown series, Series character, folder, a book not in the series or not linked to it; 409 the book doesn't differ from series; 422 naming the books a copy failed to write into (the rest were written). */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    seriesCharacterId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["SeriesResolveRequest"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series/{id}/characters/{seriesCharacterId}/take": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Take { folder }: the series copy's Voices are copied into that book, a "Take series voices" History step there. Only Voices, never Voice Rules. 404 as push; 409 the book doesn't differ from series; 422 the copy failed to write. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    seriesCharacterId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["SeriesResolveRequest"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -9646,6 +9746,9 @@ export interface components {
         };
         /** @enum {unknown} */
         SeriesPosterSource: "Uploaded" | "Cover" | "None";
+        SeriesResolveRequest: {
+            folder?: null | string;
+        };
         SeriesSuggestedMemberDto: {
             /** Format: uuid */
             characterId: string;

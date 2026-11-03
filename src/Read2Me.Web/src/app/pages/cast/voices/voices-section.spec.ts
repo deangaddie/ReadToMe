@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { CharacterSummaryDto, VoiceDto } from '@app/api';
 import { override, provide, resetServices } from '@app/core/services';
 import { LiveService } from '@app/live/live.service';
+import { ConfirmService, type ConfirmOptions } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
 import { FakeApi } from '../../../../testing/fake-api';
 import { FakeLive } from '../../../../testing/fake-live';
@@ -123,8 +124,8 @@ describe('r2m-voices-section', () => {
       },
     };
 
-    async function mountLinked() {
-      api.on('GET', `${BASE}/characters/summary`, [WATSON]);
+    async function mountLinked(character: CharacterSummaryDto = WATSON) {
+      api.on('GET', `${BASE}/characters/summary`, [character]);
       api.on('GET', `${BASE}/characters/alice/lines`, []);
       api.on('GET', `${BASE}/characters/alice/voices`, {
         defaultVoiceId: 'v1',
@@ -140,7 +141,7 @@ describe('r2m-voices-section', () => {
       const host = document.createElement('div');
       provide(host, CastStore, store);
       const section = document.createElement('r2m-voices-section');
-      section.character = WATSON;
+      section.character = character;
       host.append(section);
       document.body.append(host);
       await section.rendered();
@@ -200,6 +201,102 @@ describe('r2m-voices-section', () => {
       expect(section.querySelector<HTMLButtonElement>('[data-action=add-voice]')!.disabled).toBe(
         false,
       );
+    });
+
+    describe('that differs from series (#222)', () => {
+      const DIFFERING: CharacterSummaryDto = {
+        ...WATSON,
+        seriesLink: { ...WATSON.seriesLink!, differs: true },
+      };
+      const DETAIL = '/api/series/h/characters/sc-alice';
+      const seriesBook = (folder: string, title: string, position: number, differs = false) => ({
+        folder,
+        title,
+        position,
+        characterId: `${folder}-alice`,
+        characterName: 'Alice',
+        defaultVoiceId: null,
+        differs,
+      });
+      let confirms: ConfirmOptions[];
+      let answer: boolean;
+
+      beforeEach(() => {
+        confirms = [];
+        answer = true;
+        override(ConfirmService, {
+          confirm: async (o: ConfirmOptions) => {
+            confirms.push(o);
+            return answer;
+          },
+        } as unknown as ConfirmService);
+        api.on('GET', DETAIL, {
+          seriesCopyFolder: 'scarlet',
+          voices: [],
+          books: [
+            seriesBook('scarlet', 'A Study in Scarlet', 1),
+            seriesBook('dracula', 'Dracula', 2, true),
+            seriesBook('four', 'The Sign of the Four', 3),
+          ],
+          deleteBlocks: {},
+        });
+      });
+
+      const callout = (section: Element) =>
+        section.querySelector<HTMLElement>('[data-testid=differs-callout]');
+
+      it('a callout says so and offers push or take; none when it doesn’t differ', async () => {
+        expect(callout(await mountLinked())).toBeNull();
+        document.body.replaceChildren();
+
+        const section = await mountLinked(DIFFERING);
+        expect(callout(section)?.textContent).toContain(
+          'Alice’s Voices in this book differ from the other books in Sherlock Holmes.',
+        );
+        expect(callout(section)!.querySelector('[data-action=push]')?.textContent).toContain(
+          'Use this book’s copy for all',
+        );
+        expect(callout(section)!.querySelector('[data-action=take]')?.textContent).toContain(
+          'Use the series copy',
+        );
+      });
+
+      it('push confirms which books are replaced, then pushes this book', async () => {
+        const push = '/api/series/h/characters/sc-alice/push';
+        api.on('POST', push, undefined);
+        const section = await mountLinked(DIFFERING);
+
+        answer = false;
+        callout(section)!.querySelector<HTMLButtonElement>('[data-action=push]')!.click();
+        await settle();
+        expect(confirms[0]?.title).toBe('Use Dracula’s copy for all?');
+        expect(confirms[0]?.message).toContain(
+          'Alice’s Voices in A Study in Scarlet and The Sign of the Four are replaced by the copy in Dracula.',
+        );
+        expect(api.calls('POST', push)).toEqual([]);
+
+        answer = true;
+        callout(section)!.querySelector<HTMLButtonElement>('[data-action=push]')!.click();
+        await settle();
+        await settle();
+        expect(api.calls('POST', push).map((r) => r.body)).toEqual([{ folder: 'dracula' }]);
+      });
+
+      it('take confirms what is replaced and from where, then takes the series copy', async () => {
+        const take = '/api/series/h/characters/sc-alice/take';
+        api.on('POST', take, undefined);
+        const section = await mountLinked(DIFFERING);
+
+        callout(section)!.querySelector<HTMLButtonElement>('[data-action=take]')!.click();
+        await settle();
+        await settle();
+        expect(confirms[0]?.title).toBe('Use the series copy in Dracula?');
+        expect(confirms[0]?.message).toContain(
+          'replaced by the series copy, from A Study in Scarlet',
+        );
+        expect(confirms[0]?.message).toContain('“Take series voices” History step');
+        expect(api.calls('POST', take).map((r) => r.body)).toEqual([{ folder: 'dracula' }]);
+      });
     });
   });
 });

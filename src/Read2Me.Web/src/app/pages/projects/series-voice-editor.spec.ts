@@ -367,4 +367,73 @@ describe('r2m-series-voice-editor', () => {
     expect(reads()).toBe(2);
     await el.rendered();
   });
+
+  /** Scarlet holds the series copy; Four differs (a Restore there, say). */
+  const differing = () =>
+    detail({
+      books: [
+        book('scarlet', 'A Study in Scarlet', 1, 's-watson', 'v1'),
+        { ...book('four', 'The Sign of the Four', 2, 'f-watson', 'v2'), differs: true },
+        book('adventures', 'The Adventures of Sherlock Holmes', 3, 'a-watson', 'v1'),
+      ],
+    });
+
+  it('names the book that differs and which copy it shows, with no callout when none does', async () => {
+    const plain = await mount();
+    expect(plain.querySelector('[data-testid=differs-callout]')).toBeNull();
+    document.body.replaceChildren();
+
+    const el = await mount(differing());
+    const callout = el.querySelector<HTMLElement>('[data-testid=differs-callout]')!;
+    expect(callout.dataset.key).toBe('four');
+    expect(callout.textContent).toContain(
+      'The Sign of the Four holds a different copy of these Voices. This editor shows the series copy, from A Study in Scarlet.',
+    );
+    expect(action(callout, 'push').textContent).toContain(
+      'Use The Sign of the Four’s copy for all',
+    );
+  });
+
+  it('Use <book>’s copy for all confirms what is replaced, then pushes from that book', async () => {
+    const push = '/api/series/h/characters/sc-watson/push';
+    let current = differing();
+    const el = await mount(() => current);
+    api.on('POST', push, () => {
+      current = detail();
+      return undefined;
+    });
+
+    confirmAnswer = false;
+    action(el, 'push').click();
+    await settle();
+    expect(confirms[0]?.title).toBe('Use The Sign of the Four’s copy for all?');
+    expect(confirms[0]?.message).toContain(
+      'Dr. Watson’s Voices in A Study in Scarlet and The Adventures of Sherlock Holmes are replaced',
+    );
+    expect(confirms[0]?.message).toContain('“Push series voices” History step');
+    expect(api.calls('POST', push)).toEqual([]);
+
+    confirmAnswer = true;
+    action(el, 'push').click();
+    await settle();
+    await settle();
+    expect(api.calls('POST', push).map((r) => r.body)).toEqual([{ folder: 'four' }]);
+    expect(toasts).toEqual(['success: Saved in 3 books']);
+  });
+
+  it('toasts where an edit landed from the read after it: the differing book came back in line', async () => {
+    let current = differing();
+    const el = await mount(() => current);
+    api.on('POST', COMMANDS, () => {
+      current = detail();
+      return { outcome: 'Committed', newEntityId: null };
+    });
+    promptAnswer = 'Retired';
+
+    await el.rename(current.voices[0]!);
+
+    expect(toasts).toEqual(['success: Saved in 3 books']);
+    await el.rendered();
+    expect(el.querySelector('[data-testid=differs-callout]')).toBeNull();
+  });
 });

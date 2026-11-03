@@ -43,7 +43,7 @@ namespace Read2Me.Services.Series
 
         /// <summary>The series' own writes into a book: never copied on, and never a reason to signal again.</summary>
         public static bool IsSeriesCopy(BookMutation mutation) =>
-            mutation is GainSeriesVoicesMutation or CopySeriesVoiceMutation;
+            mutation is GainSeriesVoicesMutation or CopySeriesVoiceMutation or ReplaceSeriesVoicesMutation;
 
         /// <summary>
         /// The facets of a member book's commit that the series cast board shows (#213, Hub): its

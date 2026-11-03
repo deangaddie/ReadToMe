@@ -44,6 +44,17 @@ namespace Read2Me.Services.Series
             new(blocked ? SeriesRefusalKind.Blocked : SeriesRefusalKind.Failed,
                 $"The series' Voices could not be written into '{title}', so nothing was linked: {reason}");
 
+        /// <summary>Push and take resolve <i>differs from series</i>, so a book holding the series copy has nothing to resolve.</summary>
+        public static SeriesRefusal DoesNotDiffer(string title, string label) =>
+            new(SeriesRefusalKind.Blocked, $"{label}'s Voices in '{title}' don't differ from the series.");
+
+        /// <summary>A push or take that could not be written into some books; the rest were.</summary>
+        public static SeriesRefusal CopiesFailed(IReadOnlyList<(string Title, string Reason)> failures) =>
+            new(SeriesRefusalKind.Failed,
+                "The Voices could not be written into " +
+                string.Join("; ", failures.Select(f => $"'{f.Title}': {f.Reason}")) +
+                (failures.Count == 1 ? ". That book still differs from the series." : ". Those books still differ from the series."));
+
         public static SeriesRefusal UnknownFolder(string folder) => new(SeriesRefusalKind.NotFound, $"No project '{folder}'.");
 
         public static SeriesRefusal NotAMember(string title, string series) =>

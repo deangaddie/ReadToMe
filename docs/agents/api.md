@@ -359,9 +359,9 @@ The cast read is `{ books: [{ folder, title, position }], rows: [{ seriesCharact
 [{ folder, linked: { characterId, name, differs } | null, suggested: { characterId, name } | null }] }],
 suggestedRows, unlinked: { "<folder>": [{ characterId, name, isNarrator, nameMatches }] }, suggestionCount }`, rows
 Narrator first then by label. A row's `label` is its Character's name in the lowest-positioned linked book. Link
-suggestions and *differs from series* come later: `suggested`, `suggestedRows` and `nameMatches` are empty,
-`suggestionCount` is 0 and `differs` false. `characters/summary` rows carry `seriesLink: { seriesId,
-seriesCharacterId, seriesName, bookCount, differs } | null`.
+suggestions come later: `suggested`, `suggestedRows` and `nameMatches` are empty and `suggestionCount` is 0.
+`differs` is described below. `characters/summary` rows carry `seriesLink: { seriesId, seriesCharacterId,
+seriesName, bookCount, differs } | null`.
 
 Linking runs the Voice merge: the linking book's Character gains every Voice the linked books hold that it lacks,
 then each linked book, in Series position order, gains this Character's Voices it lacks, reference audio and
@@ -379,10 +379,10 @@ per-book route (`/commands` CreateVoice, UpdateVoice, DeleteVoice, the design pr
 transcript, source; `generate-audio`, `upload`, `transcribe`, the editor's apply and restore-original), the host
 copies that Voice's whole state, reference audio included, into every other linked book in the same request, in
 Series position order, under the same Voice Id. Each copy is a History step there with the edit's label ("Edit
-voice", "Generate voice audio", …); a failed copy is logged and the rest carry on. A History Restore is never
-copied. Deleting a shared Voice deletes it in every linked book and moves each book's default to its oldest
-remaining Voice; it is 409 when another book's positional Voice Rules target it, or when it is that book's last
-Voice, with `reason` (`PositionalRules` | `LastVoice`) and `books: [{ folder, title, ruleCount }]` extensions.
+voice", "Generate voice audio", …); a failed copy is logged, the rest carry on and the edit still answers as
+success (that book then *differs*). A History Restore is never copied. Deleting a shared Voice deletes it in every
+linked book and moves each book's default to its oldest remaining Voice; it is 409 when another book's positional
+Voice Rules target it, or when it is the last Voice of another book that holds it, with `reason` (`PositionalRules` | `LastVoice`) and `books: [{ folder, title, ruleCount }]` extensions.
 `DeleteCharacter` on a linked Character unlinks it first; its Voices go in that book only. `MergeCharacters` whose
 merged (removed) Character is linked is 409 ("Unlink … first, or merge the other way"). Any commit in a member book
 that changes its Characters, aliases, Voices or Voice Rules sends the `series` signal for its series.
@@ -393,9 +393,27 @@ curl -s http://localhost:5000/api/series/{id}/characters/{scId}   # the inline s
 
 It answers `{ seriesCopyFolder, voices: [VoiceDto], books: [{ folder, title, position, characterId,
 characterName, defaultVoiceId, differs }], deleteBlocks: { "<voiceId>": { reason, books } } }`, books in Series
-position order. The series copy is the lowest-positioned linked book's Character (until *differs from series*
-lands); the editor writes through that book's per-book routes and the copies carry each edit to the rest. 404:
-unknown series or Series character.
+position order. `voices` and `seriesCopyFolder` are the **series copy**'s; the editor writes through that book's
+per-book routes and the copies carry each edit to the rest. 404: unknown series or Series character.
+
+**Differs from series** (#222). A linked book *differs* when its copy of the Series character's Voices (every
+shared field, and the reference audio by content hash) is not the series copy: the version most linked books
+hold, a tie going to the lowest Series position. It is found on each read, not stored, so a copy that failed to
+write and a Restore to older Voices end the same way. `differs` is filled in the cast read's cells, the editor
+read's books and `seriesLink`. An edit made in the series copy's book (where the editor writes) brings each
+differing book back in line: that book takes the whole set, as a step with the edit's label. A Voice delete
+doesn't, and nor does an edit made in a differing book.
+
+```bash
+curl -s -X POST http://localhost:5000/api/series/{id}/characters/{scId}/push -H 'content-type: application/json' \n  -d '{ "folder": "a-study-in-scarlet" }'   # this book's Voices into every other linked book → 204
+curl -s -X POST http://localhost:5000/api/series/{id}/characters/{scId}/take -H 'content-type: application/json' \n  -d '{ "folder": "a-study-in-scarlet" }'   # the series copy into this book → 204
+```
+
+Each replaces the target books' Voices of that Character with the source's whole set (added, overwritten, and
+those it lacks removed), as a History step "Push series voices" or "Take series voices" in each target book. Only
+Voices are copied: Voice Rules stay each book's own, apart from positional rules on a removed Voice, which go with
+it, and a default on one, which moves to the oldest Voice left. 409 when the book doesn't differ. 422 when a copy
+couldn't be written, naming the books (a push writes the rest first). 404 as Unlink; 400 without `folder`.
 
 Where the project stands, in one read:
 

@@ -308,6 +308,17 @@ export class CastPage extends R2mElement {
                         : nothing
                     }
                     ${
+                      row.seriesLink?.differs
+                        ? html`<span
+                            class="cast__series cast__series--differs"
+                            data-testid="differs-badge"
+                            data-tooltip=${`Differs from series: its Voices here are not the copy the other books in ${row.seriesLink.seriesName} hold`}
+                            aria-label="Differs from series"
+                            >${icon('sync_problem')}</span
+                          >`
+                        : nothing
+                    }
+                    ${
                       row.aliases.length > 0
                         ? html`<span
                             class="cast__aliases"

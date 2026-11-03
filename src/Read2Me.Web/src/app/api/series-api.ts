@@ -120,4 +120,22 @@ export class SeriesApi {
       path: { id, seriesCharacterId },
     });
   }
+
+  // ---- Differs from series (#222) ----
+
+  /** Push: `folder`'s Voices of the Series character into every other linked book. 409 when it doesn't differ. */
+  push(id: string, seriesCharacterId: string, folder: string): Promise<void> {
+    return this.api.post('/api/series/{id}/characters/{seriesCharacterId}/push', {
+      path: { id, seriesCharacterId },
+      body: { folder },
+    });
+  }
+
+  /** Take: the series copy into `folder`. 409 when it doesn't differ. */
+  take(id: string, seriesCharacterId: string, folder: string): Promise<void> {
+    return this.api.post('/api/series/{id}/characters/{seriesCharacterId}/take', {
+      path: { id, seriesCharacterId },
+      body: { folder },
+    });
+  }
 }
