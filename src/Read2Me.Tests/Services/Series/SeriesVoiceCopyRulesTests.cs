@@ -103,22 +103,24 @@ namespace Read2Me.Tests.Services.Series
 
         // ---- delete refusals -----------------------------------------------------------------------
 
-        private static SeriesVoiceDeleteBook Uses(string folder, int rules) => new(folder, folder, rules);
+        /// <summary>Another linked book: its positional rules on the Voice, and whether it holds the Voice and any other.</summary>
+        private static SeriesVoiceDeleteRules.OtherBook Other(string folder, int rules = 0, bool holds = true, bool others = true) =>
+            new(folder, folder, rules, holds, others);
 
         [Fact]
         public void Another_books_positional_rules_refuse_the_delete_naming_only_those_books()
         {
-            var block = SeriesVoiceDeleteRules.Check(isLastVoice: false, [Uses("four", 0), Uses("adventures", 2)]);
+            var block = SeriesVoiceDeleteRules.Check([Other("four"), Other("adventures", rules: 2)]);
 
             Assert.NotNull(block);
             Assert.Equal(SeriesVoiceDeleteReason.PositionalRules, block.Reason);
-            Assert.Equal([Uses("adventures", 2)], block.Books);
+            Assert.Equal([new SeriesVoiceDeleteBook("adventures", "adventures", 2)], block.Books);
         }
 
         [Fact]
         public void The_last_Voice_is_refused_while_other_books_would_lose_their_default()
         {
-            var block = SeriesVoiceDeleteRules.Check(isLastVoice: true, [Uses("four", 0), Uses("adventures", 0)]);
+            var block = SeriesVoiceDeleteRules.Check([Other("four", others: false), Other("adventures", others: false)]);
 
             Assert.NotNull(block);
             Assert.Equal(SeriesVoiceDeleteReason.LastVoice, block.Reason);
@@ -126,9 +128,22 @@ namespace Read2Me.Tests.Services.Series
         }
 
         [Fact]
+        public void Only_a_book_that_holds_the_Voice_and_no_other_would_lose_its_default()
+        {
+            // "four" differs: it never got the Voice. "adventures" differs too: it holds another as well.
+            var block = SeriesVoiceDeleteRules.Check([
+                Other("four", holds: false, others: false), Other("adventures", others: true), Other("valley", others: false),
+            ]);
+
+            Assert.Equal(SeriesVoiceDeleteReason.LastVoice, block?.Reason);
+            Assert.Equal(["valley"], block!.Books.Select(b => b.Folder));
+            Assert.Null(SeriesVoiceDeleteRules.Check([Other("four", holds: false, others: false), Other("adventures")]));
+        }
+
+        [Fact]
         public void Rules_are_named_before_the_last_Voice()
         {
-            var block = SeriesVoiceDeleteRules.Check(isLastVoice: true, [Uses("four", 1)]);
+            var block = SeriesVoiceDeleteRules.Check([Other("four", rules: 1, others: false)]);
 
             Assert.Equal(SeriesVoiceDeleteReason.PositionalRules, block?.Reason);
         }
@@ -136,8 +151,8 @@ namespace Read2Me.Tests.Services.Series
         [Fact]
         public void A_Voice_no_other_book_uses_can_go_and_so_can_the_last_one_of_a_Character_linked_nowhere_else()
         {
-            Assert.Null(SeriesVoiceDeleteRules.Check(isLastVoice: false, [Uses("four", 0)]));
-            Assert.Null(SeriesVoiceDeleteRules.Check(isLastVoice: true, []));
+            Assert.Null(SeriesVoiceDeleteRules.Check([Other("four")]));
+            Assert.Null(SeriesVoiceDeleteRules.Check([]));
         }
 
         [Fact]

@@ -82,6 +82,9 @@
   .cast__series .r2m-icon {
     font-size: 18px;
   }
+  .cast__series--differs {
+    color: var(--r2m-status-busy);
+  }
   .cast__aliases {
     font-size: var(--r2m-text-xs);
     padding: 0 var(--r2m-space-2);

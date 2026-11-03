@@ -185,6 +185,36 @@ describe('r2m-cast-page', () => {
     expect(page.querySelector('r2m-narrator-banner')?.textContent).toContain('Say who tells it');
   });
 
+  it('a series-linked row carries the link badge, and a differs badge when its Voices differ (#222)', async () => {
+    const link = (differs: boolean) => ({
+      seriesId: 'h',
+      seriesCharacterId: `sc-${differs}`,
+      seriesName: 'Sherlock Holmes',
+      bookCount: 3,
+      differs,
+    });
+    const { page } = await render('projects/dracula/cast', [
+      row('Narrator'),
+      row('Mina', { seriesLink: link(false) }),
+      row('Arthur', { seriesLink: link(true) }),
+    ]);
+    const badges = (id: string) => {
+      const r = page.querySelector(`.cast__row[data-character-id="${id}"]`)!;
+      return [
+        r.querySelector('[data-testid=series-badge]'),
+        r.querySelector('[data-testid=differs-badge]'),
+      ];
+    };
+    expect(badges('narrator')).toEqual([null, null]);
+    const [minaLink, minaDiffers] = badges('mina');
+    expect(minaLink).not.toBeNull();
+    expect(minaDiffers).toBeNull();
+    const [, arthurDiffers] = badges('arthur');
+    expect(arthurDiffers?.getAttribute('data-tooltip')).toBe(
+      'Differs from series: its Voices here are not the copy the other books in Sherlock Holmes hold',
+    );
+  });
+
   it('search filters by name or alias and sort reorders', async () => {
     const { page } = await render();
     const search = page.querySelector<HTMLInputElement>('input[type=search]')!;

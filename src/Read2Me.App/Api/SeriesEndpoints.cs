@@ -61,9 +61,32 @@ namespace Read2Me.App.Api
                 .WithSummary("What linking characterId would copy, for the Link confirm: { bookGains, seriesGains } (Voice names). Refused as the link itself would be.");
             endpoints.MapGet("/api/series/{id:guid}/characters/{seriesCharacterId:guid}", CharacterAsync)
                 .WithSummary("The inline series Voice editor's read: the series copy's folder and its Voices (edit them through that book's per-book routes; " +
-                             "each commit is copied into every other linked book), each linked book in position order with its Character and default Voice, " +
+                             "each commit is copied into every other linked book; one made here brings each differing book back in line), each linked book in position order with its Character, " +
+                             "default Voice and differs (its Voices are not the series copy: the version most linked books hold, ties to the lowest position), " +
                              "and deleteBlocks by Voice Id (PositionalRules or LastVoice, naming the books). 404 unknown series or Series character.");
+            endpoints.MapPost("/api/series/{id:guid}/characters/{seriesCharacterId:guid}/push", PushAsync)
+                .WithSummary("Push { folder }: that book's Voices of the Series character are copied into every other linked book, each a \"Push series voices\" History step there. " +
+                             "Only Voices, never Voice Rules. 404 unknown series, Series character, folder, a book not in the series or not linked to it; " +
+                             "409 the book doesn't differ from series; 422 naming the books a copy failed to write into (the rest were written).");
+            endpoints.MapPost("/api/series/{id:guid}/characters/{seriesCharacterId:guid}/take", TakeAsync)
+                .WithSummary("Take { folder }: the series copy's Voices are copied into that book, a \"Take series voices\" History step there. " +
+                             "Only Voices, never Voice Rules. 404 as push; 409 the book doesn't differ from series; 422 the copy failed to write.");
         }
+
+        private static async Task<Results<NoContent, ProblemHttpResult>> PushAsync(
+            Guid id, Guid seriesCharacterId, SeriesResolveRequest? body, SeriesRegistry registry, CancellationToken ct) =>
+            body?.Folder is { Length: > 0 } folder
+                ? NoContentOr(await registry.PushAsync(id, seriesCharacterId, folder, ct))
+                : TypedResults.Problem("Expected a JSON body with 'folder'.", statusCode: StatusCodes.Status400BadRequest);
+
+        private static async Task<Results<NoContent, ProblemHttpResult>> TakeAsync(
+            Guid id, Guid seriesCharacterId, SeriesResolveRequest? body, SeriesRegistry registry, CancellationToken ct) =>
+            body?.Folder is { Length: > 0 } folder
+                ? NoContentOr(await registry.TakeAsync(id, seriesCharacterId, folder, ct))
+                : TypedResults.Problem("Expected a JSON body with 'folder'.", statusCode: StatusCodes.Status400BadRequest);
+
+        private static Results<NoContent, ProblemHttpResult> NoContentOr(SeriesResult<bool> result) =>
+            result.Refusal is { } refusal ? Refused(refusal) : TypedResults.NoContent();
 
         private static async Task<Results<PhysicalFileHttpResult, NotFound, ProblemHttpResult>> GetPosterAsync(
             Guid id, SeriesRegistry registry, CancellationToken ct)
@@ -205,7 +228,7 @@ namespace Read2Me.App.Api
                 view.SeriesCopyFolder,
                 view.Voices.Select(v => VoiceEndpoints.ToDto(copyFolder, v, originals, fs)).ToList(),
                 view.Books.Select(b => new SeriesCharacterBookDto(
-                    b.Folder, b.Title, b.Position, b.CharacterId, b.CharacterName, b.DefaultVoiceId, Differs: false)).ToList(),
+                    b.Folder, b.Title, b.Position, b.CharacterId, b.CharacterName, b.DefaultVoiceId, b.Differs)).ToList(),
                 view.DeleteBlocks.ToDictionary(
                     d => d.Key.ToString(),
                     d => new SeriesVoiceDeleteBlockDto(
@@ -266,7 +289,7 @@ namespace Read2Me.App.Api
     /// <summary>
     /// The series cast board (#213): <see cref="SuggestedRows"/>, each cell's <c>suggested</c>, each
     /// unlinked Character's <c>nameMatches</c> and <see cref="SuggestionCount"/> stay empty until link
-    /// suggestions (#223); <c>differs</c> stays false until #222.
+    /// suggestions (#223).
     /// </summary>
     public sealed record SeriesCastDto(
         IReadOnlyList<SeriesCastBookDto> Books,
@@ -281,7 +304,7 @@ namespace Read2Me.App.Api
                 r.SeriesCharacterId, r.Label, r.IsNarrator,
                 r.Cells.Select(c => new SeriesCastCellDto(
                     c.Folder,
-                    c.Linked is { } l ? new SeriesLinkedCellDto(l.CharacterId, l.Name, Differs: false) : null,
+                    c.Linked is { } l ? new SeriesLinkedCellDto(l.CharacterId, l.Name, c.Differs) : null,
                     Suggested: null)).ToList())).ToList(),
             [],
             v.Unlinked.ToDictionary(
@@ -309,7 +332,7 @@ namespace Read2Me.App.Api
     /// <summary>A book's unlinked Character, for the pickers; <see cref="NameMatches"/> marks the rows whose names it matches (#223).</summary>
     public sealed record SeriesUnlinkedCharacterDto(Guid CharacterId, string Name, bool IsNarrator, IReadOnlyList<Guid> NameMatches);
 
-    /// <summary>A Character's series link on the Cast page's roster; <see cref="Differs"/> stays false until #222.</summary>
+    /// <summary>A Character's series link on the Cast page's roster; <see cref="Differs"/>: this book's Voices are not the series copy (#222).</summary>
     public sealed record CharacterSeriesLinkDto(Guid SeriesId, Guid SeriesCharacterId, string SeriesName, int BookCount, bool Differs);
 
     /// <summary>
@@ -322,7 +345,7 @@ namespace Read2Me.App.Api
         IReadOnlyList<SeriesCharacterBookDto> Books,
         IReadOnlyDictionary<string, SeriesVoiceDeleteBlockDto> DeleteBlocks);
 
-    /// <summary>A linked book, its Character and its own default Voice; <see cref="Differs"/> stays false until #222.</summary>
+    /// <summary>A linked book, its Character and its own default Voice; <see cref="Differs"/>: its Voices are not the series copy (#222).</summary>
     public sealed record SeriesCharacterBookDto(
         string Folder, string Title, decimal Position, Guid CharacterId, string CharacterName, Guid? DefaultVoiceId, bool Differs);
 
@@ -332,4 +355,7 @@ namespace Read2Me.App.Api
     public sealed record SeriesVoiceDeleteBookDto(string Folder, string Title, int RuleCount);
 
     public sealed record SeriesPositionsRequest(IReadOnlyDictionary<string, decimal>? Positions = null);
+
+    /// <summary>Push or take: the book whose Voices are pushed, or that takes the series copy.</summary>
+    public sealed record SeriesResolveRequest(string? Folder = null);
 }

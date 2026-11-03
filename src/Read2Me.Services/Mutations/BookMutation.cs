@@ -718,3 +718,22 @@ public sealed record CopySeriesVoiceMutation(
 
     internal override (string Label, StepAction Action)? OwnStep => (Label, Action);
 }
+
+/// <summary>
+/// One book's side of resolving <i>differs from series</i> (#222): a push into it from another
+/// linked book, or a take of the series copy. Its linked Character's Voices become exactly
+/// <see cref="Voices"/>, under the same Ids: each added or overwritten, and every other Voice of
+/// the Character removed. The book's Voice Rules stay its own, apart from those on a removed Voice:
+/// a positional one goes with it, and the default moves to the oldest Voice left. The audio paths
+/// name this book's copies, which the producer has already written. A Voice another Character of
+/// this book holds is refused.
+/// </summary>
+public sealed record ReplaceSeriesVoicesMutation(
+    ProjectFolderId FolderId, Guid CharacterId, IReadOnlyList<SeriesVoiceCopy> Voices, string Label, StepAction Action)
+    : ProjectStateMutation(FolderId)
+{
+    /// <summary>The copied reference audio and originals may land over this book's own, so History hashes them with the commit.</summary>
+    public override StateFileOwners WritesFiles => new(Voices.Select(v => v.Id).ToList());
+
+    internal override (string Label, StepAction Action)? OwnStep => (Label, Action);
+}

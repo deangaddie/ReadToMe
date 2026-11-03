@@ -1,10 +1,18 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
-import type { CharacterSummaryDto } from '@app/api';
+import {
+  type CharacterSeriesLinkDto,
+  type CharacterSummaryDto,
+  SeriesApi,
+  toApiError,
+} from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
-import { blockable, emptyState, icon } from '@app/ui/partials';
+import { ConfirmService } from '@app/ui/dialogs';
+import { ToastService } from '@app/ui/toast';
+import { castDiffersText, resolveConfirm } from '../../projects/series-voices';
+import { blockable, callout, emptyState, icon } from '@app/ui/partials';
 import { CastStore } from '../cast-store';
 import { openAddVoiceDialog } from './add-voice-dialog';
 import { seriesBoardPath } from '../cast-path';
@@ -17,6 +25,10 @@ import './voice-card';
  */
 export class VoicesSection extends R2mElement {
   private store!: CastStore;
+  private readonly series = use(SeriesApi);
+  private readonly confirm = use(ConfirmService);
+  private readonly toast = use(ToastService);
+  readonly resolving = signal(false);
 
   readonly #character = signal<CharacterSummaryDto | null>(null);
   get character() {
@@ -67,6 +79,7 @@ export class VoicesSection extends R2mElement {
           </button>`,
         )}
       </div>
+      ${link?.differs ? this.differsCallout(character.name, link) : nothing}
       ${
         voices.voices.length === 0 && !this.store.voicesLoading()
           ? emptyState({
@@ -90,6 +103,51 @@ export class VoicesSection extends R2mElement {
         )}
       </div>
     `;
+  }
+
+  /** Differs from series (#222): this book's copy isn't the series copy; push it, or take that one. */
+  private differsCallout(name: string, link: CharacterSeriesLinkDto) {
+    const disabled = this.resolving();
+    return callout({
+      kind: 'warn',
+      text: castDiffersText(name, link.seriesName),
+      testId: 'differs-callout',
+      action: {
+        label: 'Use this book’s copy for all',
+        name: 'push',
+        disabled,
+        run: () => void this.resolve(name, link, 'push'),
+      },
+      more: [
+        {
+          label: 'Use the series copy',
+          name: 'take',
+          disabled,
+          run: () => void this.resolve(name, link, 'take'),
+        },
+      ],
+    });
+  }
+
+  /** Reads the series character for the confirm's book titles, confirms, then pushes or takes. */
+  async resolve(name: string, link: CharacterSeriesLinkDto, how: 'push' | 'take'): Promise<void> {
+    const folder = this.store.folder();
+    if (!folder || this.resolving()) return;
+    this.resolving.set(true);
+    try {
+      const detail = await this.series.character(link.seriesId, link.seriesCharacterId);
+      const confirm = resolveConfirm(detail, folder, name, how);
+      if (!confirm || !(await this.confirm.confirm(confirm))) return;
+      if (how === 'push') await this.series.push(link.seriesId, link.seriesCharacterId, folder);
+      else await this.series.take(link.seriesId, link.seriesCharacterId, folder);
+      // Read again here: a push writes only the other books, so no receipt reaches this one, yet
+      // this book's `differs` has changed.
+      await this.store.refresh();
+    } catch (error) {
+      this.toast.problem(toApiError(error).toProblem());
+    } finally {
+      this.resolving.set(false);
+    }
   }
 
   async addVoice(): Promise<void> {

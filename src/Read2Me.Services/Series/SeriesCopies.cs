@@ -6,8 +6,9 @@ namespace Read2Me.Services.Series
         public Core.Models.ProjectFolderId FolderId => new(Folder);
     }
 
-    /// <summary>A book's series-linked Character: its series and Series character, and the other linked books.</summary>
-    public sealed record SeriesPeers(Guid SeriesId, Guid SeriesCharacterId, IReadOnlyList<SeriesPeer> Others);
+    /// <summary>A book's series-linked Character: its series and Series character, the book itself, and the other linked books.</summary>
+    /// <param name="Self">The book itself, as its peers see it.</param>
+    public sealed record SeriesPeers(Guid SeriesId, Guid SeriesCharacterId, SeriesPeer Self, IReadOnlyList<SeriesPeer> Others);
 
     /// <summary>How a copy into one book went: <see cref="Failure"/> is null when it committed.</summary>
     public sealed record SeriesCopyResult(string Folder, string? Failure);

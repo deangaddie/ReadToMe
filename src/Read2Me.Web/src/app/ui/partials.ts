@@ -44,7 +44,14 @@ export function statusChip(options: {
  * elsewhere as a link. The label is the real control's exact button label.
  */
 export type MessageAction =
-  | { label: string; icon?: IconName; run: () => void }
+  | {
+      label: string;
+      icon?: IconName;
+      run: () => void;
+      /** Its `data-action` hook. */
+      name?: string;
+      disabled?: boolean;
+    }
   | { label: string; icon?: IconName; href: string };
 
 export type EmptyStateAction = MessageAction;
@@ -53,7 +60,13 @@ function messageAction(action: MessageAction, cls: string) {
   const content = html`${action.icon ? icon(action.icon) : nothing}${action.label}`;
   return 'href' in action
     ? html`<a class="r2m-button ${cls}" href=${action.href}>${content}</a>`
-    : html`<button type="button" class="r2m-button ${cls}" @click=${action.run}>
+    : html`<button
+        type="button"
+        class="r2m-button ${cls}"
+        data-action=${action.name ?? nothing}
+        ?disabled=${action.disabled ?? false}
+        @click=${action.run}
+      >
         ${content}
       </button>`;
 }
@@ -105,6 +118,12 @@ export interface Callout {
   kind: 'info' | 'warn';
   text: string;
   action?: MessageAction;
+  /** Further actions after {@link action}, in order. */
+  more?: readonly MessageAction[];
+  /** The banner's `data-testid`. */
+  testId?: string;
+  /** The banner's `data-key`, when several show at once (a book's folder, say). */
+  key?: string;
 }
 
 /**
@@ -113,10 +132,15 @@ export interface Callout {
  * feature folder. Errors stay toasts.
  */
 export function callout(options: Callout) {
-  return html`<div class="r2m-callout r2m-callout--${options.kind}">
+  return html`<div
+    class="r2m-callout r2m-callout--${options.kind}"
+    data-testid=${options.testId ?? nothing}
+    data-key=${options.key ?? nothing}
+  >
     ${icon(DEFAULT_ICONS[options.kind], 'r2m-callout__icon')}
     <span class="r2m-callout__text">${options.text}</span>
     ${options.action ? messageAction(options.action, 'r2m-callout__action') : nothing}
+    ${(options.more ?? []).map((a) => messageAction(a, 'r2m-callout__action'))}
   </div>`;
 }
 

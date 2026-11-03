@@ -797,6 +797,30 @@ describe('r2m-projects-page series cast board', () => {
     expect(cellOf(el, 'sc-holmes', 'four').dataset.cell).toBe('empty');
   });
 
+  it('a linked cell whose Voices differ from series carries the differs badge (#222)', async () => {
+    const differing = {
+      ...narratorRow,
+      cells: [
+        narratorRow.cells[0]!,
+        {
+          folder: 'four',
+          linked: { ...linked('f-narrator', 'Narrator'), differs: true },
+          suggested: null,
+        },
+      ],
+    };
+    const { el } = await openBoard(
+      castOf(holmes, [scarlet, four], [differing, holmesRow], unlinked),
+    );
+
+    expect(cellOf(el, 'sc-narrator', 'scarlet').querySelector('.series-cast__differs')).toBeNull();
+    expect(
+      cellOf(el, 'sc-narrator', 'four')
+        .querySelector('.series-cast__differs')
+        ?.getAttribute('data-tooltip'),
+    ).toBe('Differs from series');
+  });
+
   it('an empty cell picks among that book’s unlinked Characters', async () => {
     const { el } = await openBoard();
     const options = Array.from(cellOf(el, 'sc-holmes', 'four').querySelectorAll('option'), text);

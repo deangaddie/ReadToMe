@@ -31,6 +31,7 @@ namespace Read2Me.Services.Series
         BookMutations mutations,
         SeriesRegistryLock gate,
         EventBroadcaster<SeriesChanged> changes,
+        VoiceAudioHashes audioHashes,
         ILogger<SeriesRegistry> logger)
     {
         public const string FolderName = ".series";

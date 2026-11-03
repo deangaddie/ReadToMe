@@ -30,17 +30,22 @@ namespace Read2Me.Services.Series
             var (state, refusal) = await LinkStateAsync(seriesId, ct);
             if (state is null) return refusal!;
 
-            var rows = state.Links
-                .GroupBy(l => l.SeriesCharacterId)
-                .Select(g =>
+            var unordered = new List<SeriesCastRow>();
+            foreach (var seriesCharacterId in state.Links.Select(l => l.SeriesCharacterId).Distinct())
+            {
+                var choice = await ChooseAsync(seriesId, LinkedPeers(state, seriesCharacterId));
+                var cells = state.Books.Select(b =>
                 {
-                    var cells = state.Books.Select(b =>
-                    {
-                        var link = state.LinkOf(g.Key, b.ProjectId);
-                        return new SeriesCastCell(b.Folder, link is null ? null : state.Find(link.ProjectId, link.CharacterId));
-                    }).ToList();
-                    return new SeriesCastRow(g.Key, state.LabelOf(g.Key), cells.Any(c => c.Linked?.IsNarrator == true), cells);
-                })
+                    var link = state.LinkOf(seriesCharacterId, b.ProjectId);
+                    return new SeriesCastCell(
+                        b.Folder,
+                        link is null ? null : state.Find(link.ProjectId, link.CharacterId),
+                        link is not null && choice?.DiffersFrom(b.Folder) == true);
+                }).ToList();
+                unordered.Add(new SeriesCastRow(seriesCharacterId, state.LabelOf(seriesCharacterId), cells.Any(c => c.Linked?.IsNarrator == true), cells));
+            }
+
+            var rows = unordered
                 .OrderBy(r => r.IsNarrator ? 0 : 1)
                 .ThenBy(r => r.Label, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
@@ -83,12 +88,26 @@ namespace Read2Me.Services.Series
             if (series is null) return new Dictionary<Guid, CharacterSeriesLink>();
 
             var links = await LoadLinksAsync(series.Id, ct);
-            return links
-                .Where(l => l.ProjectId == project.Id)
-                .ToDictionary(
-                    l => l.CharacterId,
-                    l => new CharacterSeriesLink(series.Id, l.SeriesCharacterId, series.Name,
-                        links.Count(o => o.SeriesCharacterId == l.SeriesCharacterId && series.Members.ContainsKey(o.ProjectId))));
+            var mine = links.Where(l => l.ProjectId == project.Id).ToList();
+            if (mine.Count == 0) return new Dictionary<Guid, CharacterSeriesLink>();
+
+            var index = await IndexProjectsAsync();
+            var result = new Dictionary<Guid, CharacterSeriesLink>();
+            foreach (var link in mine)
+            {
+                var peers = links
+                    .Where(o => o.SeriesCharacterId == link.SeriesCharacterId && series.Members.ContainsKey(o.ProjectId))
+                    .Select(o => index.ById(o.ProjectId) is { } p
+                        ? new SeriesPeer(p.Folder, p.Title, SeriesPositions.Normalize(series.Members[o.ProjectId]), o.CharacterId)
+                        : null)
+                    .OfType<SeriesPeer>()
+                    .ToList();
+                var choice = await ChooseAsync(series.Id, peers);
+                var differs = choice is not null && index.ById(project.Id) is { } self && choice.DiffersFrom(self.Folder);
+                result[link.CharacterId] = new CharacterSeriesLink(series.Id, link.SeriesCharacterId, series.Name,
+                    links.Count(o => o.SeriesCharacterId == link.SeriesCharacterId && series.Members.ContainsKey(o.ProjectId)), differs);
+            }
+            return result;
         }
 
         // ---- writes ------------------------------------------------------------------------------
@@ -146,7 +165,7 @@ namespace Read2Me.Services.Series
             }
 
             // The link stands from here: a book that can't take its Voices is logged and the rest go on
-            // (#222 marks it differs from series).
+            // (it then differs from series, #222).
             foreach (var gains in plan.Merge.LinkedGains)
             {
                 var other = plan.State.Books.First(b => b.Folder == gains.Folder);
@@ -405,8 +424,8 @@ namespace Read2Me.Services.Series
     /// <summary>A Series character's row: its live label and one cell per book, in the board's book order.</summary>
     public sealed record SeriesCastRow(Guid SeriesCharacterId, string Label, bool IsNarrator, IReadOnlyList<SeriesCastCell> Cells);
 
-    /// <summary>One book's cell in a row: the Character linked there, or null for an empty cell.</summary>
-    public sealed record SeriesCastCell(string Folder, SeriesCastCharacter? Linked);
+    /// <summary>One book's cell in a row: the Character linked there, or null for an empty cell, and whether its Voices differ from series.</summary>
+    public sealed record SeriesCastCell(string Folder, SeriesCastCharacter? Linked, bool Differs);
 
     /// <summary>A book's Character as the board shows it; <see cref="IsNarrator"/> marks the seed Narrator row.</summary>
     public sealed record SeriesCastCharacter(Guid CharacterId, string Name, bool IsNarrator);
@@ -415,5 +434,5 @@ namespace Read2Me.Services.Series
     public sealed record SeriesLinkPreview(IReadOnlyList<string> BookGains, IReadOnlyList<string> SeriesGains);
 
     /// <summary>A Character's series link, as the Cast page's roster shows it.</summary>
-    public sealed record CharacterSeriesLink(Guid SeriesId, Guid SeriesCharacterId, string SeriesName, int BookCount);
+    public sealed record CharacterSeriesLink(Guid SeriesId, Guid SeriesCharacterId, string SeriesName, int BookCount, bool Differs);
 }

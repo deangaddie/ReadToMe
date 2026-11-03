@@ -5,6 +5,7 @@ import {
   defaultCells,
   deleteBlockOf,
   deleteNote,
+  differsCallouts,
   renameHint,
   savedInCount,
   savedInLabel,
@@ -49,7 +50,7 @@ describe('series Voice editor rules', () => {
     expect(seriesCopyBook(detail({ seriesCopyFolder: 'gone' }))).toBeNull();
   });
 
-  it('"Saved in N books" counts the linked books that don’t differ', () => {
+  it('"Saved in N books" counts the linked books that don’t differ, read after the edit', () => {
     expect(savedInCount(detail())).toBe(3);
     expect(savedInLabel(detail())).toBe('Saved in 3 books');
     const differing = detail({
@@ -59,7 +60,8 @@ describe('series Voice editor rules', () => {
       ],
     });
     expect(savedInLabel(differing)).toBe('Saved');
-    expect(renameHint(differing)).toBe('Saved in A Study in Scarlet.');
+    // An edit made here brings a differing book back in line, so the rename names it too.
+    expect(renameHint(differing)).toBe('Saved in A Study in Scarlet and The Sign of the Four.');
     expect(renameHint(detail())).toBe(
       'Saved in A Study in Scarlet, The Sign of the Four and A Novella.',
     );
@@ -110,5 +112,27 @@ describe('series Voice editor rules', () => {
     expect(deleteSeriesVoiceConfirm('Army doctor', ['A Study in Scarlet']).title).toBe(
       'Delete "Army doctor"?',
     );
+  });
+
+  it('a book that differs gets a callout naming it and the series copy, with its push', () => {
+    expect(differsCallouts(detail())).toEqual([]);
+    const differing = detail({
+      seriesCopyFolder: 'four',
+      books: [
+        book('scarlet', 'A Study in Scarlet', 1, 'v1', true),
+        book('four', 'The Sign of the Four', 2, 'v1'),
+        book('novella', 'A Novella', 2.5, 'v1'),
+      ],
+    });
+    const [callout, ...rest] = differsCallouts(differing);
+    expect(rest).toEqual([]);
+    expect(callout?.book.folder).toBe('scarlet');
+    expect(callout?.message).toBe(
+      'A Study in Scarlet holds a different copy of these Voices. This editor shows the series ' +
+        'copy, from The Sign of the Four. Adding or changing a Voice here brings A Study in Scarlet back ' +
+        'in line.',
+    );
+    expect(callout?.pushLabel).toBe('Use A Study in Scarlet’s copy for all');
+    expect(callout?.otherTitles).toEqual(['The Sign of the Four', 'A Novella']);
   });
 });

@@ -91,7 +91,7 @@ namespace Read2Me.App.Api
                 r.LineCount, r.VoiceCount, r.ReadyVoiceCount, r.IsNarrator,
                 narrator.IsLinkedTo(r.Id),
                 links.TryGetValue(r.Id, out var link)
-                    ? new CharacterSeriesLinkDto(link.SeriesId, link.SeriesCharacterId, link.SeriesName, link.BookCount, Differs: false)
+                    ? new CharacterSeriesLinkDto(link.SeriesId, link.SeriesCharacterId, link.SeriesName, link.BookCount, link.Differs)
                     : null)).ToList());
         }
 

@@ -16,17 +16,19 @@ import { provide, use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { LiveService } from '@app/live/live.service';
 import { ConfirmService, PromptService } from '@app/ui/dialogs';
-import { blockable, icon, statusChip } from '@app/ui/partials';
+import { blockable, callout, icon, statusChip } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
 import { CastStore } from '../cast/cast-store';
 import { openAddVoiceDialog } from '../cast/voices/add-voice-dialog';
 import { voiceAudioUrl } from '../cast/voices/voice-logic';
-import { deleteSeriesVoiceConfirm } from './permanent-changes';
+import { deleteSeriesVoiceConfirm, pushSeriesVoicesConfirm } from './permanent-changes';
 import {
   defaultCells,
   defaultHeading,
   deleteBlockOf,
   deleteNote,
+  type DiffersCallout,
+  differsCallouts,
   renameHint,
   savedInLabel,
   seriesCopyBook,
@@ -115,22 +117,47 @@ export class SeriesVoiceEditor extends R2mElement {
     else await this.cast.refreshVoices();
   }
 
-  /** Runs one command in `folder`; toasts "Saved in N books" (or the refusal), then reads again. */
-  private async run(folder: string, command: BookCommand, saved = true): Promise<boolean> {
-    const detail = this.detail();
-    if (!detail || this.busy()) return false;
+  /** Runs one command in `folder`, then reads again; toasts "Saved in N books" from that read (or the refusal). */
+  private run(folder: string, command: BookCommand, saved = true): Promise<boolean> {
+    return this.write(() => this.book.execute(folder, command), saved);
+  }
+
+  /**
+   * One write, then a fresh read. "Saved in N books" counts from the read after it, since an edit
+   * here brings a differing book back in line, and a copy that failed leaves its book differing.
+   */
+  private async write(send: () => Promise<unknown>, saved: boolean): Promise<boolean> {
+    if (!this.detail() || this.busy()) return false;
     this.busy.set(true);
+    let ok = false;
     try {
-      await this.book.execute(folder, command);
-      if (saved) this.toast.success(savedInLabel(detail));
-      return true;
+      await send();
+      ok = true;
     } catch (error) {
       this.toast.problem(toApiError(error).toProblem());
-      return false;
     } finally {
       this.busy.set(false);
       await this.load();
     }
+    const after = this.detail();
+    if (ok && saved && after) this.toast.success(savedInLabel(after));
+    return ok;
+  }
+
+  /** "Use <book>'s copy for all": confirms what is replaced, then pushes that book's Voices. */
+  async push(callout: DiffersCallout): Promise<void> {
+    const ok = await this.confirm.confirm(
+      pushSeriesVoicesConfirm({
+        label: this.label || callout.book.characterName,
+        title: callout.book.title,
+        otherTitles: callout.otherTitles,
+      }),
+    );
+    if (!ok) return;
+    await this.write(
+      () => this.api.push(this.seriesId, this.seriesCharacterId, callout.book.folder),
+      true,
+    );
   }
 
   async addVoice(): Promise<void> {
@@ -226,6 +253,20 @@ export class SeriesVoiceEditor extends R2mElement {
           ${icon('add')} Add Voice
         </button>
       </header>
+      ${differsCallouts(detail).map((c) =>
+        callout({
+          kind: 'warn',
+          text: c.message,
+          testId: 'differs-callout',
+          key: c.book.folder,
+          action: {
+            label: c.pushLabel,
+            name: 'push',
+            disabled: busy,
+            run: () => void this.push(c),
+          },
+        }),
+      )}
       ${
         detail.voices.length === 0
           ? html`<p class="series-voices__note">No Voices yet. Add one to share it.</p>`
