@@ -55,13 +55,25 @@
       outline-offset: -2px;
     }
   }
-  /* The placeholder poster until the series poster slice: stripes and the name. */
+  /*
+   * The stacked poster (Series lifecycle 11): the uploaded image, the lowest book's cover with its
+   * "cover of Book N" note, or (--empty) stripes and the name.
+   */
   .projects__poster {
+    position: relative;
     display: grid;
     place-items: center;
     aspect-ratio: 3 / 4;
     width: 100%;
+    overflow: hidden;
     border-radius: var(--r2m-radius-md);
+    background: var(--r2m-surface-container);
+    box-shadow:
+      4px -4px 0 -1px var(--r2m-surface-container),
+      8px -8px 0 -2px var(--r2m-outline);
+    color: var(--r2m-text-muted);
+  }
+  .projects__poster--empty {
     background: repeating-linear-gradient(
       45deg,
       var(--r2m-surface-low),
@@ -69,10 +81,25 @@
       var(--r2m-surface-container) 10px,
       var(--r2m-surface-container) 20px
     );
-    box-shadow:
-      4px -4px 0 -1px var(--r2m-surface-container),
-      8px -8px 0 -2px var(--r2m-outline);
-    color: var(--r2m-text-muted);
+  }
+  .projects__poster-image {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .projects__poster-note {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    left: 6px;
+    padding: 2px 6px;
+    border-radius: var(--r2m-radius-sm);
+    background: rgb(0 0 0 / 60%);
+    color: #fff;
+    font-size: var(--r2m-text-xs);
+    text-align: center;
   }
   .projects__poster-name {
     padding: var(--r2m-space-2);

@@ -32,6 +32,11 @@ namespace Read2Me.Services.Series
     {
         public const string FolderName = ".series";
 
+        /// <summary>The uploaded poster's file name in the series folder, before its extension.</summary>
+        public const string PosterName = "poster";
+
+        private const string UploadSuffix = ".upload";
+
         // ---- reads -------------------------------------------------------------------------------
 
         /// <summary>Every readable series, by name; each one's books in position order.</summary>
@@ -144,6 +149,53 @@ namespace Read2Me.Services.Series
             return true;
         }
 
+        // ---- poster ------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Saves the uploaded poster (its type and size already checked against the cover's rules),
+        /// replacing any earlier one. No confirm and no History: picking the file is the confirm.
+        /// </summary>
+        public async Task<SeriesResult<SeriesView>> SetPosterAsync(Guid seriesId, string extension, Stream content, CancellationToken ct = default)
+        {
+            using var _ = await gate.EnterAsync(ct);
+            var (series, refusal) = await FindAsync(seriesId, ct);
+            if (series is null) return refusal!;
+
+            // Written aside first, so a failed upload leaves the earlier poster as it was.
+            var folder = FolderOf(seriesId);
+            var incoming = Path.Combine(folder, PosterName + UploadSuffix);
+            try
+            {
+                await using var file = File.Create(incoming);
+                await content.CopyToAsync(file, ct);
+            }
+            catch
+            {
+                File.Delete(incoming);
+                throw;
+            }
+            foreach (var earlier in PosterFiles(folder))
+                File.Delete(earlier);
+            File.Move(incoming, Path.Combine(folder, PosterName + extension.ToLowerInvariant()));
+
+            Signal(seriesId, SeriesChangeKind.Changed);
+            return await ViewAsync(series, await IndexProjectsAsync(), ct);
+        }
+
+        /// <summary>Removes the uploaded poster; a series without one is fine too. The fallback shows again.</summary>
+        public async Task<SeriesResult<bool>> ClearPosterAsync(Guid seriesId, CancellationToken ct = default)
+        {
+            using var _ = await gate.EnterAsync(ct);
+            var (series, refusal) = await FindAsync(seriesId, ct);
+            if (series is null) return refusal!;
+
+            var files = PosterFiles(FolderOf(seriesId));
+            foreach (var file in files)
+                File.Delete(file);
+            if (files.Count > 0) Signal(seriesId, SeriesChangeKind.Changed);
+            return true;
+        }
+
         // ---- membership --------------------------------------------------------------------------
 
         /// <summary>
@@ -250,7 +302,7 @@ namespace Read2Me.Services.Series
 
         private sealed record Loaded(Guid Id, string Name, IReadOnlyDictionary<Guid, decimal> Members);
 
-        private sealed record IndexedProject(string Folder, Guid ProjectId, string Title);
+        private sealed record IndexedProject(string Folder, Guid ProjectId, string Title, string? CoverImage);
 
         /// <summary>
         /// Every project folder with its Id and title. <see cref="Complete"/> is false when a folder's
@@ -282,7 +334,7 @@ namespace Read2Me.Services.Series
                 try
                 {
                     if (await projects.GetProjectAsync(id) is { } project)
-                        entries.Add(new IndexedProject(folder, project.Id, project.Title));
+                        entries.Add(new IndexedProject(folder, project.Id, project.Title, project.CoverImage));
                     else
                         complete = false;
                 }
@@ -366,8 +418,37 @@ namespace Read2Me.Services.Series
                     await RemoveMemberAsync(series.Id, projectId, ct);
                 }
             }
-            return new SeriesView(series.Id, series.Name, books.OrderBy(b => b.Position).ToList());
+            var ordered = books.OrderBy(b => b.Position).ToList();
+            return new SeriesView(series.Id, series.Name, ordered, PosterOf(series.Id, ordered, index));
         }
+
+        /// <summary>
+        /// The uploaded poster; else the cover of the lowest-positioned book; else none (the client
+        /// draws the placeholder). Only that one book's cover counts, not the first book with one.
+        /// </summary>
+        private SeriesPoster PosterOf(Guid seriesId, IReadOnlyList<SeriesBookView> books, ProjectIndex index)
+        {
+            if (PosterFiles(FolderOf(seriesId)).FirstOrDefault() is { } uploaded)
+                return SeriesPoster.Of(SeriesPosterSource.Uploaded, uploaded, coverPosition: null);
+
+            if (books.FirstOrDefault() is { } first
+                && index.ByFolder(first.Folder)?.CoverImage is { Length: > 0 } cover
+                && ProjectFolderId.TryParse(first.Folder, out var folderId))
+            {
+                var path = Path.Combine(fs.GetProjectFolderPath(folderId), Path.GetFileName(cover));
+                if (File.Exists(path))
+                    return SeriesPoster.Of(SeriesPosterSource.Cover, path, first.Position);
+            }
+            return SeriesPoster.None;
+        }
+
+        private static IReadOnlyList<string> PosterFiles(string folder) =>
+            Directory.Exists(folder)
+                ? Directory.GetFiles(folder, PosterName + ".*")
+                    .Where(f => !f.EndsWith(UploadSuffix, StringComparison.OrdinalIgnoreCase))
+                    .Order(StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : [];
 
         private async Task RemoveMemberAsync(Guid seriesId, Guid projectId, CancellationToken ct)
         {
@@ -386,7 +467,27 @@ namespace Read2Me.Services.Series
     }
 
     /// <summary>One series as the API reads it: its books in position order.</summary>
-    public sealed record SeriesView(Guid Id, string Name, IReadOnlyList<SeriesBookView> Books);
+    public sealed record SeriesView(Guid Id, string Name, IReadOnlyList<SeriesBookView> Books, SeriesPoster Poster);
+
+    public enum SeriesPosterSource
+    {
+        Uploaded,
+        Cover,
+        None,
+    }
+
+    /// <summary>
+    /// What a series card shows (#206 item 11): the file served for it, if any, with a
+    /// <see cref="Version"/> that changes whenever that file does, and for a fallback cover the
+    /// position of the book it comes from.
+    /// </summary>
+    public sealed record SeriesPoster(SeriesPosterSource Source, string? Path, long Version, decimal? CoverPosition)
+    {
+        public static readonly SeriesPoster None = new(SeriesPosterSource.None, null, 0, null);
+
+        public static SeriesPoster Of(SeriesPosterSource source, string path, decimal? coverPosition) =>
+            new(source, path, File.GetLastWriteTimeUtc(path).Ticks, coverPosition);
+    }
 
     public sealed record SeriesBookView(string Folder, string Title, decimal Position);
 

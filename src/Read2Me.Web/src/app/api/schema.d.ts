@@ -5026,6 +5026,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/series/{id}/poster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The series poster: the uploaded image, else the cover of the lowest-positioned book. 404 unknown series or no image. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "image/jpeg": components["schemas"]["Stream"];
+                        "image/png": components["schemas"]["Stream"];
+                        "image/webp": components["schemas"]["Stream"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        /** Upload or replace the poster (multipart 'file': jpg/jpeg/png/webp, at most 10 MB, as the cover) → the series. 400 wrong type or too big; 404 unknown series. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SeriesDto"];
+                    };
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /** Remove the uploaded poster: the fallback cover shows again. 204, also when there is none; 404 unknown series. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/audio-processing": {
         parameters: {
             query?: never;
@@ -9158,12 +9274,21 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            poster: components["schemas"]["SeriesPosterDto"];
         };
         SeriesPositionsRequest: {
             positions?: null | {
                 [key: string]: number;
             };
         };
+        SeriesPosterDto: {
+            /** Format: double */
+            coverPosition: null | number;
+            source: components["schemas"]["SeriesPosterSource"];
+            url: null | string;
+        };
+        /** @enum {unknown} */
+        SeriesPosterSource: "Uploaded" | "Cover" | "None";
         SetActiveRequest: {
             /** Format: int32 */
             id: number;

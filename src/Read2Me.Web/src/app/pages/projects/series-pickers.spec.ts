@@ -16,13 +16,24 @@ const zenda = book('zenda', 'The Prisoner of Zenda');
 const holmes: SeriesView = {
   id: 'h',
   name: 'Sherlock Holmes',
+  poster: { url: null, source: 'None', coverPosition: null },
   members: [
     { project: scarlet, position: 1 },
     { project: four, position: 2.5 },
   ],
 };
-const ozBooks: SeriesView = { id: 'o', name: 'Oz', members: [{ project: oz, position: 1 }] };
-const austen: SeriesView = { id: 'a', name: 'Austen', members: [] };
+const ozBooks: SeriesView = {
+  id: 'o',
+  name: 'Oz',
+  poster: { url: null, source: 'None', coverPosition: null },
+  members: [{ project: oz, position: 1 }],
+};
+const austen: SeriesView = {
+  id: 'a',
+  name: 'Austen',
+  poster: { url: null, source: 'None', coverPosition: null },
+  members: [],
+};
 
 afterEach(() => document.body.replaceChildren());
 

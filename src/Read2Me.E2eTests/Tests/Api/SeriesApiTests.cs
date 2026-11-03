@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
@@ -385,6 +386,134 @@ public class SeriesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             Directory.Delete(fourFolder, recursive: true);
         }
+    }
+
+    // ---- the poster (#219) ----------------------------------------------------------------------
+
+    private static MultipartFormDataContent ImageForm(byte[] bytes, string fileName)
+    {
+        var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(bytes), "file", fileName);
+        return form;
+    }
+
+    private async Task<HttpResponseMessage> PutPosterAsync(Guid series, byte[] bytes, string fileName = "poster.png")
+    {
+        using var form = ImageForm(bytes, fileName);
+        return await Http.PutAsync($"{app.BaseUrl}/api/series/{series}/poster", form);
+    }
+
+    private async Task PutCoverAsync(string folder, string content)
+    {
+        using var form = ImageForm(Encoding.UTF8.GetBytes(content), "cover.png");
+        Assert.Equal(HttpStatusCode.OK, (await Http.PutAsync($"{app.BaseUrl}/api/projects/{folder}/cover", form)).StatusCode);
+    }
+
+    private async Task<JsonElement> PosterAsync(Guid series) => (await SeriesAsync(series))!.Value.GetProperty("poster");
+
+    /// <summary>The bytes the poster's URL serves now.</summary>
+    private async Task<string> ServedAsync(JsonElement poster)
+    {
+        var response = await Http.GetAsync($"{app.BaseUrl}{poster.GetProperty("url").GetString()}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return await response.Content.ReadAsStringAsync();
+    }
+
+    [Fact]
+    public async Task An_uploaded_poster_is_served_and_a_replacement_takes_its_place()
+    {
+        var holmes = await SeedHolmesAsync();
+        var id = await CreateAsync(UniqueName(), holmes.Scarlet);
+        await PutCoverAsync(holmes.Scarlet, "scarlet cover");
+
+        var uploaded = await PutPosterAsync(id, Encoding.UTF8.GetBytes("first poster"));
+        Assert.Equal(HttpStatusCode.OK, uploaded.StatusCode);
+        Assert.Equal("Uploaded", (await JsonAsync(uploaded)).GetProperty("poster").GetProperty("source").GetString());
+
+        var poster = await PosterAsync(id);
+        Assert.Equal("Uploaded", poster.GetProperty("source").GetString());
+        Assert.Equal(JsonValueKind.Null, poster.GetProperty("coverPosition").ValueKind);
+        Assert.Equal("first poster", await ServedAsync(poster)); // ahead of the book's cover
+        var served = await Http.GetAsync($"{app.BaseUrl}/api/series/{id}/poster");
+        Assert.Equal("image/png", served.Content.Headers.ContentType?.MediaType);
+
+        await Task.Delay(20); // a later write time, so the URL's version moves on
+        Assert.Equal(HttpStatusCode.OK, (await PutPosterAsync(id, Encoding.UTF8.GetBytes("second poster"), "Second.JPG")).StatusCode);
+
+        var replaced = await PosterAsync(id);
+        Assert.NotEqual(poster.GetProperty("url").GetString(), replaced.GetProperty("url").GetString());
+        Assert.Equal("second poster", await ServedAsync(replaced));
+        Assert.Equal("image/jpeg", (await Http.GetAsync($"{app.BaseUrl}/api/series/{id}/poster")).Content.Headers.ContentType?.MediaType);
+        Assert.Equal(["poster.jpg"], // the earlier upload is gone
+            Directory.GetFiles(Path.GetDirectoryName(RegistryPath(id))!, "poster*").Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public async Task A_wrong_type_or_oversize_poster_is_400_and_an_unknown_series_404()
+    {
+        var id = await CreateAsync(UniqueName());
+
+        await AssertProblemAsync(await PutPosterAsync(id, [1, 2, 3], "poster.gif"), HttpStatusCode.BadRequest, ".png");
+        await AssertProblemAsync(await PutPosterAsync(id, new byte[10 * 1024 * 1024 + 1]), HttpStatusCode.BadRequest, "10 MB");
+        Assert.Equal("None", (await PosterAsync(id)).GetProperty("source").GetString());
+
+        Assert.Equal(HttpStatusCode.NotFound, (await PutPosterAsync(Guid.NewGuid(), [1])).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Http.DeleteAsync($"{app.BaseUrl}/api/series/{Guid.NewGuid()}/poster")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Http.GetAsync($"{app.BaseUrl}/api/series/{Guid.NewGuid()}/poster")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Clearing_the_poster_is_204_also_with_none_and_the_cover_shows_again()
+    {
+        var holmes = await SeedHolmesAsync();
+        var id = await CreateAsync(UniqueName(), holmes.Scarlet);
+        await PutCoverAsync(holmes.Scarlet, "scarlet cover");
+
+        Assert.Equal(HttpStatusCode.NoContent, (await Http.DeleteAsync($"{app.BaseUrl}/api/series/{id}/poster")).StatusCode);
+
+        await PutPosterAsync(id, Encoding.UTF8.GetBytes("a poster"));
+        Assert.Equal(HttpStatusCode.NoContent, (await Http.DeleteAsync($"{app.BaseUrl}/api/series/{id}/poster")).StatusCode);
+
+        var poster = await PosterAsync(id);
+        Assert.Equal("Cover", poster.GetProperty("source").GetString());
+        Assert.Equal("scarlet cover", await ServedAsync(poster));
+    }
+
+    [Fact]
+    public async Task The_fallback_is_the_cover_of_the_lowest_positioned_book_and_follows_a_reorder()
+    {
+        var holmes = await SeedHolmesAsync();
+        var id = await CreateAsync(UniqueName(), holmes.Scarlet);
+        await JoinedAtAsync(id, holmes.Four);
+        await PutCoverAsync(holmes.Scarlet, "scarlet cover");
+        await PutCoverAsync(holmes.Four, "four cover");
+
+        var poster = await PosterAsync(id);
+        Assert.Equal("Cover", poster.GetProperty("source").GetString());
+        Assert.Equal(1m, poster.GetProperty("coverPosition").GetDecimal());
+        Assert.Equal("scarlet cover", await ServedAsync(poster));
+
+        await SetPositionsAsync(id, new Dictionary<string, decimal> { [holmes.Scarlet] = 3m, [holmes.Four] = 2m });
+
+        poster = await PosterAsync(id);
+        Assert.Equal(2m, poster.GetProperty("coverPosition").GetDecimal());
+        Assert.Equal("four cover", await ServedAsync(poster));
+
+        // Only the lowest book's cover counts: without one, the card shows the placeholder.
+        Assert.Equal(HttpStatusCode.NoContent, (await Http.DeleteAsync($"{app.BaseUrl}/api/projects/{holmes.Four}/cover")).StatusCode);
+        Assert.Equal("None", (await PosterAsync(id)).GetProperty("source").GetString());
+    }
+
+    [Fact]
+    public async Task An_empty_series_has_no_poster()
+    {
+        var id = await CreateAsync(UniqueName());
+
+        var poster = await PosterAsync(id);
+        Assert.Equal("None", poster.GetProperty("source").GetString());
+        Assert.Equal(JsonValueKind.Null, poster.GetProperty("url").ValueKind);
+        Assert.Equal(JsonValueKind.Null, poster.GetProperty("coverPosition").ValueKind);
+        Assert.Equal(HttpStatusCode.NotFound, (await Http.GetAsync($"{app.BaseUrl}/api/series/{id}/poster")).StatusCode);
     }
 
     // ---- no History, no origin, the hub signal --------------------------------------------------

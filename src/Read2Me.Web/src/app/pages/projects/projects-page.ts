@@ -264,6 +264,8 @@ export class ProjectsPage extends R2mElement {
                         onToggle: () => this.toggle(item.series.id),
                         onAddBook: () => void this.actions.addBook(item.series),
                         onRename: () => void this.actions.rename(item.series),
+                        onPoster: (file) => void this.actions.uploadPoster(item.series, file),
+                        onRemovePoster: () => void this.actions.removePoster(item.series),
                         onDelete: () => void this.deleteSeries(item.series),
                       })
                     : this.bookCard(item.project, cards)

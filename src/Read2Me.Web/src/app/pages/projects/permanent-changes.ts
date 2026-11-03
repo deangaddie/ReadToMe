@@ -4,7 +4,7 @@ import { bookLabel, type Membership } from './series-shelf';
 /**
  * The Projects page's permanent-change confirms (web.md conventions 12), worded per Series
  * lifecycle (#206). Joining, creating, renaming and saving numbers ask nothing; Leave and Move to
- * ask (neutral: every book keeps its Voices), deleting a series asks in red, and deleting a member
+ * ask (neutral: every book keeps its Voices), deleting a series and Remove poster ask in red, and deleting a member
  * project adds a line. Like `rereadConfirm`, each keeps its own title and button label, which a
  * `PermanentChange`'s "Action?" title cannot say ("Remove Emma from Austen?"), so each returns
  * `ConfirmOptions`.
@@ -58,16 +58,44 @@ export function moveConfirm(input: LeaveInput & { to: string }): ConfirmOptions 
 export function deleteSeriesConfirm(input: {
   name: string;
   titles: readonly string[];
+  /** An uploaded poster goes too; a fallback cover belongs to its book and stays. */
+  hasPoster?: boolean;
 }): ConfirmOptions {
+  const poster = input.hasPoster ?? false;
   return {
     title: `Delete series ${input.name}?`,
     message:
       input.titles.length === 0
-        ? 'The series has no books. Its name is removed, and there is no History to bring it back.'
+        ? poster
+          ? 'The series has no books. Its name and poster are removed, and there is no History ' +
+            'to bring them back.'
+          : 'The series has no books. Its name is removed, and there is no History to bring it back.'
         : `Every book is kept, with its Characters and Voices: ${list(input.titles)}. ` +
-          'The series’ name, book numbers and links are removed, and there is no History to ' +
-          'bring them back.',
+          `The series’ name, ${poster ? 'poster, ' : ''}book numbers and links are removed, ` +
+          'and there is no History to bring them back.',
     confirmLabel: 'Delete series',
+    destructive: true,
+  };
+}
+
+/**
+ * Remove poster (Series lifecycle 11): red, since the uploaded image has no History. Says what
+ * shows instead: the cover of the lowest-positioned book (`fallbackPosition`), or the placeholder.
+ */
+export function removePosterConfirm(input: {
+  name: string;
+  fallbackPosition: number | null;
+}): ConfirmOptions {
+  const instead =
+    input.fallbackPosition === null
+      ? 'a placeholder with its name'
+      : `the cover of ${bookLabel(input.fallbackPosition)}`;
+  return {
+    title: `Remove the poster of ${input.name}?`,
+    message:
+      'The uploaded image is deleted, and there is no History to bring it back. ' +
+      `The series shows ${instead} instead.`,
+    confirmLabel: 'Remove poster',
     destructive: true,
   };
 }

@@ -33,14 +33,25 @@ const oz = book('oz', 'The Wonderful Wizard of Oz');
 const holmes: SeriesDto = {
   id: 'h',
   name: 'Sherlock Holmes',
+  poster: { url: null, source: 'None', coverPosition: null },
   books: [
     { folder: 'scarlet', position: 1 },
     { folder: 'four', position: 2 },
     { folder: 'adventures', position: 2.5 },
   ],
 };
-const ozSeries: SeriesDto = { id: 'o', name: 'oz books', books: [{ folder: 'oz', position: 1 }] };
-const empty: SeriesDto = { id: 'e', name: 'Austen', books: [] };
+const ozSeries: SeriesDto = {
+  id: 'o',
+  name: 'oz books',
+  poster: { url: null, source: 'None', coverPosition: null },
+  books: [{ folder: 'oz', position: 1 }],
+};
+const empty: SeriesDto = {
+  id: 'e',
+  name: 'Austen',
+  poster: { url: null, source: 'None', coverPosition: null },
+  books: [],
+};
 
 describe('seriesViews()', () => {
   it('joins each series to its projects in position order, dropping a missing folder', () => {
