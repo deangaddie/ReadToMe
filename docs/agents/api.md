@@ -402,17 +402,22 @@ hold, a tie going to the lowest Series position. It is found on each read, not s
 write and a Restore to older Voices end the same way. `differs` is filled in the cast read's cells, the editor
 read's books and `seriesLink`. An edit made in the series copy's book (where the editor writes) brings each
 differing book back in line: that book takes the whole set, as a step with the edit's label. A Voice delete
-doesn't, and nor does an edit made in a differing book.
+doesn't, nor does an edit made in a differing book, and a book that would lose positional Voice Rules is left
+differing (nothing asks first there): push or take resolves it.
 
 ```bash
 curl -s -X POST http://localhost:5000/api/series/{id}/characters/{scId}/push -H 'content-type: application/json' \n  -d '{ "folder": "a-study-in-scarlet" }'   # this book's Voices into every other linked book → 204
 curl -s -X POST http://localhost:5000/api/series/{id}/characters/{scId}/take -H 'content-type: application/json' \n  -d '{ "folder": "a-study-in-scarlet" }'   # the series copy into this book → 204
+curl -s 'http://localhost:5000/api/series/{id}/characters/{scId}/push/preview?folder=a-study-in-scarlet'   # → { losses }
+curl -s 'http://localhost:5000/api/series/{id}/characters/{scId}/take/preview?folder=a-study-in-scarlet'   # → { losses }
 ```
 
 Each replaces the target books' Voices of that Character with the source's whole set (added, overwritten, and
 those it lacks removed), as a History step "Push series voices" or "Take series voices" in each target book. Only
 Voices are copied: Voice Rules stay each book's own, apart from positional rules on a removed Voice, which go with
-it, and a default on one, which moves to the oldest Voice left. 409 when the book doesn't differ. 422 when a copy
+it, and a default on one, which moves to the oldest Voice left. The previews, for the confirms, answer `losses: [{ folder, title,
+voices, ruleCount }]`: each target book that would lose Voices (names) and the positional rules on them; they
+refuse as the write would. 409 when the book doesn't differ. 422 when a copy
 couldn't be written, naming the books (a push writes the rest first). 404 as Unlink; 400 without `folder`.
 
 Where the project stands, in one read:

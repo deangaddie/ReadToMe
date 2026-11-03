@@ -129,14 +129,19 @@ export class VoicesSection extends R2mElement {
     });
   }
 
-  /** Reads the series character for the confirm's book titles, confirms, then pushes or takes. */
+  /** Reads the confirm's book titles and what would be removed, confirms, then pushes or takes. */
   async resolve(name: string, link: CharacterSeriesLinkDto, how: 'push' | 'take'): Promise<void> {
     const folder = this.store.folder();
     if (!folder || this.resolving()) return;
     this.resolving.set(true);
     try {
-      const detail = await this.series.character(link.seriesId, link.seriesCharacterId);
-      const confirm = resolveConfirm(detail, folder, name, how);
+      const [detail, preview] = await Promise.all([
+        this.series.character(link.seriesId, link.seriesCharacterId),
+        how === 'push'
+          ? this.series.previewPush(link.seriesId, link.seriesCharacterId, folder)
+          : this.series.previewTake(link.seriesId, link.seriesCharacterId, folder),
+      ]);
+      const confirm = resolveConfirm(detail, folder, name, how, preview.losses);
       if (!confirm || !(await this.confirm.confirm(confirm))) return;
       if (how === 'push') await this.series.push(link.seriesId, link.seriesCharacterId, folder);
       else await this.series.take(link.seriesId, link.seriesCharacterId, folder);

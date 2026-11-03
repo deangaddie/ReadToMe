@@ -70,6 +70,9 @@ export type SeriesUnlinkedCharacterDto = Schema['SeriesUnlinkedCharacterDto'];
 export type SeriesLinkPreviewDto = Schema['SeriesLinkPreviewDto'];
 /** `CharacterSummaryDto.seriesLink`: the Character's Series character, or null. */
 export type CharacterSeriesLinkDto = Schema['CharacterSeriesLinkDto'];
+/** A push or take's confirm (#222): each book that would lose Voices, and the positional rules on them. */
+export type SeriesResolvePreviewDto = Schema['SeriesResolvePreviewDto'];
+export type SeriesVoiceLossDto = Schema['SeriesVoiceLossDto'];
 /** `GET /api/series/{id}/characters/{scId}`: the inline series Voice editor (the series copy's Voices, each linked book, the refused deletes). */
 export type SeriesCharacterDto = Schema['SeriesCharacterDto'];
 export type SeriesCharacterBookDto = Schema['SeriesCharacterBookDto'];

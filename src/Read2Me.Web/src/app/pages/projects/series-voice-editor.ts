@@ -144,13 +144,25 @@ export class SeriesVoiceEditor extends R2mElement {
     return ok;
   }
 
-  /** "Use <book>'s copy for all": confirms what is replaced, then pushes that book's Voices. */
+  /** "Use <book>'s copy for all": reads what it would remove, confirms, then pushes that book's Voices. */
   async push(callout: DiffersCallout): Promise<void> {
+    let losses;
+    try {
+      ({ losses } = await this.api.previewPush(
+        this.seriesId,
+        this.seriesCharacterId,
+        callout.book.folder,
+      ));
+    } catch (error) {
+      this.toast.problem(toApiError(error).toProblem());
+      return;
+    }
     const ok = await this.confirm.confirm(
       pushSeriesVoicesConfirm({
         label: this.label || callout.book.characterName,
         title: callout.book.title,
         otherTitles: callout.otherTitles,
+        losses,
       }),
     );
     if (!ok) return;

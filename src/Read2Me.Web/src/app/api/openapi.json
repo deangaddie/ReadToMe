@@ -4074,6 +4074,20 @@
           "None"
         ]
       },
+      "SeriesResolvePreviewDto": {
+        "properties": {
+          "losses": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesVoiceLossDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "losses"
+        ],
+        "type": "object"
+      },
       "SeriesResolveRequest": {
         "properties": {
           "folder": {
@@ -4194,6 +4208,33 @@
           "PositionalRules",
           "LastVoice"
         ]
+      },
+      "SeriesVoiceLossDto": {
+        "properties": {
+          "folder": {
+            "type": "string"
+          },
+          "ruleCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "voices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "folder",
+          "title",
+          "voices",
+          "ruleCount"
+        ],
+        "type": "object"
       },
       "SetActiveRequest": {
         "properties": {
@@ -10738,6 +10779,64 @@
         ]
       }
     },
+    "/api/series/{id}/characters/{seriesCharacterId}/push/preview": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "seriesCharacterId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesResolvePreviewDto"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "What a push from folder would remove, for its confirm: { losses: [{ folder, title, voices, ruleCount }] }, each other linked book that would lose Voices (names) and the positional Voice Rules on them. Refused as the push itself would be.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      }
+    },
     "/api/series/{id}/characters/{seriesCharacterId}/take": {
       "post": {
         "parameters": [
@@ -10792,6 +10891,64 @@
           }
         },
         "summary": "Take { folder }: the series copy's Voices are copied into that book, a \"Take series voices\" History step there. Only Voices, never Voice Rules. 404 as push; 409 the book doesn't differ from series; 422 the copy failed to write.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      }
+    },
+    "/api/series/{id}/characters/{seriesCharacterId}/take/preview": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "seriesCharacterId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesResolvePreviewDto"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "What a take into folder would remove, for its confirm: { losses } as the push preview, for that book only. Refused as the take itself would be.",
         "tags": [
           "SeriesEndpoints"
         ]

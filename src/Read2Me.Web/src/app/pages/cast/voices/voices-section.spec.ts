@@ -263,6 +263,7 @@ describe('r2m-voices-section', () => {
 
       it('push confirms which books are replaced, then pushes this book', async () => {
         const push = '/api/series/h/characters/sc-alice/push';
+        api.on('GET', `${push}/preview`, { losses: [] });
         api.on('POST', push, undefined);
         const section = await mountLinked(DIFFERING);
 
@@ -284,6 +285,9 @@ describe('r2m-voices-section', () => {
 
       it('take confirms what is replaced and from where, then takes the series copy', async () => {
         const take = '/api/series/h/characters/sc-alice/take';
+        api.on('GET', `${take}/preview`, {
+          losses: [{ folder: 'dracula', title: 'Dracula', voices: ['Pipe'], ruleCount: 2 }],
+        });
         api.on('POST', take, undefined);
         const section = await mountLinked(DIFFERING);
 
@@ -295,6 +299,9 @@ describe('r2m-voices-section', () => {
           'replaced by the series copy, from A Study in Scarlet',
         );
         expect(confirms[0]?.message).toContain('“Take series voices” History step');
+        expect(confirms[0]?.message).toContain(
+          'Dracula loses “Pipe”, and the 2 Voice Rules on it.',
+        );
         expect(api.calls('POST', take).map((r) => r.body)).toEqual([{ folder: 'dracula' }]);
       });
     });
