@@ -66,6 +66,14 @@ export type SeriesCastRowDto = Schema['SeriesCastRowDto'];
 /** A row's cell in one book: `linked`, `suggested` (#223), or neither (an empty cell, with a picker). */
 export type SeriesCastCellDto = Schema['SeriesCastCellDto'];
 export type SeriesUnlinkedCharacterDto = Schema['SeriesUnlinkedCharacterDto'];
+/** A suggested row (#223): unlinked Characters of two or more books whose names match one-to-one; `label` is the first one's name. */
+export type SeriesSuggestedRowDto = Schema['SeriesSuggestedRowDto'];
+export type SeriesSuggestedMemberDto = Schema['SeriesSuggestedMemberDto'];
+/** One book's Character in a suggested row, as Share and link and Not the same take it. */
+export type SeriesMemberDto = Schema['SeriesMemberDto'];
+/** Share and link's confirm: the Voice names each book gains, lowest position first. */
+export type SeriesShareAndLinkPreviewDto = Schema['SeriesShareAndLinkPreviewDto'];
+export type SeriesBookGainsDto = Schema['SeriesBookGainsDto'];
 /** The Link confirm's gains: Voice names this book gains, and those the other linked books gain. */
 export type SeriesLinkPreviewDto = Schema['SeriesLinkPreviewDto'];
 /** `CharacterSummaryDto.seriesLink`: the Character's Series character, or null. */

@@ -4,6 +4,7 @@ import {
   type ProjectSummary,
   type SeriesCastDto,
   type SeriesCastRowDto,
+  type SeriesSuggestedRowDto,
   SeriesApi,
   toApiError,
 } from '@app/api';
@@ -18,6 +19,7 @@ import {
   linkConfirm,
   moveConfirm,
   removePosterConfirm,
+  shareAndLinkConfirm,
   shareConfirm,
   unlinkConfirm,
 } from './permanent-changes';
@@ -337,6 +339,57 @@ export class SeriesActions {
     });
   }
 
+  // ---- Link suggestions (#223) ----
+
+  /** Share and link a suggested row, behind one confirm listing what each book gains. */
+  async shareAndLink(
+    series: { id: string; name: string },
+    cast: SeriesCastDto,
+    row: SeriesSuggestedRowDto,
+  ): Promise<boolean> {
+    const members = memberRefs(row);
+    let preview;
+    try {
+      preview = await this.seriesApi.previewShareAndLink(series.id, members);
+    } catch (error) {
+      this.toast.problem(toApiError(error).toProblem());
+      return false;
+    }
+    const ok = await this.confirm.confirm(
+      shareAndLinkConfirm({
+        label: row.label,
+        seriesName: series.name,
+        books: preview.books.map((b) => ({
+          name: row.members.find((m) => m.folder === b.folder)?.name ?? row.label,
+          title: cast.books.find((c) => c.folder === b.folder)?.title ?? b.title,
+          gains: b.gains,
+        })),
+      }),
+    );
+    if (!ok) return false;
+    return this.run(async () => {
+      await this.seriesApi.shareAndLink(series.id, members);
+      this.toast.success(`${row.label} is shared and linked across ${series.name}`);
+    });
+  }
+
+  /** Not the same on a suggested cell: no confirm, as the picker still offers the Character. */
+  notTheSame(
+    series: { id: string },
+    row: SeriesCastRowDto,
+    folder: string,
+    characterId: string,
+  ): Promise<boolean> {
+    return this.run(() =>
+      this.seriesApi.notTheSame(series.id, row.seriesCharacterId, folder, characterId),
+    );
+  }
+
+  /** Not the same on a suggested row: each pair of its Characters. */
+  notTheSameRow(series: { id: string }, row: SeriesSuggestedRowDto): Promise<boolean> {
+    return this.run(() => this.seriesApi.notTheSameRow(series.id, memberRefs(row)));
+  }
+
   private joinedToast(project: ProjectSummary, position: number, seriesName: string): void {
     this.toast.success(
       `${project.title} is ${bookLabel(position)} of ${seriesName}. ` +
@@ -354,4 +407,9 @@ export class SeriesActions {
       return false;
     }
   }
+}
+
+/** A suggested row's Characters as Share and link and Not the same take them. */
+function memberRefs(row: SeriesSuggestedRowDto): { folder: string; characterId: string }[] {
+  return row.members.map((m) => ({ folder: m.folder, characterId: m.characterId }));
 }

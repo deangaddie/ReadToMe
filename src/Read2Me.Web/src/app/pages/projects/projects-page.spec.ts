@@ -850,7 +850,8 @@ describe('r2m-projects-page series cast board', () => {
     expect(preview[0]!.search).toBe('?characterId=f-holmes');
     const put = api.calls('PUT', '/api/series/h/characters/sc-holmes/links/four');
     expect(put.map((r) => r.body)).toEqual([{ characterId: 'f-holmes' }]);
-    expect(api.calls('GET', '/api/series/h/cast')).toHaveLength(2);
+    // The panel's suggestion count on opening, the board's read, and its read after the link.
+    expect(api.calls('GET', '/api/series/h/cast')).toHaveLength(3);
     expect(toasts).toEqual(['Holmes is linked to Sherlock Holmes']);
   });
 
@@ -907,8 +908,226 @@ describe('r2m-projects-page series cast board', () => {
     await settle();
     await el.rendered();
 
-    // One read on opening and one for this series' signal; another series' signal reads nothing.
-    expect(api.calls('GET', '/api/series/h/cast')).toHaveLength(2);
+    // The panel's suggestion count and the board's read on opening, then one for this series'
+    // signal (the board's: the panel leaves it to the showing board); another series' reads nothing.
+    expect(api.calls('GET', '/api/series/h/cast')).toHaveLength(3);
+  });
+
+  describe('Link suggestions (#223)', () => {
+    /** Four's Holmes suggested in Holmes' row, and Watson a suggested row across both books. */
+    const suggesting = (): SeriesCastDto => ({
+      ...castOf(
+        holmes,
+        [scarlet, four],
+        [
+          narratorRow,
+          {
+            ...holmesRow,
+            cells: [
+              holmesRow.cells[0]!,
+              {
+                folder: 'four',
+                linked: null,
+                suggested: { characterId: 'f-holmes', name: 'Holmes' },
+              },
+            ],
+          },
+        ],
+        {
+          scarlet: unlinked.scarlet,
+          four: [{ ...unlinked.four[0]!, nameMatches: ['sc-holmes'] }, unlinked.four[1]!],
+        },
+      ),
+      suggestedRows: [
+        {
+          label: 'Dr. Watson',
+          members: [
+            { folder: 'scarlet', characterId: 's-watson', name: 'Dr. Watson' },
+            { folder: 'four', characterId: 'f-watson', name: 'John Watson' },
+          ],
+        },
+      ],
+      suggestionCount: 2,
+    });
+
+    const watsonMembers = [
+      { folder: 'scarlet', characterId: 's-watson' },
+      { folder: 'four', characterId: 'f-watson' },
+    ];
+
+    const suggestedRow = (el: Element) =>
+      el.querySelector<HTMLElement>('tr[data-suggested-row="s-watson f-watson"]')!;
+
+    it('a suggested cell shows the Character with Link and ✕', async () => {
+      const { el } = await openBoard(suggesting());
+      const cell = cellOf(el, 'sc-holmes', 'four');
+
+      expect(cell.dataset.cell).toBe('suggested');
+      expect(text(cell)).toBe('Holmes? Link close');
+      expect(cell.querySelector('[data-action="not-the-same"]')!.getAttribute('aria-label')).toBe(
+        'Holmes is not Sherlock Holmes',
+      );
+    });
+
+    it('a suggested cell’s Link runs the Link confirm and links', async () => {
+      const { el } = await openBoard(suggesting());
+      api
+        .on('GET', '/api/series/h/characters/sc-holmes/links/four/preview', {
+          bookGains: [],
+          seriesGains: [],
+        })
+        .on('PUT', '/api/series/h/characters/sc-holmes/links/four', undefined);
+
+      cellOf(el, 'sc-holmes', 'four')
+        .querySelector<HTMLButtonElement>('[data-action="link-suggested"]')!
+        .click();
+      const { title } = await confirmDialog('confirm');
+
+      expect(title).toBe('Link Holmes to Sherlock Holmes?');
+      expect(
+        api.calls('PUT', '/api/series/h/characters/sc-holmes/links/four').map((r) => r.body),
+      ).toEqual([{ characterId: 'f-holmes' }]);
+    });
+
+    it('a suggested cell’s ✕ records Not the same without a confirm, then reads again', async () => {
+      const { el } = await openBoard(suggesting());
+      api.on('POST', '/api/series/h/not-the-same', undefined);
+
+      cellOf(el, 'sc-holmes', 'four')
+        .querySelector<HTMLButtonElement>('[data-action="not-the-same"]')!
+        .click();
+      await flush();
+
+      expect(document.querySelector('r2m-confirm-dialog')).toBeNull();
+      expect(api.calls('POST', '/api/series/h/not-the-same').map((r) => r.body)).toEqual([
+        { seriesCharacterId: 'sc-holmes', folder: 'four', characterId: 'f-holmes' },
+      ]);
+      // The panel's count and the board's read on opening, then the board's read after the write.
+      expect(api.calls('GET', '/api/series/h/cast')).toHaveLength(3);
+    });
+
+    it('a suggested row shows each book’s Character, with Share and link and ✕', async () => {
+      const { el } = await openBoard(suggesting());
+      const row = suggestedRow(el);
+
+      expect(text(row.querySelector('th'))).toBe('Dr. Watson? Share and link close');
+      expect(Array.from(row.querySelectorAll('td'), text)).toEqual(['Dr. Watson?', 'John Watson?']);
+      // Suggested rows come after the Series characters, before Share as new.
+      expect(Array.from(el.querySelectorAll('tbody > tr'), (r) => r.className)).toEqual([
+        '',
+        '',
+        'series-cast__suggested-row',
+        'series-cast__share-row',
+      ]);
+    });
+
+    it('Share and link asks once, naming what each book gains, then shares and links', async () => {
+      const { el } = await openBoard(suggesting());
+      api
+        .on('POST', '/api/series/h/characters/share-and-link/preview', {
+          books: [
+            { folder: 'scarlet', title: 'A Study in Scarlet', gains: ['Brisk'] },
+            { folder: 'four', title: 'The Sign of the Four', gains: [] },
+          ],
+        })
+        .on('POST', '/api/series/h/characters/share-and-link', { seriesCharacterId: 'sc-watson' });
+
+      suggestedRow(el).querySelector<HTMLButtonElement>('[data-action="share-and-link"]')!.click();
+      const { title, message } = await confirmDialog('confirm');
+
+      expect(title).toBe('Share and link Dr. Watson across Sherlock Holmes?');
+      expect(message).toContain(
+        'Dr. Watson in A Study in Scarlet and John Watson in The Sign of the Four become one ' +
+          'series character',
+      );
+      expect(message).toContain(
+        'A Study in Scarlet gains “Brisk”; The Sign of the Four gains no Voices.',
+      );
+      expect(
+        api.calls('POST', '/api/series/h/characters/share-and-link/preview').map((r) => r.body),
+      ).toEqual([{ members: watsonMembers }]);
+      expect(
+        api.calls('POST', '/api/series/h/characters/share-and-link').map((r) => r.body),
+      ).toEqual([{ members: watsonMembers }]);
+      expect(toasts).toEqual(['Dr. Watson is shared and linked across Sherlock Holmes']);
+    });
+
+    it('Share and link cancelled writes nothing', async () => {
+      const { el } = await openBoard(suggesting());
+      api.on('POST', '/api/series/h/characters/share-and-link/preview', { books: [] });
+
+      suggestedRow(el).querySelector<HTMLButtonElement>('[data-action="share-and-link"]')!.click();
+      await confirmDialog('cancel');
+
+      expect(api.calls('POST', '/api/series/h/characters/share-and-link')).toHaveLength(0);
+    });
+
+    it('a suggested row’s ✕ records each pair as not the same', async () => {
+      const { el } = await openBoard(suggesting());
+      api.on('POST', '/api/series/h/not-the-same', undefined);
+
+      suggestedRow(el)
+        .querySelector<HTMLButtonElement>('[data-action="not-the-same-row"]')!
+        .click();
+      await flush();
+
+      expect(api.calls('POST', '/api/series/h/not-the-same').map((r) => r.body)).toEqual([
+        { members: watsonMembers },
+      ]);
+    });
+
+    it('an ambiguous cell’s picker lists the name matches first, marked', async () => {
+      const character = (characterId: string, name: string, nameMatches: string[] = []) => ({
+        characterId,
+        name,
+        isNarrator: false,
+        nameMatches,
+      });
+      const { el } = await openBoard(
+        castOf(holmes, [scarlet, four], [narratorRow, holmesRow], {
+          scarlet: unlinked.scarlet,
+          four: [
+            character('f-watson', 'John Watson'),
+            character('f-holmes', 'Holmes', ['sc-holmes']),
+            character('f-sherlock', 'Sherlock', ['sc-holmes']),
+          ],
+        }),
+      );
+
+      expect(Array.from(cellOf(el, 'sc-holmes', 'four').querySelectorAll('option'), text)).toEqual([
+        'Link…',
+        'Holmes — name matches',
+        'Sherlock — name matches',
+        'John Watson',
+      ]);
+      // The Share as new picker marks nothing.
+      expect(
+        Array.from(el.querySelectorAll('td[data-cell="share"][data-folder="four"] option'), text),
+      ).toEqual(['Share…', 'John Watson', 'Holmes', 'Sherlock']);
+    });
+
+    it('the Characters tab counts suggestions, from opening the panel and then from the board', async () => {
+      const page = await render([four, scarlet], [holmes]);
+      api.on('GET', '/api/series/h/cast', suggesting());
+      await showSeries(page);
+      page.querySelector<HTMLButtonElement>('.projects__series-open')!.click();
+      await flush();
+      await page.rendered();
+      const tab = () => text(page.querySelector('[role=tab][data-tab="characters"]'));
+
+      expect(tab()).toBe('groupsCharacters · 2 suggestions');
+
+      api.on('GET', '/api/series/h/cast', {
+        ...suggesting(),
+        suggestedRows: [],
+        suggestionCount: 1,
+      });
+      page.querySelector<HTMLButtonElement>('[role=tab][data-tab="characters"]')!.click();
+      await flush();
+      await page.rendered();
+
+      expect(tab()).toBe('groupsCharacters · 1 suggestion');
+    });
   });
 
   it('Remove from <series> names the book’s linked Characters', async () => {

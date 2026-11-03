@@ -353,16 +353,40 @@ curl -s 'http://localhost:5000/api/series/{id}/characters/{scId}/links/{folder}/
 curl -s -X PUT http://localhost:5000/api/series/{id}/characters/{scId}/links/{folder} -H 'content-type: application/json' \
   -d '{ "characterId": "…" }'   # Link → 204
 curl -s -X DELETE http://localhost:5000/api/series/{id}/characters/{scId}/links/{folder}   # Unlink → 204; the book keeps its copy
+curl -s -X POST http://localhost:5000/api/series/{id}/characters/share-and-link/preview -H 'content-type: application/json' \
+  -d '{ "members": [{ "folder": "…", "characterId": "…" }, …] }'   # → { books: [{ folder, title, gains }] }; writes nothing
+curl -s -X POST http://localhost:5000/api/series/{id}/characters/share-and-link -H 'content-type: application/json' \
+  -d '{ "members": [{ "folder": "…", "characterId": "…" }, …] }'   # Share and link → 201 { seriesCharacterId }
+curl -s -X POST http://localhost:5000/api/series/{id}/not-the-same -H 'content-type: application/json' \
+  -d '{ "seriesCharacterId": "…", "folder": "…", "characterId": "…" }'   # a suggested cell → 204; or { "members": [...] }, a suggested row
 ```
 
 The cast read is `{ books: [{ folder, title, position }], rows: [{ seriesCharacterId, label, isNarrator, cells:
 [{ folder, linked: { characterId, name, differs } | null, suggested: { characterId, name } | null }] }],
 suggestedRows, unlinked: { "<folder>": [{ characterId, name, isNarrator, nameMatches }] }, suggestionCount }`, rows
-Narrator first then by label. A row's `label` is its Character's name in the lowest-positioned linked book. Link
-suggestions come later: `suggested`, `suggestedRows` and `nameMatches` are empty and `suggestionCount` is 0.
+Narrator first then by label. A row's `label` is its Character's name in the lowest-positioned linked book.
 `differs` is described below. `characters/summary` rows carry `seriesLink: { seriesId, seriesCharacterId,
 seriesName, bookCount, differs } | null`.
 
+**Link suggestions** (#212) are computed on each cast read from current names and aliases, never stored
+(`SeriesNameMatch`). A Character's forms are its name and aliases, case-folded, punctuation dropped (apostrophes
+and hyphens inside a word kept) and honorifics set aside; all-lowercase aliases ("the doctor") and honorific-only
+forms ("Doctor") take no part. Two forms match on the same set of other words, with honorifics agreeing where both
+carry them ("Dr." agrees with "Doctor"): "Sherlock Holmes" is "Holmes, Sherlock", "John" is not "John Watson", "Mr. Hudson" is not "Mrs.
+Hudson". A Series character's side is every form of every Character linked to it. The seed Narrator row matches
+only the seed Narrator row, by its flag, and isn't offered by a book whose narrator link is set. A cell's
+`suggested` is an unlinked Character that matches just that Series character, which matches just that Character
+in the book; each unlinked Character's `nameMatches` lists every Series character with an empty cell in its book
+that it matches (the picker lists those first). `suggestedRows: [{ label, members: [{ folder, characterId, name }]
+}]` join Characters that match no Series character across two or more books, each pair one-to-one, lowest
+position first, labelled by the first one's name. `suggestionCount` is the cells plus the rows.
+
+Share and link makes the Series character from the lowest-positioned member and links the rest in position order,
+each link the Voice merge below; a link refused part-way leaves those before it. Its preview names the Voices
+each book gains (every member ends up with every member's Voices). *Not the same* (a cell, or a row's every pair)
+is kept in `series.db` until a Character it names is linked or deleted, with no History; the picker still lists a
+dismissed Character. 400: a not-the-same body that is neither form, fewer than two members, or a book named twice;
+409: a Character already linked.
 Linking runs the Voice merge: the linking book's Character gains every Voice the linked books hold that it lacks,
 then each linked book, in Series position order, gains this Character's Voices it lacks, reference audio and
 stored original copied with each. Each book's gain is a History step "Link series character" there; a Character

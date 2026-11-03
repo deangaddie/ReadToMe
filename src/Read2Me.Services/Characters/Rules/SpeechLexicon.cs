@@ -7,17 +7,10 @@ namespace Read2Me.Services.Characters.Rules
     /// The word lists and text helpers of the speech-tag rules, copied verbatim from the JavaScript
     /// prototype they were measured with. JavaScript semantics are kept where they could differ: letter tests
     /// are ASCII (<c>/[A-Z]/</c>), whitespace is ECMAScript <c>\s</c>, and <c>$</c> is end of string.
+    /// The honorific words are shared with the series' Link suggestions: <see cref="Characters.Honorifics"/>.
     /// </summary>
     internal static partial class SpeechLexicon
     {
-        public static readonly FrozenSet<string> Honorifics = FrozenSet.ToFrozenSet(
-        [
-            "mr", "mrs", "ms", "miss", "sir", "lady", "lord", "master", "prince", "princess", "duke", "duchess",
-            "king", "queen", "father", "mother", "brother", "sister", "dr", "doctor", "captain", "colonel", "uncle", "aunt", "madame",
-            "madam", "monsieur", "count", "countess", "baron", "baroness", "earl", "squire", "professor", "mistress", "dame", "general",
-            "lieutenant", "sergeant", "major", "inspector", "reverend", "commander", "admiral", "baronet", "emperor", "empress",
-        ], StringComparer.Ordinal);
-
         public static readonly FrozenSet<string> SpeechVerbs = FrozenSet.ToFrozenSet(
             """
             said says say asked asks replied replies answered answers cried cries shouted shouts yelled yells

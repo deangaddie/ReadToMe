@@ -1,18 +1,30 @@
 import { html, nothing } from 'lit-html';
-import { type SeriesCastDto, type SeriesCastRowDto, SeriesApi, toApiError } from '@app/api';
+import {
+  type SeriesCastDto,
+  type SeriesCastRowDto,
+  type SeriesSuggestedRowDto,
+  SeriesApi,
+  toApiError,
+} from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { LiveService } from '@app/live/live.service';
 import { icon, statusChip } from '@app/ui/partials';
 import { SeriesActions } from './series-actions';
-import { type BoardCell, boardCells, pickerOptions } from './series-cast';
+import { type BoardCell, boardCells, pickerOptions, suggestedRowCells } from './series-cast';
 import { bookLabel } from './series-shelf';
 import './series-voice-editor';
 import { adoptStyles } from '@app/core/styles';
 import boardCss from './series-cast-board.css' with { type: 'text' };
 
 adoptStyles(boardCss);
+
+/** `cast-read`: the board read its series again; the panel's Characters tab shows the count (#223). */
+export interface CastRead {
+  seriesId: string;
+  suggestionCount: number;
+}
 
 /** The series the board is for: its id and name. */
 export interface BoardSeries {
@@ -81,6 +93,10 @@ export class SeriesCastBoard extends R2mElement {
       if (seq !== this.seq) return;
       this.cast.set(cast);
       this.error.set(null);
+      this.emit<CastRead>('cast-read', {
+        seriesId: series.id,
+        suggestionCount: cast.suggestionCount,
+      });
     } catch (error) {
       if (seq !== this.seq) return;
       this.error.set(toApiError(error).message);
@@ -133,7 +149,9 @@ export class SeriesCastBoard extends R2mElement {
             </tr>
           </thead>
           <tbody>
-            ${cast.rows.map((row) => this.row(cast, row, busy))} ${this.shareRow(cast, busy)}
+            ${cast.rows.map((row) => this.row(cast, row, busy))}
+            ${cast.suggestedRows.map((row) => this.suggestedRow(cast, row, busy))}
+            ${this.shareRow(cast, busy)}
           </tbody>
         </table>
       </div>`;
@@ -229,6 +247,20 @@ export class SeriesCastBoard extends R2mElement {
           >
             Link
           </button>
+          <button
+            type="button"
+            class="r2m-icon-button series-cast__dismiss"
+            data-action="not-the-same"
+            aria-label=${`${cell.name} is not ${row.label}`}
+            data-tooltip="Not the same"
+            ?disabled=${busy}
+            @click=${() =>
+              void this.write((series) =>
+                this.actions.notTheSame(series, row, folder, cell.characterId),
+              )}
+          >
+            ${icon('close')}
+          </button>
         </td>`;
       case 'empty':
         return html`<td data-folder=${folder} data-cell="empty">
@@ -266,9 +298,52 @@ export class SeriesCastBoard extends R2mElement {
     </tr>`;
   }
 
-  /** A book's picker; a pick runs `onPick` and the select goes back to its prompt. */
+  /**
+   * A suggested row (#223): unlinked Characters of two or more books whose names match. Share and
+   * link makes them one Series character; ✕ records each pair as not the same.
+   */
+  private suggestedRow(cast: SeriesCastDto, row: SeriesSuggestedRowDto, busy: boolean) {
+    const key = row.members.map((m) => m.characterId).join(' ');
+    return html`<tr class="series-cast__suggested-row" data-suggested-row=${key}>
+      <th scope="row" class="series-cast__label">
+        <span class="series-cast__suggested">${row.label}?</span>
+        <button
+          type="button"
+          class="r2m-button"
+          data-action="share-and-link"
+          ?disabled=${busy}
+          @click=${() => void this.write((series) => this.actions.shareAndLink(series, cast, row))}
+        >
+          Share and link
+        </button>
+        <button
+          type="button"
+          class="r2m-icon-button series-cast__dismiss"
+          data-action="not-the-same-row"
+          aria-label=${`These are not the same ${row.label}`}
+          data-tooltip="Not the same"
+          ?disabled=${busy}
+          @click=${() => void this.write((series) => this.actions.notTheSameRow(series, row))}
+        >
+          ${icon('close')}
+        </button>
+      </th>
+      ${suggestedRowCells(cast, row).map(
+        ({ book, member }) =>
+          html`<td data-folder=${book.folder} data-cell=${member ? 'member' : 'none'}>
+            ${
+              member
+                ? html`<span class="series-cast__suggested">${member.name}?</span>`
+                : html`<span class="series-cast__none">—</span>`
+            }
+          </td>`,
+      )}
+    </tr>`;
+  }
+
+  /** A book's picker; a pick runs `onPick` and the select goes back to its prompt. Name matches come first, marked. */
   private picker(
-    options: { characterId: string; name: string; isNarrator: boolean }[],
+    options: { characterId: string; name: string; isNarrator: boolean; matches?: boolean }[],
     label: string,
     prompt: string,
     busy: boolean,
@@ -287,7 +362,12 @@ export class SeriesCastBoard extends R2mElement {
       }}
     >
       <option value="">${prompt}</option>
-      ${options.map((o) => html`<option value=${o.characterId}>${o.name}</option>`)}
+      ${options.map(
+        (o) =>
+          html`<option value=${o.characterId} data-matches=${o.matches ? 'true' : 'false'}>
+            ${o.matches ? `${o.name} — name matches` : o.name}
+          </option>`,
+      )}
     </select>`;
   }
 }

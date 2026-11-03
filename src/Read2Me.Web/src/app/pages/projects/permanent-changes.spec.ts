@@ -7,6 +7,7 @@ import {
   moveConfirm,
   pushSeriesVoicesConfirm,
   removePosterConfirm,
+  shareAndLinkConfirm,
   shareConfirm,
   takeSeriesVoicesConfirm,
   unlinkConfirm,
@@ -260,6 +261,30 @@ describe('shareConfirm()', () => {
       title: 'Share Dr. Watson across Sherlock Holmes?',
       message: 'A series character is made from the Voices of Dr. Watson in A Study in Scarlet.',
       confirmLabel: 'Share as new',
+      destructive: false,
+    });
+  });
+});
+
+describe('shareAndLinkConfirm()', () => {
+  it('names each member and what each book gains, and is neutral', () => {
+    expect(
+      shareAndLinkConfirm({
+        label: 'Watson',
+        seriesName: 'Sherlock Holmes',
+        books: [
+          { name: 'Watson', title: 'A Study in Scarlet', gains: ['Brisk'] },
+          { name: 'Dr. Watson', title: 'The Sign of the Four', gains: [] },
+        ],
+      }),
+    ).toEqual({
+      title: 'Share and link Watson across Sherlock Holmes?',
+      message:
+        'Watson in A Study in Scarlet and Dr. Watson in The Sign of the Four become one series ' +
+        'character, sharing their Voices. A Study in Scarlet gains “Brisk”; The Sign of the Four ' +
+        'gains no Voices. Each is a History step in its book. Names, aliases, delivery cues and ' +
+        'Voice Rules stay each book’s own.',
+      confirmLabel: 'Share and link',
       destructive: false,
     });
   });

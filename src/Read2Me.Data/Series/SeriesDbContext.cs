@@ -5,9 +5,10 @@ namespace Read2Me.Data.Series
 {
     /// <summary>
     /// One series' registry, <c>{workspace}/.series/{seriesId}/series.db</c> (ADR 0018). It holds the
-    /// series' name, its members by project Id with their Series positions, and its Series characters
-    /// with the <c>(projectId, characterId)</c> pairs linked to each. Membership and links are
-    /// recorded only here, never in a book's <c>project.db</c>, and nothing in it has History.
+    /// series' name, its members by project Id with their Series positions, its Series characters
+    /// with the <c>(projectId, characterId)</c> pairs linked to each, and its <i>Not the same</i>
+    /// dismissals. Membership and links are recorded only here, never in a book's <c>project.db</c>,
+    /// and nothing in it has History.
     /// </summary>
     public class SeriesDbContext(DbContextOptions<SeriesDbContext> options) : DbContext(options)
     {
@@ -17,6 +18,7 @@ namespace Read2Me.Data.Series
         public DbSet<SeriesBook> Books => Set<SeriesBook>();
         public DbSet<SeriesCharacterRow> Characters => Set<SeriesCharacterRow>();
         public DbSet<SeriesLink> Links => Set<SeriesLink>();
+        public DbSet<NotTheSameRow> NotTheSame => Set<NotTheSameRow>();
 
         /// <summary>Opens (creating and migrating as needed) the registry in <paramref name="folderPath"/>.</summary>
         public static async Task<SeriesDbContext> OpenAsync(string folderPath, CancellationToken ct = default)
@@ -62,6 +64,15 @@ namespace Read2Me.Data.Series
                 e.HasOne<SeriesCharacterRow>().WithMany().HasForeignKey(l => l.SeriesCharacterId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
+
+            modelBuilder.Entity<NotTheSameRow>(e =>
+            {
+                e.ToTable("NotTheSame");
+                e.HasKey(n => n.Id);
+                e.HasIndex(n => new { n.ProjectId, n.CharacterId });
+                e.HasOne<SeriesCharacterRow>().WithMany().HasForeignKey(n => n.SeriesCharacterId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
         }
     }
 
@@ -94,6 +105,22 @@ namespace Read2Me.Data.Series
         public Guid SeriesCharacterId { get; set; }
         public Guid ProjectId { get; set; }
         public Guid CharacterId { get; set; }
+    }
+
+    /// <summary>
+    /// <i>Not the same</i> (#212): the user dismissed a Link suggestion for a book's Character, either a
+    /// suggested cell (<see cref="SeriesCharacterId"/> set) or one pair of a suggested row (the
+    /// <see cref="OtherProjectId"/> and <see cref="OtherCharacterId"/> set). It lasts until either
+    /// Character it names is linked or deleted; it has no History.
+    /// </summary>
+    public class NotTheSameRow
+    {
+        public Guid Id { get; set; }
+        public Guid ProjectId { get; set; }
+        public Guid CharacterId { get; set; }
+        public Guid? SeriesCharacterId { get; set; }
+        public Guid? OtherProjectId { get; set; }
+        public Guid? OtherCharacterId { get; set; }
     }
 
     public class SeriesDbContextDesignFactory : IDesignTimeDbContextFactory<SeriesDbContext>

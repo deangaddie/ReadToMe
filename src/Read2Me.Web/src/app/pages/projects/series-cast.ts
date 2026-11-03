@@ -2,6 +2,7 @@ import type {
   SeriesCastBookDto,
   SeriesCastDto,
   SeriesCastRowDto,
+  SeriesSuggestedRowDto,
   SeriesUnlinkedCharacterDto,
 } from '@app/api';
 
@@ -20,7 +21,12 @@ export type BoardCell =
       differs: boolean;
     }
   | { kind: 'suggested'; book: SeriesCastBookDto; characterId: string; name: string }
-  | { kind: 'empty'; book: SeriesCastBookDto; options: SeriesUnlinkedCharacterDto[] };
+  | { kind: 'empty'; book: SeriesCastBookDto; options: PickerOption[] };
+
+/** A picker's Character; `matches`: its names match the row's Series character (#223), so it is listed first. */
+export interface PickerOption extends SeriesUnlinkedCharacterDto {
+  matches: boolean;
+}
 
 /** The Characters of `folder` already linked to some Series character, by id. */
 function linkedIds(cast: SeriesCastDto, folder: string): Set<string> {
@@ -34,11 +40,22 @@ function linkedIds(cast: SeriesCastDto, folder: string): Set<string> {
 /**
  * The picker rule (#208, 8): a book's unlinked Characters, never one already linked in that book,
  * so a Series character can't gain a second Character from one book. The Narrator is listed like
- * any other.
+ * any other. In a row's cell, the Characters whose names match that row's Series character come
+ * first, marked (#223): that is how an ambiguous match, which makes no suggestion, is offered.
  */
-export function pickerOptions(cast: SeriesCastDto, folder: string): SeriesUnlinkedCharacterDto[] {
+export function pickerOptions(
+  cast: SeriesCastDto,
+  folder: string,
+  seriesCharacterId?: string,
+): PickerOption[] {
   const linked = linkedIds(cast, folder);
-  return (cast.unlinked[folder] ?? []).filter((c) => !linked.has(c.characterId));
+  const options = (cast.unlinked[folder] ?? [])
+    .filter((c) => !linked.has(c.characterId))
+    .map((c) => ({
+      ...c,
+      matches: seriesCharacterId !== undefined && c.nameMatches.includes(seriesCharacterId),
+    }));
+  return [...options.filter((o) => o.matches), ...options.filter((o) => !o.matches)];
 }
 
 /** A row's cells in the board's book order; a book the row has no cell for is empty. */
@@ -60,7 +77,11 @@ export function boardCells(cast: SeriesCastDto, row: SeriesCastRowDto): BoardCel
         characterId: cell.suggested.characterId,
         name: cell.suggested.name,
       };
-    return { kind: 'empty', book, options: pickerOptions(cast, book.folder) };
+    return {
+      kind: 'empty',
+      book,
+      options: pickerOptions(cast, book.folder, row.seriesCharacterId),
+    };
   });
 }
 
@@ -87,4 +108,21 @@ export function linkedNames(cast: SeriesCastDto, folder: string): string[] {
 /** Every Series character's label, for Delete series. */
 export function seriesCharacterLabels(cast: SeriesCastDto): string[] {
   return cast.rows.map((r) => r.label);
+}
+
+/** A suggested row's cells (#223) in the board's book order: its member in that book, or null. */
+export function suggestedRowCells(
+  cast: SeriesCastDto,
+  row: SeriesSuggestedRowDto,
+): { book: SeriesCastBookDto; member: { characterId: string; name: string } | null }[] {
+  return cast.books.map((book) => {
+    const member = row.members.find((m) => m.folder === book.folder);
+    return { book, member: member ? { characterId: member.characterId, name: member.name } : null };
+  });
+}
+
+/** The series panel's Characters tab: "Characters", or "Characters · 3 suggestions" (#223). */
+export function charactersTabLabel(suggestionCount: number): string {
+  if (suggestionCount <= 0) return 'Characters';
+  return `Characters · ${suggestionCount} ${suggestionCount === 1 ? 'suggestion' : 'suggestions'}`;
 }

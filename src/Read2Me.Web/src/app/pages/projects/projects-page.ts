@@ -1,6 +1,6 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
-import { type ProjectSummary, toApiError } from '@app/api';
+import { type ProjectSummary, SeriesApi, toApiError } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
@@ -11,6 +11,7 @@ import { menuItem } from '@app/ui/menu';
 import { emptyState, icon, statusChip } from '@app/ui/partials';
 import { projectCard } from '@app/ui/project-card';
 import { ToastService } from '@app/ui/toast';
+import { LiveService } from '@app/live/live.service';
 import { openNewProjectDialog } from './new-project-dialog';
 import {
   type DraftRow,
@@ -23,6 +24,7 @@ import {
 import { ProjectsStore } from './projects-store';
 import { SeriesActions } from './series-actions';
 import { type SeriesPanelTab, seriesCard, seriesPanel } from './series-card';
+import type { CastRead } from './series-cast-board';
 import './series-cast-board';
 import { deleteProjectConfirm } from './permanent-changes';
 import {
@@ -73,6 +75,8 @@ export class ProjectsPage extends R2mElement {
   private readonly router = use(Router);
   private readonly confirm = use(ConfirmService);
   private readonly toast = use(ToastService);
+  private readonly seriesApi = use(SeriesApi);
+  private readonly live = use(LiveService);
 
   /** Folder of the project whose delete is in flight; its card is disabled meanwhile. */
   private readonly deleting = signal<string | null>(null);
@@ -81,6 +85,8 @@ export class ProjectsPage extends R2mElement {
   private readonly openSeries = signal<string | null>(null);
   /** The open panel's tab: its books, or the series cast board. */
   private readonly panelTab = signal<SeriesPanelTab>('books');
+  /** The open series' Link suggestion count, for its Characters tab (#223). */
+  private readonly suggestions = signal<{ seriesId: string; count: number } | null>(null);
   /** Edit book numbers: the open series' draft, while it is on. */
   private readonly draft = signal<{ seriesId: string; rows: DraftRow[] } | null>(null);
   private readonly saving = signal(false);
@@ -90,6 +96,15 @@ export class ProjectsPage extends R2mElement {
   protected override connected(): void {
     this.classList.add('projects');
     this.onDisconnect(this.store.follow());
+    // The Characters tab's count: read again on the hub's series signal while the board, which
+    // reports its own reads, isn't showing.
+    this.onDisconnect(
+      this.live.on('series', (m) => {
+        const open = this.openSeries();
+        if (m.seriesId === open && m.kind === 'Changed' && this.panelTab() === 'books')
+          void this.readSuggestions(open);
+      }),
+    );
     // A re-read (this tab's write or the hub's series signal) rebases an open number draft, so it
     // never saves a stale set; a deleted series drops it.
     this.effect(() => {
@@ -260,6 +275,8 @@ export class ProjectsPage extends R2mElement {
     const draft = this.draft();
     const saving = this.saving();
     const tab = this.panelTab();
+    // Read here, not in the repeat's callback, so the render tracks it.
+    const suggestionCount = open ? this.suggestionCount(open.id) : 0;
     const empty =
       series.length === 0
         ? emptyState(
@@ -301,6 +318,7 @@ export class ProjectsPage extends R2mElement {
                         saving,
                         cards,
                         tab,
+                        suggestionCount,
                       )
                     : nothing
                 }`,
@@ -316,14 +334,18 @@ export class ProjectsPage extends R2mElement {
     saving: boolean,
     cards: CardState,
     tab: SeriesPanelTab,
+    suggestionCount: number,
   ) {
     return seriesPanel(series, {
       tab,
+      suggestionCount,
       onTab: (tab) => this.panelTab.set(tab),
       characters: () =>
         html`<r2m-series-cast-board
           .series=${{ id: series.id, name: series.name }}
           .openRows=${this.arrivalRows}
+          @cast-read=${(e: CustomEvent<CastRead>) =>
+            this.suggestions.set({ seriesId: e.detail.seriesId, count: e.detail.suggestionCount })}
         ></r2m-series-cast-board>`,
       editing: rows
         ? { blocked: saveBlockedReason(rows), problem: positionsProblem(rows), saving }
@@ -392,7 +414,25 @@ export class ProjectsPage extends R2mElement {
   private toggle(id: string): void {
     this.draft.set(null);
     this.panelTab.set('books');
-    this.openSeries.set(this.openSeries() === id ? null : id);
+    const opening = this.openSeries() !== id;
+    this.openSeries.set(opening ? id : null);
+    if (opening) void this.readSuggestions(id);
+  }
+
+  /** Reads the series cast board for its suggestion count; a failed read just shows no count. */
+  private async readSuggestions(seriesId: string): Promise<void> {
+    try {
+      const cast = await this.seriesApi.cast(seriesId);
+      if (this.openSeries() === seriesId)
+        this.suggestions.set({ seriesId, count: cast.suggestionCount });
+    } catch {
+      // The Characters tab reads the board itself and shows why it failed.
+    }
+  }
+
+  private suggestionCount(seriesId: string): number {
+    const s = this.suggestions();
+    return s?.seriesId === seriesId ? s.count : 0;
   }
 
   private type(folder: string, text: string): void {

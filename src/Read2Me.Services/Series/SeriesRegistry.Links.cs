@@ -30,6 +30,7 @@ namespace Read2Me.Services.Series
             var (state, refusal) = await LinkStateAsync(seriesId, ct);
             if (state is null) return refusal!;
 
+            var suggestions = await SuggestAsync(state, ct);
             var unordered = new List<SeriesCastRow>();
             foreach (var seriesCharacterId in state.Links.Select(l => l.SeriesCharacterId).Distinct())
             {
@@ -37,10 +38,13 @@ namespace Read2Me.Services.Series
                 var cells = state.Books.Select(b =>
                 {
                     var link = state.LinkOf(seriesCharacterId, b.ProjectId);
+                    var suggested = suggestions.Cells
+                        .FirstOrDefault(s => s.SeriesCharacterId == seriesCharacterId && s.ProjectId == b.ProjectId);
                     return new SeriesCastCell(
                         b.Folder,
                         link is null ? null : state.Find(link.ProjectId, link.CharacterId),
-                        link is not null && choice?.DiffersFrom(b.Folder) == true);
+                        link is not null && choice?.DiffersFrom(b.Folder) == true,
+                        suggested is null ? null : state.Find(b.ProjectId, suggested.CharacterId));
                 }).ToList();
                 unordered.Add(new SeriesCastRow(seriesCharacterId, state.LabelOf(seriesCharacterId), cells.Any(c => c.Linked?.IsNarrator == true), cells));
             }
@@ -57,7 +61,22 @@ namespace Read2Me.Services.Series
                     .ToList(),
                 StringComparer.OrdinalIgnoreCase);
 
-            return new SeriesCastView(state.Books.Select(b => new SeriesBookView(b.Folder, b.Title, b.Position)).ToList(), rows, unlinked);
+            var suggestedRows = suggestions.Rows
+                .Select(members => new SeriesSuggestedRow(members
+                    .Select(m => (Book: state.Books.First(b => b.ProjectId == m.ProjectId), Character: state.Find(m.ProjectId, m.CharacterId)!))
+                    .Select(m => new SeriesSuggestedMember(m.Book.Folder, m.Character.CharacterId, m.Character.Name, m.Character.IsNarrator))
+                    .ToList()))
+                .OrderBy(r => r.Members[0].IsNarrator ? 0 : 1)
+                .ThenBy(r => r.Label, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+
+            return new SeriesCastView(
+                state.Books.Select(b => new SeriesBookView(b.Folder, b.Title, b.Position)).ToList(),
+                rows,
+                suggestedRows,
+                unlinked,
+                suggestions.NameMatches,
+                suggestions.Count);
         }
 
         /// <summary>
@@ -126,13 +145,7 @@ namespace Read2Me.Services.Series
             if (SeriesLinkRules.CheckShare(state.Links, book.ProjectId, characterId) is { } linked)
                 return SeriesRefusal.CharacterAlreadyLinked(character.Name, book.Title, state.LabelOf(linked.SeriesCharacterId));
 
-            var id = Guid.NewGuid();
-            await using (var db = await SeriesDbContext.OpenAsync(FolderOf(seriesId), ct))
-            {
-                db.Characters.Add(new SeriesCharacterRow { Id = id });
-                db.Links.Add(new SeriesLink { SeriesCharacterId = id, ProjectId = book.ProjectId, CharacterId = characterId });
-                await db.SaveChangesAsync(ct);
-            }
+            var id = await ShareUncheckedAsync(seriesId, book, characterId, ct);
             Signal(seriesId, SeriesChangeKind.Changed);
             return id;
         }
@@ -149,8 +162,28 @@ namespace Read2Me.Services.Series
             using var _ = await gate.EnterAsync(ct);
             var (plan, refusal) = await PlanLinkAsync(seriesId, seriesCharacterId, folder, characterId, ct);
             if (plan is null) return refusal!;
-            var book = plan.Book;
+            if (await RunLinkAsync(seriesId, seriesCharacterId, characterId, plan, ct) is { } failed) return failed;
+            Signal(seriesId, SeriesChangeKind.Changed);
+            return true;
+        }
 
+        /// <summary>A new Series character owning this Character (already checked), whose <i>Not the same</i> go.</summary>
+        private async Task<Guid> ShareUncheckedAsync(Guid seriesId, LinkBook book, Guid characterId, CancellationToken ct)
+        {
+            var id = Guid.NewGuid();
+            await using var db = await SeriesDbContext.OpenAsync(FolderOf(seriesId), ct);
+            db.Characters.Add(new SeriesCharacterRow { Id = id });
+            db.Links.Add(new SeriesLink { SeriesCharacterId = id, ProjectId = book.ProjectId, CharacterId = characterId });
+            ForgetNotTheSame(db, [new(book.ProjectId, characterId)]);
+            await db.SaveChangesAsync(ct);
+            return id;
+        }
+
+        /// <summary>Runs a planned link; a refusal when the joining book's half didn't commit and nothing was linked.</summary>
+        private async Task<SeriesRefusal?> RunLinkAsync(
+            Guid seriesId, Guid seriesCharacterId, Guid characterId, LinkPlan plan, CancellationToken ct)
+        {
+            var book = plan.Book;
             if (plan.Merge.JoiningGains.Count > 0)
             {
                 var outcome = await GainAsync(book, characterId, plan.Merge.JoiningGains.Select(g => g.Voice), ct);
@@ -161,6 +194,7 @@ namespace Read2Me.Services.Series
             await using (var db = await SeriesDbContext.OpenAsync(FolderOf(seriesId), ct))
             {
                 db.Links.Add(new SeriesLink { SeriesCharacterId = seriesCharacterId, ProjectId = book.ProjectId, CharacterId = characterId });
+                ForgetNotTheSame(db, [new(book.ProjectId, characterId)]);
                 await db.SaveChangesAsync(ct);
             }
 
@@ -186,9 +220,7 @@ namespace Read2Me.Services.Series
                     logger.LogWarning("Series {SeriesId}: linking left '{Folder}' without {Count} Voices: {Reason}",
                         seriesId, other.Folder, gains.Voices.Count, failure);
             }
-
-            Signal(seriesId, SeriesChangeKind.Changed);
-            return true;
+            return null;
         }
 
         /// <summary>Unlink: the book keeps its own copy of the Voices, and edits stop crossing books.</summary>
@@ -265,8 +297,8 @@ namespace Read2Me.Services.Series
             {
                 try
                 {
-                    roster[book.ProjectId] = (await characters.GetCharactersAsync(book.FolderId))
-                        .Select(c => new SeriesCastCharacter(c.Id, c.Name, c.IsNarrator))
+                    roster[book.ProjectId] = (await characters.GetCharactersWithAliasesAsync(book.FolderId))
+                        .Select(c => new SeriesCastCharacter(c.Id, c.Name, c.IsNarrator, c.Aliases.Select(a => a.Name).ToList()))
                         .ToList();
                 }
                 catch (Exception ex)
@@ -288,6 +320,23 @@ namespace Read2Me.Services.Series
                 logger.LogInformation("Series {SeriesId}: {Count} links to Characters that are gone are removed", seriesId, gone.Count);
                 await using var db = await SeriesDbContext.OpenAsync(FolderOf(seriesId), ct);
                 await RemoveLinksAsync(db, gone.Contains, ct);
+            }
+
+            // Not the same lasts until its Character is deleted: by the same rule as a link.
+            bool Present(Guid projectId, Guid characterId) =>
+                series.Members.ContainsKey(projectId)
+                && (!roster.TryGetValue(projectId, out var cast) || cast.Any(c => c.CharacterId == characterId));
+            await using (var db = await SeriesDbContext.OpenAsync(FolderOf(seriesId), ct))
+            {
+                var stale = (await db.NotTheSame.ToListAsync(ct))
+                    .Where(n => !Present(n.ProjectId, n.CharacterId)
+                                || (n.OtherProjectId is { } p && n.OtherCharacterId is { } c && !Present(p, c)))
+                    .ToList();
+                if (stale.Count > 0)
+                {
+                    db.NotTheSame.RemoveRange(stale);
+                    await db.SaveChangesAsync(ct);
+                }
             }
             return (new LinkState(series, books, roster, links.Where(l => !gone.Contains(l)).ToList()), null);
         }
@@ -415,20 +464,42 @@ namespace Read2Me.Services.Series
         }
     }
 
-    /// <summary>The series cast board (#208, variant B): books in position order, one row per Series character.</summary>
+    /// <summary>
+    /// The series cast board (#208, variant B): books in position order, one row per Series character,
+    /// and its Link suggestions (#212): <see cref="SuggestedRows"/>, the Series characters each
+    /// unlinked Character's names match (<see cref="NameMatches"/>, by Character Id) and
+    /// <see cref="SuggestionCount"/>, suggested cells and rows together.
+    /// </summary>
     public sealed record SeriesCastView(
         IReadOnlyList<SeriesBookView> Books,
         IReadOnlyList<SeriesCastRow> Rows,
-        IReadOnlyDictionary<string, IReadOnlyList<SeriesCastCharacter>> Unlinked);
+        IReadOnlyList<SeriesSuggestedRow> SuggestedRows,
+        IReadOnlyDictionary<string, IReadOnlyList<SeriesCastCharacter>> Unlinked,
+        IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> NameMatches,
+        int SuggestionCount);
 
     /// <summary>A Series character's row: its live label and one cell per book, in the board's book order.</summary>
     public sealed record SeriesCastRow(Guid SeriesCharacterId, string Label, bool IsNarrator, IReadOnlyList<SeriesCastCell> Cells);
 
-    /// <summary>One book's cell in a row: the Character linked there, or null for an empty cell, and whether its Voices differ from series.</summary>
-    public sealed record SeriesCastCell(string Folder, SeriesCastCharacter? Linked, bool Differs);
+    /// <summary>
+    /// One book's cell in a row: the Character linked there, whether its Voices differ from series,
+    /// or else the unlinked Character suggested for it (#212), if any.
+    /// </summary>
+    public sealed record SeriesCastCell(string Folder, SeriesCastCharacter? Linked, bool Differs, SeriesCastCharacter? Suggested = null);
 
-    /// <summary>A book's Character as the board shows it; <see cref="IsNarrator"/> marks the seed Narrator row.</summary>
-    public sealed record SeriesCastCharacter(Guid CharacterId, string Name, bool IsNarrator);
+    /// <summary>A suggested row (#212): unlinked Characters of two or more books, lowest position first. Its label is the first one's name.</summary>
+    public sealed record SeriesSuggestedRow(IReadOnlyList<SeriesSuggestedMember> Members)
+    {
+        public string Label => Members[0].Name;
+    }
+
+    public sealed record SeriesSuggestedMember(string Folder, Guid CharacterId, string Name, bool IsNarrator);
+
+    /// <summary>
+    /// A book's Character as the board shows it; <see cref="IsNarrator"/> marks the seed Narrator row.
+    /// <see cref="Aliases"/> feed the Link suggestions only.
+    /// </summary>
+    public sealed record SeriesCastCharacter(Guid CharacterId, string Name, bool IsNarrator, IReadOnlyList<string> Aliases);
 
     /// <summary>The Link confirm's gains: Voice names this book gains, and the other linked books gain.</summary>
     public sealed record SeriesLinkPreview(IReadOnlyList<string> BookGains, IReadOnlyList<string> SeriesGains);
