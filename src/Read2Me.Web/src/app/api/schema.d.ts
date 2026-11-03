@@ -5304,6 +5304,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/series/{id}/characters/{seriesCharacterId}/push/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What a push from folder would remove, for its confirm: { losses: [{ folder, title, voices, ruleCount }] }, each other linked book that would lose Voices (names) and the positional Voice Rules on them. Refused as the push itself would be. */
+        get: {
+            parameters: {
+                query: {
+                    folder: string;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                    seriesCharacterId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SeriesResolvePreviewDto"];
+                    };
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/series/{id}/characters/{seriesCharacterId}/take": {
         parameters: {
             query?: never;
@@ -5348,6 +5398,56 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series/{id}/characters/{seriesCharacterId}/take/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What a take into folder would remove, for its confirm: { losses } as the push preview, for that book only. Refused as the take itself would be. */
+        get: {
+            parameters: {
+                query: {
+                    folder: string;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                    seriesCharacterId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SeriesResolvePreviewDto"];
+                    };
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -9746,6 +9846,9 @@ export interface components {
         };
         /** @enum {unknown} */
         SeriesPosterSource: "Uploaded" | "Cover" | "None";
+        SeriesResolvePreviewDto: {
+            losses: components["schemas"]["SeriesVoiceLossDto"][];
+        };
         SeriesResolveRequest: {
             folder?: null | string;
         };
@@ -9778,6 +9881,13 @@ export interface components {
         };
         /** @enum {unknown} */
         SeriesVoiceDeleteReason: "PositionalRules" | "LastVoice";
+        SeriesVoiceLossDto: {
+            folder: string;
+            /** Format: int32 */
+            ruleCount: number;
+            title: string;
+            voices: string[];
+        };
         SetActiveRequest: {
             /** Format: int32 */
             id: number;

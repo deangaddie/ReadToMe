@@ -396,6 +396,16 @@ describe('r2m-series-voice-editor', () => {
 
   it('Use <book>’s copy for all confirms what is replaced, then pushes from that book', async () => {
     const push = '/api/series/h/characters/sc-watson/push';
+    api.on('GET', `${push}/preview`, {
+      losses: [
+        {
+          folder: 'adventures',
+          title: 'The Adventures of Sherlock Holmes',
+          voices: ['Pipe'],
+          ruleCount: 1,
+        },
+      ],
+    });
     let current = differing();
     const el = await mount(() => current);
     api.on('POST', push, () => {
@@ -411,6 +421,9 @@ describe('r2m-series-voice-editor', () => {
       'Dr. Watson’s Voices in A Study in Scarlet and The Adventures of Sherlock Holmes are replaced',
     );
     expect(confirms[0]?.message).toContain('“Push series voices” History step');
+    expect(confirms[0]?.message).toContain(
+      'The Adventures of Sherlock Holmes loses “Pipe”, and the Voice Rule on it.',
+    );
     expect(api.calls('POST', push)).toEqual([]);
 
     confirmAnswer = true;

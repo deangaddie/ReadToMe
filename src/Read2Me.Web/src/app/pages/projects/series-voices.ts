@@ -2,6 +2,7 @@ import type {
   SeriesCharacterBookDto,
   SeriesCharacterDto,
   SeriesVoiceDeleteBlockDto,
+  SeriesVoiceLossDto,
   VoiceDto,
 } from '@app/api';
 import { bookLabel } from './series-shelf';
@@ -115,6 +116,7 @@ export function resolveConfirm(
   folder: string,
   label: string,
   how: 'push' | 'take',
+  losses: readonly SeriesVoiceLossDto[] = [],
 ): ConfirmOptions | null {
   // Folders compare ignoring case, as the host's do.
   const book = detail.books.find((b) => b.folder.toLowerCase() === folder.toLowerCase());
@@ -124,8 +126,10 @@ export function resolveConfirm(
       label,
       title: book.title,
       otherTitles: detail.books.filter((b) => b !== book).map((b) => b.title),
+      losses,
     });
   return takeSeriesVoicesConfirm({
+    losses,
     label,
     title: book.title,
     copyTitle: seriesCopyBook(detail)?.title ?? 'the other books',

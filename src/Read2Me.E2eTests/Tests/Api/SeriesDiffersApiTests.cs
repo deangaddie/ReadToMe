@@ -252,6 +252,56 @@ public class SeriesDiffersApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         Assert.Null(await VoiceAsync(holmes.Scarlet, voice));
     }
 
+    /// <summary>
+    /// Four holds a Voice "Pipe" (with a positional rule on it there) that Scarlet and Adventures were
+    /// Restored to before, so Four differs and the series copy is Scarlet's.
+    /// </summary>
+    private async Task<(Holmes Holmes, Guid Doctor, Guid Pipe)> SeedRuledExtraAsync()
+    {
+        var holmes = await SeedAsync();
+        var doctor = await CreateVoiceAsync(holmes.Scarlet, "Army doctor");
+        var scarlet = await HeadAsync(holmes.Scarlet);
+        var adventures = await HeadAsync(holmes.Adventures);
+        var pipe = await CreateVoiceAsync(holmes.Four, "Pipe");
+        await RunAsync(holmes.Four.Folder, new
+        {
+            type = "CreateVoiceRule", characterId = holmes.Four.Watson, voiceId = pipe, fromLevel = "Chapter", fromNodeId = holmes.Four.Chapter2,
+        });
+        await RestoreAsync(holmes.Scarlet, scarlet);
+        await RestoreAsync(holmes.Adventures, adventures);
+        return (holmes, doctor, pipe);
+    }
+
+    [Fact]
+    public async Task The_previews_name_each_book_that_loses_Voices_and_the_rules_on_them()
+    {
+        var (holmes, _, _) = await SeedRuledExtraAsync();
+
+        var take = await GetJsonAsync($"/api/series/{holmes.Series}/characters/{holmes.SeriesWatson}/take/preview?folder={holmes.Four.Folder}");
+        var loss = Assert.Single(take.GetProperty("losses").EnumerateArray());
+        Assert.Equal(holmes.Four.Folder, loss.GetProperty("folder").GetString());
+        Assert.Equal(["Pipe"], loss.GetProperty("voices").EnumerateArray().Select(v => v.GetString()).ToArray());
+        Assert.Equal(1, loss.GetProperty("ruleCount").GetInt32());
+
+        var push = await GetJsonAsync($"/api/series/{holmes.Series}/characters/{holmes.SeriesWatson}/push/preview?folder={holmes.Four.Folder}");
+        Assert.Empty(push.GetProperty("losses").EnumerateArray()); // the others only gain "Pipe"
+
+        Assert.Equal(HttpStatusCode.Conflict, (await Http.GetAsync(
+            $"{app.BaseUrl}/api/series/{holmes.Series}/characters/{holmes.SeriesWatson}/take/preview?folder={holmes.Scarlet.Folder}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task An_edit_in_the_series_copy_leaves_a_book_that_would_lose_rules_differing()
+    {
+        var (holmes, doctor, pipe) = await SeedRuledExtraAsync();
+
+        await RunAsync(holmes.Scarlet.Folder, new { type = "UpdateVoice", voiceId = doctor, name = "Old campaigner" });
+
+        Assert.Equal("Old campaigner", await NameAsync(holmes.Four, doctor)); // the edit itself is copied
+        Assert.Equal("Pipe", await NameAsync(holmes.Four, pipe));
+        Assert.True((await BoardDiffersAsync(holmes))[holmes.Four.Folder]);
+    }
+
     private async Task UnlinkAsync(Holmes holmes, Book book) =>
         Assert.Equal(HttpStatusCode.NoContent,
             (await Http.DeleteAsync($"{app.BaseUrl}/api/series/{holmes.Series}/characters/{holmes.SeriesWatson}/links/{book.Folder}")).StatusCode);

@@ -1,3 +1,4 @@
+import type { SeriesVoiceLossDto } from '@app/api';
 import type { ConfirmOptions } from '@app/ui/dialogs';
 import { bookLabel, type Membership } from './series-shelf';
 
@@ -214,7 +215,23 @@ export function deleteSeriesVoiceConfirm(
   };
 }
 
-const RULES_STAY = 'Voice Rules stay each book’s own, apart from those on a Voice that goes.';
+/**
+ * What a push or take removes, from its preview read: "Four loses “Pipe”, and the Voice Rule on it."
+ * per book, then the Voice Rules that stay.
+ */
+function lossLines(losses: readonly SeriesVoiceLossDto[]): string {
+  if (losses.length === 0) return 'Voice Rules stay each book’s own.';
+  const lines = losses.map((l) => {
+    const rules =
+      l.ruleCount === 0
+        ? ''
+        : l.ruleCount === 1
+          ? `, and the Voice Rule on ${l.voices.length === 1 ? 'it' : 'them'}`
+          : `, and the ${l.ruleCount} Voice Rules on ${l.voices.length === 1 ? 'it' : 'them'}`;
+    return `${l.title} loses ${voiceNames(l.voices)}${rules}.`;
+  });
+  return `${lines.join(' ')} Other Voice Rules stay each book’s own.`;
+}
 
 /**
  * Push (#222): a book that differs from series copies its Voices into every other linked book.
@@ -227,6 +244,8 @@ export function pushSeriesVoicesConfirm(input: {
   title: string;
   /** The other linked books, whose Voices are replaced. */
   otherTitles: readonly string[];
+  /** What each replaced book loses, from the push preview. */
+  losses?: readonly SeriesVoiceLossDto[];
 }): ConfirmOptions {
   const many = input.otherTitles.length > 1;
   return {
@@ -235,7 +254,7 @@ export function pushSeriesVoicesConfirm(input: {
       `${input.label}’s Voices in ${list(input.otherTitles)} are replaced by the copy in ` +
       `${input.title}. ${many ? 'Each of those books records' : 'That book records'} a ` +
       '“Push series voices” History step, which can bring its own copy back. ' +
-      RULES_STAY,
+      lossLines(input.losses ?? []),
     confirmLabel: 'Use this copy for all',
     destructive: false,
   };
@@ -248,6 +267,8 @@ export function takeSeriesVoicesConfirm(input: {
   title: string;
   /** The book the series copy is read from. */
   copyTitle: string;
+  /** What this book loses, from the take preview. */
+  losses?: readonly SeriesVoiceLossDto[];
 }): ConfirmOptions {
   return {
     title: `Use the series copy in ${input.title}?`,
@@ -255,7 +276,7 @@ export function takeSeriesVoicesConfirm(input: {
       `${input.label}’s Voices in ${input.title} are replaced by the series copy, from ` +
       `${input.copyTitle}. ${input.title} records a “Take series voices” History step, which can ` +
       'bring its own copy back. ' +
-      RULES_STAY,
+      lossLines(input.losses ?? []),
     confirmLabel: 'Use the series copy',
     destructive: false,
   };

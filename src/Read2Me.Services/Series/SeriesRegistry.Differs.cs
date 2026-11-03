@@ -38,34 +38,57 @@ namespace Read2Me.Services.Series
         public Task<SeriesResult<bool>> TakeAsync(Guid seriesId, Guid seriesCharacterId, string folder, CancellationToken ct = default) =>
             ResolveAsync(seriesId, seriesCharacterId, folder, push: false, ct);
 
+        /// <summary>
+        /// What a push from, or take into, <paramref name="folder"/> would remove, for its confirm: each
+        /// target book that loses Voices, with the positional rules on them. Refused as the write would be.
+        /// </summary>
+        public async Task<SeriesResult<SeriesResolvePreview>> PreviewResolveAsync(
+            Guid seriesId, Guid seriesCharacterId, string folder, bool push, CancellationToken ct = default)
+        {
+            using var _ = await gate.EnterAsync(ct);
+            var (plan, refusal) = await PlanResolveAsync(seriesId, seriesCharacterId, folder, push, ct);
+            if (plan is null) return refusal!;
+            return new SeriesResolvePreview(await LossesAsync(plan.Source, plan.Targets));
+        }
+
+        /// <summary>A push or take: the book whose Voices are copied, the books they replace, and the step label.</summary>
+        private sealed record ResolvePlan(SeriesPeer Source, IReadOnlyList<SeriesPeer> Targets, string Step, IReadOnlyList<SeriesPeer> Linked);
+
+        private async Task<(ResolvePlan? Plan, SeriesRefusal? Refusal)> PlanResolveAsync(
+            Guid seriesId, Guid seriesCharacterId, string folder, bool push, CancellationToken ct)
+        {
+            var (state, refusal) = await LinkStateAsync(seriesId, ct);
+            if (state is null) return (null, refusal);
+            if (MemberOf(state, folder) is not { } book) return (null, await NotAMemberAsync(state, folder));
+            if (state.Links.All(l => l.SeriesCharacterId != seriesCharacterId)) return (null, SeriesRefusal.UnknownSeriesCharacter);
+            var label = state.LabelOf(seriesCharacterId);
+            if (state.LinkOf(seriesCharacterId, book.ProjectId) is null) return (null, SeriesRefusal.NotLinked(book.Title, label));
+
+            var linked = LinkedPeers(state, seriesCharacterId);
+            var choice = await ChooseAsync(seriesId, linked);
+            if (choice is null || !choice.DiffersFrom(book.Folder)) return (null, SeriesRefusal.DoesNotDiffer(book.Title, label));
+
+            var self = linked.First(p => p.Folder == book.Folder);
+            return push
+                ? (new ResolvePlan(self, linked.Where(p => p != self).ToList(), PushLabel, linked), null)
+                : (new ResolvePlan(linked.First(p => p.Folder == choice.SeriesCopyFolder), [self], TakeLabel, linked), null);
+        }
+
         private async Task<SeriesResult<bool>> ResolveAsync(
             Guid seriesId, Guid seriesCharacterId, string folder, bool push, CancellationToken ct)
         {
             using var _ = await gate.EnterAsync(ct);
-            var (state, refusal) = await LinkStateAsync(seriesId, ct);
-            if (state is null) return refusal!;
-            if (MemberOf(state, folder) is not { } book) return await NotAMemberAsync(state, folder);
-            if (state.Links.All(l => l.SeriesCharacterId != seriesCharacterId)) return SeriesRefusal.UnknownSeriesCharacter;
-            var label = state.LabelOf(seriesCharacterId);
-            if (state.LinkOf(seriesCharacterId, book.ProjectId) is null) return SeriesRefusal.NotLinked(book.Title, label);
+            var (plan, refusal) = await PlanResolveAsync(seriesId, seriesCharacterId, folder, push, ct);
+            if (plan is null) return refusal!;
 
-            var linked = LinkedPeers(state, seriesCharacterId);
-            var choice = await ChooseAsync(seriesId, linked);
-            if (choice is null || !choice.DiffersFrom(book.Folder)) return SeriesRefusal.DoesNotDiffer(book.Title, label);
-
-            var self = linked.First(p => p.Folder == book.Folder);
-            var source = push ? self : linked.First(p => p.Folder == choice.SeriesCopyFolder);
-            var targets = push ? linked.Where(p => p != self) : [self];
-            var step = push ? PushLabel : TakeLabel;
-
-            var results = await SeriesCopies.RunAsync(targets, target => ReplaceVoicesInAsync(target, source, step, StepAction.Voice));
+            var results = await SeriesCopies.RunAsync(plan.Targets, target => ReplaceVoicesInAsync(target, plan.Source, plan.Step, StepAction.Voice));
             foreach (var failed in results.Where(r => r.Failure is not null))
                 logger.LogWarning("Series {SeriesId}: '{Step}' was not written into '{Folder}': {Reason}",
-                    seriesId, step, failed.Folder, failed.Failure);
+                    seriesId, plan.Step, failed.Folder, failed.Failure);
             Signal(seriesId, SeriesChangeKind.Changed);
 
             var failures = results.Where(r => r.Failure is not null)
-                .Select(r => (Title: linked.First(p => p.Folder == r.Folder).Title, Reason: r.Failure!))
+                .Select(r => (Title: plan.Linked.First(p => p.Folder == r.Folder).Title, Reason: r.Failure!))
                 .ToList();
             return failures.Count > 0 ? SeriesRefusal.CopiesFailed(failures) : true;
         }
@@ -74,16 +97,20 @@ namespace Read2Me.Services.Series
 
         /// <summary>
         /// The other linked books an edit made in <see cref="SeriesPeers.Self"/> should bring back in
-        /// line (#208, 5): when that book holds the series copy, every book that differs from it;
-        /// else none, since a differing book's edit resolves nothing silently.
+        /// line (#208, 5): when that book holds the series copy, every book that differs from it and
+        /// would lose no positional rules; else none, since a differing book's edit resolves nothing silently.
         /// </summary>
         public async Task<IReadOnlySet<string>> DifferingPeersAsync(SeriesPeers peers)
         {
             using var _ = await gate.EnterAsync(CancellationToken.None);
             var choice = await ChooseAsync(peers.SeriesId, [peers.Self, .. peers.Others]);
-            return choice is not null && string.Equals(choice.SeriesCopyFolder, peers.Self.Folder, StringComparison.OrdinalIgnoreCase)
-                ? choice.Differs
-                : new HashSet<string>();
+            if (choice is null || !string.Equals(choice.SeriesCopyFolder, peers.Self.Folder, StringComparison.OrdinalIgnoreCase))
+                return new HashSet<string>();
+
+            // Nothing asks first here, so a book that would lose positional rules is left differing for a push or take.
+            var differing = peers.Others.Where(p => choice.DiffersFrom(p.Folder)).ToList();
+            var losing = (await LossesAsync(peers.Self, differing)).Where(l => l.RuleCount > 0).Select(l => l.Folder).ToHashSet();
+            return differing.Select(p => p.Folder).Where(f => !losing.Contains(f)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
 
         // ---- internals ---------------------------------------------------------------------------
@@ -122,6 +149,21 @@ namespace Read2Me.Services.Series
                 }
             }
             return held;
+        }
+
+        /// <summary>What replacing each target's Voices with <paramref name="source"/>'s set removes; a book losing nothing is left out.</summary>
+        private async Task<IReadOnlyList<SeriesVoiceLoss>> LossesAsync(SeriesPeer source, IEnumerable<SeriesPeer> targets)
+        {
+            var kept = (await characters.GetCharacterVoicesAsync(source.FolderId, source.CharacterId)).Select(v => v.Id).ToHashSet();
+            var losses = new List<SeriesVoiceLoss>();
+            foreach (var target in targets)
+            {
+                var held = (await characters.GetCharacterVoicesAsync(target.FolderId, target.CharacterId)).Select(v => (v.Id, v.Name)).ToList();
+                var rules = (await characters.GetCharacterVoiceRulesAsync(target.FolderId, target.CharacterId))
+                    .Where(r => !r.IsDefault).Select(r => r.VoiceId).ToList();
+                if (SeriesVoiceLosses.Of(target.Folder, target.Title, kept, held, rules) is { } loss) losses.Add(loss);
+            }
+            return losses;
         }
 
         private static SeriesCopyChoice.Choice? Choose(IReadOnlyList<HeldVoices> held) =>
@@ -200,6 +242,9 @@ namespace Read2Me.Services.Series
             v.Id, v.Name, v.Description, v.Source, v.DesignPrompt, v.Transcript, v.AudioFileName,
             v.VoiceDesignSettingsOverrideJson, v.TtsSettingsOverrideJson, v.CreatedUtc);
     }
+
+    /// <summary>A push or take's preview: each target book that would lose Voices, and the positional rules on them.</summary>
+    public sealed record SeriesResolvePreview(IReadOnlyList<SeriesVoiceLoss> Losses);
 
     /// <summary>
     /// Reference audio content hashes for the <i>differs</i> check, kept per file by its size and

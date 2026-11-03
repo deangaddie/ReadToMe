@@ -71,6 +71,11 @@ namespace Read2Me.App.Api
             endpoints.MapPost("/api/series/{id:guid}/characters/{seriesCharacterId:guid}/take", TakeAsync)
                 .WithSummary("Take { folder }: the series copy's Voices are copied into that book, a \"Take series voices\" History step there. " +
                              "Only Voices, never Voice Rules. 404 as push; 409 the book doesn't differ from series; 422 the copy failed to write.");
+            endpoints.MapGet("/api/series/{id:guid}/characters/{seriesCharacterId:guid}/push/preview", PreviewPushAsync)
+                .WithSummary("What a push from folder would remove, for its confirm: { losses: [{ folder, title, voices, ruleCount }] }, each other linked book that " +
+                             "would lose Voices (names) and the positional Voice Rules on them. Refused as the push itself would be.");
+            endpoints.MapGet("/api/series/{id:guid}/characters/{seriesCharacterId:guid}/take/preview", PreviewTakeAsync)
+                .WithSummary("What a take into folder would remove, for its confirm: { losses } as the push preview, for that book only. Refused as the take itself would be.");
         }
 
         private static async Task<Results<NoContent, ProblemHttpResult>> PushAsync(
@@ -84,6 +89,23 @@ namespace Read2Me.App.Api
             body?.Folder is { Length: > 0 } folder
                 ? NoContentOr(await registry.TakeAsync(id, seriesCharacterId, folder, ct))
                 : TypedResults.Problem("Expected a JSON body with 'folder'.", statusCode: StatusCodes.Status400BadRequest);
+
+        private static Task<Results<Ok<SeriesResolvePreviewDto>, ProblemHttpResult>> PreviewPushAsync(
+            Guid id, Guid seriesCharacterId, string folder, SeriesRegistry registry, CancellationToken ct) =>
+            PreviewAsync(registry.PreviewResolveAsync(id, seriesCharacterId, folder, push: true, ct));
+
+        private static Task<Results<Ok<SeriesResolvePreviewDto>, ProblemHttpResult>> PreviewTakeAsync(
+            Guid id, Guid seriesCharacterId, string folder, SeriesRegistry registry, CancellationToken ct) =>
+            PreviewAsync(registry.PreviewResolveAsync(id, seriesCharacterId, folder, push: false, ct));
+
+        private static async Task<Results<Ok<SeriesResolvePreviewDto>, ProblemHttpResult>> PreviewAsync(Task<SeriesResult<SeriesResolvePreview>> read)
+        {
+            var result = await read;
+            return result.Refusal is { } refusal
+                ? Refused(refusal)
+                : TypedResults.Ok(new SeriesResolvePreviewDto(
+                    result.Value!.Losses.Select(l => new SeriesVoiceLossDto(l.Folder, l.Title, l.Voices, l.RuleCount)).ToList()));
+        }
 
         private static Results<NoContent, ProblemHttpResult> NoContentOr(SeriesResult<bool> result) =>
             result.Refusal is { } refusal ? Refused(refusal) : TypedResults.NoContent();
@@ -355,6 +377,11 @@ namespace Read2Me.App.Api
     public sealed record SeriesVoiceDeleteBookDto(string Folder, string Title, int RuleCount);
 
     public sealed record SeriesPositionsRequest(IReadOnlyDictionary<string, decimal>? Positions = null);
+
+    /// <summary>A push or take's confirm: each book that would lose Voices, and the positional rules on them (#222).</summary>
+    public sealed record SeriesResolvePreviewDto(IReadOnlyList<SeriesVoiceLossDto> Losses);
+
+    public sealed record SeriesVoiceLossDto(string Folder, string Title, IReadOnlyList<string> Voices, int RuleCount);
 
     /// <summary>Push or take: the book whose Voices are pushed, or that takes the series copy.</summary>
     public sealed record SeriesResolveRequest(string? Folder = null);

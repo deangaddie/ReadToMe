@@ -23,10 +23,14 @@ try {
   await api(`/api/series/${seriesId}/characters/${sc}/links/${four.folder}`, {
     method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ characterId: w2 }),
   });
-  const voice = (await cmd(scarlet.folder, { type: 'CreateVoice', characterId: w1, name: 'Army doctor' })).newEntityId;
-  const before = (await api(`/api/projects/${four.folder}/history`)).headStepId;
-  await cmd(scarlet.folder, { type: 'UpdateVoice', voiceId: voice, name: 'Old campaigner' });
-  await api(`/api/projects/${four.folder}/history/${before}/restore`, { method: 'POST' });
+  // Book 2 gains a Voice "Pipe" with a positional rule; Book 1 is Restored to before it, so the tie
+  // makes Book 1 the series copy and Book 2 differs (a take there loses "Pipe" and its rule).
+  await cmd(scarlet.folder, { type: 'CreateVoice', characterId: w1, name: 'Army doctor' });
+  const before = (await api(`/api/projects/${scarlet.folder}/history`)).headStepId;
+  const pipe = (await cmd(four.folder, { type: 'CreateVoice', characterId: w2, name: 'Pipe' })).newEntityId;
+  const ch = (await api(`/api/projects/${four.folder}/book`)).volumes?.[0];
+  console.log('rule:', await cmd(four.folder, { type: 'CreateVoiceRule', characterId: w2, voiceId: pipe, fromLevel: null, fromNodeId: null, toLevel: null, toNodeId: null }));
+  await api(`/api/projects/${scarlet.folder}/history/${before}/restore`, { method: 'POST' });
 
   // Board: the differs badge on Book 2's cell; with two books, the tie gives Book 1 the series copy.
   await openWeb(page, `/projects?series=${seriesId}&character=${sc}`);

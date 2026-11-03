@@ -287,8 +287,7 @@ describe('pushSeriesVoicesConfirm()', () => {
       message:
         'Dr. Watson’s Voices in The Sign of the Four and The Adventures of Sherlock Holmes are ' +
         'replaced by the copy in A Study in Scarlet. Each of those books records a “Push series ' +
-        'voices” History step, which can bring its own copy back. Voice Rules stay each book’s ' +
-        'own, apart from those on a Voice that goes.',
+        'voices” History step, which can bring its own copy back. Voice Rules stay each book’s own.',
       confirmLabel: 'Use this copy for all',
       destructive: false,
     });
@@ -308,9 +307,42 @@ describe('takeSeriesVoicesConfirm()', () => {
       message:
         'Dr. Watson’s Voices in A Study in Scarlet are replaced by the series copy, from The Sign ' +
         'of the Four. A Study in Scarlet records a “Take series voices” History step, which can ' +
-        'bring its own copy back. Voice Rules stay each book’s own, apart from those on a Voice that goes.',
+        'bring its own copy back. Voice Rules stay each book’s own.',
       confirmLabel: 'Use the series copy',
       destructive: false,
     });
+  });
+});
+
+describe('push and take confirms with losses', () => {
+  it('name each book that loses Voices and the positional rules that go with them', () => {
+    const push = pushSeriesVoicesConfirm({
+      label: 'Dr. Watson',
+      title: 'A Study in Scarlet',
+      otherTitles: ['The Sign of the Four', 'The Adventures of Sherlock Holmes'],
+      losses: [
+        { folder: 'four', title: 'The Sign of the Four', voices: ['Pipe', 'Violin'], ruleCount: 2 },
+        {
+          folder: 'adv',
+          title: 'The Adventures of Sherlock Holmes',
+          voices: ['Retired'],
+          ruleCount: 0,
+        },
+      ],
+    });
+    expect(push.message).toEndWith(
+      'The Sign of the Four loses “Pipe” and “Violin”, and the 2 Voice Rules on them. ' +
+        'The Adventures of Sherlock Holmes loses “Retired”. Other Voice Rules stay each book’s own.',
+    );
+
+    const take = takeSeriesVoicesConfirm({
+      label: 'Dr. Watson',
+      title: 'The Sign of the Four',
+      copyTitle: 'A Study in Scarlet',
+      losses: [{ folder: 'four', title: 'The Sign of the Four', voices: ['Pipe'], ruleCount: 1 }],
+    });
+    expect(take.message).toEndWith(
+      'The Sign of the Four loses “Pipe”, and the Voice Rule on it. Other Voice Rules stay each book’s own.',
+    );
   });
 });

@@ -1,6 +1,12 @@
 import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
-import type { SeriesCastDto, SeriesCharacterDto, SeriesDto, SeriesLinkPreviewDto } from './dtos';
+import type {
+  SeriesCastDto,
+  SeriesCharacterDto,
+  SeriesDto,
+  SeriesLinkPreviewDto,
+  SeriesResolvePreviewDto,
+} from './dtos';
 
 /**
  * `SeriesEndpoints.cs`: the series registry and its lifecycle (Series lifecycle, #206). Books are
@@ -128,6 +134,30 @@ export class SeriesApi {
     return this.api.post('/api/series/{id}/characters/{seriesCharacterId}/push', {
       path: { id, seriesCharacterId },
       body: { folder },
+    });
+  }
+
+  /** What a push from `folder` would remove from the other books, for its confirm. */
+  previewPush(
+    id: string,
+    seriesCharacterId: string,
+    folder: string,
+  ): Promise<SeriesResolvePreviewDto> {
+    return this.api.get('/api/series/{id}/characters/{seriesCharacterId}/push/preview', {
+      path: { id, seriesCharacterId },
+      query: { folder },
+    });
+  }
+
+  /** What a take into `folder` would remove from it, for its confirm. */
+  previewTake(
+    id: string,
+    seriesCharacterId: string,
+    folder: string,
+  ): Promise<SeriesResolvePreviewDto> {
+    return this.api.get('/api/series/{id}/characters/{seriesCharacterId}/take/preview', {
+      path: { id, seriesCharacterId },
+      query: { folder },
     });
   }
 
