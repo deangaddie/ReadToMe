@@ -4982,7 +4982,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The series cast board: books in position order, one row per Series character (label = its Character's name in the lowest-positioned linked book) with one cell per book, and each book's unlinked Characters for the pickers. 404 unknown series. */
+        /** The series cast board: books in position order, one row per Series character (label = its Character's name in the lowest-positioned linked book) with one cell per book, and each book's unlinked Characters for the pickers. Link suggestions are computed live from names and aliases: a cell's suggested Character, suggestedRows (unlinked Characters of two or more books that match one-to-one), each unlinked Character's nameMatches (Series character Ids, for an ambiguous cell's picker) and suggestionCount. 404 unknown series. */
         get: {
             parameters: {
                 query?: never;
@@ -5054,6 +5054,108 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["ShareSeriesCharacterResponse"];
+                    };
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series/{id}/characters/share-and-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Share and link a suggested row { members: [{ folder, characterId }] }: a Series character made from the lowest-positioned book's Character, then each other one linked to it, each link running the Voice merge → 201 { seriesCharacterId }. A link refused part-way leaves those before it. 400 fewer than two members or a book named twice; 404 unknown series, folder, Character or a book not in the series; 409 a Character is already linked. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["SeriesMembersRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ShareSeriesCharacterResponse"];
+                    };
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series/{id}/characters/share-and-link/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What Share and link would copy, for its confirm (writes nothing): { books: [{ folder, title, gains }] }, the Voice names each book gains, lowest position first. Refused as Share and link would be. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["SeriesMembersRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SeriesShareAndLinkPreviewDto"];
                     };
                 };
                 /** @description A problem: any non-2xx answer. */
@@ -5448,6 +5550,55 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series/{id}/not-the-same": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Not the same: dismiss a Link suggestion until its Character is linked or deleted. Either a suggested cell { seriesCharacterId, folder, characterId } or a suggested row { members: [{ folder, characterId }] }, which records each pair. 400 a body that is neither form, fewer than two members or a book named twice; 404 unknown series, Series character, folder, Character or a book not in the series; 409 a Character is already linked. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["NotTheSameRequest"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -9373,6 +9524,14 @@ export interface components {
             /** Format: int32 */
             review: number;
         };
+        NotTheSameRequest: {
+            /** Format: uuid */
+            characterId?: null | string;
+            folder?: null | string;
+            members?: null | components["schemas"]["SeriesMemberDto"][];
+            /** Format: uuid */
+            seriesCharacterId?: null | string;
+        };
         ParagraphAttributionStatusDto: {
             outcome: null | components["schemas"]["ParagraphOutcome"];
             status: null | components["schemas"]["ParagraphQueueStatus"];
@@ -9763,6 +9922,11 @@ export interface components {
             /** Format: double */
             position: number;
         };
+        SeriesBookGainsDto: {
+            folder: string;
+            gains: string[];
+            title: string;
+        };
         SeriesCastBookDto: {
             folder: string;
             /** Format: double */
@@ -9833,6 +9997,14 @@ export interface components {
             differs: boolean;
             name: string;
         };
+        SeriesMemberDto: {
+            /** Format: uuid */
+            characterId?: null | string;
+            folder?: null | string;
+        };
+        SeriesMembersRequest: {
+            members?: null | components["schemas"]["SeriesMemberDto"][];
+        };
         SeriesPositionsRequest: {
             positions?: null | {
                 [key: string]: number;
@@ -9851,6 +10023,9 @@ export interface components {
         };
         SeriesResolveRequest: {
             folder?: null | string;
+        };
+        SeriesShareAndLinkPreviewDto: {
+            books: components["schemas"]["SeriesBookGainsDto"][];
         };
         SeriesSuggestedMemberDto: {
             /** Format: uuid */

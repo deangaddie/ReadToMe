@@ -59,9 +59,14 @@
   .series-cast__differs {
     color: var(--r2m-status-busy);
   }
-  .series-cast__unlink {
+  .series-cast__unlink,
+  .series-cast__dismiss {
     width: 28px;
     height: 28px;
+  }
+  /* A suggested row (#223): a proposal, not yet a Series character. */
+  .series-cast__suggested-row {
+    background: var(--r2m-status-neutral-soft);
   }
   .series-cast__suggested {
     font-style: italic;

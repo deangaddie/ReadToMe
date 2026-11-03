@@ -17,6 +17,36 @@ namespace Read2Me.Data.Series.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.14");
 
+            modelBuilder.Entity("Read2Me.Data.Series.NotTheSameRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CharacterId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("OtherCharacterId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("OtherProjectId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("SeriesCharacterId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SeriesCharacterId");
+
+                    b.HasIndex("ProjectId", "CharacterId");
+
+                    b.ToTable("NotTheSame", (string)null);
+                });
+
             modelBuilder.Entity("Read2Me.Data.Series.SeriesBook", b =>
                 {
                     b.Property<Guid>("ProjectId")
@@ -75,6 +105,14 @@ namespace Read2Me.Data.Series.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Series", (string)null);
+                });
+
+            modelBuilder.Entity("Read2Me.Data.Series.NotTheSameRow", b =>
+                {
+                    b.HasOne("Read2Me.Data.Series.SeriesCharacterRow", null)
+                        .WithMany()
+                        .HasForeignKey("SeriesCharacterId")
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("Read2Me.Data.Series.SeriesLink", b =>

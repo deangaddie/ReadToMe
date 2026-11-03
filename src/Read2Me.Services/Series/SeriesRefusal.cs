@@ -26,6 +26,13 @@ namespace Read2Me.Services.Series
 
         public static readonly SeriesRefusal UnknownSeriesCharacter = new(SeriesRefusalKind.NotFound, "No such series character.");
 
+        /// <summary>A suggested row names two or more books' Characters.</summary>
+        public static readonly SeriesRefusal TooFewMembers = new(SeriesRefusalKind.Malformed,
+            "Name the Characters of two or more books: { members: [{ folder, characterId }, ...] }.");
+
+        public static SeriesRefusal BookTwice(string title) =>
+            new(SeriesRefusalKind.Malformed, $"'{title}' is named twice: a suggested row has one Character per book.");
+
         public static SeriesRefusal UnknownCharacter(string title) =>
             new(SeriesRefusalKind.NotFound, $"No such Character in '{title}'.");
 

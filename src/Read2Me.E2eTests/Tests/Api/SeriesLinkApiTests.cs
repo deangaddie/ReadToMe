@@ -136,17 +136,15 @@ public class SeriesLinkApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
         Assert.Equal(holmes.Scarlet.Watson, cells[0].GetProperty("linked").GetProperty("characterId").GetGuid());
         Assert.False(cells[0].GetProperty("linked").GetProperty("differs").GetBoolean());
         Assert.Equal(JsonValueKind.Null, cells[1].GetProperty("linked").ValueKind);
-        Assert.Equal(JsonValueKind.Null, cells[1].GetProperty("suggested").ValueKind);
+        // Four's Watson matches by name: a suggested cell (#223; SeriesSuggestionApiTests covers suggestions).
+        Assert.Equal(holmes.Four.Watson, cells[1].GetProperty("suggested").GetProperty("characterId").GetGuid());
 
-        // The pickers: each book's unlinked Characters, the Narrator among them; no suggestions yet.
+        // The pickers: each book's unlinked Characters, the Narrator among them.
         var unlinked = cast.GetProperty("unlinked");
         Assert.DoesNotContain(holmes.Scarlet.Watson, unlinked.GetProperty(holmes.Scarlet.Folder).EnumerateArray().Select(c => c.GetProperty("characterId").GetGuid()));
         var fourPicker = unlinked.GetProperty(holmes.Four.Folder).EnumerateArray().ToList();
         Assert.Contains(fourPicker, c => c.GetProperty("characterId").GetGuid() == holmes.Four.Watson);
         Assert.Contains(fourPicker, c => c.GetProperty("isNarrator").GetBoolean());
-        Assert.All(fourPicker, c => Assert.Empty(c.GetProperty("nameMatches").EnumerateArray()));
-        Assert.Empty(cast.GetProperty("suggestedRows").EnumerateArray());
-        Assert.Equal(0, cast.GetProperty("suggestionCount").GetInt32());
 
         var summary = await SummaryRowAsync(holmes.Scarlet.Folder, holmes.Scarlet.Watson);
         var link = summary.GetProperty("seriesLink");

@@ -2255,6 +2255,40 @@
         ],
         "type": "object"
       },
+      "NotTheSameRequest": {
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "folder": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesMemberDto"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "seriesCharacterId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "ParagraphAttributionStatusDto": {
         "properties": {
           "outcome": {
@@ -3746,6 +3780,28 @@
         ],
         "type": "object"
       },
+      "SeriesBookGainsDto": {
+        "properties": {
+          "folder": {
+            "type": "string"
+          },
+          "gains": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "folder",
+          "title",
+          "gains"
+        ],
+        "type": "object"
+      },
       "SeriesCastBookDto": {
         "properties": {
           "folder": {
@@ -4026,6 +4082,38 @@
         ],
         "type": "object"
       },
+      "SeriesMemberDto": {
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "folder": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "SeriesMembersRequest": {
+        "properties": {
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesMemberDto"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "SeriesPositionsRequest": {
         "properties": {
           "positions": {
@@ -4097,6 +4185,20 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "SeriesShareAndLinkPreviewDto": {
+        "properties": {
+          "books": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesBookGainsDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "books"
+        ],
         "type": "object"
       },
       "SeriesSuggestedMemberDto": {
@@ -10424,7 +10526,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "The series cast board: books in position order, one row per Series character (label = its Character's name in the lowest-positioned linked book) with one cell per book, and each book's unlinked Characters for the pickers. 404 unknown series.",
+        "summary": "The series cast board: books in position order, one row per Series character (label = its Character's name in the lowest-positioned linked book) with one cell per book, and each book's unlinked Characters for the pickers. Link suggestions are computed live from names and aliases: a cell's suggested Character, suggestedRows (unlinked Characters of two or more books that match one-to-one), each unlinked Character's nameMatches (Series character Ids, for an ambiguous cell's picker) and suggestionCount. 404 unknown series.",
         "tags": [
           "SeriesEndpoints"
         ]
@@ -10482,6 +10584,120 @@
           }
         },
         "summary": "Share as new { folder, characterId }: a Series character made from that Character, which owns its Voices → 201 { seriesCharacterId }. 404 unknown series, folder, Character or a book not in the series; 409 the Character is already linked.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      }
+    },
+    "/api/series/{id}/characters/share-and-link": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SeriesMembersRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareSeriesCharacterResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "Share and link a suggested row { members: [{ folder, characterId }] }: a Series character made from the lowest-positioned book's Character, then each other one linked to it, each link running the Voice merge → 201 { seriesCharacterId }. A link refused part-way leaves those before it. 400 fewer than two members or a book named twice; 404 unknown series, folder, Character or a book not in the series; 409 a Character is already linked.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      }
+    },
+    "/api/series/{id}/characters/share-and-link/preview": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SeriesMembersRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesShareAndLinkPreviewDto"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "What Share and link would copy, for its confirm (writes nothing): { books: [{ folder, title, gains }] }, the Voice names each book gains, lowest position first. Refused as Share and link would be.",
         "tags": [
           "SeriesEndpoints"
         ]
@@ -10949,6 +11165,56 @@
           }
         },
         "summary": "What a take into folder would remove, for its confirm: { losses } as the push preview, for that book only. Refused as the take itself would be.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      }
+    },
+    "/api/series/{id}/not-the-same": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/NotTheSameRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "Not the same: dismiss a Link suggestion until its Character is linked or deleted. Either a suggested cell { seriesCharacterId, folder, characterId } or a suggested row { members: [{ folder, characterId }] }, which records each pair. 400 a body that is neither form, fewer than two members or a book named twice; 404 unknown series, Series character, folder, Character or a book not in the series; 409 a Character is already linked.",
         "tags": [
           "SeriesEndpoints"
         ]

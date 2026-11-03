@@ -5,7 +5,9 @@ import type {
   SeriesCharacterDto,
   SeriesDto,
   SeriesLinkPreviewDto,
+  SeriesMemberDto,
   SeriesResolvePreviewDto,
+  SeriesShareAndLinkPreviewDto,
 } from './dtos';
 
 /**
@@ -112,6 +114,49 @@ export class SeriesApi {
       path: { id, seriesCharacterId, folder },
       query: { characterId },
     });
+  }
+
+  // ---- Link suggestions (#223) ----
+
+  /** Share and link a suggested row: a Series character from the lowest-positioned book's Character, the rest linked to it. Resolves its id. */
+  async shareAndLink(id: string, members: SeriesMemberDto[]): Promise<string> {
+    const { seriesCharacterId } = await this.api.post(
+      '/api/series/{id}/characters/share-and-link',
+      {
+        path: { id },
+        body: { members },
+      },
+    );
+    return seriesCharacterId;
+  }
+
+  /** What Share and link would copy, for its confirm: the Voice names each book gains. Writes nothing. */
+  previewShareAndLink(
+    id: string,
+    members: SeriesMemberDto[],
+  ): Promise<SeriesShareAndLinkPreviewDto> {
+    return this.api.post('/api/series/{id}/characters/share-and-link/preview', {
+      path: { id },
+      body: { members },
+    });
+  }
+
+  /** Not the same on a suggested cell: kept until that Character is linked or deleted. */
+  notTheSame(
+    id: string,
+    seriesCharacterId: string,
+    folder: string,
+    characterId: string,
+  ): Promise<void> {
+    return this.api.post('/api/series/{id}/not-the-same', {
+      path: { id },
+      body: { seriesCharacterId, folder, characterId },
+    });
+  }
+
+  /** Not the same on a suggested row: each pair of its Characters. */
+  notTheSameRow(id: string, members: SeriesMemberDto[]): Promise<void> {
+    return this.api.post('/api/series/{id}/not-the-same', { path: { id }, body: { members } });
   }
 
   // ---- Shared Voices (#221) ----

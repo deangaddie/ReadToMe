@@ -195,6 +195,30 @@ export function shareConfirm(input: {
 }
 
 /**
+ * Share and link a suggested row (#223): one Series character made from the lowest-positioned
+ * book's Character, the others linked to it, and what each book gains (the preview read).
+ */
+export function shareAndLinkConfirm(input: {
+  /** The suggested row's label. */
+  label: string;
+  seriesName: string;
+  /** Each member, lowest position first: its name, its book, and the Voices that book gains. */
+  books: readonly { name: string; title: string; gains: readonly string[] }[];
+}): ConfirmOptions {
+  const members = list(input.books.map((b) => `${b.name} in ${b.title}`));
+  const gains = input.books.map((b) => `${b.title} gains ${voiceNames(b.gains)}`).join('; ');
+  return {
+    title: `Share and link ${input.label} across ${input.seriesName}?`,
+    message:
+      `${members} become one series character, sharing their Voices. ${gains}. ` +
+      'Each is a History step in its book. Names, aliases, delivery cues and Voice Rules stay ' +
+      'each book’s own.',
+    confirmLabel: 'Share and link',
+    destructive: false,
+  };
+}
+
+/**
  * Delete a shared Voice from the inline series Voice editor (#221), in red: it goes from every
  * linked book, each of whose History can bring it back there only.
  */

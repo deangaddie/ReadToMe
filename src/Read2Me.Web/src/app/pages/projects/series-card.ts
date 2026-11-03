@@ -4,6 +4,7 @@ import { menuItem } from '@app/ui/menu';
 import { blockable, icon } from '@app/ui/partials';
 import { tabPanel, tabs } from '@app/ui/tabs';
 import { bookLabel, type SeriesMember, type SeriesView, seriesSummary } from './series-shelf';
+import { charactersTabLabel } from './series-cast';
 
 /** One popover id per series, stable across renders so the trigger and its menu always pair up. */
 const menuIds = new Map<string, string>();
@@ -158,6 +159,8 @@ export type SeriesPanelTab = 'books' | 'characters';
 
 export interface SeriesPanelOptions {
   tab: SeriesPanelTab;
+  /** The Link suggestion count the Characters tab shows (#223). */
+  suggestionCount: number;
   onTab: (tab: SeriesPanelTab) => void;
   /** The Characters tab's content: the series cast board. */
   characters: () => unknown;
@@ -196,7 +199,11 @@ export function seriesPanel(series: SeriesView, options: SeriesPanelOptions) {
               id,
               tabs: [
                 { id: 'books', label: 'Books', icon: 'library_books' },
-                { id: 'characters', label: 'Characters', icon: 'groups' },
+                {
+                  id: 'characters',
+                  label: charactersTabLabel(options.suggestionCount),
+                  icon: 'groups',
+                },
               ],
               selected: tab,
               onSelect: options.onTab,

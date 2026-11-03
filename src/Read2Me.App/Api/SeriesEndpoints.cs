@@ -46,7 +46,9 @@ namespace Read2Me.App.Api
                 .WithSummary("Remove the uploaded poster: the fallback cover shows again. 204, also when there is none; 404 unknown series.");
             endpoints.MapGet("/api/series/{id:guid}/cast", CastAsync)
                 .WithSummary("The series cast board: books in position order, one row per Series character (label = its Character's name in the lowest-positioned linked book) " +
-                             "with one cell per book, and each book's unlinked Characters for the pickers. 404 unknown series.");
+                             "with one cell per book, and each book's unlinked Characters for the pickers. Link suggestions are computed live from names and aliases: " +
+                             "a cell's suggested Character, suggestedRows (unlinked Characters of two or more books that match one-to-one), each unlinked Character's " +
+                             "nameMatches (Series character Ids, for an ambiguous cell's picker) and suggestionCount. 404 unknown series.");
             endpoints.MapPost("/api/series/{id:guid}/characters", ShareAsync)
                 .WithSummary("Share as new { folder, characterId }: a Series character made from that Character, which owns its Voices → 201 { seriesCharacterId }. " +
                              "404 unknown series, folder, Character or a book not in the series; 409 the Character is already linked.");
@@ -59,6 +61,17 @@ namespace Read2Me.App.Api
                              "404 unknown series, Series character, folder, a book not in the series, or nothing of the book linked to it.");
             endpoints.MapGet("/api/series/{id:guid}/characters/{seriesCharacterId:guid}/links/{folder}/preview", PreviewLinkAsync)
                 .WithSummary("What linking characterId would copy, for the Link confirm: { bookGains, seriesGains } (Voice names). Refused as the link itself would be.");
+            endpoints.MapPost("/api/series/{id:guid}/characters/share-and-link", ShareAndLinkAsync)
+                .WithSummary("Share and link a suggested row { members: [{ folder, characterId }] }: a Series character made from the lowest-positioned book's Character, " +
+                             "then each other one linked to it, each link running the Voice merge → 201 { seriesCharacterId }. A link refused part-way leaves those before it. " +
+                             "400 fewer than two members or a book named twice; 404 unknown series, folder, Character or a book not in the series; 409 a Character is already linked.");
+            endpoints.MapPost("/api/series/{id:guid}/characters/share-and-link/preview", PreviewShareAndLinkAsync)
+                .WithSummary("What Share and link would copy, for its confirm (writes nothing): { books: [{ folder, title, gains }] }, the Voice names each book gains, " +
+                             "lowest position first. Refused as Share and link would be.");
+            endpoints.MapPost("/api/series/{id:guid}/not-the-same", NotTheSameAsync)
+                .WithSummary("Not the same: dismiss a Link suggestion until its Character is linked or deleted. Either a suggested cell { seriesCharacterId, folder, characterId } " +
+                             "or a suggested row { members: [{ folder, characterId }] }, which records each pair. 400 a body that is neither form, fewer than two members " +
+                             "or a book named twice; 404 unknown series, Series character, folder, Character or a book not in the series; 409 a Character is already linked.");
             endpoints.MapGet("/api/series/{id:guid}/characters/{seriesCharacterId:guid}", CharacterAsync)
                 .WithSummary("The inline series Voice editor's read: the series copy's folder and its Voices (edit them through that book's per-book routes; " +
                              "each commit is copied into every other linked book; one made here brings each differing book back in line), each linked book in position order with its Character, " +
@@ -258,6 +271,55 @@ namespace Read2Me.App.Api
                         d.Value.Books.Select(b => new SeriesVoiceDeleteBookDto(b.Folder, b.Title, b.RuleCount)).ToList()))));
         }
 
+        // ---- Link suggestions (#223) ----------------------------------------------------------------
+
+        private static async Task<Results<Created<ShareSeriesCharacterResponse>, ProblemHttpResult>> ShareAndLinkAsync(
+            Guid id, SeriesMembersRequest? body, SeriesRegistry registry, CancellationToken ct)
+        {
+            if (MembersOf(body?.Members) is not { } members) return MembersExpected();
+            var result = await registry.ShareAndLinkAsync(id, members, ct);
+            return result.Refusal is { } refusal
+                ? Refused(refusal)
+                : TypedResults.Created($"/api/series/{id}/characters/{result.Value}", new ShareSeriesCharacterResponse(result.Value));
+        }
+
+        private static async Task<Results<Ok<SeriesShareAndLinkPreviewDto>, ProblemHttpResult>> PreviewShareAndLinkAsync(
+            Guid id, SeriesMembersRequest? body, SeriesRegistry registry, CancellationToken ct)
+        {
+            if (MembersOf(body?.Members) is not { } members) return MembersExpected();
+            var result = await registry.PreviewShareAndLinkAsync(id, members, ct);
+            return result.Refusal is { } refusal
+                ? Refused(refusal)
+                : TypedResults.Ok(new SeriesShareAndLinkPreviewDto(
+                    result.Value!.Select(b => new SeriesBookGainsDto(b.Folder, b.Title, b.Gains)).ToList()));
+        }
+
+        private static async Task<Results<NoContent, ProblemHttpResult>> NotTheSameAsync(
+            Guid id, NotTheSameRequest? body, SeriesRegistry registry, CancellationToken ct)
+        {
+            SeriesResult<bool> result;
+            if (body is { SeriesCharacterId: { } sc, Folder: { Length: > 0 } folder, CharacterId: { } characterId, Members: null })
+                result = await registry.NotTheSameAsync(id, sc, folder, characterId, ct);
+            else if (body is { SeriesCharacterId: null, Folder: null, CharacterId: null, Members: { } given }
+                     && MembersOf(given) is { } members)
+                result = await registry.NotTheSameAsync(id, members, ct);
+            else
+                return TypedResults.Problem(
+                    "Expected a JSON body that is either a suggested cell { seriesCharacterId, folder, characterId } " +
+                    "or a suggested row { members: [{ folder, characterId }, ...] }.",
+                    statusCode: StatusCodes.Status400BadRequest);
+            return NoContentOr(result);
+        }
+
+        /// <summary>Each member's folder and Character, or null when one lacks either.</summary>
+        private static IReadOnlyList<SeriesRegistry.SeriesMemberRef>? MembersOf(IReadOnlyList<SeriesMemberDto>? members) =>
+            members is null || members.Any(m => m.Folder is not { Length: > 0 } || m.CharacterId is null)
+                ? null
+                : members.Select(m => new SeriesRegistry.SeriesMemberRef(m.Folder!, m.CharacterId!.Value)).ToList();
+
+        private static ProblemHttpResult MembersExpected() => TypedResults.Problem(
+            "Expected a JSON body { members: [{ folder, characterId }, ...] }.", statusCode: StatusCodes.Status400BadRequest);
+
         private static ProblemHttpResult Refused(SeriesRefusal refusal) => TypedResults.Problem(
             refusal.Detail,
             statusCode: refusal.Kind switch
@@ -309,9 +371,9 @@ namespace Read2Me.App.Api
     public sealed record SeriesLinkPreviewDto(IReadOnlyList<string> BookGains, IReadOnlyList<string> SeriesGains);
 
     /// <summary>
-    /// The series cast board (#213): <see cref="SuggestedRows"/>, each cell's <c>suggested</c>, each
-    /// unlinked Character's <c>nameMatches</c> and <see cref="SuggestionCount"/> stay empty until link
-    /// suggestions (#223).
+    /// The series cast board (#213), with its Link suggestions (#212), computed live: each cell's
+    /// <c>suggested</c>, the <see cref="SuggestedRows"/>, each unlinked Character's <c>nameMatches</c>
+    /// (for an ambiguous cell's picker) and <see cref="SuggestionCount"/>, suggested cells and rows together.
     /// </summary>
     public sealed record SeriesCastDto(
         IReadOnlyList<SeriesCastBookDto> Books,
@@ -327,13 +389,15 @@ namespace Read2Me.App.Api
                 r.Cells.Select(c => new SeriesCastCellDto(
                     c.Folder,
                     c.Linked is { } l ? new SeriesLinkedCellDto(l.CharacterId, l.Name, c.Differs) : null,
-                    Suggested: null)).ToList())).ToList(),
-            [],
+                    c.Suggested is { } s ? new SeriesCharacterRefDto(s.CharacterId, s.Name) : null)).ToList())).ToList(),
+            v.SuggestedRows.Select(r => new SeriesSuggestedRowDto(
+                r.Label, r.Members.Select(m => new SeriesSuggestedMemberDto(m.Folder, m.CharacterId, m.Name)).ToList())).ToList(),
             v.Unlinked.ToDictionary(
                 u => u.Key,
                 u => (IReadOnlyList<SeriesUnlinkedCharacterDto>)u.Value
-                    .Select(c => new SeriesUnlinkedCharacterDto(c.CharacterId, c.Name, c.IsNarrator, [])).ToList()),
-            SuggestionCount: 0);
+                    .Select(c => new SeriesUnlinkedCharacterDto(
+                        c.CharacterId, c.Name, c.IsNarrator, v.NameMatches.GetValueOrDefault(c.CharacterId) ?? [])).ToList()),
+            v.SuggestionCount);
     }
 
     public sealed record SeriesCastBookDto(string Folder, string Title, decimal Position);
@@ -351,8 +415,23 @@ namespace Read2Me.App.Api
 
     public sealed record SeriesSuggestedMemberDto(string Folder, Guid CharacterId, string Name);
 
-    /// <summary>A book's unlinked Character, for the pickers; <see cref="NameMatches"/> marks the rows whose names it matches (#223).</summary>
+    /// <summary>A book's unlinked Character, for the pickers; <see cref="NameMatches"/>: the Series characters its names match (#212).</summary>
     public sealed record SeriesUnlinkedCharacterDto(Guid CharacterId, string Name, bool IsNarrator, IReadOnlyList<Guid> NameMatches);
+
+    /// <summary>A book's Character in a suggested row (#212).</summary>
+    public sealed record SeriesMemberDto(string? Folder = null, Guid? CharacterId = null);
+
+    /// <summary>Share and link, or its preview: a suggested row's members.</summary>
+    public sealed record SeriesMembersRequest(IReadOnlyList<SeriesMemberDto>? Members = null);
+
+    /// <summary>Not the same: a suggested cell (<c>seriesCharacterId</c>, <c>folder</c>, <c>characterId</c>) or a suggested row (<c>members</c>).</summary>
+    public sealed record NotTheSameRequest(
+        Guid? SeriesCharacterId = null, string? Folder = null, Guid? CharacterId = null, IReadOnlyList<SeriesMemberDto>? Members = null);
+
+    /// <summary>Share and link's confirm: the Voice names each book gains, lowest position first.</summary>
+    public sealed record SeriesShareAndLinkPreviewDto(IReadOnlyList<SeriesBookGainsDto> Books);
+
+    public sealed record SeriesBookGainsDto(string Folder, string Title, IReadOnlyList<string> Gains);
 
     /// <summary>A Character's series link on the Cast page's roster; <see cref="Differs"/>: this book's Voices are not the series copy (#222).</summary>
     public sealed record CharacterSeriesLinkDto(Guid SeriesId, Guid SeriesCharacterId, string SeriesName, int BookCount, bool Differs);

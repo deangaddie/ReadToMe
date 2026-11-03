@@ -2,10 +2,12 @@ import { describe, expect, it } from 'bun:test';
 import type { SeriesCastDto } from '@app/api';
 import {
   boardCells,
+  charactersTabLabel,
   linkedNames,
   otherLinks,
   pickerOptions,
   seriesCharacterLabels,
+  suggestedRowCells,
 } from './series-cast';
 
 const scarlet = { folder: 'scarlet', title: 'A Study in Scarlet', position: 1 };
@@ -138,5 +140,97 @@ describe('otherLinks(), linkedNames(), seriesCharacterLabels()', () => {
 
   it('lists every Series character’s label, for Delete series', () => {
     expect(seriesCharacterLabels(cast())).toEqual(['Sherlock Holmes', 'Dr. Watson']);
+  });
+});
+
+describe('Link suggestions (#223)', () => {
+  /** Four's Watson suggested in Watson's row; Adventures has two Holmeses, an ambiguous match. */
+  function suggesting(): SeriesCastDto {
+    const board = cast();
+    board.rows[1]!.cells[1] = {
+      folder: 'four',
+      linked: null,
+      suggested: { characterId: 'f-watson', name: 'John Watson' },
+    };
+    board.unlinked.four = board.unlinked.four!.map((c) =>
+      c.characterId === 'f-watson' ? { ...c, nameMatches: ['sc-watson'] } : c,
+    );
+    board.unlinked.adventures = [
+      { characterId: 'a-irene', name: 'Irene Adler', isNarrator: false, nameMatches: [] },
+      { characterId: 'a-holmes', name: 'Holmes', isNarrator: false, nameMatches: ['sc-holmes'] },
+      {
+        characterId: 'a-sherlock',
+        name: 'Sherlock',
+        isNarrator: false,
+        nameMatches: ['sc-holmes'],
+      },
+    ];
+    board.suggestedRows = [
+      {
+        label: 'Narrator',
+        members: [
+          { folder: 'scarlet', characterId: 's-narrator', name: 'Narrator' },
+          { folder: 'four', characterId: 'f-narrator', name: 'Narrator' },
+        ],
+      },
+    ];
+    board.suggestionCount = 2;
+    return board;
+  }
+
+  it('gives a suggested cell its Character', () => {
+    const board = suggesting();
+    expect(boardCells(board, board.rows[1]!)[1]).toMatchObject({
+      kind: 'suggested',
+      characterId: 'f-watson',
+      name: 'John Watson',
+    });
+  });
+
+  it('lists the Characters whose names match the row first, marked, in an ambiguous cell', () => {
+    const board = suggesting();
+    const adventures = boardCells(board, board.rows[0]!)[2]!;
+    expect(
+      adventures.kind === 'empty' && adventures.options.map((o) => [o.name, o.matches]),
+    ).toEqual([
+      ['Holmes', true],
+      ['Sherlock', true],
+      ['Irene Adler', false],
+    ]);
+  });
+
+  it('marks no match in another row’s cell, nor in the Share as new picker', () => {
+    const board = suggesting();
+    const watsonCell = boardCells(board, board.rows[1]!)[2]!;
+    expect(watsonCell.kind === 'empty' && watsonCell.options.map((o) => o.matches)).toEqual([
+      false,
+      false,
+      false,
+    ]);
+    expect(pickerOptions(board, 'adventures').map((o) => o.name)).toEqual([
+      'Irene Adler',
+      'Holmes',
+      'Sherlock',
+    ]);
+  });
+
+  it('gives a suggested row one cell per book: its member there, or none', () => {
+    const board = suggesting();
+    expect(
+      suggestedRowCells(board, board.suggestedRows[0]!).map((c) => [
+        c.book.folder,
+        c.member?.characterId ?? null,
+      ]),
+    ).toEqual([
+      ['scarlet', 's-narrator'],
+      ['four', 'f-narrator'],
+      ['adventures', null],
+    ]);
+  });
+
+  it('counts suggestions on the Characters tab', () => {
+    expect(charactersTabLabel(0)).toBe('Characters');
+    expect(charactersTabLabel(1)).toBe('Characters · 1 suggestion');
+    expect(charactersTabLabel(3)).toBe('Characters · 3 suggestions');
   });
 });
