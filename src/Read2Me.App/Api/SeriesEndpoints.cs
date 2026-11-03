@@ -33,6 +33,45 @@ namespace Read2Me.App.Api
             endpoints.MapPut("/api/series/{id:guid}/positions", SetPositionsAsync)
                 .WithSummary("Save the whole position set { positions: { folder: number } }, checked together. 400 under 0 or more than two decimals; " +
                              "409 when the keys are not exactly the members (out of date) or two books share a number (naming both). 404 unknown series.");
+            endpoints.MapGet("/api/series/{id:guid}/poster", GetPosterAsync)
+                .Produces<Stream>(StatusCodes.Status200OK, "image/jpeg", "image/png", "image/webp")
+                .WithSummary("The series poster: the uploaded image, else the cover of the lowest-positioned book. 404 unknown series or no image.");
+            endpoints.MapPut("/api/series/{id:guid}/poster", SetPosterAsync)
+                .WithSummary("Upload or replace the poster (multipart 'file': jpg/jpeg/png/webp, at most 10 MB, as the cover) → the series. " +
+                             "400 wrong type or too big; 404 unknown series.");
+            endpoints.MapDelete("/api/series/{id:guid}/poster", ClearPosterAsync)
+                .WithSummary("Remove the uploaded poster: the fallback cover shows again. 204, also when there is none; 404 unknown series.");
+        }
+
+        private static async Task<Results<PhysicalFileHttpResult, NotFound, ProblemHttpResult>> GetPosterAsync(
+            Guid id, SeriesRegistry registry, CancellationToken ct)
+        {
+            var result = await registry.GetAsync(id, ct);
+            if (result.Refusal is { } refusal) return Refused(refusal);
+            if (result.Value!.Poster.Path is not { } path) return TypedResults.NotFound();
+
+            // The URL carries ?v= that changes with the file, so the browser may cache it; ETag and
+            // Last-Modified still answer a plain reload.
+            var type = ImageUpload.ContentTypeOf(path);
+            return TypedResults.PhysicalFile(path, type, lastModified: File.GetLastWriteTimeUtc(path));
+        }
+
+        private static async Task<Results<Ok<SeriesDto>, ProblemHttpResult>> SetPosterAsync(
+            Guid id, HttpRequest request, SeriesRegistry registry, CancellationToken ct)
+        {
+            var (upload, uploadRefusal) = await UploadedFile.ReadAsync(
+                request, ImageUpload.Extensions, ImageUpload.MaxBytes, "Poster image must be 10 MB or smaller.", ct);
+            if (upload is null) return uploadRefusal!;
+
+            await using var stream = upload.File.OpenReadStream();
+            var result = await registry.SetPosterAsync(id, upload.Extension, stream, ct);
+            return result.Refusal is { } refusal ? Refused(refusal) : TypedResults.Ok(SeriesDto.From(result.Value!));
+        }
+
+        private static async Task<Results<NoContent, ProblemHttpResult>> ClearPosterAsync(Guid id, SeriesRegistry registry, CancellationToken ct)
+        {
+            var result = await registry.ClearPosterAsync(id, ct);
+            return result.Refusal is { } refusal ? Refused(refusal) : TypedResults.NoContent();
         }
 
         private static async Task<Ok<IReadOnlyList<SeriesDto>>> ListAsync(SeriesRegistry registry, CancellationToken ct)
@@ -98,10 +137,22 @@ namespace Read2Me.App.Api
             });
     }
 
-    public sealed record SeriesDto(Guid Id, string Name, IReadOnlyList<SeriesBookDto> Books)
+    public sealed record SeriesDto(Guid Id, string Name, SeriesPosterDto Poster, IReadOnlyList<SeriesBookDto> Books)
     {
         public static SeriesDto From(SeriesView v) =>
-            new(v.Id, v.Name, v.Books.Select(b => new SeriesBookDto(b.Folder, b.Position)).ToList());
+            new(v.Id, v.Name, SeriesPosterDto.From(v.Id, v.Poster), v.Books.Select(b => new SeriesBookDto(b.Folder, b.Position)).ToList());
+    }
+
+    /// <summary>
+    /// The series card's image (#219): <see cref="Url"/> is null when <see cref="Source"/> is None;
+    /// <see cref="CoverPosition"/> is the book whose cover stands in, only for Cover.
+    /// </summary>
+    public sealed record SeriesPosterDto(string? Url, SeriesPosterSource Source, decimal? CoverPosition)
+    {
+        public static SeriesPosterDto From(Guid seriesId, SeriesPoster poster) => new(
+            poster.Path is null ? null : $"/api/series/{seriesId}/poster?v={poster.Version}",
+            poster.Source,
+            poster.CoverPosition);
     }
 
     public sealed record SeriesBookDto(string Folder, decimal Position);

@@ -52,9 +52,6 @@ namespace Read2Me.App.Api
                 .WithSummary("Remove the cover image; a project without one still answers 204.");
         }
 
-        private static readonly HashSet<string> CoverExtensions = new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".webp" };
-        private const long MaxCoverBytes = 10L * 1024 * 1024;
-
         private static async Task<Results<Ok<IReadOnlyList<ProjectSummary>>, ProblemHttpResult>> ListAsync(
             ProjectUseCases useCases, SeriesRegistry series, CancellationToken ct)
         {
@@ -170,7 +167,7 @@ namespace Read2Me.App.Api
             // The stored name is the client's base name: it is what the detail DTO echoes and what
             // /workspace serves.
             var (upload, refusal) = await UploadedFile.ReadAsync(
-                request, CoverExtensions, MaxCoverBytes, "Cover image must be 10 MB or smaller.");
+                request, ImageUpload.Extensions, ImageUpload.MaxBytes, "Cover image must be 10 MB or smaller.");
             if (upload is null)
                 return refusal!;
 

@@ -1,10 +1,15 @@
-import { type ProjectSummary, toApiError } from '@app/api';
+import { COVER_ACCEPT, COVER_MAX_BYTES, type ProjectSummary, toApiError } from '@app/api';
 import { openDialog } from '@app/core/dialog';
 import { use } from '@app/core/services';
 import { ConfirmService, PromptService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
 import { ProjectsStore } from './projects-store';
-import { deleteSeriesConfirm, leaveConfirm, moveConfirm } from './permanent-changes';
+import {
+  deleteSeriesConfirm,
+  leaveConfirm,
+  moveConfirm,
+  removePosterConfirm,
+} from './permanent-changes';
 import type { SeriesPick } from './series-pickers';
 import { bookLabel, type SeriesView } from './series-shelf';
 import './series-pickers';
@@ -74,6 +79,7 @@ export class SeriesActions {
       deleteSeriesConfirm({
         name: series.name,
         titles: series.members.map((m) => m.project.title),
+        hasPoster: series.poster.source === 'Uploaded',
       }),
     );
     if (!ok) return false;
@@ -81,6 +87,36 @@ export class SeriesActions {
       await this.store.deleteSeries(series.id);
       this.toast.success(`Deleted series ${series.name}`);
     });
+  }
+
+  /**
+   * Upload/Replace poster…: picking the file is the confirm (Series lifecycle 11). A file outside
+   * the cover's rules is turned away here, before it is sent.
+   */
+  async uploadPoster(series: SeriesView, file: File): Promise<void> {
+    const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+    if (!COVER_ACCEPT.split(',').includes(extension)) {
+      this.toast.warn('Use a .jpg, .png or .webp image.');
+      return;
+    }
+    if (file.size > COVER_MAX_BYTES) {
+      this.toast.warn('Poster image must be 10 MB or smaller.');
+      return;
+    }
+    await this.run(() => this.store.uploadPoster(series.id, file));
+  }
+
+  /** Remove poster, behind its red confirm: the uploaded image has no History. */
+  async removePoster(series: SeriesView): Promise<void> {
+    const first = series.members[0];
+    const ok = await this.confirm.confirm(
+      removePosterConfirm({
+        name: series.name,
+        fallbackPosition: first?.project.coverImage ? first.position : null,
+      }),
+    );
+    if (!ok) return;
+    await this.run(() => this.store.clearPoster(series.id));
   }
 
   /** Remove from <series>, behind Leave's confirm. */

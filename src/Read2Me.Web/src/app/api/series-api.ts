@@ -48,4 +48,19 @@ export class SeriesApi {
   savePositions(id: string, positions: Record<string, number>): Promise<SeriesDto> {
     return this.api.put('/api/series/{id}/positions', { path: { id }, body: { positions } });
   }
+
+  /**
+   * Upload or replace the poster: multipart `file` under the cover's rules (`COVER_ACCEPT`,
+   * `COVER_MAX_BYTES`); 400 otherwise. Answers the series.
+   */
+  uploadPoster(id: string, file: File): Promise<SeriesDto> {
+    const form = new FormData();
+    form.set('file', file, file.name);
+    return this.api.putForm('/api/series/{id}/poster', { path: { id } }, form);
+  }
+
+  /** Removes the uploaded poster (204, also when there is none); the fallback cover shows again. */
+  clearPoster(id: string): Promise<void> {
+    return this.api.delete('/api/series/{id}/poster', { path: { id } });
+  }
 }

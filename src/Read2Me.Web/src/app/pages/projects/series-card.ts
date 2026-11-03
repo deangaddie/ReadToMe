@@ -1,7 +1,8 @@
 import { html, nothing } from 'lit-html';
+import { COVER_ACCEPT } from '@app/api';
 import { menuItem } from '@app/ui/menu';
 import { blockable, icon } from '@app/ui/partials';
-import { type SeriesMember, type SeriesView, seriesSummary } from './series-shelf';
+import { bookLabel, type SeriesMember, type SeriesView, seriesSummary } from './series-shelf';
 
 /** One popover id per series, stable across renders so the trigger and its menu always pair up. */
 const menuIds = new Map<string, string>();
@@ -16,16 +17,67 @@ export interface SeriesCardOptions {
   onToggle: () => void;
   onAddBook: () => void;
   onRename: () => void;
+  /** A file picked through Upload/Replace poster…, not yet checked against the cover's rules. */
+  onPoster: (file: File) => void;
+  onRemovePoster: () => void;
   onDelete: () => void;
+}
+
+/**
+ * The poster in its three states (Series lifecycle 11): the uploaded image; else the lowest-
+ * positioned book's cover, marked "cover of Book N"; else stripes with the series name.
+ */
+function poster(series: SeriesView) {
+  const { url, source, coverPosition } = series.poster;
+  if (source === 'None' || !url)
+    return html`<span class="projects__poster projects__poster--empty" data-poster="None">
+      <span class="projects__poster-name">${series.name}</span>
+    </span>`;
+  const note =
+    source === 'Cover' && coverPosition !== null ? `cover of ${bookLabel(coverPosition)}` : null;
+  return html`<span class="projects__poster" data-poster=${source}>
+    <img
+      class="projects__poster-image"
+      src=${url}
+      alt=${note ? `${series.name}: ${note}` : `${series.name} poster`}
+    />
+    ${note ? html`<span class="projects__poster-note">${note}</span>` : nothing}
+  </span>`;
+}
+
+/** The hidden picker the poster menu entries open; cleared after each pick so the same file can go again. */
+function posterPicker(onPoster: (file: File) => void) {
+  return html`<input
+    class="projects__poster-input"
+    type="file"
+    accept=${COVER_ACCEPT}
+    hidden
+    tabindex="-1"
+    aria-hidden="true"
+    @change=${(e: Event) => {
+      const input = e.currentTarget as HTMLInputElement;
+      const file = input.files?.[0];
+      input.value = '';
+      if (file) onPoster(file);
+    }}
+  />`;
 }
 
 /**
  * A series on the Projects page's Series view (#207, variant D): a stacked poster with the
  * "Series" chip, the name, "4 books · Books 1–5", and the ⋮ menu. Clicking the poster or name
- * toggles its panel. The poster is a placeholder with the name until the series poster slice.
+ * toggles its panel.
  */
 export function seriesCard(series: SeriesView, options: SeriesCardOptions) {
   const menuId = menuIdFor(series.id);
+  const uploaded = series.poster.source === 'Uploaded';
+  // A menu entry's run gets no event, so the picker is found by the card's series id.
+  const pickPoster = () =>
+    document
+      .querySelector<HTMLInputElement>(
+        `.projects__series-card[data-series-id="${CSS.escape(series.id)}"] .projects__poster-input`,
+      )
+      ?.click();
   return html`<article
     class="projects__series-card ${options.open ? 'projects__series-card--open' : ''}"
     data-series-id=${series.id}
@@ -37,9 +89,7 @@ export function seriesCard(series: SeriesView, options: SeriesCardOptions) {
       aria-label=${`${options.open ? 'Hide' : 'Show'} the books of ${series.name}`}
       @click=${options.onToggle}
     >
-      <span class="projects__poster">
-        <span class="projects__poster-name">${series.name}</span>
-      </span>
+      ${poster(series)}
       <span class="projects__series-chip">${icon('library_books')} Series</span>
     </button>
     <div class="r2m-project-card__body">
@@ -71,6 +121,23 @@ export function seriesCard(series: SeriesView, options: SeriesCardOptions) {
           ${menuItem({ label: 'Add book…', icon: 'add', action: 'add-book', run: options.onAddBook })}
           ${menuItem({ label: 'Rename…', icon: 'edit', action: 'rename-series', run: options.onRename })}
           ${menuItem({
+            label: uploaded ? 'Replace poster…' : 'Upload poster…',
+            icon: 'upload_file',
+            action: 'upload-poster',
+            run: pickPoster,
+          })}
+          ${
+            uploaded
+              ? menuItem({
+                  label: 'Remove poster',
+                  icon: 'hide_image',
+                  action: 'remove-poster',
+                  destructive: true,
+                  run: options.onRemovePoster,
+                })
+              : nothing
+          }
+          ${menuItem({
             label: 'Delete series',
             icon: 'delete',
             action: 'delete-series',
@@ -81,6 +148,7 @@ export function seriesCard(series: SeriesView, options: SeriesCardOptions) {
       </div>
       <p class="r2m-project-card__author projects__series-summary">${seriesSummary(series)}</p>
     </div>
+    ${posterPicker(options.onPoster)}
   </article>`;
 }
 

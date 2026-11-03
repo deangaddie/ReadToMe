@@ -3707,11 +3707,15 @@
           },
           "name": {
             "type": "string"
+          },
+          "poster": {
+            "$ref": "#/components/schemas/SeriesPosterDto"
           }
         },
         "required": [
           "id",
           "name",
+          "poster",
           "books"
         ],
         "type": "object"
@@ -3730,6 +3734,39 @@
           }
         },
         "type": "object"
+      },
+      "SeriesPosterDto": {
+        "properties": {
+          "coverPosition": {
+            "format": "double",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/SeriesPosterSource"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "url",
+          "source",
+          "coverPosition"
+        ],
+        "type": "object"
+      },
+      "SeriesPosterSource": {
+        "enum": [
+          "Uploaded",
+          "Cover",
+          "None"
+        ]
       },
       "SetActiveRequest": {
         "properties": {
@@ -9906,6 +9943,131 @@
           }
         },
         "summary": "Save the whole position set { positions: { folder: number } }, checked together. 400 under 0 or more than two decimals; 409 when the keys are not exactly the members (out of date) or two books share a number (naming both). 404 unknown series.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      }
+    },
+    "/api/series/{id}/poster": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "Remove the uploaded poster: the fallback cover shows again. 204, also when there is none; 404 unknown series.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stream"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stream"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stream"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "The series poster: the uploaded image, else the cover of the lowest-positioned book. 404 unknown series or no image.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      },
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesDto"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "Upload or replace the poster (multipart 'file': jpg/jpeg/png/webp, at most 10 MB, as the cover) → the series. 400 wrong type or too big; 404 unknown series.",
         "tags": [
           "SeriesEndpoints"
         ]

@@ -312,7 +312,7 @@ The registry is `{workspace}/.series/{id}/series.db`; books are addressed by fol
 project: they make no History step and ignore `X-Origin-Id`, and each sends the `series` hub signal instead.
 
 ```bash
-curl -s http://localhost:5000/api/series        # [{ id, name, books: [{ folder, position }] }], books in position order
+curl -s http://localhost:5000/api/series        # [{ id, name, poster: { url, source, coverPosition }, books: [{ folder, position }] }], books in position order
 curl -s -X POST http://localhost:5000/api/series -H 'content-type: application/json' \
   -d '{ "name": "Sherlock Holmes", "folder": "a-study-in-scarlet" }'   # → 201 { id }; with folder, that book is Book 1
 curl -s -X PATCH http://localhost:5000/api/series/{id} -H 'content-type: application/json' -d '{ "name": "Holmes" }'   # → the series
@@ -322,7 +322,16 @@ curl -s -X DELETE http://localhost:5000/api/series/{id}/books/{folder}   # leave
 curl -s -X PUT http://localhost:5000/api/series/{id}/positions -H 'content-type: application/json' \
   -d '{ "positions": { "a-study-in-scarlet": 1, "the-sign-of-the-four": 2 } }'   # the whole set → the series
 curl -s -X DELETE http://localhost:5000/api/series/{id}           # → 204; every book keeps its Voices
+curl -s -X PUT http://localhost:5000/api/series/{id}/poster -F file=@poster.jpg   # upload or replace → the series
+curl -s -X DELETE http://localhost:5000/api/series/{id}/poster    # → 204, also with none; the fallback shows again
+curl -s http://localhost:5000/api/series/{id}/poster -o poster    # the image; 404 when source is None
 ```
+
+The poster follows the cover's rules (multipart `file`: jpg/jpeg/png/webp, at most 10 MB, else 400) and is stored
+as `.series/{id}/poster.{ext}`, which `/workspace` doesn't serve. `poster.source` is `Uploaded`, else `Cover` (the
+cover of the lowest-positioned book, `coverPosition` naming its position; only that book counts), else `None`
+(`url` null; the client draws a placeholder). `url` is `/api/series/{id}/poster?v=…`, the version changing with
+the file served. Upload and clear make no History step and send the `series` signal like other registry writes.
 
 Names are trimmed, can't be blank (400) and are unique in the Workspace ignoring case (409). A position is 0 or
 more with at most two decimals (else 400). A joining book gets the next whole number after the series' highest

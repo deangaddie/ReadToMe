@@ -103,6 +103,16 @@ export class ProjectsStore {
     await this.reload();
   }
 
+  async uploadPoster(id: string, file: File): Promise<void> {
+    await this.seriesApi.uploadPoster(id, file);
+    await this.reload();
+  }
+
+  async clearPoster(id: string): Promise<void> {
+    await this.seriesApi.clearPoster(id);
+    await this.reload();
+  }
+
   /** Join, or Move to with `move`; resolves the assigned Series position. */
   async join(id: string, folder: string, move: boolean): Promise<number> {
     const position = await this.seriesApi.join(id, folder, move);

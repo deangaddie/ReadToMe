@@ -4,6 +4,7 @@ import {
   deleteSeriesConfirm,
   leaveConfirm,
   moveConfirm,
+  removePosterConfirm,
 } from './permanent-changes';
 
 describe('leaveConfirm()', () => {
@@ -79,6 +80,44 @@ describe('deleteSeriesConfirm()', () => {
   it('says so when the series has no books', () => {
     expect(deleteSeriesConfirm({ name: 'Austen', titles: [] }).message).toBe(
       'The series has no books. Its name is removed, and there is no History to bring it back.',
+    );
+  });
+
+  it('names the poster among what goes when one was uploaded', () => {
+    expect(
+      deleteSeriesConfirm({
+        name: 'Sherlock Holmes',
+        titles: ['A Study in Scarlet'],
+        hasPoster: true,
+      }).message,
+    ).toBe(
+      'Every book is kept, with its Characters and Voices: A Study in Scarlet. ' +
+        'The series’ name, poster, book numbers and links are removed, and there is no History ' +
+        'to bring them back.',
+    );
+    expect(deleteSeriesConfirm({ name: 'Austen', titles: [], hasPoster: true }).message).toBe(
+      'The series has no books. Its name and poster are removed, and there is no History to ' +
+        'bring them back.',
+    );
+  });
+});
+
+describe('removePosterConfirm()', () => {
+  it('is red, says there is no History, and names the cover that shows instead', () => {
+    expect(removePosterConfirm({ name: 'Sherlock Holmes', fallbackPosition: 1 })).toEqual({
+      title: 'Remove the poster of Sherlock Holmes?',
+      message:
+        'The uploaded image is deleted, and there is no History to bring it back. ' +
+        'The series shows the cover of Book 1 instead.',
+      confirmLabel: 'Remove poster',
+      destructive: true,
+    });
+  });
+
+  it('says the placeholder shows when the lowest book has no cover', () => {
+    expect(removePosterConfirm({ name: 'Austen', fallbackPosition: null }).message).toBe(
+      'The uploaded image is deleted, and there is no History to bring it back. ' +
+        'The series shows a placeholder with its name instead.',
     );
   });
 });

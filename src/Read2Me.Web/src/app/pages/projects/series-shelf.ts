@@ -1,4 +1,4 @@
-import type { ProjectSummary, SeriesDto } from '@app/api';
+import type { ProjectSummary, SeriesDto, SeriesPosterDto } from '@app/api';
 
 /**
  * The Projects page's Series view as data (#207, variant D): each series joined to its projects,
@@ -17,6 +17,8 @@ export interface SeriesView {
   id: string;
   name: string;
   members: SeriesMember[];
+  /** The uploaded poster, the lowest book's cover, or None (the placeholder). */
+  poster: SeriesPosterDto;
 }
 
 export type ShelfItem =
@@ -41,6 +43,7 @@ export function seriesViews(series: SeriesDto[], projects: ProjectSummary[]): Se
   return series.map((s) => ({
     id: s.id,
     name: s.name,
+    poster: s.poster,
     members: s.books
       .flatMap((b) => {
         const project = byFolder.get(b.folder);

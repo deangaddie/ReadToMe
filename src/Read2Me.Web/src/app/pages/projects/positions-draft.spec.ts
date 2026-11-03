@@ -16,6 +16,7 @@ const project = (folderName: string, title: string) =>
 const holmes: SeriesView = {
   id: 'h',
   name: 'Sherlock Holmes',
+  poster: { url: null, source: 'None', coverPosition: null },
   members: [
     { project: project('scarlet', 'A Study in Scarlet'), position: 1 },
     { project: project('four', 'The Sign of the Four'), position: 2.5 },

@@ -38,6 +38,7 @@ const four = book('four', 'The Sign of the Four');
 const holmes: SeriesDto = {
   id: 'h',
   name: 'Sherlock Holmes',
+  poster: { url: null, source: 'None', coverPosition: null },
   books: [
     { folder: 'scarlet', position: 1 },
     { folder: 'four', position: 2 },
@@ -63,6 +64,7 @@ beforeEach(() => {
   override(ToastService, {
     success: (m: string) => toasts.push(m),
     problem: (p: { detail?: string }) => toasts.push(`problem: ${p.detail}`),
+    warn: (m: string) => toasts.push(`warn: ${m}`),
   } as unknown as ToastService);
 });
 afterEach(() => document.body.replaceChildren());
@@ -308,7 +310,12 @@ describe('r2m-projects-page Books view', () => {
   });
 
   it('Move to another series… asks Leave’s confirm, then joins with move', async () => {
-    const other: SeriesDto = { id: 'x', name: 'Holmes novels', books: [] };
+    const other: SeriesDto = {
+      id: 'x',
+      name: 'Holmes novels',
+      poster: { url: null, source: 'None', coverPosition: null },
+      books: [],
+    };
     const page = await render([four, scarlet], [holmes, other]);
     api.on('PUT', '/api/series/x/books/four', { position: 1 });
 
@@ -564,5 +571,133 @@ describe('r2m-projects-page Series view', () => {
     expect(message).toContain('A Study in Scarlet and The Sign of the Four');
     expect(api.calls('DELETE', '/api/series/h')).toHaveLength(1);
     expect(toasts).toEqual(['Deleted series Sherlock Holmes']);
+  });
+});
+
+describe('r2m-projects-page series poster', () => {
+  const posterOf = (page: ProjectsPage) => page.querySelector<HTMLElement>('.projects__poster')!;
+  const withPoster = (poster: SeriesDto['poster']): SeriesDto => ({ ...holmes, poster });
+  const uploaded = withPoster({
+    url: '/api/series/h/poster?v=7',
+    source: 'Uploaded',
+    coverPosition: null,
+  });
+
+  /** Picks `file` in the card's hidden poster input, as the browser's file dialog would. */
+  async function pick(page: ProjectsPage, file: File) {
+    const input = page.querySelector<HTMLInputElement>('.projects__poster-input')!;
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    input.dispatchEvent(new Event('change'));
+    await flush();
+  }
+
+  it('shows the uploaded poster, with Replace poster… and Remove poster in the menu', async () => {
+    const page = await render([four, scarlet], [uploaded]);
+    await showSeries(page);
+
+    const poster = posterOf(page);
+    expect(poster.dataset.poster).toBe('Uploaded');
+    expect(poster.querySelector('img')!.getAttribute('src')).toBe('/api/series/h/poster?v=7');
+    expect(poster.querySelector('.projects__poster-note')).toBeNull();
+    const menu = page.querySelector<HTMLElement>('.projects__series-card')!;
+    expect(menuLabels(menu)).toEqual([
+      'Add book…',
+      'Rename…',
+      'Replace poster…',
+      'Remove poster',
+      'Delete series',
+    ]);
+  });
+
+  it('marks a fallback cover "cover of Book N", with Upload poster… and no Remove', async () => {
+    const page = await render(
+      [four, scarlet],
+      [withPoster({ url: '/api/series/h/poster?v=3', source: 'Cover', coverPosition: 1.5 })],
+    );
+    await showSeries(page);
+
+    const poster = posterOf(page);
+    expect(poster.dataset.poster).toBe('Cover');
+    expect(poster.querySelector('img')!.getAttribute('src')).toBe('/api/series/h/poster?v=3');
+    expect(text(poster.querySelector('.projects__poster-note'))).toBe('cover of Book 1.5');
+    const menu = page.querySelector<HTMLElement>('.projects__series-card')!;
+    expect(menuLabels(menu)).toEqual(['Add book…', 'Rename…', 'Upload poster…', 'Delete series']);
+  });
+
+  it('with no image, shows the striped placeholder with the series name', async () => {
+    const page = await render([four, scarlet], [holmes]);
+    await showSeries(page);
+
+    const poster = posterOf(page);
+    expect(poster.dataset.poster).toBe('None');
+    expect(poster.classList.contains('projects__poster--empty')).toBe(true);
+    expect(poster.querySelector('img')).toBeNull();
+    expect(text(poster.querySelector('.projects__poster-name'))).toBe('Sherlock Holmes');
+  });
+
+  it('a picked image uploads with no confirm and the series is read again', async () => {
+    const page = await render([four, scarlet], [holmes]);
+    await showSeries(page);
+    api.on('PUT', '/api/series/h/poster', uploaded).on('GET', '/api/series', [uploaded]);
+
+    await pick(page, new File(['png'], 'Holmes.PNG', { type: 'image/png' }));
+    await page.rendered();
+
+    expect(document.querySelector('r2m-confirm-dialog')).toBeNull();
+    const [put] = api.calls('PUT', '/api/series/h/poster');
+    expect((put!.body as FormData).get('file')).toBeInstanceOf(File);
+    expect(posterOf(page).dataset.poster).toBe('Uploaded');
+  });
+
+  it('turns away a file outside the cover’s rules before sending it', async () => {
+    const page = await render([four, scarlet], [holmes]);
+    await showSeries(page);
+
+    await pick(page, new File(['gif'], 'holmes.gif', { type: 'image/gif' }));
+    await pick(page, new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'big.jpg'));
+
+    expect(api.calls('PUT', '/api/series/h/poster')).toHaveLength(0);
+    expect(toasts).toEqual([
+      'warn: Use a .jpg, .png or .webp image.',
+      'warn: Poster image must be 10 MB or smaller.',
+    ]);
+  });
+
+  it('Remove poster asks in red, naming the cover that shows instead, then clears it', async () => {
+    const coveredScarlet = { ...scarlet, coverImage: 'cover.jpg' };
+    const page = await render([four, coveredScarlet], [uploaded]);
+    await showSeries(page);
+    api.on('DELETE', '/api/series/h/poster', undefined).on('GET', '/api/series', [holmes]);
+
+    page.querySelector<HTMLButtonElement>('[data-action="remove-poster"]')!.click();
+    const { title, message } = await confirmDialog('confirm');
+
+    expect(title).toBe('Remove the poster of Sherlock Holmes?');
+    expect(message).toContain('no History');
+    expect(message).toContain('The series shows the cover of Book 1 instead.');
+    expect(api.calls('DELETE', '/api/series/h/poster')).toHaveLength(1);
+    await page.rendered();
+    expect(posterOf(page).dataset.poster).toBe('None');
+  });
+
+  it('Remove poster cancelled leaves the poster alone', async () => {
+    const page = await render([four, scarlet], [uploaded]);
+    await showSeries(page);
+
+    page.querySelector<HTMLButtonElement>('[data-action="remove-poster"]')!.click();
+    const { message } = await confirmDialog('cancel');
+
+    expect(message).toContain('a placeholder with its name');
+    expect(api.calls('DELETE', '/api/series/h/poster')).toHaveLength(0);
+  });
+
+  it('Delete series names an uploaded poster among what goes', async () => {
+    const page = await render([four, scarlet], [uploaded]);
+    await showSeries(page);
+
+    page.querySelector<HTMLButtonElement>('[data-action="delete-series"]')!.click();
+    const { message } = await confirmDialog('cancel');
+
+    expect(message).toContain('name, poster, book numbers and links are removed');
   });
 });

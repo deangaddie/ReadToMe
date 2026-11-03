@@ -4,6 +4,30 @@ using Microsoft.AspNetCore.Http.HttpResults;
 namespace Read2Me.App.Api
 {
     /// <summary>
+    /// The one set of rules for an uploaded image: a project's cover and a series' poster (#206
+    /// item 11) take the same types and size, and are served with these content types.
+    /// </summary>
+    public static class ImageUpload
+    {
+        public static readonly IReadOnlyDictionary<string, string> ContentTypes =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [".jpg"] = "image/jpeg",
+                [".jpeg"] = "image/jpeg",
+                [".png"] = "image/png",
+                [".webp"] = "image/webp",
+            };
+
+        public static readonly IReadOnlySet<string> Extensions =
+            new HashSet<string>(ContentTypes.Keys, StringComparer.OrdinalIgnoreCase);
+
+        public const long MaxBytes = 10L * 1024 * 1024;
+
+        public static string ContentTypeOf(string path) =>
+            ContentTypes.GetValueOrDefault(Path.GetExtension(path), "application/octet-stream");
+    }
+
+    /// <summary>
     /// The one way a multipart upload is read off a request (cover image, voice audio): the
     /// <c>file</c> field, its client base name (a path in it would be both a traversal and a broken
     /// link), a lower-cased extension checked against the endpoint's whitelist, and a size cap.

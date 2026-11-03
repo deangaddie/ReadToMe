@@ -54,6 +54,9 @@ export type NarratorOnlyModeRequest = Schema['NarratorOnlyModeRequest'];
 /** One item of `GET /api/series`: its books (folder, position) in position order. */
 export type SeriesDto = Schema['SeriesDto'];
 export type SeriesBookDto = Schema['SeriesBookDto'];
+/** A series card's image: `url` is null for None; `coverPosition` names the book whose cover stands in. */
+export type SeriesPosterDto = Schema['SeriesPosterDto'];
+export type SeriesPosterSource = Schema['SeriesPosterSource'];
 /** `ProjectSummary.series`: the project's series, or null. */
 export type ProjectSeries = Schema['ProjectSeries'];
 
