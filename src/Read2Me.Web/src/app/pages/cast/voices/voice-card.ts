@@ -15,7 +15,7 @@ import { ConfirmService, confirmPermanent } from '@app/ui/dialogs';
 import type { RejectedFile } from '@app/ui/file-drop';
 import { blockable, icon, statusChip } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
-import { CastStore } from '../cast-store';
+import { CastStore, SERIES_VOICES_READ_ONLY } from '../cast-store';
 import { openGeneratePromptDialog } from './generate-prompt-dialog';
 import { transcribeChange } from './permanent-changes';
 import {
@@ -141,9 +141,11 @@ export class VoiceCard extends R2mElement {
     // A write is in flight: every Save is off until the reload lands.
     if (busy) this.setAttribute('aria-busy', 'true');
     else this.removeAttribute('aria-busy');
-    // Viewing a History step: every edit control is off too, with the reason as its tooltip.
-    const readOnly = this.store.readOnly();
+    // Viewing a History step, or (on the Cast page) a series Voice: every edit control is off too,
+    // with the reason as its tooltip. The default stays the book's own, so only a viewed step locks it.
+    const readOnly = this.store.voicesReadOnly();
     const off = busy || readOnly !== null;
+    const defaultReadOnly = this.store.readOnly();
     return html`
       <details class="r2m-expansion voice-card__panel">
         <summary class="voice-card__header">
@@ -157,14 +159,14 @@ export class VoiceCard extends R2mElement {
                     ${icon('star', 'r2m-icon--filled')}
                   </span>`
                 : blockable(
-                    readOnly,
+                    defaultReadOnly,
                     html`<button
                       type="button"
                       class="r2m-icon-button voice-card__star"
                       data-action="set-default"
                       data-tooltip="Set as default"
                       aria-label="Set as default voice"
-                      ?disabled=${off}
+                      ?disabled=${busy || defaultReadOnly !== null}
                       @click=${(e: Event) => {
                         this.stop(e);
                         void this.setDefault();
@@ -222,7 +224,7 @@ export class VoiceCard extends R2mElement {
                 : nothing
             }
             ${
-              voice.audioFileName
+              voice.audioFileName && readOnly !== SERIES_VOICES_READ_ONLY
                 ? html`<a
                     class="r2m-icon-button"
                     data-tooltip="Edit audio"

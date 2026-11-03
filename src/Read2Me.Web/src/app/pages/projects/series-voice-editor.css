@@ -1,0 +1,87 @@
+/* The inline series Voice editor (#221): under its row on the series cast board. */
+@scope (r2m-series-voice-editor) to (r2m-voice-card) {
+  :scope {
+    display: block;
+  }
+  .series-voices__panel {
+    display: grid;
+    gap: var(--r2m-space-2);
+    padding: var(--r2m-space-3);
+    border: 1px solid var(--r2m-outline);
+    border-radius: var(--r2m-radius-md);
+  }
+  .series-voices__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--r2m-space-2);
+  }
+  .series-voices__title {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0;
+    font-size: var(--r2m-text-md, 1rem);
+  }
+  .series-voices__hint {
+    flex: 1 1 auto;
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-xs);
+  }
+  .series-voices__note,
+  .series-voices__footnote {
+    margin: 0;
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-xs);
+  }
+  .series-voices__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--r2m-text-sm);
+
+    & th,
+    & td {
+      padding: var(--r2m-space-2);
+      border-bottom: 1px solid var(--r2m-outline);
+      text-align: left;
+      vertical-align: middle;
+    }
+    & thead th {
+      font-weight: 600;
+    }
+  }
+  .series-voices__default-head,
+  .series-voices__default {
+    text-align: center;
+  }
+  .series-voices__as,
+  .series-voices__description {
+    display: block;
+    font-weight: 400;
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-xs);
+  }
+  .series-voices__blocked {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--r2m-text-muted);
+    font-size: var(--r2m-text-xs);
+
+    & .r2m-icon {
+      font-size: 16px;
+    }
+  }
+  .series-voices__actions {
+    white-space: nowrap;
+    text-align: right;
+
+    & r2m-audio-player {
+      display: inline-flex;
+      vertical-align: middle;
+    }
+  }
+  .series-voices__editor-row > td {
+    padding: var(--r2m-space-2) 0;
+  }
+}

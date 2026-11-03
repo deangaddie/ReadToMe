@@ -6,7 +6,7 @@ import { ToastService } from '@app/ui/toast';
 import { FakeApi } from '../../../../testing/fake-api';
 import { FakeLive } from '../../../../testing/fake-live';
 import { settle } from '../../../../testing/fake-navigation';
-import { CastStore } from '../cast-store';
+import { CastStore, SERIES_VOICES_READ_ONLY } from '../cast-store';
 import type { AddVoiceDialog } from './add-voice-dialog';
 import { ProviderSchemas } from './provider-schemas';
 import './voices-section';
@@ -109,5 +109,97 @@ describe('r2m-voices-section', () => {
     expect(api.calls('POST', COMMANDS).map((r) => r.body)).toEqual([
       { type: 'CreateVoice', characterId: 'alice', name: 'Alice', isGenerated: true },
     ]);
+  });
+
+  describe('a series-linked Character (#221)', () => {
+    const WATSON: CharacterSummaryDto = {
+      ...ALICE,
+      seriesLink: {
+        seriesId: 'h',
+        seriesCharacterId: 'sc-alice',
+        seriesName: 'Sherlock Holmes',
+        bookCount: 2,
+        differs: false,
+      },
+    };
+
+    async function mountLinked() {
+      api.on('GET', `${BASE}/characters/summary`, [WATSON]);
+      api.on('GET', `${BASE}/characters/alice/lines`, []);
+      api.on('GET', `${BASE}/characters/alice/voices`, {
+        defaultVoiceId: 'v1',
+        voices: [
+          voice('v1', 'Main'),
+          { ...voice('v2', 'Whisper'), audioFileName: 'voices/alice/v2.wav' },
+        ],
+      });
+      api.on('GET', `${BASE}/characters/alice/voice-rules`, []);
+      api.on('GET', `${BASE}/characters/alice/voice-rules/preview`, []);
+      await store.open('dracula');
+      await store.select('alice');
+      const host = document.createElement('div');
+      provide(host, CastStore, store);
+      const section = document.createElement('r2m-voices-section');
+      section.character = WATSON;
+      host.append(section);
+      document.body.append(host);
+      await section.rendered();
+      for (const card of section.querySelectorAll('r2m-voice-card')) await card.rendered();
+      return section;
+    }
+
+    it('its shared Voices are read-only, with the way to the series cast board', async () => {
+      const section = await mountLinked();
+
+      expect(store.voicesReadOnly()).toBe(SERIES_VOICES_READ_ONLY);
+      expect(section.querySelector('[data-action=edit-on-board]')?.getAttribute('href')).toBe(
+        'projects?series=h&character=sc-alice',
+      );
+      expect(section.querySelector<HTMLButtonElement>('[data-action=add-voice]')!.disabled).toBe(
+        true,
+      );
+      const cards = Array.from(section.querySelectorAll('r2m-voice-card'));
+      for (const card of cards) {
+        expect(card.querySelector<HTMLButtonElement>('[data-action=delete-voice]')!.disabled).toBe(
+          true,
+        );
+        expect(card.querySelector('r2m-inline-edit')?.readOnly).toBe(SERIES_VOICES_READ_ONLY);
+      }
+      // The full audio editor isn't offered here either.
+      expect(section.querySelector('[data-action=edit-audio]')).toBeNull();
+    });
+
+    it('its default stays this book’s own', async () => {
+      const section = await mountLinked();
+      api.on('POST', COMMANDS, { outcome: 'Committed' });
+      const star = section.querySelector<HTMLButtonElement>(
+        'r2m-voice-card[data-voice-id=v2] [data-action=set-default]',
+      )!;
+      expect(star.disabled).toBe(false);
+      star.click();
+      await settle();
+      expect(api.calls('POST', COMMANDS).map((r) => r.body)).toEqual([
+        { type: 'SetVoiceDefault', voiceId: 'v2' },
+      ]);
+    });
+
+    it('an unlinked Character’s Voices stay editable, with no board link', async () => {
+      const section = await mount([voice('v1', 'Main')], 'v1');
+      expect(store.voicesReadOnly()).toBeNull();
+      expect(section.querySelector('[data-action=edit-on-board]')).toBeNull();
+      expect(section.querySelector<HTMLButtonElement>('[data-action=add-voice]')!.disabled).toBe(
+        false,
+      );
+    });
+
+    it('the series editor’s own store is not read-only', async () => {
+      store.seriesEditor = true;
+      const section = await mountLinked();
+      expect(store.voicesReadOnly()).toBeNull();
+      expect(section.querySelector('[data-action=edit-on-board]')).toBeNull();
+      expect(section.querySelector<HTMLButtonElement>('[data-action=add-voice]')!.disabled).toBe(
+        false,
+      );
+    });
   });
 });

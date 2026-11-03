@@ -106,6 +106,26 @@ export class ProjectsPage extends R2mElement {
     }
     // Refresh on every visit; a failure surfaces through the store's error signal, not a toast.
     void this.store.load().catch(() => undefined);
+    this.arrive();
+  }
+
+  /** Series characters whose Voice editor opens on arrival (`?character=`). */
+  private arrivalRows: string[] = [];
+
+  /**
+   * `?series={id}` (with `&character={scId}`): arriving from the Cast page's "Edit on the series
+   * cast board" (#221), the Series view opens that series' Characters tab, with that row's Voice
+   * editor open.
+   */
+  private arrive(): void {
+    const query = this.router.query();
+    const series = query.get('series');
+    if (!series) return;
+    this.view.set('series');
+    this.openSeries.set(series);
+    this.panelTab.set('characters');
+    const character = query.get('character');
+    this.arrivalRows = character ? [character] : [];
   }
 
   protected override updated(): void {
@@ -303,6 +323,7 @@ export class ProjectsPage extends R2mElement {
       characters: () =>
         html`<r2m-series-cast-board
           .series=${{ id: series.id, name: series.name }}
+          .openRows=${this.arrivalRows}
         ></r2m-series-cast-board>`,
       editing: rows
         ? { blocked: saveBlockedReason(rows), problem: positionsProblem(rows), saving }

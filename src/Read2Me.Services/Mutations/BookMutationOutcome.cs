@@ -18,6 +18,12 @@ public enum BookMutationRejection
     /// waiting for the write lock: the Restore is about to replace what the write was based on.
     /// </summary>
     Restoring,
+    /// <summary>
+    /// The Book could take the write, but another book it is tied to could not (ADR 0018): a
+    /// shared Voice that another linked book's rules still use, say. The state, not the request, is
+    /// wrong; the API answers 409.
+    /// </summary>
+    Blocked,
 }
 
 /// <summary>
@@ -37,7 +43,11 @@ public abstract record BookMutationOutcome
     public sealed record NoChange : BookMutationOutcome;
 
     /// <summary>An expected failure. Nothing committed.</summary>
-    public sealed record Rejected(BookMutationRejection Reason, string Message) : BookMutationOutcome;
+    public sealed record Rejected(BookMutationRejection Reason, string Message) : BookMutationOutcome
+    {
+        /// <summary>Problem-details extensions a refusal names its things with: a <see cref="BookMutationRejection.Blocked"/> one's <c>books</c>.</summary>
+        public IReadOnlyDictionary<string, object?>? Extensions { get; init; }
+    }
 }
 
 /// <summary>

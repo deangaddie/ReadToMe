@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Read2Me.Core.Models;
@@ -59,6 +60,10 @@ public sealed class BookMutations(
             return Cancelled();
         if (RefusedWhileRestoring(mutation) is { } refused)
             return refused;
+
+        var plans = await PlanHooksAsync(mutation, ct);
+        if (plans.FirstOrDefault(p => p.Refusal is not null)?.Refusal is { } hookRefusal)
+            return hookRefusal;
 
         IDisposable? writeLock;
         try
@@ -123,7 +128,40 @@ public sealed class BookMutations(
         Publish(receipt);
         if (step is not null)
             Announce(mutation.FolderId, step);
+        var landed = step?.Landed ?? step?.Changed;
+        await FollowUpAsync(mutation, plans, new CommittedBookChange(receipt, landed?.Label, landed?.Action));
         return new BookMutationOutcome.Committed(receipt);
+    }
+
+    /// <summary>Each registered <see cref="IBookCommitHook"/>'s plan, read before the lock.</summary>
+    private async Task<IReadOnlyList<BookCommitPlan>> PlanHooksAsync(BookMutation mutation, CancellationToken ct)
+    {
+        var plans = new List<BookCommitPlan>();
+        foreach (var hook in serviceProvider.GetServices<IBookCommitHook>())
+            plans.Add(await hook.PlanAsync(mutation, ct));
+        return plans;
+    }
+
+    /// <summary>
+    /// Past the commit, so best-effort like <see cref="Publish"/>: a follow-up that throws is
+    /// logged, and the commit is still reported as committed.
+    /// </summary>
+    private async Task FollowUpAsync(BookMutation mutation, IReadOnlyList<BookCommitPlan> plans, CommittedBookChange change)
+    {
+        foreach (var plan in plans)
+        {
+            if (plan.AfterCommit is not { } after) continue;
+            try
+            {
+                await after(change);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex,
+                    "A follow-up to {Mutation} on {Folder} failed; the mutation is committed.",
+                    mutation.Name, mutation.FolderId.Value);
+            }
+        }
     }
 
     /// <summary>

@@ -42,6 +42,10 @@ const VOICE_RULE_FACETS: readonly BookFacet[] = ['VoiceRules', 'Voices', 'Struct
 
 const NO_VOICES: CharacterVoicesDto = { defaultVoiceId: null, voices: [] };
 
+/** The reason a linked Character's Voices are read-only on the Cast page (#221). */
+export const SERIES_VOICES_READ_ONLY =
+  'Shared with the series: edit these Voices on the series cast board.';
+
 /**
  * The cast page's state (ticket 15, design §9 "Cast"): the roster summary, the selected character,
  * its lines and its voices (16). Writes post a command and reload from the response (design §8
@@ -102,6 +106,23 @@ export class CastStore {
    * off with this as its reason; null on the current project.
    */
   readonly readOnly = computed(() => this.stepView.readOnly(this._folder()));
+
+  /**
+   * The store behind the inline series Voice editor (#221) rather than the Cast page: series
+   * Voices are edited there, so they are not read-only for it.
+   */
+  seriesEditor = false;
+
+  /**
+   * Why the selected character's Voices can't be edited here: a viewed History step, or — on the
+   * Cast page — they are series Voices, edited on the series cast board (#221). Its default and
+   * Voice Rules stay the book's own, so they follow {@link readOnly} instead.
+   */
+  readonly voicesReadOnly = computed(
+    () =>
+      this.readOnly() ??
+      (!this.seriesEditor && this.selected()?.seriesLink ? SERIES_VOICES_READ_ONLY : null),
+  );
 
   /** The roster as collision-check owners (what the discovery dialog folds rows onto). */
   readonly roster = computed<AliasOwner[]>(() =>

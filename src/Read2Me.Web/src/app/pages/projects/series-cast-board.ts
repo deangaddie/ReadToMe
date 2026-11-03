@@ -8,6 +8,7 @@ import { icon, statusChip } from '@app/ui/partials';
 import { SeriesActions } from './series-actions';
 import { type BoardCell, boardCells, pickerOptions } from './series-cast';
 import { bookLabel } from './series-shelf';
+import './series-voice-editor';
 import { adoptStyles } from '@app/core/styles';
 import boardCss from './series-cast-board.css' with { type: 'text' };
 
@@ -23,7 +24,8 @@ export interface BoardSeries {
  * The series cast board (Character linking #208, variant B): the Characters tab of a series panel.
  * One row per Series character (the Narrator a row like any other), one column per book in Series
  * position order. A cell is linked (the name, and ✕ to unlink) or empty (a picker of that book's
- * unlinked Characters); the last row shares a Character as new. Read when shown, and again on the
+ * unlinked Characters); the last row shares a Character as new. A row's label opens its inline
+ * series Voice editor under it (#221), several at once. Read when shown, and again on the
  * hub's `series` signal for this series and after each of its own writes.
  */
 export class SeriesCastBoard extends R2mElement {
@@ -35,7 +37,17 @@ export class SeriesCastBoard extends R2mElement {
   private readonly cast = signal<SeriesCastDto | null>(null);
   private readonly error = signal<string | null>(null);
   private readonly busy = signal(false);
+  /** The rows whose inline series Voice editor is open (#221), by Series character. */
+  readonly open = signal<ReadonlySet<string>>(new Set());
   private seq = 0;
+
+  /** Opens these rows' Voice editors on arrival (the Cast page's "Edit on the series cast board"). */
+  get openRows(): readonly string[] {
+    return [...this.open()];
+  }
+  set openRows(ids: readonly string[]) {
+    if (ids.length > 0) this.open.set(new Set([...this.open(), ...ids]));
+  }
 
   get series(): BoardSeries | null {
     return this._series();
@@ -127,13 +139,47 @@ export class SeriesCastBoard extends R2mElement {
       </div>`;
   }
 
+  /** Opens or closes a row's inline series Voice editor; several stay open at once. */
+  toggle(seriesCharacterId: string): void {
+    this.open.update((open) => {
+      const next = new Set(open);
+      if (!next.delete(seriesCharacterId)) next.add(seriesCharacterId);
+      return next;
+    });
+  }
+
   private row(cast: SeriesCastDto, row: SeriesCastRowDto, busy: boolean) {
+    const series = this._series();
+    const open = this.open().has(row.seriesCharacterId);
     return html`<tr data-series-character=${row.seriesCharacterId}>
-      <th scope="row" class="series-cast__label">
-        ${row.isNarrator ? icon('record_voice_over') : icon('person')} ${row.label}
-      </th>
-      ${boardCells(cast, row).map((cell) => this.cell(cast, row, cell, busy))}
-    </tr>`;
+        <th scope="row" class="series-cast__label">
+          <button
+            type="button"
+            class="series-cast__toggle"
+            data-action="voices"
+            aria-expanded=${open ? 'true' : 'false'}
+            data-tooltip=${open ? 'Close its Voices' : 'Edit its Voices'}
+            @click=${() => this.toggle(row.seriesCharacterId)}
+          >
+            ${icon(open ? 'expand_less' : 'expand_more')}
+            ${row.isNarrator ? icon('record_voice_over') : icon('person')} ${row.label}
+          </button>
+        </th>
+        ${boardCells(cast, row).map((cell) => this.cell(cast, row, cell, busy))}
+      </tr>
+      ${
+        open && series
+          ? html`<tr class="series-cast__editor-row" data-editor-for=${row.seriesCharacterId}>
+              <td colspan=${cast.books.length + 1}>
+                <r2m-series-voice-editor
+                  .seriesId=${series.id}
+                  .seriesCharacterId=${row.seriesCharacterId}
+                  .label=${row.label}
+                ></r2m-series-voice-editor>
+              </td>
+            </tr>`
+          : nothing
+      }`;
   }
 
   private cell(cast: SeriesCastDto, row: SeriesCastRowDto, cell: BoardCell, busy: boolean) {

@@ -3869,6 +3869,79 @@
         ],
         "type": "object"
       },
+      "SeriesCharacterBookDto": {
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "characterName": {
+            "type": "string"
+          },
+          "defaultVoiceId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "differs": {
+            "type": "boolean"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "position": {
+            "format": "double",
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "folder",
+          "title",
+          "position",
+          "characterId",
+          "characterName",
+          "defaultVoiceId",
+          "differs"
+        ],
+        "type": "object"
+      },
+      "SeriesCharacterDto": {
+        "properties": {
+          "books": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesCharacterBookDto"
+            },
+            "type": "array"
+          },
+          "deleteBlocks": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SeriesVoiceDeleteBlockDto"
+            },
+            "type": "object"
+          },
+          "seriesCopyFolder": {
+            "type": "string"
+          },
+          "voices": {
+            "items": {
+              "$ref": "#/components/schemas/VoiceDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "seriesCopyFolder",
+          "voices",
+          "books",
+          "deleteBlocks"
+        ],
+        "type": "object"
+      },
       "SeriesCharacterRefDto": {
         "properties": {
           "characterId": {
@@ -4066,6 +4139,50 @@
           "nameMatches"
         ],
         "type": "object"
+      },
+      "SeriesVoiceDeleteBlockDto": {
+        "properties": {
+          "books": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesVoiceDeleteBookDto"
+            },
+            "type": "array"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/SeriesVoiceDeleteReason"
+          }
+        },
+        "required": [
+          "reason",
+          "books"
+        ],
+        "type": "object"
+      },
+      "SeriesVoiceDeleteBookDto": {
+        "properties": {
+          "folder": {
+            "type": "string"
+          },
+          "ruleCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "folder",
+          "title",
+          "ruleCount"
+        ],
+        "type": "object"
+      },
+      "SeriesVoiceDeleteReason": {
+        "enum": [
+          "PositionalRules",
+          "LastVoice"
+        ]
       },
       "SetActiveRequest": {
         "properties": {
@@ -10313,6 +10430,56 @@
           }
         },
         "summary": "Share as new { folder, characterId }: a Series character made from that Character, which owns its Voices → 201 { seriesCharacterId }. 404 unknown series, folder, Character or a book not in the series; 409 the Character is already linked.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      }
+    },
+    "/api/series/{id}/characters/{seriesCharacterId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "seriesCharacterId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesCharacterDto"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "The inline series Voice editor's read: the series copy's folder and its Voices (edit them through that book's per-book routes; each commit is copied into every other linked book), each linked book in position order with its Character and default Voice, and deleteBlocks by Voice Id (PositionalRules or LastVoice, naming the books). 404 unknown series or Series character.",
         "tags": [
           "SeriesEndpoints"
         ]

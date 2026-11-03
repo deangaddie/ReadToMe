@@ -1,12 +1,12 @@
 import { html, nothing } from 'lit-html';
-import type { CharacterLineDto, CharacterSummaryDto } from '@app/api';
+import type { CharacterLineDto, CharacterSeriesLinkDto, CharacterSummaryDto } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
 import { type ReadonlySignal, computed, signal } from '@app/core/signals';
 import { ConfirmService } from '@app/ui/dialogs';
 import { blockable, icon, statusChip } from '@app/ui/partials';
-import { castPath } from './cast-path';
+import { castPath, seriesBoardPath } from './cast-path';
 import { CastStore } from './cast-store';
 import { openMergeDialog } from './merge-dialog';
 import '@app/ui/inline-edit';
@@ -17,6 +17,16 @@ import './voice-rules/voice-rules-section';
 /** The extra note on Delete when the character narrates the book (research §4). */
 export function linkedNarratorDeleteMessage(name: string): string {
   return `${name} narrates this book; deleting will return narration to the Narrator voice.`;
+}
+
+/** The delete confirm's line for a series-linked Character (#213 3): only this book's Voices go. */
+export function linkedSeriesDeleteMessage(name: string, link: CharacterSeriesLinkDto): string {
+  return `Linked to ${name} in ${link.seriesName}; the other books keep their Voices.`;
+}
+
+/** The series chip: "Sherlock Holmes · 3 books". */
+export function seriesChipLabel(link: CharacterSeriesLinkDto): string {
+  return `${link.seriesName} · ${link.bookCount} ${link.bookCount === 1 ? 'book' : 'books'}`;
 }
 
 /**
@@ -117,6 +127,7 @@ export class CharacterDetail extends R2mElement {
             })
           : nothing
       }
+      ${character.seriesLink ? this.seriesLine(character.seriesLink) : nothing}
       ${character.isNarrator ? nothing : this.aliases(character, off, readOnly)}
 
       <section class="character-detail__section" aria-label="Voices">
@@ -242,10 +253,36 @@ export class CharacterDetail extends R2mElement {
     if (response) this.goTo(choice.survivorId);
   }
 
+  /**
+   * A series-linked Character (#221, variant B): the chip naming its series and how many books share
+   * its Voices, and the way to the series cast board, where they are edited.
+   */
+  private seriesLine(link: CharacterSeriesLinkDto) {
+    return html`<p class="character-detail__series" data-testid="series-link">
+      ${statusChip({
+        status: 'info',
+        icon: 'library_books',
+        label: seriesChipLabel(link),
+        compact: true,
+        tooltip: 'Its Voices are shared with the other books it is linked in.',
+      })}
+      <a
+        class="character-detail__series-link"
+        data-action="series-board"
+        href=${seriesBoardPath(link.seriesId, link.seriesCharacterId)}
+        >Manage on the series cast board</a
+      >
+    </p>`;
+  }
+
   async deleteCharacter(): Promise<void> {
     const character = this.#character();
     if (!character) return;
-    const note = character.narratesBook ? ` ${linkedNarratorDeleteMessage(character.name)}` : '';
+    const note =
+      (character.narratesBook ? ` ${linkedNarratorDeleteMessage(character.name)}` : '') +
+      (character.seriesLink
+        ? ` ${linkedSeriesDeleteMessage(character.name, character.seriesLink)}`
+        : '');
     const ok = await this.confirm.confirm({
       title: 'Delete character',
       message:

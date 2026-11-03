@@ -598,7 +598,13 @@ public sealed record SetVoiceSourceMutation(
 /// Removes a Voice, its audio, its stored original and every rule that named it. The Character's
 /// default Voice Rule follows to its oldest remaining Voice, or goes too when that was the last one.
 /// </summary>
-public sealed record DeleteVoiceMutation(ProjectFolderId FolderId, Guid VoiceId) : ProjectStateMutation(FolderId);
+public sealed record DeleteVoiceMutation(ProjectFolderId FolderId, Guid VoiceId) : ProjectStateMutation(FolderId)
+{
+    /// <summary>A series copy of a delete made in another linked book (ADR 0018) names its step as that book's did; null names it from the mutation.</summary>
+    public (string Label, StepAction Action)? CopiedStep { get; init; }
+
+    internal override (string Label, StepAction Action)? OwnStep => CopiedStep;
+}
 
 /// <summary>
 /// Adds a positional Voice Rule below every rule the Character already has: from a node onward, up
@@ -692,4 +698,23 @@ public sealed record GainSeriesVoicesMutation(
     public override StateFileOwners WritesFiles => new(Voices.Select(v => v.Id).ToList());
 
     internal override (string Label, StepAction Action)? OwnStep => ("Link series character", StepAction.Voice);
+}
+
+/// <summary>
+/// A shared Voice's whole state, copied into another linked book after an edit committed in one
+/// (ADR 0018, copy after commit): the row is added under the same Id when the book lacks it, or
+/// every shared field is overwritten when it holds it. The audio paths name this book's copies,
+/// which the producer has already written. A Voice another Character of this book holds is refused.
+/// <para>
+/// The step takes the label and action of the step the edit landed in, so every book's History
+/// names the same gesture.
+/// </para>
+/// </summary>
+public sealed record CopySeriesVoiceMutation(
+    ProjectFolderId FolderId, Guid CharacterId, SeriesVoiceCopy Voice, string Label, StepAction Action) : ProjectStateMutation(FolderId)
+{
+    /// <summary>The copied reference audio and original may land over this book's own, so History hashes them with the commit.</summary>
+    public override StateFileOwners WritesFiles => StateFileOwners.Voice(Voice.Id);
+
+    internal override (string Label, StepAction Action)? OwnStep => (Label, Action);
 }
