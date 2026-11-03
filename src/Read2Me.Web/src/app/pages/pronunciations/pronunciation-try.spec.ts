@@ -28,6 +28,7 @@ const character = (id: string, name: string, flags: Partial<CharacterSummaryDto>
     readyVoiceCount: 1,
     isNarrator: false,
     narratesBook: false,
+    seriesLink: null,
     ...flags,
   }) as CharacterSummaryDto;
 const voice = (id: string, name: string) => ({ id, name, audioFileName: `${id}.wav` }) as VoiceDto;

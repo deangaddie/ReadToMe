@@ -17,6 +17,7 @@ function row(name: string, voiceCount = 0, isNarrator = false): CharacterSummary
     readyVoiceCount: 0,
     isNarrator,
     narratesBook: false,
+    seriesLink: null,
   };
 }
 

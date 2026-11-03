@@ -3,8 +3,11 @@ import {
   deleteProjectConfirm,
   deleteSeriesConfirm,
   leaveConfirm,
+  linkConfirm,
   moveConfirm,
   removePosterConfirm,
+  shareConfirm,
+  unlinkConfirm,
 } from './permanent-changes';
 
 describe('leaveConfirm()', () => {
@@ -144,5 +147,127 @@ describe('deleteProjectConfirm()', () => {
         position: 2,
       }).message,
     ).toBe(`${base} Part of Sherlock Holmes (Book 2); the other books keep their Voices.`);
+  });
+});
+
+describe('deleteSeriesConfirm() with Series characters', () => {
+  it('names each Series character whose links go', () => {
+    expect(
+      deleteSeriesConfirm({
+        name: 'Sherlock Holmes',
+        titles: ['A Study in Scarlet', 'The Sign of the Four'],
+        linked: ['Sherlock Holmes', 'Dr. Watson'],
+      }).message,
+    ).toBe(
+      'Every book is kept, with its Characters and Voices: A Study in Scarlet and ' +
+        'The Sign of the Four. The series’ name, book numbers and the links of Sherlock Holmes ' +
+        'and Dr. Watson are removed, and there is no History to bring them back.',
+    );
+  });
+});
+
+describe('linkConfirm()', () => {
+  it('names who it shares with and what each side gains, and is neutral', () => {
+    expect(
+      linkConfirm({
+        name: 'John Watson',
+        title: 'The Sign of the Four',
+        label: 'Dr. Watson',
+        others: [{ name: 'Dr. Watson', title: 'A Study in Scarlet' }],
+        bookGains: ['Army doctor'],
+        seriesGains: ['Biographer', 'Older'],
+      }),
+    ).toEqual({
+      title: 'Link John Watson to Dr. Watson?',
+      message:
+        'John Watson will share Voices with Dr. Watson in A Study in Scarlet. ' +
+        'The Sign of the Four gains “Army doctor”; the other book gains “Biographer” and “Older”. ' +
+        'Each is a History step in its book. Names, aliases, delivery cues and Voice Rules stay ' +
+        'each book’s own.',
+      confirmLabel: 'Link',
+      destructive: false,
+    });
+  });
+
+  it('says when a side gains nothing, and counts the other books', () => {
+    expect(
+      linkConfirm({
+        name: 'Narrator',
+        title: 'The Adventures of Sherlock Holmes',
+        label: 'Narrator',
+        others: [
+          { name: 'Narrator', title: 'A Study in Scarlet' },
+          { name: 'Narrator', title: 'The Sign of the Four' },
+        ],
+        bookGains: [],
+        seriesGains: ['Narration'],
+      }).message,
+    ).toBe(
+      'Narrator will share Voices with Narrator in A Study in Scarlet and Narrator in ' +
+        'The Sign of the Four. The Adventures of Sherlock Holmes gains no Voices; the other ' +
+        'books gain “Narration”. Each is a History step in its book. Names, aliases, delivery ' +
+        'cues and Voice Rules stay each book’s own.',
+    );
+  });
+});
+
+describe('unlinkConfirm()', () => {
+  it('says the book keeps its copy and edits stop crossing books', () => {
+    expect(
+      unlinkConfirm({
+        name: 'John Watson',
+        title: 'The Sign of the Four',
+        label: 'Dr. Watson',
+        otherTitles: ['A Study in Scarlet'],
+      }),
+    ).toEqual({
+      title: 'Unlink John Watson from Dr. Watson?',
+      message:
+        'The Sign of the Four keeps its own copy of John Watson’s Voices, so nothing in it ' +
+        'breaks. From now on, Voice edits there no longer reach A Study in Scarlet, and theirs ' +
+        'no longer reach it.',
+      confirmLabel: 'Unlink',
+      destructive: false,
+    });
+  });
+
+  it('says the Series character goes with its last link', () => {
+    expect(
+      unlinkConfirm({
+        name: 'Dr. Watson',
+        title: 'A Study in Scarlet',
+        label: 'Dr. Watson',
+        otherTitles: [],
+      }).message,
+    ).toBe(
+      'A Study in Scarlet keeps its own copy of Dr. Watson’s Voices, so nothing in it breaks. ' +
+        'No other book is linked, so the series character Dr. Watson is removed.',
+    );
+  });
+});
+
+describe('shareConfirm()', () => {
+  it('says a Series character is made from this Character’s Voices', () => {
+    expect(
+      shareConfirm({
+        name: 'Dr. Watson',
+        title: 'A Study in Scarlet',
+        seriesName: 'Sherlock Holmes',
+      }),
+    ).toEqual({
+      title: 'Share Dr. Watson across Sherlock Holmes?',
+      message: 'A series character is made from the Voices of Dr. Watson in A Study in Scarlet.',
+      confirmLabel: 'Share as new',
+      destructive: false,
+    });
+  });
+});
+
+describe('leaveConfirm() without the cast read', () => {
+  it('names no Characters when the links couldn’t be read', () => {
+    expect(leaveConfirm({ title: 'X', seriesName: 'S', linked: null }).message).toBe(
+      'Any of its Characters linked to the series lose their link. This book keeps its own ' +
+        'copy of their Voices. The other books in S keep their numbers.',
+    );
   });
 });

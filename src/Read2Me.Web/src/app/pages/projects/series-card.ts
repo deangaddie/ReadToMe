@@ -2,6 +2,7 @@ import { html, nothing } from 'lit-html';
 import { COVER_ACCEPT } from '@app/api';
 import { menuItem } from '@app/ui/menu';
 import { blockable, icon } from '@app/ui/partials';
+import { tabPanel, tabs } from '@app/ui/tabs';
 import { bookLabel, type SeriesMember, type SeriesView, seriesSummary } from './series-shelf';
 
 /** One popover id per series, stable across renders so the trigger and its menu always pair up. */
@@ -152,7 +153,14 @@ export function seriesCard(series: SeriesView, options: SeriesCardOptions) {
   </article>`;
 }
 
+/** The panel's tabs: its member books, and the series cast board (#208). */
+export type SeriesPanelTab = 'books' | 'characters';
+
 export interface SeriesPanelOptions {
+  tab: SeriesPanelTab;
+  onTab: (tab: SeriesPanelTab) => void;
+  /** The Characters tab's content: the series cast board. */
+  characters: () => unknown;
   /** While Edit book numbers is on: Save's blocked reason (null when it can save). */
   editing: { blocked: string | null; problem: string | null; saving: boolean } | null;
   onEdit: () => void;
@@ -166,10 +174,13 @@ export interface SeriesPanelOptions {
 /**
  * The open series' full-width panel, placed after the last card in its row (#207, 3): the member
  * books in Series position order, Edit book numbers and Add book; while editing, Cancel and
- * Save numbers, which is off with the set's problem or when nothing changed.
+ * Save numbers, which is off with the set's problem or when nothing changed. The Characters tab
+ * holds the series cast board (#208); editing numbers keeps the Books tab.
  */
 export function seriesPanel(series: SeriesView, options: SeriesPanelOptions) {
   const editing = options.editing;
+  const tab = editing ? 'books' : options.tab;
+  const id = `r2m-series-panel-${series.id}`;
   return html`<section
     class="projects__panel"
     data-series-id=${series.id}
@@ -178,64 +189,86 @@ export function seriesPanel(series: SeriesView, options: SeriesPanelOptions) {
     <header class="projects__panel-bar">
       <strong class="projects__panel-name">${series.name}</strong>
       <span class="projects__panel-summary">${seriesSummary(series)}</span>
-      <span class="projects__panel-spacer"></span>
       ${
         editing
-          ? html`${
-                editing.problem
-                  ? html`<span class="projects__panel-problem" role="alert"
-                      >${icon('error')} ${editing.problem}</span
-                    >`
-                  : nothing
-              }
-              <button
-                type="button"
-                class="r2m-button"
-                data-action="cancel-numbers"
-                @click=${options.onCancel}
-              >
-                Cancel
-              </button>
-              ${blockable(
-                editing.saving ? null : editing.blocked,
-                html`<button
+          ? nothing
+          : tabs<SeriesPanelTab>({
+              id,
+              tabs: [
+                { id: 'books', label: 'Books', icon: 'library_books' },
+                { id: 'characters', label: 'Characters', icon: 'groups' },
+              ],
+              selected: tab,
+              onSelect: options.onTab,
+              label: `${series.name}: books or characters`,
+            })
+      }
+      <span class="projects__panel-spacer"></span>
+      ${
+        tab === 'characters'
+          ? nothing
+          : editing
+            ? html`${
+                  editing.problem
+                    ? html`<span class="projects__panel-problem" role="alert"
+                        >${icon('error')} ${editing.problem}</span
+                      >`
+                    : nothing
+                }
+                <button
                   type="button"
-                  class="r2m-button r2m-button--filled"
-                  data-action="save-numbers"
-                  ?disabled=${editing.blocked !== null || editing.saving}
-                  @click=${options.onSave}
+                  class="r2m-button"
+                  data-action="cancel-numbers"
+                  @click=${options.onCancel}
                 >
-                  ${icon('save')} Save numbers
-                </button>`,
-              )}`
-          : html`${
-                series.members.length > 0
-                  ? html`<button
-                      type="button"
-                      class="r2m-button"
-                      data-action="edit-numbers"
-                      @click=${options.onEdit}
-                    >
-                      ${icon('edit')} Edit book numbers
-                    </button>`
-                  : nothing
-              }
-              <button
-                type="button"
-                class="r2m-button"
-                data-action="panel-add-book"
-                @click=${options.onAddBook}
-              >
-                ${icon('add')} Add book
-              </button>`
+                  Cancel
+                </button>
+                ${blockable(
+                  editing.saving ? null : editing.blocked,
+                  html`<button
+                    type="button"
+                    class="r2m-button r2m-button--filled"
+                    data-action="save-numbers"
+                    ?disabled=${editing.blocked !== null || editing.saving}
+                    @click=${options.onSave}
+                  >
+                    ${icon('save')} Save numbers
+                  </button>`,
+                )}`
+            : html`${
+                  series.members.length > 0
+                    ? html`<button
+                        type="button"
+                        class="r2m-button"
+                        data-action="edit-numbers"
+                        @click=${options.onEdit}
+                      >
+                        ${icon('edit')} Edit book numbers
+                      </button>`
+                    : nothing
+                }
+                <button
+                  type="button"
+                  class="r2m-button"
+                  data-action="panel-add-book"
+                  @click=${options.onAddBook}
+                >
+                  ${icon('add')} Add book
+                </button>`
       }
     </header>
     ${
-      series.members.length > 0
-        ? html`<div class="projects__panel-grid">${series.members.map(options.book)}</div>`
-        : html`<p class="projects__panel-empty">
-            No books yet. Add a book to start the series; it becomes Book 1.
-          </p>`
+      tab === 'characters'
+        ? tabPanel(id, 'characters', options.characters())
+        : tabPanel(
+            id,
+            'books',
+            series.members.length > 0
+              ? html`<div class="projects__panel-grid">${series.members.map(options.book)}</div>`
+              : html`<p class="projects__panel-empty">
+                  No books yet. Add a book to start the series; it becomes Book 1.
+                </p>`,
+          )
     }
   </section>`;
 }

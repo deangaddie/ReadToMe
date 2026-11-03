@@ -5,6 +5,7 @@ using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Data.Series;
 using Read2Me.Services.Events;
+using Read2Me.Services.Mutations;
 
 namespace Read2Me.Services.Series
 {
@@ -23,9 +24,11 @@ namespace Read2Me.Services.Series
     /// is unique in the Workspace, a book is in at most one series) and a read may heal.
     /// </para>
     /// </summary>
-    public sealed class SeriesRegistry(
+    public sealed partial class SeriesRegistry(
         IFileSystem fs,
         IProjectCatalogReader projects,
+        ICharacterReader characters,
+        BookMutations mutations,
         SeriesRegistryLock gate,
         EventBroadcaster<SeriesChanged> changes,
         ILogger<SeriesRegistry> logger)
@@ -450,10 +453,15 @@ namespace Read2Me.Services.Series
                     .ToList()
                 : [];
 
+        /// <summary>
+        /// The book leaves: its links go with it, and so does a Series character left with no linked
+        /// book. The book keeps its own copy of every Voice.
+        /// </summary>
         private async Task RemoveMemberAsync(Guid seriesId, Guid projectId, CancellationToken ct)
         {
             await using var db = await SeriesDbContext.OpenAsync(FolderOf(seriesId), ct);
             await db.Books.Where(b => b.ProjectId == projectId).ExecuteDeleteAsync(ct);
+            await RemoveLinksAsync(db, l => l.ProjectId == projectId, ct);
         }
 
         private static string? Clean(string? name) => string.IsNullOrWhiteSpace(name) ? null : name.Trim();

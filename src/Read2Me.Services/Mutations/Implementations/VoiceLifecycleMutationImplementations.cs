@@ -505,3 +505,53 @@ public sealed class MoveVoiceRuleMutationImplementation : IBookMutationImplement
         return VoiceEffects.Exact(BookFacets.VoiceRules);
     }
 }
+
+/// <summary>
+/// Adds the series' Voices a linked Character lacks, under their own Ids (ADR 0018). Exact like the
+/// rest of the family: Voice rows, and a default rule when the Character had no Voices.
+/// </summary>
+public sealed class GainSeriesVoicesMutationImplementation : IBookMutationImplementation<GainSeriesVoicesMutation>
+{
+    public async Task<BookMutationEffects> ApplyAsync(
+        GainSeriesVoicesMutation mutation, ProjectDbContext db, CancellationToken ct)
+    {
+        if (!await db.Characters.AnyAsync(c => c.Id == mutation.CharacterId, ct))
+            throw VoiceEffects.NotFound("character", mutation.CharacterId);
+
+        var ids = mutation.Voices.Select(v => v.Id).ToList();
+        var existing = await db.Voices.Where(v => ids.Contains(v.Id))
+            .Select(v => new { v.Id, v.CharacterId, CharacterName = v.Character.Name })
+            .ToListAsync(ct);
+        if (existing.FirstOrDefault(v => v.CharacterId != mutation.CharacterId) is { } held)
+            throw new BookMutationRejectedException(BookMutationRejection.Conflict,
+                $"{held.CharacterName} in this book already holds a Voice of this series character. " +
+                "Merge the two Characters first.");
+
+        var gains = mutation.Voices.Where(v => existing.All(e => e.Id != v.Id)).ToList();
+        if (gains.Count == 0)
+            return BookMutationEffects.Nothing;
+
+        var isFirst = !await db.Voices.AnyAsync(v => v.CharacterId == mutation.CharacterId, ct);
+        foreach (var copy in gains)
+            db.Voices.Add(new VoiceEntity
+            {
+                Id = copy.Id,
+                CharacterId = mutation.CharacterId,
+                Name = copy.Name,
+                Description = copy.Description,
+                Source = copy.Source,
+                DesignPrompt = copy.DesignPrompt,
+                Transcript = copy.Transcript,
+                AudioFileName = copy.AudioFileName,
+                VoiceDesignSettingsOverrideJson = copy.VoiceDesignSettingsOverrideJson,
+                TtsSettingsOverrideJson = copy.TtsSettingsOverrideJson,
+                CreatedUtc = copy.CreatedUtc,
+            });
+
+        if (!isFirst)
+            return VoiceEffects.Exact(BookFacets.Voices);
+
+        db.VoiceRules.Add(VoiceEffects.NewDefaultRule(mutation.CharacterId, gains[0].Id));
+        return VoiceEffects.Exact(BookFacets.Voices | BookFacets.VoiceRules);
+    }
+}

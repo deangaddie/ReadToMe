@@ -1111,6 +1111,36 @@
         ],
         "type": "object"
       },
+      "CharacterSeriesLinkDto": {
+        "properties": {
+          "bookCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "differs": {
+            "type": "boolean"
+          },
+          "seriesCharacterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "seriesId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "seriesName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "seriesId",
+          "seriesCharacterId",
+          "seriesName",
+          "bookCount",
+          "differs"
+        ],
+        "type": "object"
+      },
       "CharacterSummaryDto": {
         "properties": {
           "aliases": {
@@ -1140,6 +1170,16 @@
             "format": "int32",
             "type": "integer"
           },
+          "seriesLink": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CharacterSeriesLinkDto"
+              }
+            ]
+          },
           "voiceCount": {
             "format": "int32",
             "type": "integer"
@@ -1153,7 +1193,8 @@
           "voiceCount",
           "readyVoiceCount",
           "isNarrator",
-          "narratesBook"
+          "narratesBook",
+          "seriesLink"
         ],
         "type": "object"
       },
@@ -1808,6 +1849,18 @@
       },
       "JsonElement": {},
       "JsonObject": {
+        "type": "object"
+      },
+      "LinkSeriesCharacterRequest": {
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
         "type": "object"
       },
       "LlmApiType": {
@@ -3693,6 +3746,145 @@
         ],
         "type": "object"
       },
+      "SeriesCastBookDto": {
+        "properties": {
+          "folder": {
+            "type": "string"
+          },
+          "position": {
+            "format": "double",
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "folder",
+          "title",
+          "position"
+        ],
+        "type": "object"
+      },
+      "SeriesCastCellDto": {
+        "properties": {
+          "folder": {
+            "type": "string"
+          },
+          "linked": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SeriesLinkedCellDto"
+              }
+            ]
+          },
+          "suggested": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SeriesCharacterRefDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "folder",
+          "linked",
+          "suggested"
+        ],
+        "type": "object"
+      },
+      "SeriesCastDto": {
+        "properties": {
+          "books": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesCastBookDto"
+            },
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesCastRowDto"
+            },
+            "type": "array"
+          },
+          "suggestedRows": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesSuggestedRowDto"
+            },
+            "type": "array"
+          },
+          "suggestionCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "unlinked": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/SeriesUnlinkedCharacterDto"
+              },
+              "type": "array"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "books",
+          "rows",
+          "suggestedRows",
+          "unlinked",
+          "suggestionCount"
+        ],
+        "type": "object"
+      },
+      "SeriesCastRowDto": {
+        "properties": {
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesCastCellDto"
+            },
+            "type": "array"
+          },
+          "isNarrator": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          },
+          "seriesCharacterId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seriesCharacterId",
+          "label",
+          "isNarrator",
+          "cells"
+        ],
+        "type": "object"
+      },
+      "SeriesCharacterRefDto": {
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "characterId",
+          "name"
+        ],
+        "type": "object"
+      },
       "SeriesDto": {
         "properties": {
           "books": {
@@ -3717,6 +3909,47 @@
           "name",
           "poster",
           "books"
+        ],
+        "type": "object"
+      },
+      "SeriesLinkPreviewDto": {
+        "properties": {
+          "bookGains": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "seriesGains": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "bookGains",
+          "seriesGains"
+        ],
+        "type": "object"
+      },
+      "SeriesLinkedCellDto": {
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "differs": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "characterId",
+          "name",
+          "differs"
         ],
         "type": "object"
       },
@@ -3767,6 +4000,72 @@
           "Cover",
           "None"
         ]
+      },
+      "SeriesSuggestedMemberDto": {
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "folder",
+          "characterId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "SeriesSuggestedRowDto": {
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesSuggestedMemberDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "label",
+          "members"
+        ],
+        "type": "object"
+      },
+      "SeriesUnlinkedCharacterDto": {
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "isNarrator": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nameMatches": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "characterId",
+          "name",
+          "isNarrator",
+          "nameMatches"
+        ],
+        "type": "object"
       },
       "SetActiveRequest": {
         "properties": {
@@ -4141,6 +4440,36 @@
         "required": [
           "path",
           "label"
+        ],
+        "type": "object"
+      },
+      "ShareSeriesCharacterRequest": {
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "folder": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ShareSeriesCharacterResponse": {
+        "properties": {
+          "seriesCharacterId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seriesCharacterId"
         ],
         "type": "object"
       },
@@ -9886,6 +10215,287 @@
           }
         },
         "summary": "Join a book { move? }: it gets the next whole number after the series' highest; already a member answers its position. A book in another series is 409 naming it, unless move is true (Move to: leave that one, then join). 404 unknown series or folder.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      }
+    },
+    "/api/series/{id}/cast": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesCastDto"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "The series cast board: books in position order, one row per Series character (label = its Character's name in the lowest-positioned linked book) with one cell per book, and each book's unlinked Characters for the pickers. 404 unknown series.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      }
+    },
+    "/api/series/{id}/characters": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ShareSeriesCharacterRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareSeriesCharacterResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "Share as new { folder, characterId }: a Series character made from that Character, which owns its Voices → 201 { seriesCharacterId }. 404 unknown series, folder, Character or a book not in the series; 409 the Character is already linked.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      }
+    },
+    "/api/series/{id}/characters/{seriesCharacterId}/links/{folder}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "seriesCharacterId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "Unlink the book's Character: the book keeps its copy of the Voices; a Series character left with no linked book is removed. 404 unknown series, Series character, folder, a book not in the series, or nothing of the book linked to it.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      },
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "seriesCharacterId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LinkSeriesCharacterRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "Link { characterId } of the book to the Series character, running the Voice merge in each affected book as History steps under the same Voice Ids. 404 unknown series, Series character, folder, Character or a book not in the series; 409 the Character is already linked, the book already links another Character to it (merge first), or one of its Voices is held by another Character of the book.",
+        "tags": [
+          "SeriesEndpoints"
+        ]
+      }
+    },
+    "/api/series/{id}/characters/{seriesCharacterId}/links/{folder}/preview": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "seriesCharacterId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "folder",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "characterId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesLinkPreviewDto"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "A problem: any non-2xx answer."
+          }
+        },
+        "summary": "What linking characterId would copy, for the Link confirm: { bookGains, seriesGains } (Voice names). Refused as the link itself would be.",
         "tags": [
           "SeriesEndpoints"
         ]

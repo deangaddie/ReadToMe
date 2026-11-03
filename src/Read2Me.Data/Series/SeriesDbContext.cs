@@ -5,8 +5,9 @@ namespace Read2Me.Data.Series
 {
     /// <summary>
     /// One series' registry, <c>{workspace}/.series/{seriesId}/series.db</c> (ADR 0018). It holds the
-    /// series' name and its members by project Id with their Series positions. Membership is recorded
-    /// only here, never in a book's <c>project.db</c>, and nothing in it has History.
+    /// series' name, its members by project Id with their Series positions, and its Series characters
+    /// with the <c>(projectId, characterId)</c> pairs linked to each. Membership and links are
+    /// recorded only here, never in a book's <c>project.db</c>, and nothing in it has History.
     /// </summary>
     public class SeriesDbContext(DbContextOptions<SeriesDbContext> options) : DbContext(options)
     {
@@ -14,6 +15,8 @@ namespace Read2Me.Data.Series
 
         public DbSet<SeriesRow> Series => Set<SeriesRow>();
         public DbSet<SeriesBook> Books => Set<SeriesBook>();
+        public DbSet<SeriesCharacterRow> Characters => Set<SeriesCharacterRow>();
+        public DbSet<SeriesLink> Links => Set<SeriesLink>();
 
         /// <summary>Opens (creating and migrating as needed) the registry in <paramref name="folderPath"/>.</summary>
         public static async Task<SeriesDbContext> OpenAsync(string folderPath, CancellationToken ct = default)
@@ -43,6 +46,22 @@ namespace Read2Me.Data.Series
                 // Stored as text: exact, with no upper bound to fit; books are sorted in memory.
                 e.Property(b => b.Position).IsRequired();
             });
+
+            modelBuilder.Entity<SeriesCharacterRow>(e =>
+            {
+                e.ToTable("SeriesCharacters");
+                e.HasKey(c => c.Id);
+            });
+
+            modelBuilder.Entity<SeriesLink>(e =>
+            {
+                // A book links at most one Character to a Series character...
+                e.HasKey(l => new { l.SeriesCharacterId, l.ProjectId });
+                // ...and a Character is linked to at most one Series character.
+                e.HasIndex(l => new { l.ProjectId, l.CharacterId }).IsUnique();
+                e.HasOne<SeriesCharacterRow>().WithMany().HasForeignKey(l => l.SeriesCharacterId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
         }
     }
 
@@ -58,6 +77,23 @@ namespace Read2Me.Data.Series
     {
         public Guid ProjectId { get; set; }
         public decimal Position { get; set; }
+    }
+
+    /// <summary>
+    /// A Series character (ADR 0018): only an identity. Its label is derived live from the linked
+    /// Characters, and its Voices live in each linked book.
+    /// </summary>
+    public class SeriesCharacterRow
+    {
+        public Guid Id { get; set; }
+    }
+
+    /// <summary>A book's Character linked to a Series character, by project Id and Character Id.</summary>
+    public class SeriesLink
+    {
+        public Guid SeriesCharacterId { get; set; }
+        public Guid ProjectId { get; set; }
+        public Guid CharacterId { get; set; }
     }
 
     public class SeriesDbContextDesignFactory : IDesignTimeDbContextFactory<SeriesDbContext>

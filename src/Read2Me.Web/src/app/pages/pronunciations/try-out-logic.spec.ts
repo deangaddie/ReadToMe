@@ -128,6 +128,7 @@ describe('voicePicker', () => {
       readyVoiceCount: 1,
       isNarrator: false,
       narratesBook: false,
+      seriesLink: null,
       ...flags,
     }) as CharacterSummaryDto;
   const voice = (id: string, name: string, audio = true) =>

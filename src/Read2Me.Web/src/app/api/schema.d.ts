@@ -4975,6 +4975,237 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/series/{id}/cast": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The series cast board: books in position order, one row per Series character (label = its Character's name in the lowest-positioned linked book) with one cell per book, and each book's unlinked Characters for the pickers. 404 unknown series. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SeriesCastDto"];
+                    };
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series/{id}/characters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Share as new { folder, characterId }: a Series character made from that Character, which owns its Voices → 201 { seriesCharacterId }. 404 unknown series, folder, Character or a book not in the series; 409 the Character is already linked. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["ShareSeriesCharacterRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ShareSeriesCharacterResponse"];
+                    };
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series/{id}/characters/{seriesCharacterId}/links/{folder}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Link { characterId } of the book to the Series character, running the Voice merge in each affected book as History steps under the same Voice Ids. 404 unknown series, Series character, folder, Character or a book not in the series; 409 the Character is already linked, the book already links another Character to it (merge first), or one of its Voices is held by another Character of the book. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    seriesCharacterId: string;
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": null | components["schemas"]["LinkSeriesCharacterRequest"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /** Unlink the book's Character: the book keeps its copy of the Voices; a Series character left with no linked book is removed. 404 unknown series, Series character, folder, a book not in the series, or nothing of the book linked to it. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    seriesCharacterId: string;
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series/{id}/characters/{seriesCharacterId}/links/{folder}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What linking characterId would copy, for the Link confirm: { bookGains, seriesGains } (Voice names). Refused as the link itself would be. */
+        get: {
+            parameters: {
+                query: {
+                    characterId: string;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                    seriesCharacterId: string;
+                    folder: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SeriesLinkPreviewDto"];
+                    };
+                };
+                /** @description A problem: any non-2xx answer. */
+                default: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/series/{id}/positions": {
         parameters: {
             query?: never;
@@ -8602,6 +8833,16 @@ export interface components {
             paragraphId: string;
             text: string;
         };
+        CharacterSeriesLinkDto: {
+            /** Format: int32 */
+            bookCount: number;
+            differs: boolean;
+            /** Format: uuid */
+            seriesCharacterId: string;
+            /** Format: uuid */
+            seriesId: string;
+            seriesName: string;
+        };
         CharacterSummaryDto: {
             aliases: components["schemas"]["CharacterAliasDto"][];
             /** Format: uuid */
@@ -8613,6 +8854,7 @@ export interface components {
             narratesBook: boolean;
             /** Format: int32 */
             readyVoiceCount: number;
+            seriesLink: null | components["schemas"]["CharacterSeriesLinkDto"];
             /** Format: int32 */
             voiceCount: number;
         };
@@ -8781,6 +9023,10 @@ export interface components {
         };
         JsonElement: unknown;
         JsonObject: Record<string, unknown>;
+        LinkSeriesCharacterRequest: {
+            /** Format: uuid */
+            characterId?: null | string;
+        };
         /** @enum {unknown} */
         LlmApiType: "OpenAiCompatible";
         LlmModelsResponse: {
@@ -9269,12 +9515,55 @@ export interface components {
             /** Format: double */
             position: number;
         };
+        SeriesCastBookDto: {
+            folder: string;
+            /** Format: double */
+            position: number;
+            title: string;
+        };
+        SeriesCastCellDto: {
+            folder: string;
+            linked: null | components["schemas"]["SeriesLinkedCellDto"];
+            suggested: null | components["schemas"]["SeriesCharacterRefDto"];
+        };
+        SeriesCastDto: {
+            books: components["schemas"]["SeriesCastBookDto"][];
+            rows: components["schemas"]["SeriesCastRowDto"][];
+            suggestedRows: components["schemas"]["SeriesSuggestedRowDto"][];
+            /** Format: int32 */
+            suggestionCount: number;
+            unlinked: {
+                [key: string]: components["schemas"]["SeriesUnlinkedCharacterDto"][];
+            };
+        };
+        SeriesCastRowDto: {
+            cells: components["schemas"]["SeriesCastCellDto"][];
+            isNarrator: boolean;
+            label: string;
+            /** Format: uuid */
+            seriesCharacterId: string;
+        };
+        SeriesCharacterRefDto: {
+            /** Format: uuid */
+            characterId: string;
+            name: string;
+        };
         SeriesDto: {
             books: components["schemas"]["SeriesBookDto"][];
             /** Format: uuid */
             id: string;
             name: string;
             poster: components["schemas"]["SeriesPosterDto"];
+        };
+        SeriesLinkPreviewDto: {
+            bookGains: string[];
+            seriesGains: string[];
+        };
+        SeriesLinkedCellDto: {
+            /** Format: uuid */
+            characterId: string;
+            differs: boolean;
+            name: string;
         };
         SeriesPositionsRequest: {
             positions?: null | {
@@ -9289,6 +9578,23 @@ export interface components {
         };
         /** @enum {unknown} */
         SeriesPosterSource: "Uploaded" | "Cover" | "None";
+        SeriesSuggestedMemberDto: {
+            /** Format: uuid */
+            characterId: string;
+            folder: string;
+            name: string;
+        };
+        SeriesSuggestedRowDto: {
+            label: string;
+            members: components["schemas"]["SeriesSuggestedMemberDto"][];
+        };
+        SeriesUnlinkedCharacterDto: {
+            /** Format: uuid */
+            characterId: string;
+            isNarrator: boolean;
+            name: string;
+            nameMatches: string[];
+        };
         SetActiveRequest: {
             /** Format: int32 */
             id: number;
@@ -9375,6 +9681,15 @@ export interface components {
         SetupSettingsLink: {
             label: string;
             path: string;
+        };
+        ShareSeriesCharacterRequest: {
+            /** Format: uuid */
+            characterId?: null | string;
+            folder?: null | string;
+        };
+        ShareSeriesCharacterResponse: {
+            /** Format: uuid */
+            seriesCharacterId: string;
         };
         SimilarityTestRequest: {
             text1?: null | string;

@@ -330,6 +330,9 @@ public static class ServiceCollectionExtensions
             Mutations.IBookMutationImplementation<Mutations.DeleteVoiceMutation>,
             Mutations.Implementations.DeleteVoiceMutationImplementation>();
         services.AddScoped<
+            Mutations.IBookMutationImplementation<Mutations.GainSeriesVoicesMutation>,
+            Mutations.Implementations.GainSeriesVoicesMutationImplementation>();
+        services.AddScoped<
             Mutations.IBookMutationImplementation<Mutations.CreateVoiceRuleMutation>,
             Mutations.Implementations.CreateVoiceRuleMutationImplementation>();
         services.AddScoped<

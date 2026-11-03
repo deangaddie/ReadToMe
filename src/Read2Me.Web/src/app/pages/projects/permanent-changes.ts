@@ -20,17 +20,20 @@ export interface LeaveInput {
   /** The book's title. */
   title: string;
   seriesName: string;
-  /** This book's series-linked Characters, which lose their link. */
-  linked: readonly string[];
+  /** This book's series-linked Characters, which lose their link; null when they couldn't be read. */
+  linked: readonly string[] | null;
 }
 
 function leaveMessage({ seriesName, linked }: LeaveInput): string {
   const links =
-    linked.length === 0
-      ? 'No Characters in this book are linked to the series.'
-      : linked.length === 1
-        ? `${linked[0]} loses its series link. This book keeps its own copy of its Voices.`
-        : `${list(linked)} lose their series link. This book keeps its own copy of their Voices.`;
+    linked === null
+      ? 'Any of its Characters linked to the series lose their link. This book keeps its own copy ' +
+        'of their Voices.'
+      : linked.length === 0
+        ? 'No Characters in this book are linked to the series.'
+        : linked.length === 1
+          ? `${linked[0]} loses its series link. This book keeps its own copy of its Voices.`
+          : `${list(linked)} lose their series link. This book keeps its own copy of their Voices.`;
   return `${links} The other books in ${seriesName} keep their numbers.`;
 }
 
@@ -60,8 +63,12 @@ export function deleteSeriesConfirm(input: {
   titles: readonly string[];
   /** An uploaded poster goes too; a fallback cover belongs to its book and stays. */
   hasPoster?: boolean;
+  /** The Series characters' labels, whose links go. */
+  linked?: readonly string[];
 }): ConfirmOptions {
   const poster = input.hasPoster ?? false;
+  const linked = input.linked ?? [];
+  const links = linked.length === 0 ? 'links' : `the links of ${list(linked)}`;
   return {
     title: `Delete series ${input.name}?`,
     message:
@@ -71,7 +78,7 @@ export function deleteSeriesConfirm(input: {
             'to bring them back.'
           : 'The series has no books. Its name is removed, and there is no History to bring it back.'
         : `Every book is kept, with its Characters and Voices: ${list(input.titles)}. ` +
-          `The series’ name, ${poster ? 'poster, ' : ''}book numbers and links are removed, ` +
+          `The series’ name, ${poster ? 'poster, ' : ''}book numbers and ${links} are removed, ` +
           'and there is no History to bring them back.',
     confirmLabel: 'Delete series',
     destructive: true,
@@ -115,5 +122,73 @@ export function deleteProjectConfirm(
       `voices and generated audio. This cannot be undone.${series}`,
     destructive: true,
     confirmLabel: 'Delete project',
+  };
+}
+
+// ---- the series cast board (Character linking #208, 7) -----------------------------------------
+
+/** “A”, “A” and “B”; “no Voices” for none. */
+function voiceNames(names: readonly string[]): string {
+  return names.length === 0 ? 'no Voices' : list(names.map((n) => `“${n}”`));
+}
+
+/** Link: whom the Character will share with and which Voices each side gains (the preview read). */
+export function linkConfirm(input: {
+  name: string;
+  /** The book the Character is in. */
+  title: string;
+  /** The Series character's label. */
+  label: string;
+  /** The row's Characters in the other books. */
+  others: readonly { name: string; title: string }[];
+  bookGains: readonly string[];
+  seriesGains: readonly string[];
+}): ConfirmOptions {
+  const others = list(input.others.map((o) => `${o.name} in ${o.title}`));
+  const theOthers = input.others.length === 1 ? 'the other book gains' : 'the other books gain';
+  return {
+    title: `Link ${input.name} to ${input.label}?`,
+    message:
+      `${input.name} will share Voices with ${others}. ` +
+      `${input.title} gains ${voiceNames(input.bookGains)}; ${theOthers} ${voiceNames(input.seriesGains)}. ` +
+      'Each is a History step in its book. Names, aliases, delivery cues and Voice Rules stay ' +
+      'each book’s own.',
+    confirmLabel: 'Link',
+    destructive: false,
+  };
+}
+
+/** Unlink: the book keeps its copy, and edits stop crossing books; the last link takes the row. */
+export function unlinkConfirm(input: {
+  name: string;
+  title: string;
+  label: string;
+  /** The other books still linked to the row. */
+  otherTitles: readonly string[];
+}): ConfirmOptions {
+  const keeps = `${input.title} keeps its own copy of ${input.name}’s Voices, so nothing in it breaks.`;
+  return {
+    title: `Unlink ${input.name} from ${input.label}?`,
+    message:
+      input.otherTitles.length === 0
+        ? `${keeps} No other book is linked, so the series character ${input.label} is removed.`
+        : `${keeps} From now on, Voice edits there no longer reach ${list(input.otherTitles)}, ` +
+          'and theirs no longer reach it.',
+    confirmLabel: 'Unlink',
+    destructive: false,
+  };
+}
+
+/** Share as new: a Series character is made from this Character's Voices. */
+export function shareConfirm(input: {
+  name: string;
+  title: string;
+  seriesName: string;
+}): ConfirmOptions {
+  return {
+    title: `Share ${input.name} across ${input.seriesName}?`,
+    message: `A series character is made from the Voices of ${input.name} in ${input.title}.`,
+    confirmLabel: 'Share as new',
+    destructive: false,
   };
 }

@@ -75,6 +75,12 @@ public abstract record ProjectStateMutation(ProjectFolderId FolderId) : BookMuta
     /// after the mutation applied, so it can count what it did. Null describes the step from the receipt.
     /// </summary>
     internal virtual string? StepSummary => null;
+
+    /// <summary>
+    /// The label and action of the step this mutation records when no scope names it, in the web
+    /// app's words for the gesture; null names it from the mutation's type, as an Edit.
+    /// </summary>
+    internal virtual (string Label, StepAction Action)? OwnStep => null;
 }
 
 /// <summary>
@@ -650,3 +656,40 @@ public sealed record ImportBookContentMutation(
     BookContent Content,
     bool ReplaceExisting,
     string? CoverImageFileName = null) : ProjectStateMutation(FolderId);
+
+// ── series links ─────────────────────────────────────────────────────────────
+// A Series character's Voices are replicated into every linked book under the same Voice Ids
+// (ADR 0018). Linking is a write across books with no atomic commit, so each book's half is its own
+// mutation and History step.
+
+/// <summary>
+/// A Voice as another book holds it, ready to be added to this one under the same Id. The audio
+/// paths name this book's copies, which the producer has already written.
+/// </summary>
+public sealed record SeriesVoiceCopy(
+    Guid Id,
+    string Name,
+    string? Description,
+    VoiceSource Source,
+    string? DesignPrompt,
+    string? Transcript,
+    string? AudioFileName,
+    string? VoiceDesignSettingsOverrideJson,
+    string? TtsSettingsOverrideJson,
+    DateTime CreatedUtc);
+
+/// <summary>
+/// One book's half of the Voice merge on link: the series-linked Character gains the Voices it
+/// lacks, each under the Id it has in the other books. A Voice it already holds is left as it is;
+/// one another Character of this book holds is refused (those two Characters are one person: merge
+/// them first). A Character with no Voices gets its default rule on the first one gained; one with
+/// Voices keeps its default, which stays the book's own.
+/// </summary>
+public sealed record GainSeriesVoicesMutation(
+    ProjectFolderId FolderId, Guid CharacterId, IReadOnlyList<SeriesVoiceCopy> Voices) : ProjectStateMutation(FolderId)
+{
+    /// <summary>The copied reference audio and originals land under names History has not seen, so it hashes them with the commit.</summary>
+    public override StateFileOwners WritesFiles => new(Voices.Select(v => v.Id).ToList());
+
+    internal override (string Label, StepAction Action)? OwnStep => ("Link series character", StepAction.Voice);
+}

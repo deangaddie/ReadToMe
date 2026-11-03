@@ -68,6 +68,7 @@ function row(name: string, overrides: Partial<CharacterSummaryDto> = {}): Charac
     readyVoiceCount: 0,
     isNarrator: name === 'Narrator',
     narratesBook: false,
+    seriesLink: null,
     ...overrides,
   };
 }

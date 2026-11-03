@@ -41,6 +41,21 @@ namespace Read2Me.App.Api
                              "400 wrong type or too big; 404 unknown series.");
             endpoints.MapDelete("/api/series/{id:guid}/poster", ClearPosterAsync)
                 .WithSummary("Remove the uploaded poster: the fallback cover shows again. 204, also when there is none; 404 unknown series.");
+            endpoints.MapGet("/api/series/{id:guid}/cast", CastAsync)
+                .WithSummary("The series cast board: books in position order, one row per Series character (label = its Character's name in the lowest-positioned linked book) " +
+                             "with one cell per book, and each book's unlinked Characters for the pickers. 404 unknown series.");
+            endpoints.MapPost("/api/series/{id:guid}/characters", ShareAsync)
+                .WithSummary("Share as new { folder, characterId }: a Series character made from that Character, which owns its Voices → 201 { seriesCharacterId }. " +
+                             "404 unknown series, folder, Character or a book not in the series; 409 the Character is already linked.");
+            endpoints.MapPut("/api/series/{id:guid}/characters/{seriesCharacterId:guid}/links/{folder}", LinkAsync)
+                .WithSummary("Link { characterId } of the book to the Series character, running the Voice merge in each affected book as History steps under the same Voice Ids. " +
+                             "404 unknown series, Series character, folder, Character or a book not in the series; 409 the Character is already linked, " +
+                             "the book already links another Character to it (merge first), or one of its Voices is held by another Character of the book.");
+            endpoints.MapDelete("/api/series/{id:guid}/characters/{seriesCharacterId:guid}/links/{folder}", UnlinkAsync)
+                .WithSummary("Unlink the book's Character: the book keeps its copy of the Voices; a Series character left with no linked book is removed. " +
+                             "404 unknown series, Series character, folder, a book not in the series, or nothing of the book linked to it.");
+            endpoints.MapGet("/api/series/{id:guid}/characters/{seriesCharacterId:guid}/links/{folder}/preview", PreviewLinkAsync)
+                .WithSummary("What linking characterId would copy, for the Link confirm: { bookGains, seriesGains } (Voice names). Refused as the link itself would be.");
         }
 
         private static async Task<Results<PhysicalFileHttpResult, NotFound, ProblemHttpResult>> GetPosterAsync(
@@ -126,6 +141,52 @@ namespace Read2Me.App.Api
             return result.Refusal is { } refusal ? Refused(refusal) : TypedResults.Ok(SeriesDto.From(result.Value!));
         }
 
+        // ---- Series characters and links (#220) ----------------------------------------------------
+
+        private static async Task<Results<Ok<SeriesCastDto>, ProblemHttpResult>> CastAsync(Guid id, SeriesRegistry registry, CancellationToken ct)
+        {
+            var result = await registry.CastAsync(id, ct);
+            return result.Refusal is { } refusal ? Refused(refusal) : TypedResults.Ok(SeriesCastDto.From(result.Value!));
+        }
+
+        private static async Task<Results<Created<ShareSeriesCharacterResponse>, ProblemHttpResult>> ShareAsync(
+            Guid id, ShareSeriesCharacterRequest? body, SeriesRegistry registry, CancellationToken ct)
+        {
+            if (body?.Folder is not { Length: > 0 } folder || body.CharacterId is not { } characterId)
+                return TypedResults.Problem("Expected a JSON body with 'folder' and 'characterId'.", statusCode: StatusCodes.Status400BadRequest);
+
+            var result = await registry.ShareAsync(id, folder, characterId, ct);
+            return result.Refusal is { } refusal
+                ? Refused(refusal)
+                : TypedResults.Created($"/api/series/{id}/characters/{result.Value}", new ShareSeriesCharacterResponse(result.Value));
+        }
+
+        private static async Task<Results<NoContent, ProblemHttpResult>> LinkAsync(
+            Guid id, Guid seriesCharacterId, string folder, LinkSeriesCharacterRequest? body, SeriesRegistry registry, CancellationToken ct)
+        {
+            if (body?.CharacterId is not { } characterId)
+                return TypedResults.Problem("Expected a JSON body with 'characterId'.", statusCode: StatusCodes.Status400BadRequest);
+
+            var result = await registry.LinkAsync(id, seriesCharacterId, folder, characterId, ct);
+            return result.Refusal is { } refusal ? Refused(refusal) : TypedResults.NoContent();
+        }
+
+        private static async Task<Results<NoContent, ProblemHttpResult>> UnlinkAsync(
+            Guid id, Guid seriesCharacterId, string folder, SeriesRegistry registry, CancellationToken ct)
+        {
+            var result = await registry.UnlinkAsync(id, seriesCharacterId, folder, ct);
+            return result.Refusal is { } refusal ? Refused(refusal) : TypedResults.NoContent();
+        }
+
+        private static async Task<Results<Ok<SeriesLinkPreviewDto>, ProblemHttpResult>> PreviewLinkAsync(
+            Guid id, Guid seriesCharacterId, string folder, Guid characterId, SeriesRegistry registry, CancellationToken ct)
+        {
+            var result = await registry.PreviewLinkAsync(id, seriesCharacterId, folder, characterId, ct);
+            return result.Refusal is { } refusal
+                ? Refused(refusal)
+                : TypedResults.Ok(new SeriesLinkPreviewDto(result.Value!.BookGains, result.Value.SeriesGains));
+        }
+
         private static ProblemHttpResult Refused(SeriesRefusal refusal) => TypedResults.Problem(
             refusal.Detail,
             statusCode: refusal.Kind switch
@@ -166,6 +227,64 @@ namespace Read2Me.App.Api
     public sealed record JoinSeriesRequest(bool Move = false);
 
     public sealed record JoinSeriesResponse(decimal Position);
+
+    public sealed record ShareSeriesCharacterRequest(string? Folder = null, Guid? CharacterId = null);
+
+    public sealed record ShareSeriesCharacterResponse(Guid SeriesCharacterId);
+
+    public sealed record LinkSeriesCharacterRequest(Guid? CharacterId = null);
+
+    /// <summary>The Link confirm's gains (#208, 7): the Voice names this book gains, and those the other linked books gain.</summary>
+    public sealed record SeriesLinkPreviewDto(IReadOnlyList<string> BookGains, IReadOnlyList<string> SeriesGains);
+
+    /// <summary>
+    /// The series cast board (#213): <see cref="SuggestedRows"/>, each cell's <c>suggested</c>, each
+    /// unlinked Character's <c>nameMatches</c> and <see cref="SuggestionCount"/> stay empty until link
+    /// suggestions (#223); <c>differs</c> stays false until #222.
+    /// </summary>
+    public sealed record SeriesCastDto(
+        IReadOnlyList<SeriesCastBookDto> Books,
+        IReadOnlyList<SeriesCastRowDto> Rows,
+        IReadOnlyList<SeriesSuggestedRowDto> SuggestedRows,
+        IReadOnlyDictionary<string, IReadOnlyList<SeriesUnlinkedCharacterDto>> Unlinked,
+        int SuggestionCount)
+    {
+        public static SeriesCastDto From(SeriesCastView v) => new(
+            v.Books.Select(b => new SeriesCastBookDto(b.Folder, b.Title, b.Position)).ToList(),
+            v.Rows.Select(r => new SeriesCastRowDto(
+                r.SeriesCharacterId, r.Label, r.IsNarrator,
+                r.Cells.Select(c => new SeriesCastCellDto(
+                    c.Folder,
+                    c.Linked is { } l ? new SeriesLinkedCellDto(l.CharacterId, l.Name, Differs: false) : null,
+                    Suggested: null)).ToList())).ToList(),
+            [],
+            v.Unlinked.ToDictionary(
+                u => u.Key,
+                u => (IReadOnlyList<SeriesUnlinkedCharacterDto>)u.Value
+                    .Select(c => new SeriesUnlinkedCharacterDto(c.CharacterId, c.Name, c.IsNarrator, [])).ToList()),
+            SuggestionCount: 0);
+    }
+
+    public sealed record SeriesCastBookDto(string Folder, string Title, decimal Position);
+
+    public sealed record SeriesCastRowDto(Guid SeriesCharacterId, string Label, bool IsNarrator, IReadOnlyList<SeriesCastCellDto> Cells);
+
+    /// <summary>One book's cell: the Character linked there, a suggestion, or neither (an empty cell, with a picker).</summary>
+    public sealed record SeriesCastCellDto(string Folder, SeriesLinkedCellDto? Linked, SeriesCharacterRefDto? Suggested);
+
+    public sealed record SeriesLinkedCellDto(Guid CharacterId, string Name, bool Differs);
+
+    public sealed record SeriesCharacterRefDto(Guid CharacterId, string Name);
+
+    public sealed record SeriesSuggestedRowDto(string Label, IReadOnlyList<SeriesSuggestedMemberDto> Members);
+
+    public sealed record SeriesSuggestedMemberDto(string Folder, Guid CharacterId, string Name);
+
+    /// <summary>A book's unlinked Character, for the pickers; <see cref="NameMatches"/> marks the rows whose names it matches (#223).</summary>
+    public sealed record SeriesUnlinkedCharacterDto(Guid CharacterId, string Name, bool IsNarrator, IReadOnlyList<Guid> NameMatches);
+
+    /// <summary>A Character's series link on the Cast page's roster; <see cref="Differs"/> stays false until #222.</summary>
+    public sealed record CharacterSeriesLinkDto(Guid SeriesId, Guid SeriesCharacterId, string SeriesName, int BookCount, bool Differs);
 
     public sealed record SeriesPositionsRequest(IReadOnlyDictionary<string, decimal>? Positions = null);
 }
