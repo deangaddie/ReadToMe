@@ -31,6 +31,36 @@ namespace Read2Me.Data.Series.Migrations
                     b.ToTable("Books");
                 });
 
+            modelBuilder.Entity("Read2Me.Data.Series.SeriesCharacterRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SeriesCharacters", (string)null);
+                });
+
+            modelBuilder.Entity("Read2Me.Data.Series.SeriesLink", b =>
+                {
+                    b.Property<Guid>("SeriesCharacterId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CharacterId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("SeriesCharacterId", "ProjectId");
+
+                    b.HasIndex("ProjectId", "CharacterId")
+                        .IsUnique();
+
+                    b.ToTable("Links");
+                });
+
             modelBuilder.Entity("Read2Me.Data.Series.SeriesRow", b =>
                 {
                     b.Property<Guid>("Id")
@@ -45,6 +75,15 @@ namespace Read2Me.Data.Series.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Series", (string)null);
+                });
+
+            modelBuilder.Entity("Read2Me.Data.Series.SeriesLink", b =>
+                {
+                    b.HasOne("Read2Me.Data.Series.SeriesCharacterRow", null)
+                        .WithMany()
+                        .HasForeignKey("SeriesCharacterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

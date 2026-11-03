@@ -1,0 +1,76 @@
+/* The series cast board (#208, variant B): the Characters tab of a series panel. One row per
+   Series character, one column per book in Series position order. */
+@scope (r2m-series-cast-board) {
+  :scope {
+    display: block;
+  }
+  .series-cast__note {
+    margin: 0 0 var(--r2m-space-3);
+    color: var(--r2m-text-muted);
+  }
+  .series-cast__scroll {
+    overflow-x: auto;
+  }
+  .series-cast__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--r2m-text-sm);
+
+    & th,
+    & td {
+      padding: var(--r2m-space-2);
+      border-bottom: 1px solid var(--r2m-outline);
+      text-align: left;
+      vertical-align: middle;
+    }
+    & thead th {
+      font-weight: 600;
+      white-space: nowrap;
+    }
+  }
+  .series-cast__book {
+    display: block;
+    font-weight: 400;
+    color: var(--r2m-text-muted);
+    white-space: normal;
+  }
+  .series-cast__label {
+    font-weight: 600;
+    white-space: nowrap;
+
+    & .r2m-icon {
+      font-size: 18px;
+      vertical-align: middle;
+    }
+  }
+  .series-cast__label--new {
+    font-weight: 400;
+    color: var(--r2m-text-muted);
+  }
+  .series-cast__linked {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+
+    & .r2m-icon {
+      font-size: 16px;
+    }
+  }
+  .series-cast__differs {
+    color: var(--r2m-status-busy);
+  }
+  .series-cast__unlink {
+    width: 28px;
+    height: 28px;
+  }
+  .series-cast__suggested {
+    font-style: italic;
+    margin-right: var(--r2m-space-2);
+  }
+  .series-cast__picker {
+    max-width: 14rem;
+  }
+  .series-cast__none {
+    color: var(--r2m-text-muted);
+  }
+}

@@ -60,6 +60,7 @@ function row(name: string, lineCount = 0): CharacterSummaryDto {
     readyVoiceCount: 0,
     isNarrator: name === 'Narrator',
     narratesBook: false,
+    seriesLink: null,
   };
 }
 

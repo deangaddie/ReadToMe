@@ -24,6 +24,26 @@ namespace Read2Me.Services.Series
         public static readonly SeriesRefusal MemberUnreadable = new(SeriesRefusalKind.Failed,
             "A book in this series could not be read, so its positions can't be saved.");
 
+        public static readonly SeriesRefusal UnknownSeriesCharacter = new(SeriesRefusalKind.NotFound, "No such series character.");
+
+        public static SeriesRefusal UnknownCharacter(string title) =>
+            new(SeriesRefusalKind.NotFound, $"No such Character in '{title}'.");
+
+        public static SeriesRefusal NotLinked(string title, string label) =>
+            new(SeriesRefusalKind.NotFound, $"No Character in '{title}' is linked to {label}.");
+
+        public static SeriesRefusal CharacterAlreadyLinked(string name, string title, string label) =>
+            new(SeriesRefusalKind.Blocked, $"{name} in '{title}' is already linked to {label}. Unlink it first.");
+
+        public static SeriesRefusal BookAlreadyLinked(string title, string linked, string label) =>
+            new(SeriesRefusalKind.Blocked,
+                $"'{title}' already links {linked} to {label}. If they are the same person, merge the two Characters first.");
+
+        /// <summary>The joining book's half of the Voice merge did not commit: nothing was linked.</summary>
+        public static SeriesRefusal VoicesNotWritten(string title, string reason, bool blocked) =>
+            new(blocked ? SeriesRefusalKind.Blocked : SeriesRefusalKind.Failed,
+                $"The series' Voices could not be written into '{title}', so nothing was linked: {reason}");
+
         public static SeriesRefusal UnknownFolder(string folder) => new(SeriesRefusalKind.NotFound, $"No project '{folder}'.");
 
         public static SeriesRefusal NotAMember(string title, string series) =>

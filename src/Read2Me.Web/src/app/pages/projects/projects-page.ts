@@ -22,7 +22,8 @@ import {
 } from './positions-draft';
 import { ProjectsStore } from './projects-store';
 import { SeriesActions } from './series-actions';
-import { seriesCard, seriesPanel } from './series-card';
+import { type SeriesPanelTab, seriesCard, seriesPanel } from './series-card';
+import './series-cast-board';
 import { deleteProjectConfirm } from './permanent-changes';
 import {
   bookLabel,
@@ -78,6 +79,8 @@ export class ProjectsPage extends R2mElement {
   private readonly view = signal<ProjectsView>(readView());
   /** The series whose panel is open; one at a time. */
   private readonly openSeries = signal<string | null>(null);
+  /** The open panel's tab: its books, or the series cast board. */
+  private readonly panelTab = signal<SeriesPanelTab>('books');
   /** Edit book numbers: the open series' draft, while it is on. */
   private readonly draft = signal<{ seriesId: string; rows: DraftRow[] } | null>(null);
   private readonly saving = signal(false);
@@ -236,6 +239,7 @@ export class ProjectsPage extends R2mElement {
     const open = series.find((s) => s.id === openId);
     const draft = this.draft();
     const saving = this.saving();
+    const tab = this.panelTab();
     const empty =
       series.length === 0
         ? emptyState(
@@ -276,6 +280,7 @@ export class ProjectsPage extends R2mElement {
                         draft?.seriesId === open.id ? draft.rows : null,
                         saving,
                         cards,
+                        tab,
                       )
                     : nothing
                 }`,
@@ -285,8 +290,20 @@ export class ProjectsPage extends R2mElement {
     }`;
   }
 
-  private panel(series: SeriesView, rows: DraftRow[] | null, saving: boolean, cards: CardState) {
+  private panel(
+    series: SeriesView,
+    rows: DraftRow[] | null,
+    saving: boolean,
+    cards: CardState,
+    tab: SeriesPanelTab,
+  ) {
     return seriesPanel(series, {
+      tab,
+      onTab: (tab) => this.panelTab.set(tab),
+      characters: () =>
+        html`<r2m-series-cast-board
+          .series=${{ id: series.id, name: series.name }}
+        ></r2m-series-cast-board>`,
       editing: rows
         ? { blocked: saveBlockedReason(rows), problem: positionsProblem(rows), saving }
         : null,
@@ -353,6 +370,7 @@ export class ProjectsPage extends R2mElement {
 
   private toggle(id: string): void {
     this.draft.set(null);
+    this.panelTab.set('books');
     this.openSeries.set(this.openSeries() === id ? null : id);
   }
 

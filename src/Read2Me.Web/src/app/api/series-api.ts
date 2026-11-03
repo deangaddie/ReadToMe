@@ -1,6 +1,6 @@
 import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
-import type { SeriesDto } from './dtos';
+import type { SeriesCastDto, SeriesDto, SeriesLinkPreviewDto } from './dtos';
 
 /**
  * `SeriesEndpoints.cs`: the series registry and its lifecycle (Series lifecycle, #206). Books are
@@ -62,5 +62,49 @@ export class SeriesApi {
   /** Removes the uploaded poster (204, also when there is none); the fallback cover shows again. */
   clearPoster(id: string): Promise<void> {
     return this.api.delete('/api/series/{id}/poster', { path: { id } });
+  }
+
+  // ---- Series characters and links (#220) ----
+
+  /** The series cast board: books in position order, one row per Series character, each book's unlinked Characters. */
+  cast(id: string): Promise<SeriesCastDto> {
+    return this.api.get('/api/series/{id}/cast', { path: { id } });
+  }
+
+  /** Share as new: a Series character made from this Character. Resolves its id; 409 when already linked. */
+  async share(id: string, folder: string, characterId: string): Promise<string> {
+    const { seriesCharacterId } = await this.api.post('/api/series/{id}/characters', {
+      path: { id },
+      body: { folder, characterId },
+    });
+    return seriesCharacterId;
+  }
+
+  /** Links the book's Character, running the Voice merge in each affected book. */
+  link(id: string, seriesCharacterId: string, folder: string, characterId: string): Promise<void> {
+    return this.api.put('/api/series/{id}/characters/{seriesCharacterId}/links/{folder}', {
+      path: { id, seriesCharacterId, folder },
+      body: { characterId },
+    });
+  }
+
+  /** Unlinks the book's Character; the book keeps its copy of the Voices. */
+  unlink(id: string, seriesCharacterId: string, folder: string): Promise<void> {
+    return this.api.delete('/api/series/{id}/characters/{seriesCharacterId}/links/{folder}', {
+      path: { id, seriesCharacterId, folder },
+    });
+  }
+
+  /** What linking would copy, for the Link confirm. */
+  previewLink(
+    id: string,
+    seriesCharacterId: string,
+    folder: string,
+    characterId: string,
+  ): Promise<SeriesLinkPreviewDto> {
+    return this.api.get('/api/series/{id}/characters/{seriesCharacterId}/links/{folder}/preview', {
+      path: { id, seriesCharacterId, folder },
+      query: { characterId },
+    });
   }
 }

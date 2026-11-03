@@ -152,9 +152,9 @@ internal sealed class HistoryCapture : IAsyncDisposable
 
         // A commit no scope holds is a request's edit of its own, named from the mutation.
         var step = new HistoryStep(
-            Guid.NewGuid(), head, sequence, scope is null ? ProjectHistory.LabelOf(mutation) : LabelOf(scope, kinds), summary, _author, now,
+            Guid.NewGuid(), head, sequence, scope is null ? mutation.OwnStep?.Label ?? ProjectHistory.LabelOf(mutation) : LabelOf(scope, kinds), summary, _author, now,
             EndedAt: now, IsOpen: scope is not null, Note: StepNotes.Of(part, ending: null),
-            Kind: scope?.Kind ?? HistoryStepKind.Request, Action: scope is null ? StepAction.Edit : ActionOf(scope, kinds),
+            Kind: scope?.Kind ?? HistoryStepKind.Request, Action: scope is null ? mutation.OwnStep?.Action ?? StepAction.Edit : ActionOf(scope, kinds),
             RestoredFromStepId: mutation.RestoresStepId);
         await HistoryDatabase.AppendStepAsync(_connection, Transaction, h, step, chunk, ct);
         return new RecordedStep(step.StepId, changes, kinds, part, step, Changed: null, closed);

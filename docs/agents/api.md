@@ -341,6 +341,39 @@ exactly the members (else 409, out of date), and a tie is 409 naming both books.
 a book not in the series. Deleting a project removes its registry entry; a folder gone outside the app is dropped
 the next time its series is read.
 
+**Series characters** share Voices across the books they are linked in (ADR 0018, #208). Each book keeps its own
+copy of every shared Voice under the same Voice Id; the registry records only which book's Character is linked to
+which Series character. The Narrator is linked like any other Character.
+
+```bash
+curl -s http://localhost:5000/api/series/{id}/cast   # the series cast board (below)
+curl -s -X POST http://localhost:5000/api/series/{id}/characters -H 'content-type: application/json' \
+  -d '{ "folder": "a-study-in-scarlet", "characterId": "…" }'   # Share as new → 201 { seriesCharacterId }
+curl -s 'http://localhost:5000/api/series/{id}/characters/{scId}/links/{folder}/preview?characterId=…'   # → { bookGains, seriesGains }
+curl -s -X PUT http://localhost:5000/api/series/{id}/characters/{scId}/links/{folder} -H 'content-type: application/json' \
+  -d '{ "characterId": "…" }'   # Link → 204
+curl -s -X DELETE http://localhost:5000/api/series/{id}/characters/{scId}/links/{folder}   # Unlink → 204; the book keeps its copy
+```
+
+The cast read is `{ books: [{ folder, title, position }], rows: [{ seriesCharacterId, label, isNarrator, cells:
+[{ folder, linked: { characterId, name, differs } | null, suggested: { characterId, name } | null }] }],
+suggestedRows, unlinked: { "<folder>": [{ characterId, name, isNarrator, nameMatches }] }, suggestionCount }`, rows
+Narrator first then by label. A row's `label` is its Character's name in the lowest-positioned linked book. Link
+suggestions and *differs from series* come later: `suggested`, `suggestedRows` and `nameMatches` are empty,
+`suggestionCount` is 0 and `differs` false. `characters/summary` rows carry `seriesLink: { seriesId,
+seriesCharacterId, seriesName, bookCount, differs } | null`.
+
+Linking runs the Voice merge: the linking book's Character gains every Voice the linked books hold that it lacks,
+then each linked book, in Series position order, gains this Character's Voices it lacks, reference audio and
+stored original copied with each. Each book's gain is a History step "Link series character" there; a Character
+with no Voices takes its default rule from the first one gained, and one with Voices keeps its own. If the linking
+book's gain fails, nothing is linked; a later book's failure is logged and the link stands. Unlinking copies
+nothing. A Series character left with no linked book (its last link unlinked, or its last book leaving) is
+removed, and a link whose Character is gone from its book is dropped on the next read. 404: unknown series,
+Series character, folder or Character, a book not in the series, or (unlink) nothing in that book linked to it.
+409: the Character is already linked, the book already links another Character to that Series character (merge
+them first), or a Voice of the series is held by another Character of the book. 400: a body without its ids.
+
 Where the project stands, in one read:
 
 ```bash

@@ -11,6 +11,7 @@ function row(overrides: Partial<CharacterSummaryDto> & { name: string }): Charac
     readyVoiceCount: 0,
     isNarrator: false,
     narratesBook: false,
+    seriesLink: null,
     ...overrides,
   };
 }

@@ -59,6 +59,17 @@ export type SeriesPosterDto = Schema['SeriesPosterDto'];
 export type SeriesPosterSource = Schema['SeriesPosterSource'];
 /** `ProjectSummary.series`: the project's series, or null. */
 export type ProjectSeries = Schema['ProjectSeries'];
+/** `GET /api/series/{id}/cast`: the series cast board (books in position order, one row per Series character). */
+export type SeriesCastDto = Schema['SeriesCastDto'];
+export type SeriesCastBookDto = Schema['SeriesCastBookDto'];
+export type SeriesCastRowDto = Schema['SeriesCastRowDto'];
+/** A row's cell in one book: `linked`, `suggested` (#223), or neither (an empty cell, with a picker). */
+export type SeriesCastCellDto = Schema['SeriesCastCellDto'];
+export type SeriesUnlinkedCharacterDto = Schema['SeriesUnlinkedCharacterDto'];
+/** The Link confirm's gains: Voice names this book gains, and those the other linked books gain. */
+export type SeriesLinkPreviewDto = Schema['SeriesLinkPreviewDto'];
+/** `CharacterSummaryDto.seriesLink`: the Character's Series character, or null. */
+export type CharacterSeriesLinkDto = Schema['CharacterSeriesLinkDto'];
 
 /**
  * `PipelineStep`: the nine stepper step ids, which are also the checkpoint route segment and the

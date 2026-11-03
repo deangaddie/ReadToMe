@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { ProjectSummary, SeriesDto } from '@app/api';
+import type { ProjectSummary, SeriesCastDto, SeriesDto } from '@app/api';
 import { Router } from '@app/core/router';
 import { override, resetServices } from '@app/core/services';
 import { ToastService } from '@app/ui/toast';
@@ -76,8 +76,29 @@ async function flush() {
   await settle();
 }
 
+/** A series' cast board with no Series characters: every book's Characters unlinked. */
+function castOf(
+  series: SeriesDto,
+  projects: ProjectSummary[],
+  rows: SeriesCastDto['rows'] = [],
+  unlinked: SeriesCastDto['unlinked'] = {},
+): SeriesCastDto {
+  return {
+    books: series.books.map((b) => ({
+      folder: b.folder,
+      title: projects.find((p) => p.folderName === b.folder)?.title ?? b.folder,
+      position: b.position,
+    })),
+    rows,
+    suggestedRows: [],
+    unlinked: Object.fromEntries(series.books.map((b) => [b.folder, unlinked[b.folder] ?? []])),
+    suggestionCount: 0,
+  };
+}
+
 /** Mounts the page over a pending list, checks the skeletons, then answers both reads. */
 async function render(projects: ProjectSummary[], series: SeriesDto[] = []) {
+  for (const s of series) api.on('GET', `/api/series/${s.id}/cast`, castOf(s, projects));
   let answer!: (value: ProjectSummary[]) => void;
   api.on('GET', '/api/projects', () => new Promise<ProjectSummary[]>((r) => (answer = r)));
   api.on('GET', '/api/series', series);
@@ -699,5 +720,207 @@ describe('r2m-projects-page series poster', () => {
     const { message } = await confirmDialog('cancel');
 
     expect(message).toContain('name, poster, book numbers and links are removed');
+  });
+});
+
+describe('r2m-projects-page series cast board', () => {
+  const linked = (characterId: string, name: string) => ({ characterId, name, differs: false });
+  const holmesRow = {
+    seriesCharacterId: 'sc-holmes',
+    label: 'Sherlock Holmes',
+    isNarrator: false,
+    cells: [
+      { folder: 'scarlet', linked: linked('s-holmes', 'Sherlock Holmes'), suggested: null },
+      { folder: 'four', linked: null, suggested: null },
+    ],
+  };
+  const narratorRow = {
+    seriesCharacterId: 'sc-narrator',
+    label: 'Narrator',
+    isNarrator: true,
+    cells: [
+      { folder: 'scarlet', linked: linked('s-narrator', 'Narrator'), suggested: null },
+      { folder: 'four', linked: linked('f-narrator', 'Narrator'), suggested: null },
+    ],
+  };
+  const unlinked = {
+    scarlet: [{ characterId: 's-watson', name: 'Dr. Watson', isNarrator: false, nameMatches: [] }],
+    four: [
+      { characterId: 'f-holmes', name: 'Holmes', isNarrator: false, nameMatches: [] },
+      { characterId: 'f-watson', name: 'John Watson', isNarrator: false, nameMatches: [] },
+    ],
+  };
+  const board = () => castOf(holmes, [scarlet, four], [narratorRow, holmesRow], unlinked);
+
+  /** Opens the Holmes panel's Characters tab over `cast`. */
+  async function openBoard(cast = board()) {
+    const page = await render([four, scarlet], [holmes]);
+    api.on('GET', '/api/series/h/cast', cast);
+    await showSeries(page);
+    page.querySelector<HTMLButtonElement>('.projects__series-open')!.click();
+    await page.rendered();
+    page.querySelector<HTMLButtonElement>('[role=tab][data-tab="characters"]')!.click();
+    await page.rendered();
+    await settle();
+    const el = page.querySelector('r2m-series-cast-board')!;
+    await el.rendered();
+    return { page, el };
+  }
+
+  const cellOf = (el: Element, row: string, folder: string) =>
+    el.querySelector<HTMLElement>(
+      `tr[data-series-character="${row}"] td[data-folder="${folder}"]`,
+    )!;
+
+  async function pick(select: HTMLSelectElement, value: string) {
+    select.value = value;
+    select.dispatchEvent(new Event('change'));
+    await flush();
+  }
+
+  it('shows a row per Series character and a column per book, the Narrator a row too', async () => {
+    const { el } = await openBoard();
+
+    expect(Array.from(el.querySelectorAll('thead th'), text)).toEqual([
+      'Series character',
+      'Book 1A Study in Scarlet',
+      'Book 2The Sign of the Four',
+    ]);
+    expect(Array.from(el.querySelectorAll('tbody th[scope=row]'), text)).toEqual([
+      'record_voice_over Narrator',
+      'person Sherlock Holmes',
+      'person_add Share as new',
+    ]);
+    expect(cellOf(el, 'sc-holmes', 'scarlet').dataset.cell).toBe('linked');
+    expect(text(cellOf(el, 'sc-holmes', 'scarlet'))).toContain('Sherlock Holmes');
+    expect(cellOf(el, 'sc-holmes', 'four').dataset.cell).toBe('empty');
+  });
+
+  it('an empty cell picks among that book’s unlinked Characters', async () => {
+    const { el } = await openBoard();
+    const options = Array.from(cellOf(el, 'sc-holmes', 'four').querySelectorAll('option'), text);
+    expect(options).toEqual(['Link…', 'Holmes', 'John Watson']);
+  });
+
+  it('Link asks with what each side gains, then links and reads the board again', async () => {
+    const { el } = await openBoard();
+    api
+      .on('GET', '/api/series/h/characters/sc-holmes/links/four/preview', {
+        bookGains: ['Deerstalker'],
+        seriesGains: [],
+      })
+      .on('PUT', '/api/series/h/characters/sc-holmes/links/four', undefined);
+
+    await pick(cellOf(el, 'sc-holmes', 'four').querySelector('select')!, 'f-holmes');
+    const { title, message } = await confirmDialog('confirm');
+
+    expect(title).toBe('Link Holmes to Sherlock Holmes?');
+    expect(message).toContain(
+      'Holmes will share Voices with Sherlock Holmes in A Study in Scarlet.',
+    );
+    expect(message).toContain(
+      'The Sign of the Four gains “Deerstalker”; the other book gains no Voices.',
+    );
+    const preview = api.calls('GET', '/api/series/h/characters/sc-holmes/links/four/preview');
+    expect(preview[0]!.search).toBe('?characterId=f-holmes');
+    const put = api.calls('PUT', '/api/series/h/characters/sc-holmes/links/four');
+    expect(put.map((r) => r.body)).toEqual([{ characterId: 'f-holmes' }]);
+    expect(api.calls('GET', '/api/series/h/cast')).toHaveLength(2);
+    expect(toasts).toEqual(['Holmes is linked to Sherlock Holmes']);
+  });
+
+  it('Link cancelled writes nothing', async () => {
+    const { el } = await openBoard();
+    api.on('GET', '/api/series/h/characters/sc-holmes/links/four/preview', {
+      bookGains: [],
+      seriesGains: [],
+    });
+
+    await pick(cellOf(el, 'sc-holmes', 'four').querySelector('select')!, 'f-holmes');
+    await confirmDialog('cancel');
+
+    expect(api.calls('PUT', '/api/series/h/characters/sc-holmes/links/four')).toHaveLength(0);
+  });
+
+  it('✕ unlinks after a confirm saying the book keeps its copy', async () => {
+    const { el } = await openBoard();
+    api.on('DELETE', '/api/series/h/characters/sc-narrator/links/four', undefined);
+
+    cellOf(el, 'sc-narrator', 'four')
+      .querySelector<HTMLButtonElement>('[data-action="unlink"]')!
+      .click();
+    const { title, message } = await confirmDialog('confirm');
+
+    expect(title).toBe('Unlink Narrator from Narrator?');
+    expect(message).toContain('The Sign of the Four keeps its own copy of Narrator’s Voices');
+    expect(message).toContain('no longer reach A Study in Scarlet');
+    expect(api.calls('DELETE', '/api/series/h/characters/sc-narrator/links/four')).toHaveLength(1);
+  });
+
+  it('Share as new picks a Character of a book, asks, then shares it', async () => {
+    const { el } = await openBoard();
+    api.on('POST', '/api/series/h/characters', { seriesCharacterId: 'sc-watson' });
+
+    const share = el.querySelector<HTMLSelectElement>(
+      'td[data-cell="share"][data-folder="scarlet"] select',
+    )!;
+    await pick(share, 's-watson');
+    const { title } = await confirmDialog('confirm');
+
+    expect(title).toBe('Share Dr. Watson across Sherlock Holmes?');
+    expect(api.calls('POST', '/api/series/h/characters').map((r) => r.body)).toEqual([
+      { folder: 'scarlet', characterId: 's-watson' },
+    ]);
+    expect(toasts).toEqual(['Dr. Watson is shared across Sherlock Holmes']);
+  });
+
+  it('reads the board again on the hub’s series signal for its own series', async () => {
+    const { el } = await openBoard();
+
+    live.emit('series', { seriesId: 'other', kind: 'Changed' });
+    live.emit('series', { seriesId: 'h', kind: 'Changed' });
+    await settle();
+    await el.rendered();
+
+    // One read on opening and one for this series' signal; another series' signal reads nothing.
+    expect(api.calls('GET', '/api/series/h/cast')).toHaveLength(2);
+  });
+
+  it('Remove from <series> names the book’s linked Characters', async () => {
+    const page = await render([four, scarlet], [holmes]);
+    api.on('GET', '/api/series/h/cast', board());
+    api.on('DELETE', '/api/series/h/books/four', undefined);
+
+    card(page, 'four').querySelector<HTMLButtonElement>('[data-action="leave-series"]')!.click();
+    const { message } = await confirmDialog('confirm');
+
+    expect(message).toStartWith(
+      'Narrator loses its series link. This book keeps its own copy of its Voices.',
+    );
+  });
+
+  it('Delete series names the Series characters whose links go', async () => {
+    const page = await render([four, scarlet], [holmes]);
+    api.on('GET', '/api/series/h/cast', board());
+    await showSeries(page);
+
+    page.querySelector<HTMLButtonElement>('[data-action="delete-series"]')!.click();
+    const { message } = await confirmDialog('cancel');
+
+    expect(message).toContain('the links of Narrator and Sherlock Holmes are removed');
+  });
+});
+
+describe('r2m-projects-page series confirms without the cast read', () => {
+  it('Remove from <series> still asks, naming no Characters, when the cast can’t be read', async () => {
+    const page = await render([four, scarlet], [holmes]);
+    api.on('GET', '/api/series/h/cast', () => problem(422, 'registry unreadable'));
+    api.on('DELETE', '/api/series/h/books/four', undefined);
+
+    card(page, 'four').querySelector<HTMLButtonElement>('[data-action="leave-series"]')!.click();
+    const { message } = await confirmDialog('confirm');
+
+    expect(message).toStartWith('Any of its Characters linked to the series lose their link.');
+    expect(api.calls('DELETE', '/api/series/h/books/four')).toHaveLength(1);
   });
 });

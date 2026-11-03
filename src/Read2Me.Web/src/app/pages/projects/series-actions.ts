@@ -1,4 +1,12 @@
-import { COVER_ACCEPT, COVER_MAX_BYTES, type ProjectSummary, toApiError } from '@app/api';
+import {
+  COVER_ACCEPT,
+  COVER_MAX_BYTES,
+  type ProjectSummary,
+  type SeriesCastDto,
+  type SeriesCastRowDto,
+  SeriesApi,
+  toApiError,
+} from '@app/api';
 import { openDialog } from '@app/core/dialog';
 import { use } from '@app/core/services';
 import { ConfirmService, PromptService } from '@app/ui/dialogs';
@@ -7,9 +15,13 @@ import { ProjectsStore } from './projects-store';
 import {
   deleteSeriesConfirm,
   leaveConfirm,
+  linkConfirm,
   moveConfirm,
   removePosterConfirm,
+  shareConfirm,
+  unlinkConfirm,
 } from './permanent-changes';
+import { linkedNames, otherLinks, seriesCharacterLabels } from './series-cast';
 import type { SeriesPick } from './series-pickers';
 import { bookLabel, type SeriesView } from './series-shelf';
 import './series-pickers';
@@ -22,6 +34,7 @@ import './series-pickers';
  */
 export class SeriesActions {
   private readonly store = use(ProjectsStore);
+  private readonly seriesApi = use(SeriesApi);
   private readonly confirm = use(ConfirmService);
   private readonly prompt = use(PromptService);
   private readonly toast = use(ToastService);
@@ -75,11 +88,13 @@ export class SeriesActions {
   }
 
   async deleteSeries(series: SeriesView): Promise<boolean> {
+    const cast = await this.castOf(series.id);
     const ok = await this.confirm.confirm(
       deleteSeriesConfirm({
         name: series.name,
         titles: series.members.map((m) => m.project.title),
         hasPoster: series.poster.source === 'Uploaded',
+        linked: cast ? seriesCharacterLabels(cast) : [],
       }),
     );
     if (!ok) return false;
@@ -123,8 +138,9 @@ export class SeriesActions {
   async leave(project: ProjectSummary): Promise<void> {
     const current = this.store.membership().get(project.folderName);
     if (!current) return;
+    const linked = await this.linkedIn(current.seriesId, project.folderName);
     const ok = await this.confirm.confirm(
-      leaveConfirm({ title: project.title, seriesName: current.name, linked: [] }),
+      leaveConfirm({ title: project.title, seriesName: current.name, linked }),
     );
     if (!ok) return;
     await this.run(async () => {
@@ -171,7 +187,7 @@ export class SeriesActions {
   private async join(target: SeriesView, project: ProjectSummary): Promise<void> {
     const current = this.store.membership().get(project.folderName);
     if (current?.seriesId === target.id) return;
-    if (current && !(await this.confirmMove(project, current.name, target.name))) return;
+    if (current && !(await this.confirmMove(project, current, target.name))) return;
     await this.run(async () => {
       const position = await this.store.join(target.id, project.folderName, current !== undefined);
       this.joinedToast(project, position, target.name);
@@ -185,7 +201,7 @@ export class SeriesActions {
    */
   private async newSeriesWith(project: ProjectSummary): Promise<void> {
     const current = this.store.membership().get(project.folderName);
-    if (current && !(await this.confirmMove(project, current.name, 'a new series'))) return;
+    if (current && !(await this.confirmMove(project, current, 'a new series'))) return;
     // Set inside the prompt's write; a holder, since TypeScript doesn't follow the callback.
     const created: { series?: { id: string; name: string } } = {};
     await this.withName(
@@ -210,10 +226,115 @@ export class SeriesActions {
     });
   }
 
-  private confirmMove(project: ProjectSummary, from: string, to: string): Promise<boolean> {
+  private async confirmMove(
+    project: ProjectSummary,
+    from: { seriesId: string; name: string },
+    to: string,
+  ): Promise<boolean> {
+    const linked = await this.linkedIn(from.seriesId, project.folderName);
     return this.confirm.confirm(
-      moveConfirm({ title: project.title, seriesName: from, to, linked: [] }),
+      moveConfirm({ title: project.title, seriesName: from.name, to, linked }),
     );
+  }
+
+  /**
+   * The series cast board, read for a confirm. A failed read (an unreadable registry, say) resolves
+   * null and the confirm names no Characters, so Leave, Move to and Delete series still run.
+   */
+  private async castOf(seriesId: string): Promise<SeriesCastDto | null> {
+    try {
+      return await this.seriesApi.cast(seriesId);
+    } catch {
+      return null;
+    }
+  }
+
+  /** The book's series-linked Characters, which Leave and Move to name. */
+  private async linkedIn(seriesId: string, folder: string): Promise<string[] | null> {
+    const cast = await this.castOf(seriesId);
+    return cast ? linkedNames(cast, folder) : null;
+  }
+
+  // ---- the series cast board (Character linking #208) ----
+
+  /** Link, behind its confirm naming what each side gains; resolves whether it landed. */
+  async link(
+    series: { id: string; name: string },
+    cast: SeriesCastDto,
+    row: SeriesCastRowDto,
+    folder: string,
+    character: { characterId: string; name: string },
+  ): Promise<boolean> {
+    const book = cast.books.find((b) => b.folder === folder);
+    if (!book) return false;
+    let gains;
+    try {
+      gains = await this.seriesApi.previewLink(
+        series.id,
+        row.seriesCharacterId,
+        folder,
+        character.characterId,
+      );
+    } catch (error) {
+      this.toast.problem(toApiError(error).toProblem());
+      return false;
+    }
+    const ok = await this.confirm.confirm(
+      linkConfirm({
+        name: character.name,
+        title: book.title,
+        label: row.label,
+        others: otherLinks(cast, row, folder),
+        bookGains: gains.bookGains,
+        seriesGains: gains.seriesGains,
+      }),
+    );
+    if (!ok) return false;
+    return this.run(async () => {
+      await this.seriesApi.link(series.id, row.seriesCharacterId, folder, character.characterId);
+      this.toast.success(`${character.name} is linked to ${row.label}`);
+    });
+  }
+
+  /** Unlink, behind its confirm: the book keeps its copy of the Voices. */
+  async unlink(
+    series: { id: string; name: string },
+    cast: SeriesCastDto,
+    row: SeriesCastRowDto,
+    folder: string,
+    name: string,
+  ): Promise<boolean> {
+    const book = cast.books.find((b) => b.folder === folder);
+    if (!book) return false;
+    const ok = await this.confirm.confirm(
+      unlinkConfirm({
+        name,
+        title: book.title,
+        label: row.label,
+        otherTitles: otherLinks(cast, row, folder).map((o) => o.title),
+      }),
+    );
+    if (!ok) return false;
+    return this.run(() => this.seriesApi.unlink(series.id, row.seriesCharacterId, folder));
+  }
+
+  /** Share as new, behind its confirm: a Series character made from this Character's Voices. */
+  async share(
+    series: { id: string; name: string },
+    cast: SeriesCastDto,
+    folder: string,
+    character: { characterId: string; name: string },
+  ): Promise<boolean> {
+    const book = cast.books.find((b) => b.folder === folder);
+    if (!book) return false;
+    const ok = await this.confirm.confirm(
+      shareConfirm({ name: character.name, title: book.title, seriesName: series.name }),
+    );
+    if (!ok) return false;
+    return this.run(async () => {
+      await this.seriesApi.share(series.id, folder, character.characterId);
+      this.toast.success(`${character.name} is shared across ${series.name}`);
+    });
   }
 
   private joinedToast(project: ProjectSummary, position: number, seriesName: string): void {

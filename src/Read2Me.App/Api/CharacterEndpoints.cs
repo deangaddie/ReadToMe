@@ -6,17 +6,20 @@ using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.Llm;
+using Read2Me.Services.Series;
 using Read2Me.Services.Voice;
 
 namespace Read2Me.App.Api
 {
     /// <summary>
     /// A cast-list row. <see cref="NarratesBook"/> is true on the character the narrator link
-    /// points at; <see cref="IsNarrator"/> marks the seed Narrator row itself.
+    /// points at; <see cref="IsNarrator"/> marks the seed Narrator row itself. <see cref="SeriesLink"/> is its
+    /// Series character when it is series-linked (ADR 0018), else null.
     /// </summary>
     public sealed record CharacterSummaryDto(
         Guid Id, string Name, IReadOnlyList<CharacterAliasDto> Aliases,
-        int LineCount, int VoiceCount, int ReadyVoiceCount, bool IsNarrator, bool NarratesBook);
+        int LineCount, int VoiceCount, int ReadyVoiceCount, bool IsNarrator, bool NarratesBook,
+        CharacterSeriesLinkDto? SeriesLink);
 
     /// <summary>One item a character speaks, with where it sits so the reader can open there.</summary>
     public sealed record CharacterLineDto(Guid ItemId, Guid ParagraphId, Guid ChapterId, string Text);
@@ -73,18 +76,23 @@ namespace Read2Me.App.Api
         }
 
         private static async Task<Results<Ok<List<CharacterSummaryDto>>, NotFound>> GetSummaryAsync(
-            string folder, IFileSystem fs, ICharacterReader characters, IProjectCatalogReader catalog, CancellationToken ct)
+            string folder, IFileSystem fs, ICharacterReader characters, IProjectCatalogReader catalog, SeriesRegistry series,
+            CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return TypedResults.NotFound();
 
             var rows = await characters.GetCharacterSummariesAsync(folderId);
             var narrator = await catalog.GetNarratorAsync(folderId, ct);
+            var links = await series.LinksOfAsync(folderId, ct);
             return TypedResults.Ok(rows.Select(r => new CharacterSummaryDto(
                 r.Id, r.Name,
                 r.Aliases.Select(a => new CharacterAliasDto(a.Id, a.Name)).ToList(),
                 r.LineCount, r.VoiceCount, r.ReadyVoiceCount, r.IsNarrator,
-                narrator.IsLinkedTo(r.Id))).ToList());
+                narrator.IsLinkedTo(r.Id),
+                links.TryGetValue(r.Id, out var link)
+                    ? new CharacterSeriesLinkDto(link.SeriesId, link.SeriesCharacterId, link.SeriesName, link.BookCount, Differs: false)
+                    : null)).ToList());
         }
 
         private static async Task<Results<Ok<List<CharacterLineDto>>, NotFound>> GetLinesAsync(string folder, Guid id, IFileSystem fs, ICharacterReader reader)

@@ -25,6 +25,7 @@ const ALICE: CharacterSummaryDto = {
   readyVoiceCount: 0,
   isNarrator: false,
   narratesBook: false,
+  seriesLink: null,
 };
 
 function voice(overrides: Partial<VoiceDto> = {}): VoiceDto {
