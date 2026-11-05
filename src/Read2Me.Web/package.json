@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@microsoft/signalr": "^10.0.11",
-    "@preact/signals-core": "^1.14.0",
+    "@preact/signals-core": "^1.14.5",
     "lit-html": "^3.3.0"
   },
   "devDependencies": {
