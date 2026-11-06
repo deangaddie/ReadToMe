@@ -430,8 +430,10 @@ doesn't, nor does an edit made in a differing book, and a book that would lose p
 differing (nothing asks first there): push or take resolves it.
 
 ```bash
-curl -s -X POST http://localhost:5000/api/series/{id}/characters/{scId}/push -H 'content-type: application/json' \n  -d '{ "folder": "a-study-in-scarlet" }'   # this book's Voices into every other linked book → 204
-curl -s -X POST http://localhost:5000/api/series/{id}/characters/{scId}/take -H 'content-type: application/json' \n  -d '{ "folder": "a-study-in-scarlet" }'   # the series copy into this book → 204
+curl -s -X POST http://localhost:5000/api/series/{id}/characters/{scId}/push -H 'content-type: application/json' \
+  -d '{ "folder": "a-study-in-scarlet" }'   # this book's Voices into every other linked book → 204
+curl -s -X POST http://localhost:5000/api/series/{id}/characters/{scId}/take -H 'content-type: application/json' \
+  -d '{ "folder": "a-study-in-scarlet" }'   # the series copy into this book → 204
 curl -s 'http://localhost:5000/api/series/{id}/characters/{scId}/push/preview?folder=a-study-in-scarlet'   # → { losses }
 curl -s 'http://localhost:5000/api/series/{id}/characters/{scId}/take/preview?folder=a-study-in-scarlet'   # → { losses }
 ```

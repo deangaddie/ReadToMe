@@ -74,7 +74,7 @@ The split is made once, at import, by `ParagraphSplitter`, and only a user may c
 | `Text`              | string | yes      | spoken / narration text                                                                                    |
 | `CharacterId`       | Guid   | yes      | FK → Character — what the item is: null = unattributed dialog, Narrator sentinel = narration, else that character's line |
 | `VoiceInstructions` | string | yes      | max 3000, free-text delivery cue                                                                           |
-| `AudioFileName`     | string | yes      | relative path to generated WAV                                                                             |
+| `AudioFileName`     | string | yes      | relative path to generated WAV, max 512                                                                    |
 
 ### Character
 
@@ -111,13 +111,13 @@ One entry in the book's Pronunciation list: TTS is asked to say `SpokenForm` whe
 | `Id`                              | Guid     | no       | PK                                           |
 | `CharacterId`                     | Guid     | no       | FK → Character                               |
 | `Name`                            | string   | no       | max 250                                      |
-| `Description`                     | string   | yes      |                                              |
+| `Description`                     | string   | yes      | max 1000                                     |
 | `Source`                          | enum     | no       | `VoiceSource` (Uploaded / Generated) |
-| `DesignPrompt`                    | string   | yes      | text description used for voice design       |
-| `Transcript`                      | string   | yes      | transcript of reference audio (cloning)      |
-| `AudioFileName`                   | string   | yes      | relative path to reference WAV               |
-| `VoiceDesignSettingsOverrideJson` | string   | yes      | per-voice TTS design settings override       |
-| `TtsSettingsOverrideJson`         | string   | yes      | per-voice TTS generation settings override   |
+| `DesignPrompt`                    | string   | yes      | text description used for voice design, max 4000 |
+| `Transcript`                      | string   | yes      | transcript of reference audio (cloning), max 4000 |
+| `AudioFileName`                   | string   | yes      | relative path to reference WAV, max 512     |
+| `VoiceDesignSettingsOverrideJson` | string   | yes      | per-voice TTS design settings override, max 4000 |
+| `TtsSettingsOverrideJson`         | string   | yes      | per-voice TTS generation settings override, max 4000 |
 | `CreatedUtc`                      | DateTime | no       |                                              |
 
 ### VoiceRule
@@ -165,3 +165,33 @@ A Pipeline step the user confirmed or skipped (one project per database, so the 
 | `State` | CheckpointState | no       | Confirmed / Skipped, stored as text                    |
 | `Stale` | bool            | no       | a later mutation disturbed what was confirmed          |
 | `At`    | DateTimeOffset  | no       | when it was confirmed or skipped; kept when it goes stale |
+
+## Other databases
+
+The tables above are one book's `project.db`. Two more per-project or per-registry stores sit beside it; neither is part of Project state.
+
+### History (`{project}/history/history.db`)
+
+Raw SQLite, created by `HistoryDatabase` (not EF), versioned by `PRAGMA user_version`. Snapshots, blobs and a throwaway cache sit in sibling folders ([ADR 0016](../../docs/adr/0016-project-history-snapshots-and-session-patchsets.md)).
+
+| Table   | Columns                                                                                                                                                              |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Step`  | `StepId` (PK), `ParentStepId`, `Sequence` (unique), `Label`, `Author`, `StartedAt`, `EndedAt`, `IsOpen`, `RestoredFromStepId`, `Note`, `Summary`, `CantOpen`, `Kind`, `Action` |
+| `Head`  | `Id` (always 1), `StepId` — the tip                                                                                                                                  |
+| `Chunk` | `StepId`, `Sequence` (PK together), `Patchset` (SQLite session changeset), `FileChanges`                                                                              |
+
+### Series registry (`{workspace}/.series/{seriesId}/series.db`)
+
+One database per Series, EF Core (`SeriesDbContext`, own migrations in `Series/Migrations`), no History ([ADR 0018](../../docs/adr/0018-replicated-series-voices.md)). Books are keyed by their project's `Id`, never by folder name. Membership and links live only here, not in any `project.db`.
+
+| Table              | Columns                                                                                          | Notes                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `Series`           | `Id` (PK), `Name` (max 250)                                                                      | the registry's single row                                                                       |
+| `Books`            | `ProjectId` (PK), `Position` (decimal, stored as text)                                           | a member book and its Series position                                                           |
+| `SeriesCharacters` | `Id` (PK)                                                                                        | identity only; label is derived from the linked Characters, Voices live in each book            |
+| `Links`            | `SeriesCharacterId`, `ProjectId` (PK together), `CharacterId`                                    | FK → SeriesCharacters (cascade); unique on (`ProjectId`, `CharacterId`)                         |
+| `NotTheSame`       | `Id` (PK), `ProjectId`, `CharacterId`, `SeriesCharacterId?`, `OtherProjectId?`, `OtherCharacterId?` | a dismissed link suggestion: a cell (`SeriesCharacterId` set) or one pair of a row (`Other…` set); FK → SeriesCharacters (cascade) |
+
+### App settings (`app.db`)
+
+Workspace-wide LLM, TTS, voice-design, transcription and similarity configs, prompts, audio-processing settings and themes (`Read2Me.AppData`). Not per book.

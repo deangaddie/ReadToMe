@@ -71,6 +71,7 @@ After `dotnet run`, open <https://localhost:5001>. Configure the AI services und
 
 | Settings page | Configure | Needs container |
 | ------------- | --------- | --------------- |
+| **Setup check** | Read-only check of the workspace, ffmpeg and each AI service's container, with what to fix | — |
 | **LLM** | LLM server URL + model preset for character attribution, and the attribution chain | `read2me-llama` |
 | **Prompts** | Prompt templates for extraction / attribution | — |
 | **Paragraph TTS** | TTS service(s) used to synthesise paragraph audio (Breeze / VoxCPM2 / Chatterbox / Qwen3 Base) | `read2me-audiocpp` |
@@ -93,12 +94,18 @@ Audio processing is one settings record, not a list of configs. Leave its **ffmp
 4. **Generate audio** — back on the **Book** tab, switch to **Audio** mode. Select items (or **Select needs audio**) and click **Generate audio** in the selection bar. Each item is synthesised, loudness-normalised, transcribed by Whisper, and verified (WER, with Semantic Rescue as fallback). The activity centre streams per-item progress; failures surface as review items on the node badges.
 5. **Assemble the audiobook** — on the **Export** tab, click **Assemble**. The app concatenates all clips (with per-kind pauses), adds chapter markers and cover art, and writes `{projectFolder}/output/{BookTitle}.m4b`. While some items still lack audio the button reads **Assemble…** and, after a confirm, builds a partial `{BookTitle}_partial_{yyyyMMdd}.m4b` instead.
 
+Also in the app:
+
+- **Pronunciations** — the project's Pronunciation list: respell a word so the TTS says it right, and try it out.
+- **History** — every change to the book is a History step; view an earlier step read-only or Restore it. Neither can start while the project is busy (attribution, audio, a voice batch or assembly queued or running).
+- **Series** — on **Projects**, the Books / Series toggle groups books into a named, ordered series with a poster. Link a Character across books on the series cast board so they share Voices; an edit to a shared Voice is copied to each linked book ([ADR 0018](docs/adr/0018-replicated-series-voices.md), glossary in [context/series.md](context/series.md)).
+
 ## Driving it without the UI
 
 The whole production cycle is also an HTTP API, served from the running app on `http://localhost:5000/api/...` — localhost only, no auth. Create a project, import, attribute, generate voices and audio, and assemble, all without opening a browser.
 
 - **Workflow guide**: [docs/agents/api.md](docs/agents/api.md) — endpoints in the order you call them.
-- **Schemas**: `GET /openapi/v1.json` is the source of truth for request/response shapes.
+- **Schemas**: `GET /openapi/v1.json` is the source of truth for request/response shapes; the web app is typed from a checked-in copy ([ADR 0017](docs/adr/0017-openapi-document-is-the-http-contract.md); regenerate with `pwsh scripts/api-types.ps1`).
 
 The four long operations (attribution, audio, voice batch, assembly) return `202 Accepted` and run in the background; poll their status endpoint until the queue is idle, then read per-item outcomes. Errors are RFC 7807 ProblemDetails.
 
@@ -139,8 +146,11 @@ One database per project, stored at `{Workspace.FolderPath}/{project-folder}/pro
 - The book hierarchy: Volume → Part → Chapter → Paragraph → ParagraphItem
 - Characters, aliases, voices, and voice rules
 - Audio review outcomes (WER, Whisper transcript, normalisation result)
+- The Pronunciation list and the project's History
 
 Audio files (WAV per ParagraphItem, reference voice WAVs) are stored in the same project folder alongside the database.
+
+Book series are in neither database: each series has its own `series.db` and poster under `{Workspace.FolderPath}/.series/{id}/`, which is never listed as a project.
 
 ## Digging deeper
 
