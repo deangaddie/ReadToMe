@@ -19,3 +19,5 @@ Use these terms exactly in code, tests, and discussion.
   _Avoid_: "busy" for a Restore in progress
 - **Restoring** — the exclusive phase while a project's Restore runs: one at a time per project, nothing queued, not extended by anything. While restoring, the project refuses every write but the Restore's own, every enqueue, and every View a step; it wins over busy wherever the two overlap.
   _Avoid_: "busy" (a separate state with different rules)
+- **Project activity gate** (`ProjectActivity`, `Read2Me.Services.History`) — the one module that owns a project's **busy** and **restoring** states together and answers what is allowed: a write and an enqueue are refused while restoring (the Restore's own write is exempt); View a step and start a Restore are refused while busy or restoring; planning Edit with AI is refused while restoring, also when a Restore began since the plan was marked. A refusal is an `ActivityRefusal` of kind `Busy` or `Restoring` with a reason the caller shows. Restoring wins wherever the two overlap.
+  _Avoid_: a per-caller busy or restoring check — ask the gate

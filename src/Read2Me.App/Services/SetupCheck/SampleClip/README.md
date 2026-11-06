@@ -1,8 +1,8 @@
 # Setup check sample clip
 
 `sample-clip.wav` speaks the exact text in `sample-clip.txt`. The Full check uses it as the
-transcription input, the similarity check's known text and the paragraph TTS reference audio.
-Both files are embedded in the host assembly.
+transcription input, the similarity check's known text and the paragraph TTS reference audio
+(the text is its reference text, and the text voice design speaks). Both files are embedded in the host assembly.
 
 ## Provenance and license
 

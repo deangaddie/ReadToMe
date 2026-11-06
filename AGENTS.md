@@ -55,6 +55,7 @@ docker logs -f <container>     # follow logs
 
 - `CLAUDE.md` — repository overview, build/run commands, and architecture summary
 - `docs/agents/web.md` — the web app (`src/Read2Me.Web`, `/app`): commands, layout, conventions, adding a page, the live hub contract, primitive catalogue, browser tests, gotchas; vocabulary in `context/web.md`
+- `docs/agents/api.md` — the agent HTTP API in the order you call it; `GET /openapi/v1.json` is the contract (ADR 0017)
 - `docs/adr/0014-native-web-front-end-replaces-angular.md` — why the front end moved off Angular and what the web app is built on
 - `CONTEXT.md` — domain glossary index; read before any architecture work, then load only the `context/*.md` section file(s) for the area you're touching
 - `Infra/README.md` — Docker service details, ports, supported endpoints, and usage notes
