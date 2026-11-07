@@ -240,7 +240,7 @@ export class SeriesVoiceEditor extends R2mElement {
     if (!detail)
       return html`<p class="series-voices__note" aria-busy="true">Reading the Voices…</p>`;
     const busy = this.busy();
-    // Read here, not inside `repeat`'s item templates, so the rows stay tracked (web.md, Gotchas).
+    // Read here, not inside `repeat`'s item templates, so the rows stay tracked (docs/agents/web/conventions.md, Gotchas).
     const view: RowView = {
       busy,
       expanded: this.expanded(),

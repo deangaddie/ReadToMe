@@ -1,70 +1,106 @@
-# AGENTS for ReadToMe
+# AGENTS.md
 
-This repository is an ASP.NET Core API host with a web front end at `/app` (custom elements on Bun, ADR 0014; see `docs/agents/web.md`), plus AI inference infrastructure for audiobook production, with GPU-backed generation services and CPU-only transcription/semantic services.
+**ReadToMe** orchestrates AI-powered audiobook production from text scripts: an ASP.NET Core 10 API host, a web front end at `/app` (custom elements on Bun, ADR 0014), and containerised AI services in `Infra/`.
 
-## Use when
+## Sample books
 
-- working on code in `src/Read2Me.App`
-- updating or extending the API host or the web app
-- changing AI service orchestration or Docker-based inference dependencies
-- fixing build/run issues for the .NET app or the `Infra/` services
+Tests, specs, docs, research and tools use only public-domain books from Project Gutenberg, quoted or bundled. This covers what the repo uses, not what a user imports into the app.
 
-## Key facts
+## Commands
 
-- App: `src/Read2Me.App` is an ASP.NET Core 10 host using the `Program.cs` + `Startup.cs` pattern: agent API under `Api/`, the live hub under `Live/`.
-- UI: the web app in `src/Read2Me.Web`, built into `src/Read2Me.App/wwwroot/app` and served at `/app`. It is not part of the .NET solution.
-- Solution: `src/Read2Me.slnx`.
-- Infra: `Infra/` contains GPU-backed LLM/TTS containers plus CPU-only Whisper and semantic similarity containers.
-- Models: `Infra/models/` holds GGUF model files by default; these are not committed and must be provided separately. `GGUF_MODELS_DIR` in `Infra/.env` can point the llama mount at a shared directory outside the repo.
-
-## Build and run
-
-- Build: `dotnet build src/Read2Me.App`
-- Run: `dotnet run --project src/Read2Me.App`
-- App host: <https://localhost:5001> and <http://localhost:5000> by default.
-- Web app: `pwsh scripts/build-web.ps1` (or `bun install --frozen-lockfile` + `bun run build` in `src/Read2Me.Web`); dev server `bun run dev` on `:4300/app/`; gate `bun run check`; one spec `bun test <file>`. Bun 1.4.2 is pinned by `packageManager`; no Node.
-- Browser tests: `dotnet test src/Read2Me.E2eTests` — `Tests/Web` needs the `/app` bundle (without it they skip); `R2M_E2E_BROWSER=firefox` runs them in Firefox (the PR gate runs only `--filter-namespace 'Read2Me.E2eTests.Tests.Web*'` there).
-- Tests: `dotnet test` runs on Microsoft Testing Platform (`global.json`): filter with xunit's `--filter-class`/`--filter-namespace`/`--filter-method`, not VSTest `--filter`.
-- API contract after a host DTO or endpoint change: `pwsh scripts/api-types.ps1` regenerates `src/Read2Me.Web/src/app/api/openapi.json` and `schema.d.ts`; commit both (ADR 0017).
-- PR gate, every CI stage in order: `pwsh scripts/check.ps1` (`-SkipInstall` once dependencies are current).
-- Ad-hoc driving of a running host: `tools/browse` or the `verify` skill.
-
-## Infrastructure services
-
-Use `docker compose` from the `Infra/` directory.
+Solution: `src/Read2Me.slnx` (slnx format, not sln).
 
 ```bash
-docker compose up -d llama
-docker compose up -d audiocpp        # every TTS + voice-design model (audio.cpp, ADR 0010)
-docker compose up -d whisper
-docker compose up -d minilm-l6
-docker compose up -d mpnet-base-v2
-docker compose up -d --build   # after Dockerfile or entrypoint changes
-docker compose down            # stop everything
-docker logs -f <container>     # follow logs
+# Build
+dotnet build src/Read2Me.App
+
+# Run (Kestrel)
+dotnet run --project src/Read2Me.App
+# Per-machine settings (Workspace folder, ffmpeg path): copy src/Read2Me.App/appsettings.Local.example.json to appsettings.Local.json (git-ignored); command line and env vars override it
+# https://localhost:5001 / http://localhost:5000 — `/` redirects to the web app at /app (the only UI, ADR 0014)
+
+# Infrastructure services (run from Infra/)
+docker compose up -d llama              # LLM service
+docker compose up -d audiocpp          # TTS + voice design — every TTS model (audio.cpp, ADR 0010)
+docker compose up -d whisper           # CPU Whisper.CPP transcription
+docker compose up -d minilm-l6         # Semantic similarity
+docker compose up -d mpnet-base-v2     # Semantic similarity
+docker compose stop <service>
+docker compose up -d --build            # After Dockerfile/entrypoint changes
+docker logs -f read2me-llama
+
+# Web front end (Bun, src/Read2Me.Web — custom elements, ADR 0014; see its README.md and docs/agents/web/README.md)
+pwsh scripts/build-web.ps1              # bun install --frozen-lockfile + bun run build from anywhere; -Check runs bun run check; -SkipInstall for local loops
+cd src/Read2Me.Web
+bun install --frozen-lockfile           # Bun 1.4.2 pinned by packageManager; no Node needed
+bun run dev                             # HMR dev server on http://localhost:4300/app/, proxies /api,/hubs,/workspace,/openapi,/audio-preview,/preview-source to :5000
+bun run build                           # emits to src/Read2Me.App/wwwroot/app/ (git-ignored); host serves it at /app
+bun run check                           # format:check + lint + typecheck + icons:check + help:check + bun test + build
+bun test src/app/core/router.spec.ts    # one spec file
+bun run api:types                       # regenerate src/app/api/schema.d.ts from the checked-in src/app/api/openapi.json
+bun run icons                           # rebuild the subset icon font from the IconName union (network); icons:check gates offline
+bun run help                            # render docs/guide/<step>.md into src/app/help/help.generated.ts (committed); help:check gates in check
+
+# dotnet test runs on Microsoft Testing Platform (global.json): filter with xunit's --filter-class/--filter-namespace/--filter-method, not VSTest --filter
+# E2E tests: src/Read2Me.E2eTests — xUnit + Playwright over an in-proc host with fake AI.
+dotnet test src/Read2Me.E2eTests         # browser tests (Tests/Web) skip unless wwwroot/app holds a built bundle
+R2M_E2E_BROWSER=firefox dotnet test src/Read2Me.E2eTests   # whole suite in Firefox (default chromium); the gate runs only Tests.Web there
+dotnet test src/Read2Me.E2eTests --filter-namespace 'Read2Me.E2eTests.Tests.Web*'   # only the browser suite (Tests/Web)
+# Ad-hoc browser driving of a running host: tools/browse/README.md (or the `verify` skill)
+
+# API contract (ADR 0017): host OpenAPI document → src/Read2Me.Web/src/app/api/openapi.json → schema.d.ts, via the in-proc E2E host (no Workspace touched); commit both files
+pwsh scripts/api-types.ps1              # after changing a DTO or endpoint; -NoBuild, -SkipInstall
+
+# PR gate: every CI stage in order, stopping at the first failure (dotnet build, API contract, web check and build, unit, E2E Chromium, E2E Firefox browser tests only)
+pwsh scripts/check.ps1                  # -SkipInstall once node_modules are current; installs Playwright Firefox on first use; an E2E stage hung past -E2eTimeoutMinutes (10) is killed and dumped
 ```
 
-## Important constraints
+## Architecture
 
-- GPU setup is VRAM-limited (RTX 3070, 8 GB). Only one GPU-resident container should run at a time in normal use.
-- Host has 32 GB RAM; llama mlocks its weights inside the WSL2 VM, so `.wslconfig` must set `memory=16GB` (see `Infra/README.md`, "Host / WSL memory"). The app's LLM preset is `qwen-28b` ("Attribution preset" there), plus `gemma-12b` for an opt-in Chapter-style attribution config (ADR 0013).
-- `read2me-whisper`, `read2me-minilm-l6` and `read2me-mpnet-base-v2` are CPU-only and can run alongside any GPU container.
-- `read2me-audiocpp` serves every TTS model (ids in `Infra/audiocpp/server.json`), one resident at a time, switching on request. Paragraph TTS clones from a voice's reference audio; voice design (`breeze-design`, `qwen3-design`, `voxcpm2`) works from a text description.
+### .NET App (`src/Read2Me.App`)
 
-## Relevant files
+- **Framework**: ASP.NET Core 10 API host, `Program.cs` → `Startup.cs` (`ConfigureServices` / `Configure`)
+- **Surface**: agent API endpoints (`Api/`; `GET /openapi/v1.json` is the contract, ADR 0017), the `/hubs/live` SignalR hub (`Live/`), `/workspace`, and the web bundle at `/app`. Before calling or changing an endpoint or the hub, read `docs/agents/api/README.md`, then only the part for that area
+- **UI**: the web app (`src/Read2Me.Web`, not part of the .NET solution) is a thin client over the agent API and the live hub. Before changing it, read `docs/agents/web/README.md`, then only the parts it names for your change
+- **Data model**: entity schema reference in `src/Read2Me.Data/datamodel.md`
 
-- `CLAUDE.md` — repository overview, build/run commands, and architecture summary
-- `docs/agents/web.md` — the web app (`src/Read2Me.Web`, `/app`): commands, layout, conventions, adding a page, the live hub contract, primitive catalogue, browser tests, gotchas; vocabulary in `context/web.md`
-- `docs/agents/api.md` — the agent HTTP API in the order you call it; `GET /openapi/v1.json` is the contract (ADR 0017)
-- `docs/adr/0014-native-web-front-end-replaces-angular.md` — why the front end moved off Angular and what the web app is built on
-- `CONTEXT.md` — domain glossary index; read before any architecture work, then load only the `context/*.md` section file(s) for the area you're touching
-- `Infra/README.md` — Docker service details, ports, supported endpoints, and usage notes
-- `Infra/docker-compose.yml` — container orchestration for all services
-- `src/Read2Me.App/Program.cs` and `Startup.cs` — application startup and middleware configuration
-- `src/Read2Me.Data/datamodel.md` — entity schema reference
+### AI Infrastructure (`Infra/`)
 
-## Agent guidance
+Containerized services orchestrated via `Infra/docker-compose.yml` (check ports and startup commands there when changing service integration). RTX 3070 (8 GB VRAM) — only one GPU-resident container at a time; the CPU-only containers (whisper, minilm-l6, mpnet-base-v2) can run beside it. Host 32 GB RAM; llama mlocks its weights inside the WSL2 VM, so `.wslconfig` must set `memory=16GB` (sizing and the host-memory trap: `Infra/README.md`, "Host / WSL memory"). `Infra/README.md` holds the service details; link to it rather than restating them.
 
-- Prefer linking to `CLAUDE.md` or `Infra/README.md` for detailed infra behaviour rather than duplicating those docs.
-- When modifying infrastructure or AI service integration, verify service startup commands and port mappings in `Infra/docker-compose.yml`.
-- If asked to add features, confirm whether the work is on the UI app, the AI service layer, or the Docker infra.
+| Container | Port | Role |
+|-----------|------|------|
+| `read2me-llama` | 8080 | LLM — character extraction, script classification. OpenAI-compatible API. |
+| `read2me-audiocpp` | 8004 | TTS + voice design — audio.cpp runtime serving every TTS model (`POST /v1/audio/speech`) |
+| `read2me-whisper` | 9000 | CPU-only Whisper.CPP transcription for accuracy scoring |
+| `read2me-minilm-l6` | 8200 | Semantic similarity — MiniLM-L6 (`POST /similarity`) |
+| `read2me-mpnet-base-v2` | 8201 | Semantic similarity — MPNet-Base-v2 (`POST /similarity`) |
+
+**audio.cpp** (ADR 0010) serves the model entries in `Infra/audiocpp/server.json`; each provider config's `ModelId` names one. It keeps one model resident and switches on request, like llama autoload — the first request after a switch takes 9–31 s. Paragraph TTS clones from a voice's reference audio; voice design (`breeze-design`, `qwen3-design`, `voxcpm2`) works from a text description. `server.json` is read at container start, so restart `audiocpp` after editing it. Its GGUFs share `GGUF_MODELS_DIR` with llama, one folder per model. Breeze is research/non-commercial, output included: personal use only. Details in `Infra/README.md`.
+
+**llama.cpp** is upstream `v0.5.0`. Switch model without restart via autoload — name the target model in an inference request; `--models-max 1` evicts the loaded model:
+```bash
+curl http://localhost:8080/v1/chat/completions -d '{"model":"qwen-28b","messages":[{"role":"user","content":"hi"}],"max_tokens":1}'
+```
+Probe the loaded preset with `GET /v1/models` (each item's `status.value` is `unloaded`/`loading`/`loaded`).
+Model presets defined in `Infra/llama/config/models.ini`. The app uses `qwen-28b` (thinking budget 4096) through two LLM configs — attribution (thinking off, the active config) and thinking (the chain's final step); why and how: `Infra/README.md`, "Attribution preset". It also uses `gemma-12b` when an LLM config with the opt-in Chapter attribution prompt style names it (ADR 0013; `Infra/README.md`, "Chapter-pass preset").
+
+GGUF model files live in `Infra/models/` by default (bind-mounted, not committed). Override the host directory with `GGUF_MODELS_DIR` in `Infra/.env` to share GGUFs across projects; container path stays `/models`. Whisper's `ggml-base.en.bin` stays in `Infra/models/`.
+
+### Data Flow
+
+User imports epub/text → LLM attributes dialog items to Characters → TTS synthesises audio per ParagraphItem → Whisper transcribes for WER/semantic accuracy check → items assembled into `.m4b` audiobook with chapter markers and cover art.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs (PRDs) live as GitHub issues on `deangaddie/ReadToMe` (public), driven with `gh`. `.scratch/completed/` and `.scratch/not-implemented/` remain as local-only history. Every implementation issue gets its own PR and closes when it merges, even inside a wider spec. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default roles, each label named as its role (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`).
+
+### Domain docs
+
+Single-context: `CONTEXT.md` (an index; the glossary itself is split by area into `context/*.md`) + `docs/adr/` at repo root. Read the index before architecture work, then only the area files you're touching. See `docs/agents/domain.md`.

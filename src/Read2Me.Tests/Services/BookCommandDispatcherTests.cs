@@ -626,7 +626,7 @@ namespace Read2Me.Tests.Services
         {
             // BookMutations tells an unknown anchor apart from a legal no-op, but this seam does
             // not: every command bar SetNarratorCharacter no-ops on a node the Book does not
-            // contain (docs/agents/api.md), and the endpoint keeps that answer through the
+            // contain (docs/agents/api/book-commands.md), and the endpoint keeps that answer through the
             // migration rather than starting to 422 on it.
             var b = new BookHierarchyBuilder(OpenDbAsync);
             await b.AddVolume("vol", v => v.AddChapter("ch", c => c

@@ -412,7 +412,7 @@ ASALocalRun/
  
 # Temporary analysis artifacts created during code review
 /scripts/*.ps1
-# ...except the checked-in front-end build scripts, the API contract script, their shared Bun lookup and the PR gate (see docs/agents/web.md)
+# ...except the checked-in front-end build scripts, the API contract script, their shared Bun lookup and the PR gate (see docs/agents/web/README.md)
 !/scripts/build-web.ps1
 !/scripts/check.ps1
 !/scripts/api-types.ps1

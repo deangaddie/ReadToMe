@@ -242,7 +242,7 @@ export class PronunciationTry extends R2mElement {
     const picker = this.picker();
     const matches = this.#matches();
     if (matches.length === 0) return nothing;
-    // Read once here: `repeat` item templates must not read signals themselves (web.md Gotchas).
+    // Read once here: `repeat` item templates must not read signals themselves (docs/agents/web/conventions.md, Gotchas).
     const view: PlayView = { playing: this.player.playing(), blocked: this.blocked() };
     const noSpoken = spokenPlayBlockedReason(this.#draft()?.spokenForm ?? null);
     const byKey = new Map(matches.map((m) => [matchKey(m), m]));

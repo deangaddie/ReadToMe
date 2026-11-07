@@ -5,7 +5,7 @@ description: Launch ReadToMe and drive the web app (/app) in a browser to see a 
 
 # Verifying ReadToMe in a browser
 
-The web app (`src/Read2Me.Web`, custom elements on Bun, `docs/agents/web.md`) is served at
+The web app (`src/Read2Me.Web`, custom elements on Bun, `docs/agents/web/README.md`) is served at
 `/app`, and `/` redirects there. The surface is the browser — drive it, don't import-and-call.
 
 ## Launch
@@ -23,9 +23,9 @@ trying things out: leave it alone. `tools/browse/workspace/` is git-ignored and 
 `app.db`; delete it to start clean. Its books come with the
 tools: Project Gutenberg epubs in `tools/browse/books/`, imported with `bookProject('dracula')`
 (or a text project from `throwawayProject`). Never use a book that is not from Project Gutenberg.
-A fresh `app.db` takes its ffmpeg path from `Ffmpeg:Path` in `appsettings.Local.json` (or
-`Ffmpeg__Path`). Without one it has none, so set it (Settings → Audio processing) before anything
-that needs ffmpeg.
+A fresh `app.db` has no saved ffmpeg path, so the app runs `Ffmpeg:Path` from
+`appsettings.Local.json` (or `Ffmpeg__Path`), read live, else `ffmpeg` on PATH. If neither is set,
+set it in Settings → Audio processing before anything that needs ffmpeg.
 
 Start each detached with its output redirected to a file. A `dotnet run` piped through
 `Select-Object -First N` gets killed when the pipe closes; a `| Select-Object -Last N` shows
@@ -74,9 +74,10 @@ await page.evaluate(async url => {
 
 - **A frozen tab is a defect, not a slow page.** A screenshot that times out means the renderer is
   spinning (a microtask loop in a store); capture the API calls the page made and look for a loop.
-- **ffmpeg is not on PATH.** It lives at `D:\Dev\ffmpeg\bin\ffmpeg.exe`; the path is stored in
-  settings (Audio Processing → ffmpeg), so a fresh tool workspace needs it set. Any ffmpeg-dependent step silently *falls back* rather than
-  failing, so an unset path looks like "the filter did nothing".
+- **ffmpeg is not on PATH.** It lives at `D:\Dev\ffmpeg\bin\ffmpeg.exe`; the host finds it only
+  through a saved Settings path or `Ffmpeg:Path`. Any ffmpeg-dependent step silently *falls back*
+  rather than failing, so a missing ffmpeg looks like "the filter did nothing" — check the
+  resolved `ffmpegPath` in `GET /api/settings/audio-processing`.
 - **Docker AI containers are usually stopped.** TTS/LLM/Whisper flows need `docker compose up -d
   <service>` from `Infra/` first. Audio *post-processing* and assembly only need ffmpeg.
 - **`<audio>` needs `Content-Length`.** A chunked response gives the element an infinite duration —
