@@ -71,8 +71,9 @@ public class SeriesVoiceEditorTests(E2eAppFixture app, PlaywrightFixture pw) : E
         await Expect(Row(seeded.Holmes)).ToBeVisibleAsync();
 
         await Row(seeded.Holmes).Locator("[data-action=voices]").ClickAsync();
-        await Row(seeded.Watson).Locator("[data-action=voices]").ClickAsync();
+        // Opened first: the editor pushes Watson's row down, so a click before it lands could miss.
         await Expect(EditorRow(seeded.Holmes).Locator("tr[data-voice-id]")).ToHaveCountAsync(1);
+        await Row(seeded.Watson).Locator("[data-action=voices]").ClickAsync();
         await Expect(EditorRow(seeded.Watson).Locator("tr[data-voice-id]")).ToHaveCountAsync(1);
 
         // "Sherlock Holmes" sorts before "Watson": row, its editor, row, its editor, top to bottom.

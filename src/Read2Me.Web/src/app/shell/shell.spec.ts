@@ -382,6 +382,7 @@ describe('Setup check surfacing', () => {
 
     live.emit('setupCheck', { kind: 'Done', report: { ...report!, fullRun: null } });
     await settle();
+    expect(shield?.classList.contains('shell__setup-shield--busy')).toBe(false);
     expect(shield?.classList.contains('shell__setup-shield--error')).toBe(true);
     expect(shell.querySelector('.shell__setup-shield .r2m-spinner')).toBeNull();
   });

@@ -1371,8 +1371,9 @@ describe('r2m-book-page', () => {
     const matches = `${BASE}/pronunciations/matches`;
     let report: PronunciationSpanReport = { pronunciations: [], spans: [] };
     api.on('GET', matches, () => report);
+    const reads = () => api.calls('GET', matches).length;
     const { page } = await start('projects/dracula/book');
-    await afterRefetch();
+    await readsReach(reads, 1);
     expect(page.querySelector('.r2m-pron-mark')).toBeNull();
 
     report = {
@@ -1398,7 +1399,7 @@ describe('r2m-book-page', () => {
         changedNothing: false,
       },
     } as Receipt);
-    await afterRefetch();
+    await readsReach(reads, 2);
     await page.rendered();
 
     const marks = page.querySelectorAll('.r2m-paragraph[data-paragraph-id=p1] .r2m-pron-mark');
@@ -1406,5 +1407,11 @@ describe('r2m-book-page', () => {
   });
 });
 
-/** Waits out the debounce that bursts of signals share before a read again. */
-const afterRefetch = () => new Promise((r) => setTimeout(r, REFETCH_DEBOUNCE_MS + 30));
+/** Waits until `reads` reaches `count`: a read again lands only after the debounce that bursts of signals share. */
+async function readsReach(reads: () => number, count: number) {
+  for (let waited = 0; reads() < count; waited += 10) {
+    if (waited > REFETCH_DEBOUNCE_MS * 20) throw new Error(`${reads()} reads, expected ${count}`);
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  await settle();
+}
