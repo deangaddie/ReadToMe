@@ -324,6 +324,74 @@ describe('r2m-book-page', () => {
     expect(page.querySelector('[aria-label="Show structure"]')).not.toBeNull();
   });
 
+  it('a receipt re-rendering the tree under an open Node menu keeps it on its trigger, and Escape returns focus to the node', async () => {
+    const chapters = (first: string) => ({
+      chapters: [
+        { id: 'c1', title: first },
+        { id: 'c2', title: 'Chapter 2' },
+      ],
+    });
+    api.on('GET', `${BASE}/nodes/Part/p1/children`, chapters('Chapter 1'));
+    const { page } = await start('projects/dracula/book');
+    const tree = page.querySelector('nav.book__tree r2m-structure-tree')!;
+    const titles = () =>
+      Array.from(tree.querySelectorAll('.tree__title')).map((n) => n.textContent?.trim());
+    const triggerOf = (id: string) =>
+      tree.querySelector<HTMLButtonElement>(`[data-node-id=${id}] .r2m-node-menu__trigger`)!;
+    const menu = page.querySelector('r2m-node-menu')!;
+    const trigger = triggerOf('c2');
+    trigger.click();
+    await page.rendered();
+    expect(menu.isOpen).toBe(true);
+    expect(trigger.style.getPropertyValue('anchor-name')).toBe('--r2m-node-menu');
+
+    // A rename from elsewhere: the receipt reads the tree again and re-renders it.
+    api.on('GET', `${BASE}/nodes/Part/p1/children`, chapters('Renamed'));
+    live.emit('receipt', {
+      folder: 'dracula',
+      mutationName: 'UpdateChapterTitleMutation',
+      mutationId: 'm2',
+      revision: 2,
+      originId: 'elsewhere',
+      isOwn: false,
+      effects: {
+        scope: 'Exact',
+        createdId: null,
+        createdParentId: null,
+        facets: ['NodeTitle'],
+        nodeIds: ['c1'],
+        paragraphIds: [],
+        paragraphItemIds: [],
+        structural: [],
+        changedNothing: false,
+      },
+    } as Receipt);
+    const reads = () => api.calls('GET', `${BASE}/nodes/Part/p1/children`).length;
+    await readsReach(reads, 2);
+    await page.rendered();
+    expect(titles()).toEqual(['Renamed', 'Chapter 2']);
+
+    // The re-render kept the trigger element, so the panel's anchor is the one it opened on.
+    expect(triggerOf('c2') === trigger).toBe(true);
+    expect(trigger.isConnected).toBe(true);
+    expect(trigger.style.getPropertyValue('anchor-name')).toBe('--r2m-node-menu');
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(menu.isOpen).toBe(true);
+    expect(menu.querySelector('[role="menu"]')?.getAttribute('aria-label')).toBe(
+      'Actions for Chapter 2',
+    );
+
+    // And it still belongs to its node: Escape closes it and focus goes back there.
+    document.activeElement!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    await page.rendered();
+    expect(menu.isOpen).toBe(false);
+    expect(
+      document.activeElement?.closest<HTMLElement>('[role="treeitem"]')?.dataset['nodeId'],
+    ).toBe('c2');
+  });
+
   it('a pause paragraph row carries a node-menu trigger for its inserts and delete', async () => {
     api.on('GET', `${BASE}/nodes/Chapter/c1/children`, {
       paragraphs: [

@@ -36,7 +36,7 @@ import type { PronunciationEditRequest } from './pronunciation-card';
 import { PronunciationMarks } from './pronunciation-marks-store';
 import type { PronunciationPanel } from './pronunciation-panel';
 import { PronunciationPanelState } from './pronunciation-panel-store';
-import { type ReaderGeometry, ReaderWindow } from './reader-window';
+import { type ReaderGeometry, ReaderWindow, listGeometry } from './reader-window';
 import { addPausesChange } from './permanent-changes';
 import {
   READER_MODES,
@@ -844,17 +844,7 @@ export class BookPage extends R2mElement {
   private geometry(): ReaderGeometry | null {
     const list = this.list();
     const rows = this.rows();
-    if (!list || rows.length === 0) return null;
-    return {
-      scrollTop: () => list.scrollOffset('top'),
-      scrollBottom: () => list.scrollOffset('bottom'),
-      viewportHeight: () => list.clientHeight,
-      chapterTop: (chapterId) => {
-        const index = rows.findIndex((r) => r.kind === 'chapter' && r.chapterId === chapterId);
-        return index < 0 ? Number.POSITIVE_INFINITY : list.offsetOf(index);
-      },
-      scrollTo: (offset) => list.scrollToOffset(offset),
-    };
+    return !list || rows.length === 0 ? null : listGeometry(list, rows);
   }
 }
 

@@ -1,6 +1,5 @@
-import type { LiveMessageMap, LiveSnapshot, ProjectSnapshot, ReceiptMessage } from '@app/api';
+import type { LiveSnapshot, ReceiptMessage } from '@app/api';
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import { HubConnectionState } from '@microsoft/signalr';
 import { ORIGIN_ID } from '@app/api';
 import { override, resetServices } from '@app/core/services';
 import { effect } from '@app/core/signals';
@@ -8,12 +7,11 @@ import { ToastService } from '@app/ui/toast';
 import { FakeTimers, settleMicrotasks as settle } from '../../testing/fake-timers';
 import {
   LIVE_CONNECTION_FACTORY,
-  type LiveConnection,
   type LiveConnectionOptions,
   RECONNECT_DELAYS_MS,
   reconnectDelayMs,
 } from './live-connection';
-import type { LiveFamily, Receipt } from './live-messages';
+import type { Receipt } from './live-messages';
 import { DISCONNECT_TOAST_AFTER_MS, LiveService } from './live.service';
 import {
   assemblyMessage,
@@ -22,155 +20,7 @@ import {
   serviceStatusMessage,
   voiceBatchMessage,
 } from '../../testing/live-messages';
-
-// ---- fake HubConnection --------------------------------------------------------------------------
-
-type Handler = (...args: unknown[]) => void;
-
-class FakeConnection implements LiveConnection {
-  state = HubConnectionState.Disconnected;
-  connectionId: string | null = 'conn-1';
-  readonly handlers = new Map<string, Handler>();
-  readonly invocations: { method: string; args: unknown[] }[] = [];
-  /** Per-method canned results; a function may throw to simulate a dropped connection. */
-  readonly results = new Map<string, (...args: unknown[]) => unknown>();
-  /** Reject `start()` this many times before succeeding. */
-  startFailures = 0;
-  startCalls = 0;
-
-  private reconnecting: ((error?: Error) => void)[] = [];
-  private reconnected: ((connectionId?: string) => void)[] = [];
-  private closed: ((error?: Error) => void)[] = [];
-
-  constructor(readonly options: LiveConnectionOptions) {}
-
-  async start(): Promise<void> {
-    this.startCalls++;
-    if (this.startFailures > 0) {
-      this.startFailures--;
-      throw new Error('host down');
-    }
-    this.state = HubConnectionState.Connected;
-  }
-
-  async stop(): Promise<void> {
-    this.state = HubConnectionState.Disconnected;
-  }
-
-  async invoke<T = void>(method: string, ...args: unknown[]): Promise<T> {
-    this.invocations.push({ method, args });
-    const result = this.results.get(method);
-    return (result ? result(...args) : undefined) as T;
-  }
-
-  on(method: string, handler: Handler): void {
-    this.handlers.set(method, handler);
-  }
-
-  onreconnecting(cb: (error?: Error) => void): void {
-    this.reconnecting.push(cb);
-  }
-
-  onreconnected(cb: (connectionId?: string) => void): void {
-    this.reconnected.push(cb);
-  }
-
-  onclose(cb: (error?: Error) => void): void {
-    this.closed.push(cb);
-  }
-
-  // ---- test controls ----
-
-  /** One frame as the hub sends it: typed by family, so a spec's frame is the wire shape. */
-  emit<K extends LiveFamily>(family: K, payload: LiveMessageMap[K]): void {
-    const handler = this.handlers.get(family);
-    if (!handler) throw new Error(`no handler for ${family}`);
-    handler(payload);
-  }
-
-  /** Drop the transport: SignalR asks the retry policy, then fires onreconnecting. */
-  drop(): void {
-    this.state = HubConnectionState.Reconnecting;
-    this.options.onRetry(1);
-    this.reconnecting.forEach((cb) => cb(new Error('lost')));
-  }
-
-  retry(attempt: number): void {
-    this.options.onRetry(attempt);
-  }
-
-  recover(): void {
-    this.state = HubConnectionState.Connected;
-    this.reconnected.forEach((cb) => cb('conn-2'));
-  }
-
-  close(): void {
-    this.state = HubConnectionState.Disconnected;
-    this.closed.forEach((cb) => cb(new Error('gone')));
-  }
-
-  calls(method: string): unknown[][] {
-    return this.invocations.filter((i) => i.method === method).map((i) => i.args);
-  }
-}
-
-function snapshot(projects: Record<string, ProjectSnapshot> = {}): LiveSnapshot {
-  return {
-    queue: {
-      attribution: {
-        queuedCount: 3,
-        processingCount: 1,
-        averageSecondsPerParagraph: 2,
-        estimatedSecondsRemaining: 6,
-        completedCount: 10,
-        currentItemElapsedSeconds: 0.5,
-        isBusy: true,
-      },
-      audio: {
-        queuedCount: 0,
-        processingCount: 0,
-        averageSecondsPerItem: 0,
-        estimatedSecondsRemaining: 0,
-        completedCount: 0,
-        currentItemElapsedSeconds: 0,
-      },
-      escalation: { step: 2, configName: 'Qwen 28B', itemCount: 3 },
-    },
-    assembly: {
-      isRunning: false,
-      currentPhase: null,
-      encodePercent: 0,
-      lastError: null,
-      audioRemainingCount: 4,
-      folder: null,
-      outputFileName: null,
-    },
-    voiceBatch: {
-      isRunning: false,
-      processed: 0,
-      total: 0,
-      failed: 0,
-      currentVoiceName: null,
-      currentOperation: null,
-      lastError: null,
-    },
-    watchdog: { llama: 'ServiceHealthy' },
-    serviceStatus: { llama: 'Ready' },
-    throughput: {
-      hasRun: false,
-      isRunActive: false,
-      runThroughput: null,
-      perConfig: [],
-      generationRate: null,
-      generationRateHistory: [],
-    },
-    projects,
-  };
-}
-
-function project(folder: string, revision = 1): ProjectSnapshot {
-  return { folder, revision, nodes: {}, folderAudioRemaining: 0, paragraphs: {}, items: {} };
-}
+import { FakeConnection, hubSnapshot, projectSnapshot } from '../../testing/fake-hub-connection';
 
 function receipt(folder: string, originId: string): ReceiptMessage {
   return {
@@ -223,8 +73,8 @@ describe('LiveService', () => {
     override(LIVE_CONNECTION_FACTORY, (options: LiveConnectionOptions) => {
       const c = new FakeConnection(options);
       c.startFailures = startFailures;
-      c.results.set('GetSnapshot', () => snapshot());
-      c.results.set('JoinProject', (folder) => project(String(folder)));
+      c.results.set('GetSnapshot', () => hubSnapshot());
+      c.results.set('JoinProject', (folder) => projectSnapshot(String(folder)));
       connections.push(c);
       return c;
     });
@@ -345,7 +195,7 @@ describe('LiveService', () => {
     expect(service.statusLabel()).toBe('Reconnecting… attempt 3');
 
     current().results.set('GetSnapshot', () =>
-      snapshot({ 'pride-and-prejudice': project('pride-and-prejudice', 9) }),
+      hubSnapshot({ 'pride-and-prejudice': projectSnapshot('pride-and-prejudice', 9) }),
     );
     current().recover();
     await settle();

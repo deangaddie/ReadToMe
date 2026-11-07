@@ -1,4 +1,5 @@
 import type { BookStore } from './book-store';
+import type { ReaderRow } from './reader-rows';
 
 /** Load the adjacent chapter when the viewport is this close to either end. */
 export const EDGE_PX = 600;
@@ -13,6 +14,31 @@ export interface ReaderGeometry {
   /** Where a loaded chapter's header row starts; `+Infinity` when the chapter is not in the rows. */
   chapterTop(chapterId: string): number;
   scrollTo(offset: number): void;
+}
+
+/** The slice of `<r2m-measured-list>` the reader measures, in rows. */
+export interface ReaderList {
+  readonly clientHeight: number;
+  scrollOffset(from?: 'top' | 'bottom'): number;
+  offsetOf(index: number): number;
+  scrollToOffset(top: number): void;
+}
+
+/** The list in chapters: a chapter starts where its header row does. */
+export function listGeometry(
+  list: ReaderList,
+  rows: readonly Pick<ReaderRow, 'kind' | 'chapterId'>[],
+): ReaderGeometry {
+  return {
+    scrollTop: () => list.scrollOffset('top'),
+    scrollBottom: () => list.scrollOffset('bottom'),
+    viewportHeight: () => list.clientHeight,
+    chapterTop: (chapterId) => {
+      const index = rows.findIndex((r) => r.kind === 'chapter' && r.chapterId === chapterId);
+      return index < 0 ? Number.POSITIVE_INFINITY : list.offsetOf(index);
+    },
+    scrollTo: (offset) => list.scrollToOffset(offset),
+  };
 }
 
 export type ReaderWindowStore = Pick<

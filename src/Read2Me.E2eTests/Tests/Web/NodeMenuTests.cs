@@ -5,9 +5,10 @@ namespace Read2Me.E2eTests.Tests.Web;
 
 /// <summary>
 /// The structure tree's per-node menu (spec §7 named risk 2): one shared popover in the real top
-/// layer, anchored to the trigger of each open. The anchor survives a live receipt re-rendering the
-/// tree under the open menu, and focus returns to the tree item after Escape and after choosing an
-/// entry (Delete, then Cancel in the real confirm dialog). Runs in Chromium and Firefox.
+/// layer, anchored to the trigger of each open. The panel stays on its trigger while a live receipt
+/// re-renders the tree, and focus returns to the tree item through the real confirm dialog. That the
+/// re-render keeps the trigger, its anchor and the open menu, and that Escape returns focus, are
+/// pinned in <c>book-page.spec.ts</c>. Runs in Chromium and Firefox.
 /// </summary>
 public class NodeMenuTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
@@ -19,25 +20,23 @@ public class NodeMenuTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBas
         () => document.activeElement?.closest('[role="menuitem"]')?.dataset.entry ?? null
         """;
 
-    // Needs a real browser: the menu is a top-layer popover and focus returns through a real modal confirm.
+    // Needs a real browser: the menu is a top-layer popover placed by CSS anchor positioning.
     [Fact]
-    public async Task The_anchor_survives_a_receipt_re_rendering_the_tree_and_focus_returns_to_the_tree_item()
+    public async Task The_panel_stays_on_its_trigger_while_a_receipt_re_renders_the_tree()
     {
         var book = await App.SeedLongBookAsync("native-menu-anchor", "Native Menu Anchor", "A. Author", chapters: 3, paragraphs: 2);
-        var second = book.ChapterId("Chapter 2").ToString();
 
         await GotoAppAsync("projects/native-menu-anchor/book");
         await Expect(Page.Locator(".tree__title")).ToHaveTextAsync(["Chapter 1", "Chapter 2", "Chapter 3"]);
 
-        var node = Page.Locator($"[data-node-id='{second}']");
+        var node = Page.Locator($"[data-node-id='{book.ChapterId("Chapter 2")}']");
         await node.HoverAsync();
         var trigger = node.Locator(".r2m-node-menu__trigger");
         await trigger.ClickAsync();
         var menu = Page.GetByRole(AriaRole.Menu, new() { Name = "Actions for Chapter 2" });
         await Expect(menu).ToBeVisibleAsync();
-        var anchor = (await trigger.BoundingBoxAsync())!;
         var before = (await menu.BoundingBoxAsync())!;
-        AssertAnchored(anchor, before);
+        AssertAnchored((await trigger.BoundingBoxAsync())!, before);
 
         // A rename from elsewhere reaches the reader as a receipt and re-renders the tree.
         var rename = await Page.APIRequest.PostAsync($"{App.BaseUrl}/api/projects/native-menu-anchor/commands", new()
@@ -47,21 +46,30 @@ public class NodeMenuTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBas
         Assert.True(rename.Ok, await rename.TextAsync());
         await Expect(Page.Locator(".tree__title").First).ToHaveTextAsync("Renamed");
 
-        // The menu is still open, still on its trigger.
+        // The panel is still open, still on its trigger.
         await Expect(menu).ToBeVisibleAsync();
         var after = (await menu.BoundingBoxAsync())!;
         Assert.InRange(after.X, before.X - 1, before.X + 1);
         Assert.InRange(after.Y, before.Y - 1, before.Y + 1);
         AssertAnchored((await trigger.BoundingBoxAsync())!, after);
+    }
 
-        // And it still belongs to its node: Escape closes it and returns focus there.
-        await Page.Keyboard.PressAsync("Escape");
-        await Expect(menu).ToBeHiddenAsync();
+    // Needs a real browser: focus comes back from a real modal dialog, which happy-dom only marks open.
+    [Fact]
+    public async Task Cancelling_a_chosen_delete_returns_focus_to_the_tree_item_through_the_real_confirm()
+    {
+        var book = await App.SeedLongBookAsync("native-menu-focus", "Native Menu Focus", "A. Author", chapters: 3, paragraphs: 2);
+        var second = book.ChapterId("Chapter 2").ToString();
+
+        await GotoAppAsync("projects/native-menu-focus/book");
+        await Expect(Page.Locator(".tree__title")).ToHaveCountAsync(3);
+
+        // Shift+F10 on the focused tree item opens its menu, End reaches Delete, and Cancel in its
+        // confirm closes both.
+        await Page.Locator($"[data-node-id='{second}']").FocusAsync();
         Assert.Equal(second, await Page.EvaluateAsync<string?>(FocusedNode));
-
-        // Choosing an entry also returns focus to the item: Shift+F10 reopens the menu, End reaches
-        // Delete, and Cancel in its confirm closes both.
         await Page.Keyboard.PressAsync("Shift+F10");
+        var menu = Page.GetByRole(AriaRole.Menu, new() { Name = "Actions for Chapter 2" });
         await Expect(menu).ToBeVisibleAsync();
         await Page.Keyboard.PressAsync("End");
         Assert.Equal("delete", await Page.EvaluateAsync<string?>(FocusedEntry));

@@ -7,9 +7,12 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// <summary>
 /// The native reader's real layout over big books (spec §8.2 "big-book tests"), which happy-dom
 /// cannot measure. A deep link into a nested book scrolls the chapter header to the top within a
-/// pixel and holds it there while the three chapters before it are prepended, and a row menu opened
+/// pixel and holds it there while the three chapters before it are prepended; a row menu opened
 /// deep in the list sits on its trigger; the top row of a long book holds within a pixel when the
-/// viewport is resized narrow and wide. Runs in Chromium and Firefox.
+/// viewport is resized narrow and wide. The anchoring maths (which chapters load when, where the
+/// header lands, the opened chapter held current) is pinned over fake geometry in
+/// <c>reader-anchoring.spec.ts</c>, <c>reader-window.spec.ts</c> and <c>measured-list.spec.ts</c>.
+/// Runs in Chromium and Firefox.
 /// </summary>
 public class BigBookTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
@@ -83,9 +86,9 @@ public class BigBookTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase
         }
         """;
 
-    // Needs a real browser: scroll anchoring over prepends and the menu's top-layer placement need real layout.
+    // Needs a real browser: scroll anchoring over prepends needs real layout and whole-pixel scrolling.
     [Fact]
-    public async Task Deep_link_holds_the_header_at_the_top_over_three_prepends_and_a_row_menu_opens_on_its_trigger()
+    public async Task A_deep_link_holds_its_header_at_the_top_over_three_prepends()
     {
         var book = await App.SeedNestedBookAsync("native-big-nested", "Native Nested Book", "A. Author");
 
@@ -99,7 +102,6 @@ public class BigBookTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase
         var landed = (await (await Page.WaitForFunctionAsync(
             $"(key) => {{ const t = ({RowTop})(key); return t !== null && Math.abs(t) <= {TolerancePx} ? {{ t }} : null; }}",
             header)).JsonValueAsync<JsonElement>()).GetProperty("t").GetDouble();
-        await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", deep.ToString());
 
         // The chapters are short, so the edge check prepends chapter 3, then 2, then 1, one after
         // the other: a rounding error that compounded per prepend would show here.
@@ -108,21 +110,35 @@ public class BigBookTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase
         await SettleAsync();
         var afterPrepend = await Page.EvaluateAsync<double>(RowTop, header);
         Assert.InRange(afterPrepend, landed - TolerancePx, landed + TolerancePx);
-        await Expect(Page.Locator("r2m-book-page")).ToHaveAttributeAsync("data-current-chapter", deep.ToString());
+    }
 
-        // Below the anchored header the rendered window starts far down the list: a row menu opened
-        // there sits on its trigger, not where the row would be without the prepends.
-        var key = await Page.EvaluateAsync<string>("""
+    // Needs a real browser: the menu is a top-layer popover anchored to a row placed deep in the list.
+    [Fact]
+    public async Task A_row_menu_opened_deep_in_the_list_opens_on_its_trigger()
+    {
+        await App.SeedLongBookAsync("native-big-menu", "Native Menu Book", "A. Author");
+
+        await GotoAppAsync("projects/native-big-menu/book");
+        await Page.WaitForSelectorAsync(".r2m-paragraph", new() { State = WaitForSelectorState.Attached });
+        await Page.EvaluateAsync(ScrollBy, 1500);
+        await SettleAsync();
+
+        // The rendered rows start far down the list (Firefox anchors a popover to a row's box as
+        // placed, so a misplaced window would put the menu that far from its trigger). Take a row in
+        // the upper half of the viewport, where the panel opens below its trigger.
+        var key = await Page.EvaluateAsync<string?>("""
             () => {
               const list = document.querySelector('r2m-measured-list');
+              if (parseFloat(list.querySelector('.r2m-vlist__content').style.top) <= 0) return null;
               const box = list.getBoundingClientRect();
               return [...list.querySelectorAll('[data-row-key^="paragraph:"]')]
                 .find((row) => {
                   const r = row.getBoundingClientRect();
-                  return r.top > box.top + 80 && r.bottom < box.bottom - 80;
-                }).dataset.rowKey;
+                  return r.top > box.top + 40 && r.bottom < box.top + box.height / 2;
+                })?.dataset.rowKey ?? null;
             }
             """);
+        Assert.NotNull(key);
         var row = Page.Locator($"[data-row-key='{key}'] .r2m-paragraph__menu");
         await row.HoverAsync();
         var trigger = row.Locator("button");
