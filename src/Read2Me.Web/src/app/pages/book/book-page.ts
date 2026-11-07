@@ -734,7 +734,7 @@ export class BookPage extends R2mElement {
     }
   };
 
-  /** Top-layer calls are optional: happy-dom has no popover API (web.md, conventions 11). */
+  /** Top-layer calls are optional: happy-dom has no popover API (docs/agents/web/conventions.md, 11). */
   private closeMenu(id: string): void {
     const menu = this.querySelector<HTMLElement>(`#${id}`);
     if (menu?.matches(':popover-open')) menu.hidePopover?.();

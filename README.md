@@ -35,7 +35,7 @@ dotnet run --project src/Read2Me.App       # web app at http://localhost:5000/ap
 For web development with live reload run the host as above and, in a second terminal, `bun run dev` in
 `src/Read2Me.Web` (Bun 1.4.2, pinned by `packageManager`; no Node): the dev server on <http://localhost:4300/app/> proxies the API and hub to
 `:5000`. Until a bundle exists, `/app` answers with a page that says how to build one. Structure, conventions
-and how to add a page: [docs/agents/web.md](docs/agents/web.md); the web project's own
+and how to add a page: [docs/agents/web/](docs/agents/web/README.md); the web project's own
 [README](src/Read2Me.Web/README.md) lists every script.
 
 ## Infrastructure services
@@ -104,7 +104,7 @@ Also in the app:
 
 The whole production cycle is also an HTTP API, served from the running app on `http://localhost:5000/api/...` — localhost only, no auth. Create a project, import, attribute, generate voices and audio, and assemble, all without opening a browser.
 
-- **Workflow guide**: [docs/agents/api.md](docs/agents/api.md) — endpoints in the order you call them.
+- **Workflow guide**: [docs/agents/api/](docs/agents/api/README.md) — the endpoints by area, one file each.
 - **Schemas**: `GET /openapi/v1.json` is the source of truth for request/response shapes; the web app is typed from a checked-in copy ([ADR 0017](docs/adr/0017-openapi-document-is-the-http-contract.md); regenerate with `pwsh scripts/api-types.ps1`).
 
 The four long operations (attribution, audio, voice batch, assembly) return `202 Accepted` and run in the background; poll their status endpoint until the queue is idle, then read per-item outcomes. Errors are RFC 7807 ProblemDetails.

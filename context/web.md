@@ -1,6 +1,6 @@
 # Web front end
 
-Use these terms exactly in code, tests, and discussion. Background: [ADR 0014](../docs/adr/0014-native-web-front-end-replaces-angular.md); how-to: [docs/agents/web.md](../docs/agents/web.md).
+Use these terms exactly in code, tests, and discussion. Background: [ADR 0014](../docs/adr/0014-native-web-front-end-replaces-angular.md); how-to: [docs/agents/web/](../docs/agents/web/README.md).
 
 - **Web app** — the front end in `src/Read2Me.Web` (custom elements on Bun), served by the .NET host at `/app` from the bundle `bun run build` emits into `src/Read2Me.App/wwwroot/app`. `/` redirects to it. It owns no data: the host, its workspace and the API do.
 - **Live hub** — the SignalR endpoint `/hubs/live` the web app subscribes to. The **Live relay** (`LiveRelay`, `Live/`) is the host-side bridge that turns in-process events (queue snapshots, node status, receipts, watchdog, streams) into hub pushes; the **event family** is the hub method name (`queue`, `nodeStatus`, `itemStatus`, `receipt`, `assembly`, `voiceBatch`, `watchdog`, `serviceStatus`, `preflight`, `llm`, `audioGen`, `throughput`, `settingsChanged`, `series`, `bookEdit`, `llmTest`, `history`, `setupCheck`) and each payload carries a `kind` discriminator. Project-scoped families go to the **project group** a client joins with `JoinProject(folder)`; stream families to a **stream group** (`JoinStream(kind)`).

@@ -167,7 +167,7 @@ export class ProjectsPage extends R2mElement {
   protected template() {
     const error = this.store.error();
     const view = this.view();
-    // Read here, not inside `repeat`'s item templates, so the cards stay tracked (web.md, Gotchas).
+    // Read here, not inside `repeat`'s item templates, so the cards stay tracked (docs/agents/web/conventions.md, Gotchas).
     const cards: CardState = { deleting: this.deleting(), membership: this.store.membership() };
     return html`
       <header class="r2m-page-header projects__header">

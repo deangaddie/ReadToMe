@@ -349,7 +349,7 @@ export class NodeMenu extends R2mElement {
     this.#typeAhead.cancel();
   }
 
-  /** Top-layer calls are optional: happy-dom has no popover API (web.md, conventions 11). */
+  /** Top-layer calls are optional: happy-dom has no popover API (docs/agents/web/conventions.md, 11). */
   #show(panel: HTMLElement | null): void {
     if (panel && !panel.matches(':popover-open')) panel.showPopover?.();
   }
