@@ -97,7 +97,7 @@ namespace Read2Me.Services.Characters
             var list = paragraphs.ToList();
             lock (_enqueueLock)
             {
-                if (list.Select(p => p.Folder).Distinct().Select(_activity.MayEnqueue).FirstOrDefault(r => r is not null) is { } refusal)
+                if (_activity.MayEnqueue(list.Select(p => p.Folder)) is { } refusal)
                     return refusal;
 
                 foreach (var p in list)

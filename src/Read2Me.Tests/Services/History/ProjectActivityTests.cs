@@ -77,6 +77,26 @@ public class ProjectActivityTests
     }
 
     [Fact]
+    public void An_enqueue_across_projects_is_refused_when_any_of_them_is_restoring()
+    {
+        Assert.Null(_activity.TryBeginRestore(Folder));
+
+        var refusal = _activity.MayEnqueue([Other, Folder, Other]);
+
+        Assert.Equal(ActivityRefusalKind.Restoring, refusal?.Kind);
+        Assert.Equal(ProjectActivity.RestoringReason, refusal!.Reason);
+    }
+
+    [Fact]
+    public void An_enqueue_across_projects_is_allowed_when_none_is_restoring()
+    {
+        _busy.Answer = Busy();
+
+        Assert.Null(_activity.MayEnqueue([Other, Folder]));
+        Assert.Null(_activity.MayEnqueue([]));
+    }
+
+    [Fact]
     public void A_restore_refused_as_busy_releases_the_flag_so_a_later_one_begins()
     {
         _busy.Answer = Busy();

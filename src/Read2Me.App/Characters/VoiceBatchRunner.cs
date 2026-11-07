@@ -75,7 +75,7 @@ public sealed class VoiceBatchRunner
 
     /// <summary>
     /// Starts the batch unless one is running or the <see cref="ProjectActivity"/> gate refuses.
-    /// <see cref="ProjectActivity.MayEnqueue"/> is asked under the lock <see cref="BusyFor"/> takes,
+    /// <see cref="ProjectActivity.MayEnqueue(ProjectFolderId)"/> is asked under the lock <see cref="BusyFor"/> takes,
     /// so it can't race a Restore: one that claimed the project first is seen here, and one that
     /// claims it after finds this batch running and is refused.
     /// </summary>

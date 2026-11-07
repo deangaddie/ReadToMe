@@ -290,6 +290,8 @@ public sealed class BookMutations(
     /// <summary>
     /// Every mutation but the Restore's own asks <see cref="ProjectActivity"/>, which refuses a write only while the
     /// project is restoring, so its refusal is always <see cref="BookMutationRejection.Restoring"/>.
+    /// The exemption is this type check rather than a flag a mutation declares, so no other mutation
+    /// can exempt itself (#240).
     /// </summary>
     private BookMutationOutcome? RefusedWhileRestoring(BookMutation mutation) =>
         mutation is not RestoreStepMutation && activity.MayWrite(mutation.FolderId) is { } refusal

@@ -63,7 +63,7 @@ namespace Read2Me.Services.Audio
             var list = items.ToList();
             lock (_enqueueLock)
             {
-                if (list.Select(i => i.Folder).Distinct().Select(_activity.MayEnqueue).FirstOrDefault(r => r is not null) is { } refusal)
+                if (_activity.MayEnqueue(list.Select(i => i.Folder)) is { } refusal)
                     return refusal;
 
                 foreach (var item in list)
