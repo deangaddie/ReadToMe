@@ -32,6 +32,7 @@
         ]
       },
       "AiServiceStatus": {
+        "description": "Live status of a managed service as the settings UI displays it.",
         "enum": [
           "NotFound",
           "Stopped",
@@ -58,6 +59,7 @@
         "type": "object"
       },
       "ApiItemType": {
+        "description": "An item's type as the API reports it: ApiItemType.Narration or ApiItemType.Character\r\nfor speech (the speaker decides, ADR-0006), a pause kind by name otherwise.",
         "enum": [
           "Narration",
           "Character",
@@ -69,6 +71,7 @@
         ]
       },
       "AppTheme": {
+        "description": "A theme row. The optional colours are null where the palette default applies.",
         "properties": {
           "appbarBackground": {
             "type": [
@@ -190,6 +193,7 @@
         "type": "object"
       },
       "AssemblyMessage": {
+        "description": "`Folder` is the project the (single, global) run belongs to; `OutputFileName` rides on\r\n`Completed`.",
         "properties": {
           "folder": {
             "type": [
@@ -250,6 +254,7 @@
         ]
       },
       "AssemblyOutputDto": {
+        "description": "One assembled audiobook under `&lt;workspace&gt;/{folder}/output/`. CreatedAt is\r\nISO 8601, UTC: when the file was last written; IsPartial marks a build that skipped\r\nitems without audio.",
         "properties": {
           "createdAt": {
             "format": "date-time",
@@ -293,6 +298,7 @@
         "type": "object"
       },
       "AssemblyState": {
+        "description": "Assembly service state for the connect-time snapshot.",
         "properties": {
           "audioRemainingCount": {
             "format": "int32",
@@ -346,6 +352,7 @@
         "type": "object"
       },
       "AssemblyStatusDto": {
+        "description": "`Folder` is the project of the running (or most recent) job, null until the first start;\r\n`OutputFileName` is set once that job has completed and names a file under its assembly outputs.",
         "properties": {
           "audioRemainingCount": {
             "format": "int32",
@@ -417,6 +424,7 @@
         "type": "object"
       },
       "AttributionChainResponse": {
+        "description": "The stored chain, plus Resolved (the chain attribution runs: deduped, and the default\r\nconfig alone when Steps is empty) and every config a step may name.",
         "properties": {
           "available": {
             "items": {
@@ -449,6 +457,7 @@
         "type": "object"
       },
       "AttributionChainStepDto": {
+        "description": "One stored attribution chain rung.",
         "properties": {
           "configId": {
             "format": "int32",
@@ -460,7 +469,8 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/AttributionPromptStyle"
+                "$ref": "#/components/schemas/AttributionPromptStyle",
+                "description": "Null stores no style: the rung inherits its config's own."
               }
             ]
           },
@@ -475,6 +485,7 @@
         "type": "object"
       },
       "AttributionCountsDto": {
+        "description": "Paragraphs still needing attribution, plus what the queue has in flight for this project.",
         "properties": {
           "processing": {
             "type": "boolean"
@@ -496,6 +507,7 @@
         "type": "object"
       },
       "AttributionPromptStyle": {
+        "description": "Which character-attribution prompt tier an LLM server uses.",
         "enum": [
           "Full",
           "Simple",
@@ -503,6 +515,7 @@
         ]
       },
       "AttributionQueueSnapshot": {
+        "description": "The attribution queue's counts and timings, answered by `GET /api/attribution/queue`.",
         "properties": {
           "averageSecondsPerParagraph": {
             "format": "double",
@@ -521,6 +534,7 @@
             "type": "number"
           },
           "isBusy": {
+            "description": "Work in hand, globally — one worker drains every folder's queue. Settled outcomes\r\n(Failed/Unfinished) are not busy: those paragraphs are finished.",
             "type": "boolean"
           },
           "processingCount": {
@@ -544,6 +558,7 @@
         "type": "object"
       },
       "AudioCountsDto": {
+        "description": "Paragraphs with at least one item still missing audio.",
         "properties": {
           "remaining": {
             "format": "int32",
@@ -580,6 +595,7 @@
         "type": "object"
       },
       "AudioGenMessage": {
+        "description": "One per AudioGenEvent. Stream group only. `ModelLoading` is not tied to an item:\r\nits `Id` is empty and `Model` names the TTS model loading.",
         "properties": {
           "applied": {
             "type": [
@@ -702,6 +718,7 @@
         "type": "object"
       },
       "AudioItemOutcomeKind": {
+        "description": "Why a settled item is not simply done. `Unfinished` exists so\r\nvoid AudioQueueService.Apply(QueuedAudioItem item, Disposition disposition) can stay total over Disposition: this\r\nqueue's phase 1 cannot produce it today (a resolution failure is a `Failed` work outcome,\r\nnot empty work), but throwing would break totality and recording it as `Failed` would lie\r\nto the UI chip.",
         "enum": [
           "Failed",
           "Unfinished"
@@ -714,6 +731,7 @@
         ]
       },
       "AudioItemRefDto": {
+        "description": "A speech item audio can be generated for, and the nodes it rolls up into (AudioItemRef on\r\nthe wire). An entry of `GET …/nodes/{level}/{id}/item-ids`.",
         "properties": {
           "chapterId": {
             "format": "uuid",
@@ -783,6 +801,7 @@
         "type": "object"
       },
       "AudioPostProcessStepConfig": {
+        "description": "One step's config on the settings row: its enabled flag plus JsonElement? AudioPostProcessStepConfig.Settings, the\r\nstep's opaque settings payload (shape owned by the step, e.g.\r\nConsonantSoftenSettings for consonant-soften or SilenceTrimSettings for\r\nsilence-trim). The host stores the payload as raw JSON, so the document leaves it unknown and the\r\nstep's form narrows it. Order and membership come from\r\nAudioPostProcessStepDefaults, not from the stored list.",
         "properties": {
           "enabled": {
             "type": "boolean"
@@ -809,6 +828,7 @@
         "type": "object"
       },
       "AudioProcessingFullResponse": {
+        "description": "`GET /api/settings/audio-processing/full`: everything the audio-processing settings page shows, in\r\none read. FfmpegPath is the saved value the form edits; with none saved the app runs\r\nConfiguredFfmpegPath (the host's `Ffmpeg:Path`), else ffmpeg on PATH.",
         "properties": {
           "audioMaxAttempts": {
             "format": "int32",
@@ -860,6 +880,7 @@
         "type": "object"
       },
       "AudioProcessingSettings": {
+        "description": "Snapshot of the audio post-processing settings row (`AudioProcessingSettingsService.GetAsync()`),\r\nwith defaults already applied for a missing row. FfmpegPath is the ffmpeg every\r\nconsumer runs: the SavedFfmpegPath, else the\r\nConfiguredFfmpegPath, else null (PATH).",
         "properties": {
           "audioMaxAttempts": {
             "format": "int32",
@@ -964,6 +985,7 @@
         "type": "object"
       },
       "AudioQueueSnapshot": {
+        "description": "The audio queue's counts and timings, answered by `GET /api/audio/queue`.",
         "properties": {
           "averageSecondsPerItem": {
             "format": "double",
@@ -1001,6 +1023,7 @@
         "type": "object"
       },
       "AudioReviewDto": {
+        "description": "AudioReviewInfo on the wire, shared with the live hub's item status; nulls are sent explicitly.",
         "properties": {
           "normalizeOk": {
             "type": "boolean"
@@ -1062,6 +1085,7 @@
         ]
       },
       "BookEditMessage": {
+        "description": "One AI book-edit proposal run (Angular ticket 19), sent to the connection that started it.\r\n`Program` is the session id the run belongs to; `Done` carries every row the run landed\r\n(all of them, or the partial set a cancel kept). `Dropped`: a Restore of the project dropped\r\nthe session, with the `Reason` to show; sent to the project group, since the session outlives\r\nits runs.",
         "properties": {
           "cancelled": {
             "type": [
@@ -1125,6 +1149,7 @@
         ]
       },
       "BookEditRowDto": {
+        "description": "ProposedEdit on the wire; enums as member names. Shared with the REST reads of a\r\nproposal run (`BookEditEndpoints`) on purpose: a row a client got pushed and a row it read\r\nback after missing the push have to be the same shape, or a review screen would need two.\r\nNewValue is null on a `Failed` row.",
         "properties": {
           "displayPath": {
             "type": "string"
@@ -1167,6 +1192,7 @@
         "type": "object"
       },
       "BookEditRunDto": {
+        "description": "The session's proposal run as a whole — what a client that missed the hub asks for.",
         "properties": {
           "done": {
             "format": "int32",
@@ -1219,6 +1245,7 @@
         ]
       },
       "BookFacets": {
+        "description": "Which kinds of Book data a mutation changed; a receipt lists each facet it touched. Facets are\r\nfacts about the write, not instructions: a reader decides for itself what to reread from them.",
         "enum": [
           "Structure",
           "ItemText",
@@ -1243,12 +1270,14 @@
         ]
       },
       "BookMutationScope": {
+        "description": "            Whether the affected identifiers on BookMutationEffects are exhaustive.\r\n            BookMutationScope.Exact means they name everything the mutation touched; BookMutationScope.WholeProject\r\n            means they do not, and is the safe answer whenever an implementation cannot enumerate what it\r\n            touched.\r\n            Scope says nothing about whether a targeted refresh is sufficient — that is a read-side\r\njudgement made from the facets as well. An insertion is exact about which Paragraph moved and\r\nstill structural.",
         "enum": [
           "Exact",
           "WholeProject"
         ]
       },
       "BookNodeLevel": {
+        "description": "The route segment of node-scoped endpoints (`/nodes/{level}/…`) and of enqueue requests.",
         "enum": [
           "Volume",
           "Part",
@@ -1256,6 +1285,7 @@
         ]
       },
       "BookOverviewDto": {
+        "description": "Revision: the book revision the read ran against, a reader's baseline for receipts\r\nand snapshots. StructureRules: what may be inserted where, one entry per anchor\r\nkind — the node menu renders from it.",
         "properties": {
           "characters": {
             "items": {
@@ -1303,6 +1333,7 @@
         "type": "object"
       },
       "BookStructuralRelation": {
+        "description": "A split or merge stated as a relationship between two nodes, so a reader can carry expansion\r\nfrom the node that disappeared to the one that took its place.",
         "properties": {
           "kind": {
             "$ref": "#/components/schemas/BookStructuralRelationKind"
@@ -1330,6 +1361,7 @@
         ]
       },
       "BulkAssignPreviewDto": {
+        "description": "BulkAssignPreview on the wire: what a bulk assign over the ids would write.\r\nParagraphs without Character items count in neither number.",
         "properties": {
           "characterItems": {
             "format": "int32",
@@ -1347,6 +1379,7 @@
         "type": "object"
       },
       "BulkAssignPreviewRequest": {
+        "description": "The body of `POST …/characters/bulk-assign-preview`: the paragraphs to preview.",
         "properties": {
           "paragraphIds": {
             "items": {
@@ -1362,6 +1395,7 @@
         "type": "object"
       },
       "ChapterVoicePreviewDto": {
+        "description": "A row of `GET …/characters/{id}/voice-rules/preview`: the voice a character's rules pick at the start of a chapter; null when none resolves.",
         "properties": {
           "chapterId": {
             "format": "uuid",
@@ -1424,6 +1458,7 @@
         "type": "object"
       },
       "CharacterLineDto": {
+        "description": "One item a character speaks, with where it sits so the reader can open there.",
         "properties": {
           "chapterId": {
             "format": "uuid",
@@ -1450,6 +1485,7 @@
         "type": "object"
       },
       "CharacterSeriesLinkDto": {
+        "description": "A Character's series link on the Cast page's roster; bool CharacterSeriesLinkDto.Differs: this book's Voices are not the series copy (#222).",
         "properties": {
           "bookCount": {
             "format": "int32",
@@ -1480,6 +1516,7 @@
         "type": "object"
       },
       "CharacterSummaryDto": {
+        "description": "A cast-list row. bool CharacterSummaryDto.NarratesBook is true on the character the narrator link\r\npoints at; bool CharacterSummaryDto.IsNarrator marks the seed Narrator row itself. CharacterSeriesLinkDto? CharacterSummaryDto.SeriesLink is its\r\nSeries character when it is series-linked (ADR 0018), else null. Aliases carry their ids so the detail\r\ncan offer removal directly.",
         "properties": {
           "aliases": {
             "items": {
@@ -1566,6 +1603,7 @@
         ]
       },
       "CheckpointState": {
+        "description": "How the user settled a Pipeline step's confirmed checkpoint. No row means open.",
         "enum": [
           "Confirmed",
           "Skipped"
@@ -1587,15 +1625,19 @@
         "type": "object"
       },
       "ConfigThroughput": {
+        "description": "One config's share of a Throughput Run. Keyed by config id, never by name: a config renamed\r\nmid-run stays one row, and the display name is resolved at render.",
         "properties": {
           "configId": {
+            "description": "The serving config's id — the row's identity.",
             "format": "int32",
             "type": "integer"
           },
           "configName": {
+            "description": "The name last seen on a RequestStarted, for render convenience only.",
             "type": "string"
           },
           "generationMs": {
+            "description": "Σ `predicted_ms` over the same requests, or null if none did.",
             "format": "double",
             "type": [
               "null",
@@ -1603,10 +1645,12 @@
             ]
           },
           "requests": {
+            "description": "Requests this config served in the run, whether or not they reported timings.",
             "format": "int32",
             "type": "integer"
           },
           "tokensOut": {
+            "description": "Σ `predicted_n` over the requests that reported timings, or null if none did.",
             "format": "int32",
             "type": [
               "null",
@@ -1614,6 +1658,7 @@
             ]
           },
           "tokensPerSecond": {
+            "description": "This config's Run Throughput: `Σ predicted_n ÷ Σ predicted_ms`. Null when nothing\r\nmeasurable arrived — never `0`, which would mean \"it generated nothing\".",
             "format": "double",
             "type": [
               "null",
@@ -1632,6 +1677,7 @@
         "type": "object"
       },
       "ContextItemDto": {
+        "description": "An item in a context paragraph. string? ContextItemDto.Speaker is the character's name on a dialog\r\nitem, null when the item is dialog whose speaker is not yet attributed; narration items are\r\nnot dialog and carry no speaker.",
         "properties": {
           "isDialog": {
             "type": "boolean"
@@ -1728,6 +1774,7 @@
         "type": "object"
       },
       "DiscoveredCharacterDto": {
+        "description": "ExistingCharacterId names the roster character the row resolves onto (by its name or\r\nalias, as apply resolves it) — the review's \"Already exists\" row.",
         "properties": {
           "aliases": {
             "items": {
@@ -1754,6 +1801,7 @@
         "type": "object"
       },
       "DiscoveryOutcomeDto": {
+        "description": "IReadOnlyList&lt;string&gt; DiscoveryOutcomeDto.Collisions: names or aliases two characters would own once every row is\r\napplied (AliasCollisions). Advisory; the client recomputes as rows are edited.",
         "properties": {
           "characters": {
             "items": {
@@ -1786,6 +1834,7 @@
         "type": "object"
       },
       "DiscoveryStatus": {
+        "description": "How character discovery ended. An answer never carries `NoLlmConfigured`: the endpoint\r\nturns it into a 422.",
         "enum": [
           "Ok",
           "NoLlmConfigured",
@@ -1794,6 +1843,7 @@
         ]
       },
       "EditPlanStatus": {
+        "description": "How planning an AI book edit ended. The planner answers all but EditPlanStatus.NoTargets,\r\nwhich the caller sets when the plan parsed but its scope matched no items. `Ok` is the only\r\nstatus that carries a program; the rest explain why there is nothing to do.",
         "enum": [
           "Ok",
           "NoLlmConfigured",
@@ -1816,6 +1866,7 @@
         "type": "object"
       },
       "EscalationState": {
+        "description": "The latched \"escalating N items → config (step S)\" label; null when no escalation is active.",
         "properties": {
           "configName": {
             "type": [
@@ -1840,6 +1891,7 @@
         "type": "object"
       },
       "FfmpegProbeResult": {
+        "description": "Outcome of an ffmpeg probe. string FfmpegProbeResult.Message carries the version banner or the error.",
         "properties": {
           "message": {
             "type": "string"
@@ -1857,6 +1909,7 @@
       "FfmpegTestRequest": {
         "properties": {
           "ffmpegPath": {
+            "description": "Persisted before the probe; blank means \"rely on PATH\".",
             "type": [
               "null",
               "string"
@@ -1893,6 +1946,7 @@
             "type": "string"
           },
           "referenceSeconds": {
+            "description": "The stored take's length, as VoiceDto reports it.",
             "format": "double",
             "type": [
               "null",
@@ -1900,6 +1954,7 @@
             ]
           },
           "referenceWarning": {
+            "description": "Set over the 15 s soft Reference Limit: the take was kept.",
             "type": [
               "null",
               "string"
@@ -1918,6 +1973,7 @@
         "type": "object"
       },
       "HistoryBusyDto": {
+        "description": "Why the project can't be viewed at a step or restored right now: what is queued or running for it.",
         "properties": {
           "reason": {
             "type": "string"
@@ -1929,6 +1985,7 @@
         "type": "object"
       },
       "HistoryDto": {
+        "description": "A project's History (`GET /api/projects/{folder}/history`): its steps newest first, the step the\r\nHead points at, what keeps it busy (null when idle) and whether a Restore is in progress.",
         "properties": {
           "busy": {
             "oneOf": [
@@ -1966,6 +2023,7 @@
         "type": "object"
       },
       "HistoryMessage": {
+        "description": "`StepLanded` | `StepChanged` | `StepClosed`: a step that appeared in a project's\r\nHistory, an open one a later commit extended, or one that closed, with its row as\r\n`GET /api/projects/{folder}/history` lists it. Sent to the project group. A step recorded by\r\none mutation lands and closes together, so both arrive back to back.\r\n`BusyChanged` carries no step: the project's busy reason (\"Attribution: 128 paragraphs left\")\r\nmoved, or went null when the project went idle. A busy project can't be viewed at a step.\r\n`Restoring`: a Restore of the project `Phase` started or finished; `Finished` carries\r\nthe Restore step it added, or no step when it added none or failed. Writes are refused in between.",
         "properties": {
           "folder": {
             "type": "string"
@@ -2019,6 +2077,7 @@
         ]
       },
       "HistoryStep": {
+        "description": "One <b>History step</b> as History lists it (context/history.md). int HistoryStep.Sequence is for\r\ndisplay only: the line of steps is the Guid? HistoryStep.ParentStepId chain from the Head, so nothing\r\nassumes the highest sequence is the tip (ADR 0016).\r\nstring? HistoryStep.Note says what is unusual about the step, or is null: \"part 2\" when another commit\r\nsplit its scope, how a Background run ended early (\"212 of 340 paragraphs, cancelled\"), or\r\n\"interrupted\" when the app stopped while it was open — joined by \" · \", without brackets.DateTimeOffset? HistoryStep.EndedAt is when the step closed, or, while it is open, its last change. An\r\ninterrupted step keeps the time of its last change: when it really ended is not known.\r\nbool HistoryStep.IsOpen, not DateTimeOffset? HistoryStep.EndedAt, says whether it is open.HistoryStepKind HistoryStep.Kind says what opened the step, and StepAction? HistoryStep.Action what kind of action a\r\nrequest's or Background run's step is (null on the others): the History sheet picks a row's icon\r\nfrom them, never from the label, so renaming a label changes no icon.Guid? HistoryStep.RestoredFromStepId is the step a Restore step brought back; null for any other.\r\nbool HistoryStep.CantOpen marks a step that can no longer be opened (its old schema fails to migrate).",
         "properties": {
           "action": {
             "oneOf": [
@@ -2109,6 +2168,7 @@
         "type": "object"
       },
       "HistoryStepDto": {
+        "description": "One History step as `GET /history` lists it (`GET /history/{stepId}` answers one), plus\r\nRestorePreview, what a Restore to it would cost now — null for a step that can't be\r\nopened, and so can't be restored.",
         "properties": {
           "action": {
             "oneOf": [
@@ -2211,6 +2271,7 @@
         "type": "object"
       },
       "HistoryStepKind": {
+        "description": "What opened a History step: a request, a Background run, a Restore, History starting, or an import.",
         "enum": [
           "Request",
           "BackgroundRun",
@@ -2251,6 +2312,7 @@
         "type": "object"
       },
       "ItemStatusEntry": {
+        "description": "What the audio queue and the review mirror say about one item.",
         "properties": {
           "audioVersion": {
             "format": "int64",
@@ -2299,6 +2361,7 @@
         "type": "object"
       },
       "ItemStatusMessage": {
+        "description": "Per-paragraph attribution and per-item audio status deltas for one project (debounced). A null entry\r\nmeans the queue forgot the paragraph or item.",
         "properties": {
           "folder": {
             "type": "string"
@@ -2338,6 +2401,7 @@
         "type": "object"
       },
       "ItemVoiceDto": {
+        "description": "The Voice a speech item will be spoken in. string? ItemVoiceDto.VoiceName is null when no Voice\r\nresolves; string? ItemVoiceDto.NarratedBy is the linked narrator's name on a narration item. An entry of\r\n`GET …/nodes/Chapter/{id}/voices`.",
         "properties": {
           "narratedBy": {
             "type": [
@@ -2359,6 +2423,7 @@
         "type": "object"
       },
       "ItemsEnqueueRequest": {
+        "description": "The body of `POST …/audio/enqueue-items`: an explicit item selection or a single retry. Ids that name no item are ignored.",
         "properties": {
           "itemIds": {
             "items": {
@@ -2502,6 +2567,7 @@
         "type": "object"
       },
       "LiveSnapshot": {
+        "description": "Answer to `GetSnapshot`: singleton state plus one ProjectSnapshot per joined project.",
         "properties": {
           "assembly": {
             "$ref": "#/components/schemas/AssemblyState"
@@ -2551,6 +2617,7 @@
         ]
       },
       "LlmMessage": {
+        "description": "`Delta` is a 100 ms batch of thinking + content text. Stream group only.",
         "properties": {
           "configId": {
             "format": "int32",
@@ -2688,6 +2755,7 @@
       "LlmServerConfig": {
         "properties": {
           "apiKey": {
+            "description": "Optional bearer token sent as Authorization header.",
             "type": [
               "null",
               "string"
@@ -2697,10 +2765,12 @@
             "$ref": "#/components/schemas/LlmApiType"
           },
           "attributionBatchSize": {
+            "description": "Character paragraphs sent per attribution request. 1 = one paragraph per request;\r\ngreater values batch consecutive unassigned character paragraphs into a single prompt.",
             "format": "int32",
             "type": "integer"
           },
           "baseUrl": {
+            "description": "Server base URL, e.g. http://localhost:8080.",
             "type": "string"
           },
           "frequencyPenalty": {
@@ -2722,12 +2792,14 @@
             ]
           },
           "model": {
+            "description": "Optional model id. Omitted from the request when null/blank.",
             "type": [
               "null",
               "string"
             ]
           },
           "name": {
+            "description": "User-facing name for this configuration.",
             "type": "string"
           },
           "presencePenalty": {
@@ -2738,9 +2810,11 @@
             ]
           },
           "promptStyle": {
-            "$ref": "#/components/schemas/AttributionPromptStyle"
+            "$ref": "#/components/schemas/AttributionPromptStyle",
+            "description": "Which attribution prompt tier this server uses. Simple = explicit-tag-only prompt,\r\nfor small models that would otherwise guess a speaker instead of escalating."
           },
           "supportsModelSwitch": {
+            "description": "True when this endpoint can switch the loaded model on demand (llama.cpp router with\r\n`--models-max 1` autoload). Gates the switch-and-wait model-load path; non-switchable\r\nendpoints (remote OpenAI-compatible servers) leave this false.",
             "type": "boolean"
           },
           "temperature": {
@@ -2777,6 +2851,7 @@
         "type": "object"
       },
       "LlmTestMessage": {
+        "description": "How the LLM settings test send ended (Angular ticket 21), sent to the connection that started it.\r\nThe tokens themselves travel on `stream:llm`.",
         "properties": {
           "configId": {
             "format": "int32",
@@ -2809,6 +2884,7 @@
       "LlmTestRequest": {
         "properties": {
           "connectionId": {
+            "description": "The live hub connection that receives the run's `llmTest` message.",
             "type": [
               "null",
               "string"
@@ -2843,6 +2919,7 @@
         "type": "object"
       },
       "ManualImportRequest": {
+        "description": "`POST /api/projects/{folder}/import/manual` body: how to re-split the source file by hand\r\n(the manual reread dialog's form, on the wire). `volume` is read only when\r\n`hasMultipleVolumes`, `part` only when `hasMultipleParts`; `chapter` always.\r\n400 when a switched-on level lacks a rule.",
         "properties": {
           "chapter": {
             "oneOf": [
@@ -2891,6 +2968,7 @@
         "type": "object"
       },
       "NarrationReleasePreviewDto": {
+        "description": "NarrationReleasePreview on the wire: what a Release narration over the scope would write.\r\nParagraphs are the paragraphs it releases and ItemsWithAudio the\r\nitems whose audio it discards. For a Chapter or Part, SpeechMarkers are the markers\r\nthat passed (count descending, then marker); empty for a Paragraph and when nothing passes.",
         "properties": {
           "itemsWithAudio": {
             "format": "int32",
@@ -2915,6 +2993,7 @@
         "type": "object"
       },
       "NarrationReleasePreviewRequest": {
+        "description": "The body of `POST …/narration/release-preview`: the scope a Release narration would cover; the same\r\nshape as the command, minus its type.",
         "properties": {
           "nodeId": {
             "format": "uuid",
@@ -2931,6 +3010,7 @@
         "type": "object"
       },
       "NarrationReleaseScope": {
+        "description": "Where a ReleaseNarrationCommand reaches. Its own enum rather than\r\nBookNodeLevel: that one has Volume, and a whole-book release is excluded on purpose.",
         "enum": [
           "Part",
           "Chapter",
@@ -2938,6 +3018,7 @@
         ]
       },
       "NarratorDto": {
+        "description": "Who narrates the book, projected from NarratorIdentity — the raw link\r\ncolumn never goes on the wire. Unlinked serialises as\r\nNarratorIdentity NarratorIdentity.Unlinked (the seed row's id, \"Narrator\", false), so\r\nthere is no null case at either end.",
         "properties": {
           "characterId": {
             "format": "uuid",
@@ -2969,6 +3050,7 @@
         "type": "object"
       },
       "NodeChildrenDto": {
+        "description": "Exactly one of the three lists is present, chosen by the requested level.",
         "properties": {
           "chapters": {
             "items": {
@@ -3045,6 +3127,7 @@
         "type": "object"
       },
       "NodeKind": {
+        "description": "Which kind of node an InsertNodeCommand anchors on. Also the JSON wire values.",
         "enum": [
           "Volume",
           "Part",
@@ -3054,6 +3137,7 @@
         ]
       },
       "NodeStatusMessage": {
+        "description": "Per-node roll-up deltas for one project (debounced, group `project:{folder}`). A null value\r\nmeans the node no longer rolls up (the folder was cleared or re-seeded without it).",
         "properties": {
           "folder": {
             "type": "string"
@@ -3084,6 +3168,7 @@
         "type": "object"
       },
       "NodeStatusSummaryDto": {
+        "description": "NodeStatusSummary on the wire: paragraph counts under one volume/part/chapter. The\r\nservice's value is a struct, which the document can only describe with every field optional.",
         "properties": {
           "attributionProcessing": {
             "type": "boolean"
@@ -3119,6 +3204,7 @@
         "type": "object"
       },
       "NotTheSameRequest": {
+        "description": "Not the same: a suggested cell (`seriesCharacterId`, `folder`, `characterId`) or a suggested row (`members`).",
         "properties": {
           "characterId": {
             "format": "uuid",
@@ -3153,6 +3239,7 @@
         "type": "object"
       },
       "ParagraphAttributionStatusDto": {
+        "description": "Queue state only. Attribution results are per item now — read them from the book endpoint's\r\nparagraph items, which carry the stamped character.",
         "properties": {
           "outcome": {
             "oneOf": [
@@ -3182,6 +3269,7 @@
         "type": "object"
       },
       "ParagraphContextDto": {
+        "description": "A paragraph with its nearest neighbours in the same chapter, nearest last in IReadOnlyList&lt;ContextParagraphDto&gt; ParagraphContextDto.Before and first in IReadOnlyList&lt;ContextParagraphDto&gt; ParagraphContextDto.After.",
         "properties": {
           "after": {
             "items": {
@@ -3207,6 +3295,7 @@
         "type": "object"
       },
       "ParagraphDto": {
+        "description": "bool ParagraphDto.IsPauseParagraph: no items, or a single pause item.",
         "properties": {
           "id": {
             "format": "uuid",
@@ -3230,6 +3319,7 @@
         "type": "object"
       },
       "ParagraphItemDto": {
+        "description": "string ParagraphItemDto.OrderKey is the item's fractional position key within its paragraph (items\r\narrive already in that order). ApiItemType ParagraphItemDto.ItemType stays for older clients; new ones read\r\nbool ParagraphItemDto.IsPause and the speaker.",
         "properties": {
           "audioFileName": {
             "type": [
@@ -3313,6 +3403,7 @@
         ]
       },
       "ParagraphRefDto": {
+        "description": "A Character paragraph and the nodes it rolls up into — what a selection holds per row. An entry of\r\n`GET …/nodes/{level}/{id}/paragraph-ids`.",
         "properties": {
           "chapterId": {
             "format": "uuid",
@@ -3340,6 +3431,7 @@
         "type": "object"
       },
       "ParagraphStatusEntry": {
+        "description": "What the attribution queue currently says about one paragraph; null fields mean \"nothing\".",
         "properties": {
           "outcome": {
             "oneOf": [
@@ -3369,6 +3461,7 @@
         "type": "object"
       },
       "ParagraphTtsServiceConfig": {
+        "description": "A configured paragraph-TTS backend. Common identity lives in columns; all\r\nbackend-specific settings are serialized into string ParagraphTtsServiceConfig.SettingsJson,\r\nkeyed by ParagraphTtsServiceType ParagraphTtsServiceConfig.Type. New backend types stay additive.",
         "properties": {
           "enabledStepIds": {
             "items": {
@@ -3418,6 +3511,7 @@
         "type": "object"
       },
       "ParagraphTtsServiceType": {
+        "description": "Selects the paragraph-TTS backend and its settings shape.",
         "enum": [
           "VoxCpm2",
           "Chatterbox",
@@ -3426,6 +3520,7 @@
         ]
       },
       "ParagraphTtsSettingsSchema": {
+        "description": "The fields a TTS provider type exposes, with the recommended default per field.",
         "properties": {
           "fields": {
             "items": {
@@ -3444,6 +3539,7 @@
         "type": "object"
       },
       "ParagraphsEnqueueRequest": {
+        "description": "The body of `POST …/attribution/enqueue-paragraphs`: an explicit selection. Ids that are not Character paragraphs are ignored.",
         "properties": {
           "paragraphIds": {
             "items": {
@@ -3459,6 +3555,7 @@
         "type": "object"
       },
       "PauseDurationsDto": {
+        "description": "The assembler's per-kind silences, as one object so a card saves them together;\r\n`PUT /api/settings/audio-processing/pauses` takes the same shape.",
         "properties": {
           "chapterMs": {
             "format": "int32",
@@ -3491,6 +3588,7 @@
         "type": "object"
       },
       "Placement": {
+        "description": "Where an InsertNodeCommand puts its new node: Placement.Before / Placement.After\r\nname a sibling at the anchor's own level, Placement.AtStart / Placement.AtEnd a first or\r\nlast child one level down — never two levels down. The member names are also the JSON wire values.",
         "enum": [
           "Before",
           "After",
@@ -3508,6 +3606,7 @@
           },
           "thinking": {
             "default": false,
+            "description": "Let the model think before planning — slower, better on vague instructions.",
             "type": "boolean"
           }
         },
@@ -3517,6 +3616,7 @@
         "type": "object"
       },
       "PlanBookEditResponse": {
+        "description": "Status is the planner's EditPlanStatus, or `NoTargets` when the\r\nplan parsed but matched nothing. Only `Ok` carries a Program, the opaque session\r\nid every later call names. Transform is the plan's TransformKind: only\r\n`Llm` plans send requests per item, so only they have a RequestCount above 0\r\n(the LLM requests the proposal will send) and offer per-row retries.",
         "properties": {
           "program": {
             "type": [
@@ -3577,6 +3677,7 @@
         "type": "object"
       },
       "PreflightConflictDto": {
+        "description": "A running GPU service the task does not need; stopped first to free VRAM.",
         "properties": {
           "name": {
             "type": "string"
@@ -3592,6 +3693,7 @@
         "type": "object"
       },
       "PreflightMessage": {
+        "description": "One pre-flight run (Angular ticket 25), sent to the connection that started it. `Stage`\r\ncarries a service and its stage; `Done` carries `Ok` and, on failure, the summary\r\n`Reason`. `Run` is the id the 202 answered with.",
         "properties": {
           "error": {
             "type": [
@@ -3652,6 +3754,7 @@
         ]
       },
       "PreflightPlanDto": {
+        "description": "`ready` means nothing to start and nothing to stop: the task may run now.",
         "properties": {
           "conflicts": {
             "items": {
@@ -3679,6 +3782,7 @@
       "PreflightRunRequest": {
         "properties": {
           "connectionId": {
+            "description": "The live hub connection that receives the run's `preflight` messages.",
             "type": [
               "null",
               "string"
@@ -3688,6 +3792,7 @@
         "type": "object"
       },
       "PreflightRunResponse": {
+        "description": "202 with the run id; every message of the run carries it.",
         "properties": {
           "run": {
             "type": "string"
@@ -3699,6 +3804,7 @@
         "type": "object"
       },
       "PreflightServiceDto": {
+        "description": "A required service that is not Ready, with its status.",
         "properties": {
           "name": {
             "type": "string"
@@ -3779,6 +3885,7 @@
         "type": "object"
       },
       "PreviewStageDto": {
+        "description": "bool PreviewStageDto.Applied false means the step fell back to its input; string? PreviewStageDto.Reason says why.",
         "properties": {
           "applied": {
             "type": "boolean"
@@ -3923,6 +4030,7 @@
         "type": "object"
       },
       "ProjectSeries": {
+        "description": "The series a project is in, as its project reads show it.",
         "properties": {
           "name": {
             "type": "string"
@@ -3944,6 +4052,7 @@
         "type": "object"
       },
       "ProjectSnapshot": {
+        "description": "Everything a project group member needs on join: current revision plus full status maps. Answers\r\n`JoinProject`; also an entry of `LiveSnapshot.projects`.",
         "properties": {
           "folder": {
             "type": "string"
@@ -4007,6 +4116,7 @@
         "type": "object"
       },
       "ProjectStatusDto": {
+        "description": "The whole-project roll-up behind the pipeline stepper and the reader tree badges.\r\nIReadOnlyDictionary&lt;string, NodeStatusSummaryDto&gt; ProjectStatusDto.Nodes is keyed by Volume/Part/Chapter id and is the same map the live hub's\r\n`nodeStatus` deltas patch; IReadOnlyList&lt;Guid&gt; ProjectStatusDto.VolumeIds are in book order. IReadOnlyDictionary&lt;PipelineStep, StepCheckpointDto&gt; ProjectStatusDto.Checkpoints\r\nholds only the steps the user confirmed or skipped, keyed by step id. Served by\r\n`GET /api/projects/{folder}/status`. Item counts are items; Attribution,\r\nAudio and Review count paragraphs, like the node summaries.\r\nRevision is the book revision the reads started at.",
         "properties": {
           "attribution": {
             "$ref": "#/components/schemas/AttributionCountsDto"
@@ -4082,6 +4192,7 @@
         "type": "object"
       },
       "ProjectSummary": {
+        "description": "One row of the project list (`GET /api/projects`). BookFileType? ProjectSummary.FileType is null for a folder\r\nwhose DB could not be opened.",
         "properties": {
           "audioItemDone": {
             "format": "int32",
@@ -4126,7 +4237,8 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/ProjectSeries"
+                "$ref": "#/components/schemas/ProjectSeries",
+                "description": "The series the project is in, or null. Filled in by the API from the series registries."
               }
             ]
           },
@@ -4148,6 +4260,7 @@
         "type": "object"
       },
       "PromptCatalogEntry": {
+        "description": "One prompt kind as the settings pages show it; `Template` is the resolved text.",
         "properties": {
           "defaultTemplate": {
             "type": "string"
@@ -4156,6 +4269,7 @@
             "type": "string"
           },
           "expectedResponse": {
+            "description": "The JSON shape the LLM must answer with; null for a plain-text prompt (voice).",
             "type": [
               "null",
               "string"
@@ -4168,18 +4282,21 @@
             "type": "string"
           },
           "template": {
+            "description": "The stored override, else DefaultTemplate.",
             "type": "string"
           },
           "title": {
             "type": "string"
           },
           "tokens": {
+            "description": "Placeholder names without braces (`book_title`).",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "warnings": {
+            "description": "Compatibility warnings, such as \"Stored override missing …\".",
             "items": {
               "type": "string"
             },
@@ -4233,6 +4350,7 @@
         "type": "object"
       },
       "PronunciationDeleted": {
+        "description": "`DELETE …/pronunciations/{id}`: what deleting an entry cost, counted as for\r\nPronunciationSaved.",
         "properties": {
           "audioDiscardCount": {
             "format": "int32",
@@ -4250,6 +4368,7 @@
         "type": "object"
       },
       "PronunciationDraftRequest": {
+        "description": "`POST …/pronunciations/impact` body: no Id adds, an Id edits\r\nthat entry, Delete deletes it.",
         "properties": {
           "delete": {
             "default": false,
@@ -4283,6 +4402,7 @@
         "type": "object"
       },
       "PronunciationEntry": {
+        "description": "One Pronunciation and its reach in the book (`GET /api/projects/{folder}/pronunciations`): how\r\noften its written form matches, in how many items, and how many of those items have audio.",
         "properties": {
           "id": {
             "format": "uuid",
@@ -4318,6 +4438,7 @@
         "type": "object"
       },
       "PronunciationImpactReport": {
+        "description": "What saving a draft would do: its reach (matches, items, items with audio — for a delete, the\r\nentry's reach now), the audio a save discards, the entries it overlaps, the entry it duplicates,\r\nand every match in book order.",
         "properties": {
           "audioDiscardCount": {
             "format": "int32",
@@ -4370,6 +4491,7 @@
         "type": "object"
       },
       "PronunciationMatchInBook": {
+        "description": "One place the draft's written form matches: the item, where it is, and the sentence around it with\r\nwhere that sentence starts in the item's text (what a try-out names it by), the match's offsets in\r\nthat sentence, and the sentence's Spoken text with the drafted list applied, with where the match's\r\nspoken form sits in it (case carried over, as TTS will be asked to say it).",
         "properties": {
           "chapterId": {
             "format": "uuid",
@@ -4438,6 +4560,7 @@
         "type": "object"
       },
       "PronunciationOverlap": {
+        "description": "An entry whose written form holds the draft's as whole words, or is held by it. The longer one wins\r\nwhere both match, so DraftWins is whether the draft's is the longer.",
         "properties": {
           "draftWins": {
             "type": "boolean"
@@ -4462,6 +4585,7 @@
         "type": "object"
       },
       "PronunciationRef": {
+        "description": "An entry of the list, as the impact of a draft names it.",
         "properties": {
           "id": {
             "format": "uuid",
@@ -4482,6 +4606,7 @@
         "type": "object"
       },
       "PronunciationSaved": {
+        "description": "A saved entry with its reach, and what saving it cost: AudioDiscardCount items lost\r\ntheir audio, and NeedsAudioCount spoken items now have none.",
         "properties": {
           "audioDiscardCount": {
             "format": "int32",
@@ -4527,6 +4652,7 @@
         "type": "object"
       },
       "PronunciationSpan": {
+        "description": "One span of an item's text the list matches: where it is, the entry it names, and where the\r\nsentence around it starts in the item's text (what a try-out names that sentence by).",
         "properties": {
           "itemId": {
             "format": "uuid",
@@ -4559,6 +4685,7 @@
         "type": "object"
       },
       "PronunciationSpanReport": {
+        "description": "The spans in some chapters, in book order, and the entries they name (each once, by written form):\r\n`GET …/pronunciations/matches?chapterIds=…`.",
         "properties": {
           "pronunciations": {
             "items": {
@@ -4589,6 +4716,7 @@
       "ProposeBookEditRequest": {
         "properties": {
           "connectionId": {
+            "description": "The live hub connection that receives the run's `bookEdit` messages.",
             "type": [
               "null",
               "string"
@@ -4624,6 +4752,7 @@
         "type": "object"
       },
       "QueueMessage": {
+        "description": "Both queues' roll-ups plus the attribution escalation banner (debounced, group `global`).",
         "properties": {
           "attribution": {
             "$ref": "#/components/schemas/AttributionQueueSnapshot"
@@ -4650,6 +4779,7 @@
         "type": "object"
       },
       "ReceiptEffects": {
+        "description": "BookMutationEffects on the wire, with IReadOnlyList&lt;BookFacets&gt; ReceiptEffects.Facets as a list of single facets\r\n(never `None` or `All`): a `[Flags]` value would travel as one comma-joined string the\r\ndocument can't describe.",
         "properties": {
           "changedNothing": {
             "type": "boolean"
@@ -4719,6 +4849,7 @@
         "type": "object"
       },
       "ReceiptMessage": {
+        "description": "BookMutationReceipt as JSON with the folder flattened; `originId` untouched.",
         "properties": {
           "effects": {
             "$ref": "#/components/schemas/ReceiptEffects"
@@ -4753,6 +4884,7 @@
         "type": "object"
       },
       "RecentAudioSampleDto": {
+        "description": "One row of the A/B preview picker: a generated item that still holds a Preview Source.",
         "properties": {
           "characterName": {
             "type": [
@@ -4813,12 +4945,14 @@
         "type": "object"
       },
       "ResolvedChainStepDto": {
+        "description": "A rung as attribution runs it.",
         "properties": {
           "config": {
             "$ref": "#/components/schemas/LlmServerConfig"
           },
           "promptStyle": {
-            "$ref": "#/components/schemas/AttributionPromptStyle"
+            "$ref": "#/components/schemas/AttributionPromptStyle",
+            "description": "The <em>effective</em> style — the rung's own when it set one, else the config's."
           },
           "thinking": {
             "type": "boolean"
@@ -4838,6 +4972,7 @@
         ]
       },
       "RestorePreviewDto": {
+        "description": "What restoring a step would cost now: the items that would lose their audio.",
         "properties": {
           "audioDiscardCount": {
             "format": "int32",
@@ -4850,6 +4985,7 @@
         "type": "object"
       },
       "RestoreResultDto": {
+        "description": "A Restore's answer (`POST /api/projects/{folder}/history/{stepId}/restore`): the Restore step it\r\nadded — null when the project already was that state, so nothing changed — the items whose audio\r\nit discarded, and the items without audio after it, the brought-back ones included: what needs\r\ngenerating.",
         "properties": {
           "audioDiscardCount": {
             "format": "int32",
@@ -4908,6 +5044,7 @@
         ]
       },
       "SemanticSimilaritySettingsSchema": {
+        "description": "The fields a semantic-similarity provider type exposes beyond its base URL.",
         "properties": {
           "fields": {
             "items": {
@@ -4984,6 +5121,7 @@
         "type": "object"
       },
       "SeriesCastCellDto": {
+        "description": "One book's cell: the Character linked there, a suggestion, or neither (an empty cell, with a picker).",
         "properties": {
           "folder": {
             "type": "string"
@@ -5017,6 +5155,7 @@
         "type": "object"
       },
       "SeriesCastDto": {
+        "description": "The series cast board (#213) from `GET /api/series/{id}/cast`: books in position order, one row per\r\nSeries character, with its Link suggestions (#212), computed live: each cell's\r\n`suggested`, the IReadOnlyList&lt;SeriesSuggestedRowDto&gt; SeriesCastDto.SuggestedRows, each unlinked Character's `nameMatches`\r\n(for an ambiguous cell's picker) and int SeriesCastDto.SuggestionCount, suggested cells and rows together.",
         "properties": {
           "books": {
             "items": {
@@ -5093,6 +5232,7 @@
         ]
       },
       "SeriesCharacterBookDto": {
+        "description": "A linked book, its Character and its own default Voice; bool SeriesCharacterBookDto.Differs: its Voices are not the series copy (#222).",
         "properties": {
           "characterId": {
             "format": "uuid",
@@ -5134,6 +5274,7 @@
         "type": "object"
       },
       "SeriesCharacterDto": {
+        "description": "The inline series Voice editor (#213), from `GET /api/series/{id}/characters/{scId}`.\r\nVoices come from the series copy, whose folder takes the editor's writes;\r\nBooks are the linked books; DeleteBlocks holds the refused\r\ndeletes, keyed by Voice Id.",
         "properties": {
           "books": {
             "items": {
@@ -5182,6 +5323,7 @@
         "type": "object"
       },
       "SeriesDto": {
+        "description": "A series on `GET /api/series`: its Books (folder, position) in position order.",
         "properties": {
           "books": {
             "items": {
@@ -5209,6 +5351,7 @@
         "type": "object"
       },
       "SeriesLinkPreviewDto": {
+        "description": "The Link confirm's gains (#208, 7): the Voice names this book gains, and those the other linked books gain.",
         "properties": {
           "bookGains": {
             "items": {
@@ -5250,6 +5393,7 @@
         "type": "object"
       },
       "SeriesMemberDto": {
+        "description": "A book's Character in a suggested row (#212), as Share and link and Not the same take it.",
         "properties": {
           "characterId": {
             "format": "uuid",
@@ -5268,6 +5412,7 @@
         "type": "object"
       },
       "SeriesMembersRequest": {
+        "description": "Share and link, or its preview: a suggested row's members.",
         "properties": {
           "members": {
             "items": {
@@ -5282,6 +5427,7 @@
         "type": "object"
       },
       "SeriesMessage": {
+        "description": "A series registry changed, or the series was deleted (#213): a signal to read `/api/series` again,\r\nwith no payload, debounced 250 ms per series, sent to every client (group `global`). A delete inside\r\nthe window wins over the changes before it.",
         "properties": {
           "kind": {
             "$ref": "#/components/schemas/SeriesChangeKind"
@@ -5313,6 +5459,7 @@
         "type": "object"
       },
       "SeriesPosterDto": {
+        "description": "The series card's image (#219): string? SeriesPosterDto.Url is null when SeriesPosterSource SeriesPosterDto.Source is None;\r\ndecimal? SeriesPosterDto.CoverPosition is the book whose cover stands in, only for Cover.",
         "properties": {
           "coverPosition": {
             "format": "double",
@@ -5346,6 +5493,7 @@
         ]
       },
       "SeriesResolvePreviewDto": {
+        "description": "A push or take's confirm: each book that would lose Voices, and the positional rules on them (#222).",
         "properties": {
           "losses": {
             "items": {
@@ -5360,6 +5508,7 @@
         "type": "object"
       },
       "SeriesResolveRequest": {
+        "description": "Push or take: the book whose Voices are pushed, or that takes the series copy.",
         "properties": {
           "folder": {
             "type": [
@@ -5371,6 +5520,7 @@
         "type": "object"
       },
       "SeriesShareAndLinkPreviewDto": {
+        "description": "Share and link's confirm: the Voice names each book gains, lowest position first.",
         "properties": {
           "books": {
             "items": {
@@ -5405,6 +5555,7 @@
         "type": "object"
       },
       "SeriesSuggestedRowDto": {
+        "description": "A suggested row (#223): unlinked Characters of two or more books whose names match one-to-one;\r\nLabel is the first one's name.",
         "properties": {
           "label": {
             "type": "string"
@@ -5423,6 +5574,7 @@
         "type": "object"
       },
       "SeriesUnlinkedCharacterDto": {
+        "description": "A book's unlinked Character, for the pickers; IReadOnlyList&lt;Guid&gt; SeriesUnlinkedCharacterDto.NameMatches: the Series characters its names match (#212).",
         "properties": {
           "characterId": {
             "format": "uuid",
@@ -5451,6 +5603,7 @@
         "type": "object"
       },
       "SeriesVoiceDeleteBlockDto": {
+        "description": "Why a Voice can't be deleted, and the books that stop it.",
         "properties": {
           "books": {
             "items": {
@@ -5489,6 +5642,7 @@
         "type": "object"
       },
       "SeriesVoiceDeleteReason": {
+        "description": "Why a shared Voice can't be deleted (#205 item 9).",
         "enum": [
           "PositionalRules",
           "LastVoice"
@@ -5522,6 +5676,7 @@
         "type": "object"
       },
       "ServiceStatusMessage": {
+        "description": "A managed service's status as last observed, pushed after every probe, lifecycle op and watchdog\r\ntransition so chips follow without polling (Angular ticket 25). `Op` with `Ok` /\r\n`Error` is set only when a lifecycle op produced the observation — that is what a client toasts.",
         "properties": {
           "error": {
             "type": [
@@ -5574,6 +5729,7 @@
         "type": "object"
       },
       "SetCheckpointRequest": {
+        "description": "`PUT /api/projects/{folder}/checkpoints/{step}` body: `Open` deletes the row.",
         "properties": {
           "state": {
             "oneOf": [
@@ -5592,6 +5748,7 @@
         "type": "object"
       },
       "SetPronunciationRequest": {
+        "description": "Body of `POST …/pronunciations` and `PUT …/pronunciations/{id}`.",
         "properties": {
           "spokenForm": {
             "type": [
@@ -5613,6 +5770,7 @@
         "type": "object"
       },
       "SettingsChangedMessage": {
+        "description": "Which settings area changed, so other clients refresh their list.",
         "properties": {
           "area": {
             "type": "string"
@@ -5624,6 +5782,7 @@
         "type": "object"
       },
       "SettingsFieldDto": {
+        "description": "One editable field of a provider's settings record. string SettingsFieldDto.Key is the JSON property\r\nname the provider's `*Settings` record serialises to, so a sparse patch of these keys\r\nmerges straight over the config's `settingsJson` (VoiceDesignSettingsMerge).\r\nA number with both double? SettingsFieldDto.Min and double? SettingsFieldDto.Max renders as a slider. A\r\nbool SettingsFieldDto.Nullable number may be left blank, meaning \"use the server's default\".",
         "properties": {
           "default": {},
           "help": {
@@ -5636,6 +5795,7 @@
             "type": "string"
           },
           "kind": {
+            "description": "One of `number` | `boolean` | `enum` | `string` | `text` (a string on the host, not an enum).",
             "type": "string"
           },
           "label": {
@@ -5690,6 +5850,7 @@
         "type": "object"
       },
       "SettingsOptionDto": {
+        "description": "One choice of an `enum` field; a null string? SettingsOptionDto.Label shows the value.",
         "properties": {
           "label": {
             "type": [
@@ -5708,6 +5869,7 @@
         "type": "object"
       },
       "SetupCheckGroup": {
+        "description": "The area a check sits under in the report's one table.",
         "enum": [
           "WorkspaceAndTools",
           "AiConfigs",
@@ -5715,6 +5877,7 @@
         ]
       },
       "SetupCheckLane": {
+        "description": "Where a Full check step runs: on this machine, in a CPU container, or in the one GPU container that fits.",
         "enum": [
           "Local",
           "Cpu",
@@ -5722,6 +5885,7 @@
         ]
       },
       "SetupCheckMessage": {
+        "description": "The Setup check's Full check, sent to every client (group `global`) so the page, the app-bar\r\nshield and every tab read one source. Each carries the whole report: the rows (the current step's\r\nare Checking) and `FullRun`; `Done` carries the final one.",
         "properties": {
           "kind": {
             "$ref": "#/components/schemas/SetupCheckMessageKind"
@@ -5743,6 +5907,7 @@
         ]
       },
       "SetupCheckReport": {
+        "description": "The Setup check report (`GET /api/setup-check`): the rows in table order and when each tier\r\nlast ran (null: not yet).\r\nbool SetupCheckReport.FirstRun: this start created app.db, so the web app opens on the Setup check.\r\nDateTimeOffset SetupCheckReport.StartedAt: when this host started; the start banner's dismissal lasts for it.\r\nbool SetupCheckReport.NoWorkspace: this host started without a usable Workspace; every other API call\r\nis refused and the web app shows only the Setup check until the app restarts.\r\nSetupFullRun? SetupCheckReport.FullRun: the Full check going on, null when none is. int SetupCheckReport.FullCheckEstimateSeconds:\r\nhow long a Full check is likely to take, for its confirm. string? SetupCheckReport.PutBack: after a Full\r\ncheck, what it did with the containers it drove (\"Put back: read2me-whisper stopped again.\").",
         "properties": {
           "firstRun": {
             "type": "boolean"
@@ -5809,6 +5974,7 @@
         "type": "object"
       },
       "SetupCheckResult": {
+        "description": "A check's one result. SetupCheckResult.Checking is transient, while a run is on that row.",
         "enum": [
           "Passed",
           "Failed",
@@ -5819,6 +5985,7 @@
         ]
       },
       "SetupCheckRow": {
+        "description": "One check: what the app expected and what it found. A string? SetupCheckRow.Note never changes the\r\nresult. Every row carries a fix hint; the page shows it only for rows that aren't Passed or Not used.\r\nbool SetupCheckRow.Managed: the app can start and restart what the row checks — a docker AI service,\r\nor a config whose every URL is one. False for the Workspace and tools, and for a config on a\r\nURL the app doesn't manage. SetupRerun? SetupCheckRow.Rerun: what re-running this one check takes, null\r\nwhen it can't be (a Quick-tier row, or a config with no active one).",
         "properties": {
           "expected": {
             "type": "string"
@@ -5880,12 +6047,14 @@
         "type": "object"
       },
       "SetupCheckTier": {
+        "description": "Which check judges the row: the Quick check reads, the Full check sends real requests.",
         "enum": [
           "Quick",
           "Full"
         ]
       },
       "SetupFixHint": {
+        "description": "Where to go next: one sentence, plus a link to the Settings section that owns the value and/or\r\na command or file path to copy, for things outside the app; null when there is none.",
         "properties": {
           "copy": {
             "type": [
@@ -5915,6 +6084,7 @@
         "type": "object"
       },
       "SetupFullRun": {
+        "description": "The Full check going on: step int SetupFullRun.Step of int SetupFullRun.Total, its lane and what it is\r\ndoing (\"Encoding a 1 s tone to .m4b\"). bool SetupFullRun.Cancelling: a cancel was asked for, so the\r\nrun stops once this step ends.",
         "properties": {
           "cancelling": {
             "type": "boolean"
@@ -5944,6 +6114,7 @@
         "type": "object"
       },
       "SetupRerun": {
+        "description": "Re-running one Full-tier check. bool SetupRerun.Gpu: it drives a GPU container, so it stops the\r\none running and loads a model, and the web app confirms first.",
         "properties": {
           "gpu": {
             "type": "boolean"
@@ -5955,6 +6126,7 @@
         "type": "object"
       },
       "SetupSettingsLink": {
+        "description": "The in-app Settings section that owns the value: an app-relative path and its label.",
         "properties": {
           "label": {
             "type": "string"
@@ -6038,6 +6210,7 @@
         "type": "object"
       },
       "SpeechMarkerCountDto": {
+        "description": "A speech marker a Chapter or Part release detected, as written (`Q.`, `Darcy:`, `—…—`),\r\nand how many paragraphs it would release.",
         "properties": {
           "marker": {
             "type": "string"
@@ -6054,6 +6227,7 @@
         "type": "object"
       },
       "SplitRuleRequest": {
+        "description": "One level's split rule. `mode` is `Prefix`, `Arabic` or `Roman`; `prefix` is\r\nrequired (non-blank) when `mode` is `Prefix`, ignored otherwise.",
         "properties": {
           "mode": {
             "type": [
@@ -6074,6 +6248,7 @@
         "type": "object"
       },
       "StartedResponse": {
+        "description": "A 202 answer for work the host started in the background: progress goes over the live hub.",
         "properties": {
           "started": {
             "type": "boolean"
@@ -6101,6 +6276,7 @@
         ]
       },
       "StepCatalogEntryDto": {
+        "description": "One step of the voice editor's checklist: what it is, the dials it exposes (same field shape\r\nas the provider settings schemas, so `r2m-settings-form` renders them) and the values\r\nthose dials start at. Only dial keys appear in IReadOnlyDictionary&lt;string, JsonElement&gt; StepCatalogEntryDto.Defaults; a step's non-dial\r\nsettings (silence-trim's output floor) are fixed server-side.",
         "properties": {
           "blurb": {
             "type": "string"
@@ -6131,6 +6307,7 @@
         "type": "object"
       },
       "StepCheckpointDto": {
+        "description": "A step's confirmed or skipped checkpoint as `/status` reports it; At is when,\r\nkept when the row goes stale.",
         "properties": {
           "at": {
             "format": "date-time",
@@ -6168,7 +6345,8 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/JsonElement"
+                "$ref": "#/components/schemas/JsonElement",
+                "description": "The card's <em>unsaved</em> settings payload."
               }
             ]
           }
@@ -6180,6 +6358,7 @@
         "type": "object"
       },
       "StepPreviewResponse": {
+        "description": "One rendered A/B preview. bool StepPreviewResponse.AppliedOk false means the step fell back, so the\r\nprocessed URL plays the unprocessed audio and string? StepPreviewResponse.Reason says why.\r\ndouble? StepPreviewResponse.RemovedMs is set only after a successful render — the trim card reads it.",
         "properties": {
           "appliedOk": {
             "type": "boolean"
@@ -6222,6 +6401,7 @@
         "type": "string"
       },
       "StructureAnchor": {
+        "description": "What a Structure rules entry is keyed by. A pause paragraph is a Paragraph to the commands\r\nbut its own anchor here: it takes no speech item at its start or end.",
         "enum": [
           "Volume",
           "Part",
@@ -6232,6 +6412,7 @@
         ]
       },
       "StructurePlacementDto": {
+        "description": "One placement an anchor allows: the kind it creates (Creates), and whether that node\r\nneeds text (TextRequired).",
         "properties": {
           "creates": {
             "$ref": "#/components/schemas/NodeKind"
@@ -6251,6 +6432,7 @@
         "type": "object"
       },
       "StructureRuleDto": {
+        "description": "StructureRule on the wire, its enums by name. NodeKind is what a command\r\nnames the anchor as; MinimumCount is how many of this kind the book always keeps\r\n(Volume: 1).",
         "properties": {
           "anchor": {
             "$ref": "#/components/schemas/StructureAnchor"
@@ -6278,8 +6460,10 @@
         "type": "object"
       },
       "TextStepDto": {
+        "description": "One text-processing step a TTS config may enable.",
         "properties": {
           "builtIn": {
+            "description": "False for one of the config's own substitutions, which the catalog lists after the built-ins.",
             "type": "boolean"
           },
           "description": {
@@ -6289,6 +6473,7 @@
             "type": "string"
           },
           "options": {
+            "description": "The step's own switches, stored beside the config (`toSentenceCaseConfig`); null when it has none.",
             "items": {
               "$ref": "#/components/schemas/SettingsFieldDto"
             },
@@ -6358,6 +6543,7 @@
         "type": "object"
       },
       "ThemeSelectionUpdateRequest": {
+        "description": "Both fields optional, so a client can flip one without knowing the other.",
         "properties": {
           "followSystemPreference": {
             "type": [
@@ -6376,8 +6562,10 @@
         "type": "object"
       },
       "ThroughputSnapshot": {
+        "description": "A read-only view of the current (or last) Throughput Run, pulled by whoever is painting.\r\nAbsence is distinguishable from zero at every point: a figure that could not be measured is\r\nnull, and a run that never happened has bool ThroughputSnapshot.HasRun false.",
         "properties": {
           "generationRate": {
+            "description": "The live figure: output tok/s over a sliding TimeSpan ThroughputSnapshot.GenerationRateWindow of the\r\nin-flight request, differenced from consecutive cumulative readings. Null whenever nothing\r\nis currently measurable — between requests before the first token, and always once the run\r\nhas ended, because a frozen \"now 87.3 tok/s\" beside an idle queue reads as current and is\r\na lie. It says <i>steady vs stuttering</i> and nothing else; the headline is\r\ndouble? ThroughputSnapshot.RunThroughput.",
             "format": "double",
             "type": [
               "null",
@@ -6385,6 +6573,7 @@
             ]
           },
           "generationRateHistory": {
+            "description": "The sparkline's history: exactly int ThroughputSnapshot.HistoryBuckets buckets of\r\nint ThroughputSnapshot.HistoryBucketMsms, oldest first, spanning the last\r\nTimeSpan ThroughputSnapshot.HistorySpan of the run. A bucket nothing was measured in is null — an empty\r\nbucket is not a `0` bucket. All null once the run has ended, or before it has\r\ngenerated anything.",
             "items": {
               "format": "double",
               "type": [
@@ -6395,18 +6584,22 @@
             "type": "array"
           },
           "hasRun": {
+            "description": "Whether there is a run to report at all. False before the first RunStarted;\r\ntrue from then on, including after the run ends, because the total is at its most readable\r\nexactly when it becomes final.",
             "type": "boolean"
           },
           "isRunActive": {
+            "description": "Whether the run is still open. Goes false at RunEnded, at which point live\r\nfigures blank while the headline and breakdown below persist — a frozen \"now 87.3 tok/s\"\r\nbeside an idle queue reads as current and is a lie.",
             "type": "boolean"
           },
           "perConfig": {
+            "description": "The run's per-config breakdown, one row per config id that served a request, so an\r\nescalation from a 4b to a 26b doesn't blend into one meaningless average.",
             "items": {
               "$ref": "#/components/schemas/ConfigThroughput"
             },
             "type": "array"
           },
           "runThroughput": {
+            "description": "The headline: `Σ predicted_n ÷ Σ predicted_ms` across every request in the run,\r\nsumming the primitives and dividing once at the end. Null when nothing was measurable.",
             "format": "double",
             "type": [
               "null",
@@ -6466,19 +6659,23 @@
         "type": "object"
       },
       "TranscriptionServiceConfig": {
+        "description": "A configured transcription (speech-to-text) backend. Common identity lives\r\nin columns; all backend-specific settings are serialized into\r\nstring TranscriptionServiceConfig.SettingsJson, keyed by TranscriptionServiceType TranscriptionServiceConfig.Type. This keeps new\r\nbackend types additive — no schema change per type.",
         "properties": {
           "id": {
             "format": "int32",
             "type": "integer"
           },
           "name": {
+            "description": "User-facing name for this configuration.",
             "type": "string"
           },
           "settingsJson": {
+            "description": "Serialized type-specific settings (e.g. base URL, API token).",
             "type": "string"
           },
           "type": {
-            "$ref": "#/components/schemas/TranscriptionServiceType"
+            "$ref": "#/components/schemas/TranscriptionServiceType",
+            "description": "Selects the backend implementation and the settings shape."
           }
         },
         "required": [
@@ -6490,11 +6687,13 @@
         "type": "object"
       },
       "TranscriptionServiceType": {
+        "description": "Discriminator selecting which transcription backend a\r\nTranscriptionServiceConfig targets. The chosen type also\r\ndetermines the shape of the type-specific settings blob.",
         "enum": [
           "LocalWhisper"
         ]
       },
       "TranscriptionSettingsSchema": {
+        "description": "The fields a transcription provider type exposes beyond its base URL.",
         "properties": {
           "fields": {
             "items": {
@@ -6532,6 +6731,7 @@
         ]
       },
       "TryPronunciationRequest": {
+        "description": "`POST …/pronunciations/try` body, answered with the WAV. A try-out: the sentence of\r\nItemId starting at SentenceStart (an impact match's `sentenceStart`), with Draft in its entry's place unless AsWritten.\r\nVoice is `{ \"voiceId\": \"…\" }` or `\"item\"` (the item's own resolved voice, also when left out).",
         "properties": {
           "asWritten": {
             "type": "boolean"
@@ -6575,6 +6775,7 @@
         "type": "object"
       },
       "UpdateProjectRequest": {
+        "description": "`PATCH /api/projects/{folder}` body: every field optional; an omitted or null field is left as it is.",
         "properties": {
           "author": {
             "type": [
@@ -6726,6 +6927,7 @@
         "type": "object"
       },
       "VoiceBatchState": {
+        "description": "Voice batch runner state for the connect-time snapshot.",
         "properties": {
           "currentOperation": {
             "type": [
@@ -6820,6 +7022,7 @@
         "type": "object"
       },
       "VoiceDesignSampleTextRequest": {
+        "description": "Null, blank or the default text clears the override.",
         "properties": {
           "text": {
             "type": [
@@ -6831,15 +7034,18 @@
         "type": "object"
       },
       "VoiceDesignSampleTextResponse": {
+        "description": "The voice-design sample text: the stored override, else the built-in default.",
         "properties": {
           "default": {
             "type": "string"
           },
           "maxLength": {
+            "description": "The longest override a PUT accepts: every designed voice speaks this text, so it bounds the take's length (the Reference Limit).",
             "format": "int32",
             "type": "integer"
           },
           "text": {
+            "description": "The stored override; null when the built-in Default is in use.",
             "type": [
               "null",
               "string"
@@ -6854,6 +7060,7 @@
         "type": "object"
       },
       "VoiceDesignServiceConfig": {
+        "description": "A configured voice-design backend. Common identity lives in columns; all\r\nbackend-specific settings are serialized into string VoiceDesignServiceConfig.SettingsJson,\r\nkeyed by VoiceDesignServiceType VoiceDesignServiceConfig.Type. New backend types stay additive.",
         "properties": {
           "id": {
             "format": "int32",
@@ -6878,6 +7085,7 @@
         "type": "object"
       },
       "VoiceDesignServiceType": {
+        "description": "Selects the voice-design backend and its settings shape.",
         "enum": [
           "VoxCpm2",
           "Qwen3",
@@ -6885,6 +7093,7 @@
         ]
       },
       "VoiceDesignSettingsSchema": {
+        "description": "The fields a voice-design provider type exposes, with the recommended default per field.",
         "properties": {
           "fields": {
             "items": {
@@ -6929,6 +7138,7 @@
         "type": "object"
       },
       "VoiceDto": {
+        "description": "A voice as the cast page shows it. bool VoiceDto.IsEdited is the on-disk invariant\r\n(bool IVoiceOriginalStore.Exists(ProjectFolderId folder, Guid characterId, Guid voiceId)): the audio has been through the voice editor, so\r\nfresh audio would discard that edit. The two override JSONs are sparse patches over the\r\nactive provider's settings, keyed as the provider's settings schema lists them.\r\ndouble? VoiceDto.ReferenceSeconds is the stored audio's length (null without audio), and\r\nstring? VoiceDto.ReferenceWarning is set when it is over the Reference Limit's soft limit.",
         "properties": {
           "audioFileName": {
             "type": [
@@ -7015,6 +7225,7 @@
         "type": "object"
       },
       "VoiceRuleDto": {
+        "description": "One voice rule as `GET …/characters/{id}/voice-rules` lists it, in evaluation order: the default\r\nrule first, then by Order. Levels are VoiceAnchorLevel names\r\n(null on the default rule and on an open \"from here on\" end); a dangling anchor names a\r\nnode that no longer exists, so its title is null. string VoiceRuleDto.Order is the fractional rank\r\nthe list is sorted by (lower first; the last passing rule wins).",
         "properties": {
           "fromDangling": {
             "type": "boolean"
@@ -7110,6 +7321,7 @@
         ]
       },
       "WatchdogKind": {
+        "description": "A watchdog transition; the snapshot keeps the last one per service.",
         "enum": [
           "RecoveryStarted",
           "ContainerRestarted",
@@ -9497,6 +9709,7 @@
               "schema": {
                 "properties": {
                   "designPrompt": {
+                    "description": "An unsaved prompt to design from instead of the stored one; it is stored with the take.",
                     "type": [
                       "null",
                       "string"

@@ -1,12 +1,7 @@
 import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
-import type {
-  Guid,
-  PreviewResponse,
-  PreviewStepRequest,
-  StepCatalogEntryDto,
-  VoiceDto,
-} from './dtos';
+import type { PreviewResponse, PreviewStepRequest, StepCatalogEntryDto, VoiceDto } from './schema';
+import type { Guid } from './dtos';
 import { projectUrl } from './projects-api';
 import { withViewedStep } from './step-view';
 

@@ -1,5 +1,5 @@
 /** RFC 7807 body the host returns for every non-2xx (`Results.Problem`, validation problems). */
-export interface ProblemDetails {
+interface ProblemDetails {
   type?: string;
   title?: string;
   status?: number;

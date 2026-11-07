@@ -1,4 +1,4 @@
-import type { NodeLevel } from '@app/api';
+import type { BookNodeLevel } from '@app/api';
 import { computed, signal } from '@app/core/signals';
 import {
   type ParagraphAncestry,
@@ -70,7 +70,7 @@ export class SelectionStore {
     this._totals.update((t) => ({ ...t, ...totals }));
   }
 
-  nodeState(level: NodeLevel, nodeId: string): TriState {
+  nodeState(level: BookNodeLevel, nodeId: string): TriState {
     return nodeState(this._selection(), level, nodeId, this._totals()[nodeId]);
   }
 

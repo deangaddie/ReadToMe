@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { PronunciationSpanReport } from '@app/api';
+import type { PronunciationSpanReport, BookFacets } from '@app/api';
 import { resetServices } from '@app/core/services';
-import type { BookFacets, Receipt } from '@app/live/live-messages';
+import type { Receipt } from '@app/live/live-messages';
 import { REFETCH_DEBOUNCE_MS } from '@app/shared/debounced';
 import { FakeApi, problem } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';

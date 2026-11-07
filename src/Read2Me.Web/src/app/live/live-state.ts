@@ -4,16 +4,6 @@
  * snapshot would say after the same event (LiveRelay.BuildSnapshot).
  */
 
-import {
-  AssemblyMessage,
-  AssemblyState,
-  ItemStatusMessage,
-  NodeStatusMessage,
-  ProjectSnapshot,
-  VoiceBatchMessage,
-  VoiceBatchState,
-} from './live-messages';
-
 export const IDLE_ASSEMBLY: AssemblyState = {
   isRunning: false,
   currentPhase: null,
@@ -148,3 +138,12 @@ export function applyItemStatus(project: ProjectSnapshot, m: ItemStatusMessage):
     items: mergeDeltas(project.items, m.items),
   };
 }
+import type {
+  AssemblyMessage,
+  AssemblyState,
+  ItemStatusMessage,
+  NodeStatusMessage,
+  ProjectSnapshot,
+  VoiceBatchMessage,
+  VoiceBatchState,
+} from '@app/api';

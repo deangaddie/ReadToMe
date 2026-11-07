@@ -41,7 +41,10 @@ namespace Read2Me.App.Api
     /// The whole-project roll-up behind the pipeline stepper and the reader tree badges.
     /// <see cref="Nodes"/> is keyed by Volume/Part/Chapter id and is the same map the live hub's
     /// <c>nodeStatus</c> deltas patch; <see cref="VolumeIds"/> are in book order. <see cref="Checkpoints"/>
-    /// holds only the steps the user confirmed or skipped, keyed by step id.
+    /// holds only the steps the user confirmed or skipped, keyed by step id. Served by
+    /// <c>GET /api/projects/{folder}/status</c>. Item counts are items; <paramref name="Attribution"/>,
+    /// <paramref name="Audio"/> and <paramref name="Review"/> count paragraphs, like the node summaries.
+    /// <paramref name="Revision"/> is the book revision the reads started at.
     /// </summary>
     public sealed record ProjectStatusDto(
         bool HasContent,

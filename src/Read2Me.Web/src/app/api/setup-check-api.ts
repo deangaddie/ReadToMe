@@ -1,6 +1,6 @@
 import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
-import type { SetupCheckReport } from './dtos';
+import type { SetupCheckReport } from './schema';
 
 /** `SetupCheckEndpoints.cs`: the Setup check report and the Quick check that refreshes it. */
 export class SetupCheckApi {

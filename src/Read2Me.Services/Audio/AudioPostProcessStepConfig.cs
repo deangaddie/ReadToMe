@@ -6,7 +6,9 @@ namespace Read2Me.Services.Audio
     /// <summary>
     /// One step's config on the settings row: its enabled flag plus <see cref="Settings"/>, the
     /// step's opaque settings payload (shape owned by the step, e.g.
-    /// <see cref="ConsonantSoftenSettings"/> for consonant-soften). Order and membership come from
+    /// <see cref="ConsonantSoftenSettings"/> for consonant-soften or <see cref="SilenceTrimSettings"/> for
+    /// silence-trim). The host stores the payload as raw JSON, so the document leaves it unknown and the
+    /// step's form narrows it. Order and membership come from
     /// <see cref="AudioPostProcessStepDefaults"/>, not from the stored list.
     /// </summary>
     public sealed record AudioPostProcessStepConfig(string StepId, bool Enabled, JsonElement? Settings)

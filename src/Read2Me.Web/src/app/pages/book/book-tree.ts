@@ -1,16 +1,16 @@
-import type { NodeDto, NodeLevel } from '@app/api';
+import type { NodeDto, BookNodeLevel } from '@app/api';
 
 /** Loaded children per parent id: volume id → parts, part id → chapters. Absent = not loaded yet. */
 export type ChildrenMap = Readonly<Record<string, readonly NodeDto[] | undefined>>;
 
 export interface NodeRef {
-  level: NodeLevel;
+  level: BookNodeLevel;
   id: string;
 }
 
 export interface TreeNode extends NodeTitle {
   id: string;
-  level: NodeLevel;
+  level: BookNodeLevel;
   /** The stored title, null when never given one. */
   rawTitle: string | null;
   /** Position among siblings of the same level: the node menu hides merges at the ends. */
@@ -55,7 +55,7 @@ export function placeholderTitleClass({ untitled }: NodeTitle): string {
 }
 
 /** A node's title, or the placeholder "Untitled <level> <n>", n its 1-based position among siblings. */
-export function nodeTitle(node: NodeDto, level: NodeLevel, index: number): NodeTitle {
+export function nodeTitle(node: NodeDto, level: BookNodeLevel, index: number): NodeTitle {
   return node.title?.trim()
     ? { title: node.title, untitled: false }
     : { title: `Untitled ${level.toLowerCase()} ${index + 1}`, untitled: true };
@@ -81,7 +81,7 @@ export function buildTree(volumes: readonly NodeDto[], children: ChildrenMap): T
   return volumeNodes;
 }
 
-function headingRef(node: NodeDto, level: NodeLevel, index: number, count: number): HeadingRef {
+function headingRef(node: NodeDto, level: BookNodeLevel, index: number, count: number): HeadingRef {
   return {
     id: node.id,
     ...nodeTitle(node, level, index),
@@ -91,7 +91,7 @@ function headingRef(node: NodeDto, level: NodeLevel, index: number, count: numbe
   };
 }
 
-function identity(node: NodeDto, level: NodeLevel, index: number, count: number) {
+function identity(node: NodeDto, level: BookNodeLevel, index: number, count: number) {
   return { ...headingRef(node, level, index, count), level };
 }
 

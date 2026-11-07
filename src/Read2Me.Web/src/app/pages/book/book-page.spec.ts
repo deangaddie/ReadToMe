@@ -1,3 +1,4 @@
+import type { QueueMessage } from '@app/api';
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import {
   type BookOverviewDto,
@@ -9,7 +10,7 @@ import {
 } from '@app/api';
 import { Router, type RouteDef } from '@app/core/router';
 import { override, resetServices, use } from '@app/core/services';
-import type { QueueMessage, Receipt } from '@app/live/live-messages';
+import type { Receipt } from '@app/live/live-messages';
 import { Preflight } from '@app/shared/preflight';
 import { type ConfirmOptions, ConfirmService, PromptService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';

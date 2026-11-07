@@ -10,7 +10,7 @@ import type {
   RecentAudioSampleDto,
   StepPreviewRequest,
   StepPreviewResponse,
-} from './dtos';
+} from './schema';
 
 /**
  * `AudioProcessingEndpoints.cs`: the single audio post-processing row — scalars, assembler pauses,

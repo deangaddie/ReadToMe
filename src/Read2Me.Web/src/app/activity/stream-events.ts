@@ -1,5 +1,5 @@
+import type { AudioGenMessage, LlmMessage } from '@app/api';
 import { AudioGenEvent, LlmStreamEvent } from '@app/live/hub-events';
-import { AudioGenMessage, LlmMessage } from '@app/live/live-messages';
 
 /**
  * Wire → presentational mapping for the two stream tabs (ticket 14). `/hubs/live` batches LLM

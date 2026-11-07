@@ -13,14 +13,19 @@ namespace Read2Me.App.Api
     public sealed record AssemblyStartRequest(bool AllowPartial = false);
 
     /// <summary>
-    /// <c>Folder</c> is the project of the running (or most recent) job; <c>OutputFileName</c> is set
-    /// once that job has completed and names a file under its assembly outputs.
+    /// <c>Folder</c> is the project of the running (or most recent) job, null until the first start;
+    /// <c>OutputFileName</c> is set once that job has completed and names a file under its assembly outputs.
     /// </summary>
     public sealed record AssemblyStatusDto(
         bool IsRunning, AssemblyPhase? CurrentPhase, double EncodePercent,
         string? LastError, int AudioRemainingCount,
         string? Folder, string? OutputFileName);
 
+    /// <summary>
+    /// One assembled audiobook under <c>&lt;workspace&gt;/{folder}/output/</c>. <paramref name="CreatedAt"/> is
+    /// ISO 8601, UTC: when the file was last written; <paramref name="IsPartial"/> marks a build that skipped
+    /// items without audio.
+    /// </summary>
     public sealed record AssemblyOutputDto(string FileName, long SizeBytes, DateTimeOffset CreatedAt, bool IsPartial);
 
     public static class AssemblyEndpoints

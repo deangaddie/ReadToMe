@@ -1,3 +1,4 @@
+import type { BookFacets } from '@app/api';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   type ProjectDetailDto,
@@ -8,7 +9,7 @@ import {
 } from '@app/api';
 import { Router, type RouteDef } from '@app/core/router';
 import { override, resetServices, use } from '@app/core/services';
-import type { BookFacets, Receipt } from '@app/live/live-messages';
+import type { Receipt } from '@app/live/live-messages';
 import { REFETCH_DEBOUNCE_MS } from '@app/shared/debounced';
 import { type ConfirmOptions, ConfirmService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';

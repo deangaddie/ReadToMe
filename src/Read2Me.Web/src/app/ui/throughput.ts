@@ -1,5 +1,5 @@
+import type { ThroughputSnapshot } from '@app/api';
 import { html, nothing } from 'lit-html';
-import type { ThroughputSnapshot } from '@app/live/live-messages';
 
 export interface SparklineOptions {
   values: readonly number[];

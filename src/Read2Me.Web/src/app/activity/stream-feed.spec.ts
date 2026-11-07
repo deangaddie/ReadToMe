@@ -1,12 +1,8 @@
+import type { AudioGenMessage, LiveSnapshot, LlmMessage } from '@app/api';
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { Emitter } from '@app/core/emitter';
 import { override, resetServices, use } from '@app/core/services';
-import type {
-  AudioGenMessage,
-  LiveSnapshot,
-  LlmMessage,
-  StreamKind,
-} from '@app/live/live-messages';
+import type { StreamKind } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { AudioStreamFeed, LlmStreamFeed } from './stream-feed';
 import { audioGenMessage, llmMessage } from '../../testing/live-messages';

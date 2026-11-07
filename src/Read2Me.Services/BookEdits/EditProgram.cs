@@ -2,6 +2,10 @@ namespace Read2Me.Services.BookEdits
 {
     public enum EditTargetSelector { VolumeTitle, PartTitle, ChapterTitle, ParagraphText }
 
+    /// <summary>
+    /// What an edit step does to the text. Only <c>Llm</c> plans send a request per item, so only they
+    /// offer per-row retries.
+    /// </summary>
     public enum TransformKind { RegexReplace, SetTemplate, Llm, ChangeCase }
 
     public enum CaseMode { Upper, Lower, Sentence, Title }

@@ -1,4 +1,4 @@
-import {
+import type {
   AssemblyState,
   AttributionQueueSnapshot,
   AudioQueueSnapshot,
@@ -6,8 +6,8 @@ import {
   QueueMessage,
   VoiceBatchState,
   WatchdogKind,
-  WatchdogState,
-} from '@app/live/live-messages';
+} from '@app/api';
+import { WatchdogState } from '@app/live/live-messages';
 import { JobState, JobView } from '@app/ui/job';
 import { StatusKind } from '@app/ui/partials';
 import { escalationBanner } from '@app/ui/llm-turns';

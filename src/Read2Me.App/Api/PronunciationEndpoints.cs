@@ -20,13 +20,18 @@ using Read2Me.Services.Pronunciations;
 
 namespace Read2Me.App.Api
 {
+    /// <summary>Body of <c>POST …/pronunciations</c> and <c>PUT …/pronunciations/{id}</c>.</summary>
     public sealed record SetPronunciationRequest(string? WrittenForm, string? SpokenForm);
 
+    /// <summary>
+    /// <c>POST …/pronunciations/impact</c> body: no <paramref name="Id"/> adds, an <paramref name="Id"/> edits
+    /// that entry, <paramref name="Delete"/> deletes it.
+    /// </summary>
     public sealed record PronunciationDraftRequest(Guid? Id, string? WrittenForm, string? SpokenForm, bool Delete = false);
 
     /// <summary>
-    /// A try-out: the sentence of <paramref name="ItemId"/> starting at <paramref name="SentenceStart"/> (an impact
-    /// match's <c>sentenceStart</c>), with <paramref name="Draft"/> in its entry's place unless <paramref name="AsWritten"/>.
+    /// <c>POST …/pronunciations/try</c> body, answered with the WAV. A try-out: the sentence of
+    /// <paramref name="ItemId"/> starting at <paramref name="SentenceStart"/> (an impact match's <c>sentenceStart</c>), with <paramref name="Draft"/> in its entry's place unless <paramref name="AsWritten"/>.
     /// <paramref name="Voice"/> is <c>{ "voiceId": "…" }</c> or <c>"item"</c> (the item's own resolved voice, also when left out).
     /// </summary>
     public sealed record TryPronunciationRequest(
@@ -40,7 +45,10 @@ namespace Read2Me.App.Api
         Guid Id, string WrittenForm, string SpokenForm, int MatchCount, int ItemCount, int WithAudioCount,
         int AudioDiscardCount, int NeedsAudioCount);
 
-    /// <summary>What deleting an entry cost, counted as for <see cref="PronunciationSaved"/>.</summary>
+    /// <summary>
+    /// <c>DELETE …/pronunciations/{id}</c>: what deleting an entry cost, counted as for
+    /// <see cref="PronunciationSaved"/>.
+    /// </summary>
     public sealed record PronunciationDeleted(int AudioDiscardCount, int NeedsAudioCount);
 
     /// <summary>

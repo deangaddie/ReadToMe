@@ -2636,6 +2636,7 @@ export interface paths {
             requestBody?: {
                 content: {
                     "application/json": {
+                        /** @description An unsaved prompt to design from instead of the stored one; it is stored with the take. */
                         designPrompt?: null | string;
                     };
                 };
@@ -8945,14 +8946,22 @@ export interface components {
         };
         /** @enum {unknown} */
         AiServiceOp: "Start" | "Restart" | "Shutdown";
-        /** @enum {unknown} */
+        /**
+         * @description Live status of a managed service as the settings UI displays it.
+         * @enum {unknown}
+         */
         AiServiceStatus: "NotFound" | "Stopped" | "Starting" | "Ready" | "Recovering" | "Down" | "Unknown";
         AiServiceStatusDto: {
             name: string;
             status: components["schemas"]["AiServiceStatus"];
         };
-        /** @enum {unknown} */
+        /**
+         * @description An item's type as the API reports it: ApiItemType.Narration or ApiItemType.Character
+         *     for speech (the speaker decides, ADR-0006), a pause kind by name otherwise.
+         * @enum {unknown}
+         */
         ApiItemType: "Narration" | "Character" | "Pause" | "ParagraphPause" | "ChapterPause" | "PartPause" | "VolumePause";
+        /** @description A theme row. The optional colours are null where the palette default applies. */
         AppTheme: {
             appbarBackground: null | string;
             background: null | string;
@@ -8979,6 +8988,10 @@ export interface components {
         ApplyPreviewRequest: {
             previewId: null | string;
         };
+        /**
+         * @description `Folder` is the project the (single, global) run belongs to; `OutputFileName` rides on
+         *     `Completed`.
+         */
         AssemblyMessage: {
             folder: null | string;
             /** Format: double */
@@ -8990,6 +9003,11 @@ export interface components {
         };
         /** @enum {unknown} */
         AssemblyMessageKind: "PhaseStarted" | "Progress" | "Completed" | "Failed" | "Cancelled";
+        /**
+         * @description One assembled audiobook under `&lt;workspace&gt;/{folder}/output/`. CreatedAt is
+         *     ISO 8601, UTC: when the file was last written; IsPartial marks a build that skipped
+         *     items without audio.
+         */
         AssemblyOutputDto: {
             /** Format: date-time */
             createdAt: string;
@@ -9004,6 +9022,7 @@ export interface components {
             /** @default false */
             allowPartial: boolean;
         };
+        /** @description Assembly service state for the connect-time snapshot. */
         AssemblyState: {
             /** Format: int32 */
             audioRemainingCount: number;
@@ -9015,6 +9034,10 @@ export interface components {
             lastError: null | string;
             outputFileName: null | string;
         };
+        /**
+         * @description `Folder` is the project of the running (or most recent) job, null until the first start;
+         *     `OutputFileName` is set once that job has completed and names a file under its assembly outputs.
+         */
         AssemblyStatusDto: {
             /** Format: int32 */
             audioRemainingCount: number;
@@ -9031,18 +9054,24 @@ export interface components {
             selfConsistency: boolean;
             steps?: null | components["schemas"]["AttributionChainStepDto"][];
         };
+        /**
+         * @description The stored chain, plus Resolved (the chain attribution runs: deduped, and the default
+         *     config alone when Steps is empty) and every config a step may name.
+         */
         AttributionChainResponse: {
             available: components["schemas"]["LlmServerConfig"][];
             resolved: components["schemas"]["ResolvedChainStepDto"][];
             selfConsistency: boolean;
             steps: components["schemas"]["AttributionChainStepDto"][];
         };
+        /** @description One stored attribution chain rung. */
         AttributionChainStepDto: {
             /** Format: int32 */
             configId: number;
             promptStyle?: null | components["schemas"]["AttributionPromptStyle"];
             thinking: boolean;
         };
+        /** @description Paragraphs still needing attribution, plus what the queue has in flight for this project. */
         AttributionCountsDto: {
             processing: boolean;
             /** Format: int32 */
@@ -9050,8 +9079,12 @@ export interface components {
             /** Format: int32 */
             remaining: number;
         };
-        /** @enum {unknown} */
+        /**
+         * @description Which character-attribution prompt tier an LLM server uses.
+         * @enum {unknown}
+         */
         AttributionPromptStyle: "Full" | "Simple" | "Chapter";
+        /** @description The attribution queue's counts and timings, answered by `GET /api/attribution/queue`. */
         AttributionQueueSnapshot: {
             /** Format: double */
             averageSecondsPerParagraph: number;
@@ -9061,12 +9094,17 @@ export interface components {
             currentItemElapsedSeconds: number;
             /** Format: double */
             estimatedSecondsRemaining: number;
+            /**
+             * @description Work in hand, globally — one worker drains every folder's queue. Settled outcomes
+             *     (Failed/Unfinished) are not busy: those paragraphs are finished.
+             */
             isBusy: boolean;
             /** Format: int32 */
             processingCount: number;
             /** Format: int32 */
             queuedCount: number;
         };
+        /** @description Paragraphs with at least one item still missing audio. */
         AudioCountsDto: {
             /** Format: int32 */
             remaining: number;
@@ -9080,6 +9118,10 @@ export interface components {
             /** Format: uuid */
             nodeId: string;
         };
+        /**
+         * @description One per AudioGenEvent. Stream group only. `ModelLoading` is not tied to an item:
+         *     its `Id` is empty and `Model` names the TTS model loading.
+         */
         AudioGenMessage: {
             applied: null | boolean;
             /** Format: int32 */
@@ -9104,10 +9146,21 @@ export interface components {
             kind: components["schemas"]["AudioItemOutcomeKind"];
             reason: null | string;
         };
-        /** @enum {unknown} */
+        /**
+         * @description Why a settled item is not simply done. `Unfinished` exists so
+         *     void AudioQueueService.Apply(QueuedAudioItem item, Disposition disposition) can stay total over Disposition: this
+         *     queue's phase 1 cannot produce it today (a resolution failure is a `Failed` work outcome,
+         *     not empty work), but throwing would break totality and recording it as `Failed` would lie
+         *     to the UI chip.
+         * @enum {unknown}
+         */
         AudioItemOutcomeKind: "Failed" | "Unfinished";
         /** @enum {unknown} */
         AudioItemQueueStatus: "Queued" | "Processing";
+        /**
+         * @description A speech item audio can be generated for, and the nodes it rolls up into (AudioItemRef on
+         *     the wire). An entry of `GET …/nodes/{level}/{id}/item-ids`.
+         */
         AudioItemRefDto: {
             /** Format: uuid */
             chapterId: string;
@@ -9126,11 +9179,24 @@ export interface components {
             outcome: null | components["schemas"]["AudioItemOutcome"];
             status: null | components["schemas"]["AudioItemQueueStatus"];
         };
+        /**
+         * @description One step's config on the settings row: its enabled flag plus JsonElement? AudioPostProcessStepConfig.Settings, the
+         *     step's opaque settings payload (shape owned by the step, e.g.
+         *     ConsonantSoftenSettings for consonant-soften or SilenceTrimSettings for
+         *     silence-trim). The host stores the payload as raw JSON, so the document leaves it unknown and the
+         *     step's form narrows it. Order and membership come from
+         *     AudioPostProcessStepDefaults, not from the stored list.
+         */
         AudioPostProcessStepConfig: {
             enabled: boolean;
             settings: null | components["schemas"]["JsonElement"];
             stepId: string;
         };
+        /**
+         * @description `GET /api/settings/audio-processing/full`: everything the audio-processing settings page shows, in
+         *     one read. FfmpegPath is the saved value the form edits; with none saved the app runs
+         *     ConfiguredFfmpegPath (the host's `Ffmpeg:Path`), else ffmpeg on PATH.
+         */
         AudioProcessingFullResponse: {
             /** Format: int32 */
             audioMaxAttempts: number;
@@ -9144,6 +9210,12 @@ export interface components {
             /** Format: double */
             werThreshold: number;
         };
+        /**
+         * @description Snapshot of the audio post-processing settings row (`AudioProcessingSettingsService.GetAsync()`),
+         *     with defaults already applied for a missing row. FfmpegPath is the ffmpeg every
+         *     consumer runs: the SavedFfmpegPath, else the
+         *     ConfiguredFfmpegPath, else null (PATH).
+         */
         AudioProcessingSettings: {
             /** Format: int32 */
             audioMaxAttempts: number;
@@ -9175,6 +9247,7 @@ export interface components {
             /** Format: double */
             werThreshold?: null | number;
         };
+        /** @description The audio queue's counts and timings, answered by `GET /api/audio/queue`. */
         AudioQueueSnapshot: {
             /** Format: double */
             averageSecondsPerItem: number;
@@ -9189,6 +9262,7 @@ export interface components {
             /** Format: int32 */
             queuedCount: number;
         };
+        /** @description AudioReviewInfo on the wire, shared with the live hub's item status; nulls are sent explicitly. */
         AudioReviewDto: {
             normalizeOk: boolean;
             normalizeReason: null | string;
@@ -9202,6 +9276,13 @@ export interface components {
         };
         /** @enum {unknown} */
         AudioReviewState: "NeedsReview" | "Dismissed";
+        /**
+         * @description One AI book-edit proposal run (Angular ticket 19), sent to the connection that started it.
+         *     `Program` is the session id the run belongs to; `Done` carries every row the run landed
+         *     (all of them, or the partial set a cancel kept). `Dropped`: a Restore of the project dropped
+         *     the session, with the `Reason` to show; sent to the project group, since the session outlives
+         *     its runs.
+         */
         BookEditMessage: {
             cancelled: null | boolean;
             /** Format: int32 */
@@ -9215,6 +9296,12 @@ export interface components {
         };
         /** @enum {unknown} */
         BookEditMessageKind: "Progress" | "Done" | "Failed" | "Dropped";
+        /**
+         * @description ProposedEdit on the wire; enums as member names. Shared with the REST reads of a
+         *     proposal run (`BookEditEndpoints`) on purpose: a row a client got pushed and a row it read
+         *     back after missing the push have to be the same shape, or a review screen would need two.
+         *     NewValue is null on a `Failed` row.
+         */
         BookEditRowDto: {
             displayPath: string;
             failureReason: null | string;
@@ -9225,6 +9312,7 @@ export interface components {
             oldValue: string;
             status: components["schemas"]["ProposalStatus"];
         };
+        /** @description The session's proposal run as a whole — what a client that missed the hub asks for. */
         BookEditRunDto: {
             /** Format: int32 */
             done: number;
@@ -9238,14 +9326,35 @@ export interface components {
         BookEditRunStatus: "Idle" | "Running" | "Completed" | "Cancelled" | "Failed";
         /** @enum {unknown} */
         BookEditTargetKind: "VolumeTitle" | "PartTitle" | "ChapterTitle" | "ParagraphItemText";
-        /** @enum {string} */
+        /**
+         * @description Which kinds of Book data a mutation changed; a receipt lists each facet it touched. Facets are
+         *     facts about the write, not instructions: a reader decides for itself what to reread from them.
+         * @enum {string}
+         */
         BookFacets: "Structure" | "ItemText" | "Attribution" | "Audio" | "Reviews" | "Characters" | "Narrator" | "Voices" | "VoiceRules" | "ProjectPolicy" | "NodeTitle" | "Checkpoints" | "Pronunciations";
         /** @enum {unknown} */
         BookFileType: "Text" | "Epub";
-        /** @enum {unknown} */
+        /**
+         * @description Whether the affected identifiers on BookMutationEffects are exhaustive.
+         *                 BookMutationScope.Exact means they name everything the mutation touched; BookMutationScope.WholeProject
+         *                 means they do not, and is the safe answer whenever an implementation cannot enumerate what it
+         *                 touched.
+         *                 Scope says nothing about whether a targeted refresh is sufficient — that is a read-side
+         *     judgement made from the facets as well. An insertion is exact about which Paragraph moved and
+         *     still structural.
+         * @enum {unknown}
+         */
         BookMutationScope: "Exact" | "WholeProject";
-        /** @enum {unknown} */
+        /**
+         * @description The route segment of node-scoped endpoints (`/nodes/{level}/…`) and of enqueue requests.
+         * @enum {unknown}
+         */
         BookNodeLevel: "Volume" | "Part" | "Chapter";
+        /**
+         * @description Revision: the book revision the read ran against, a reader's baseline for receipts
+         *     and snapshots. StructureRules: what may be inserted where, one entry per anchor
+         *     kind — the node menu renders from it.
+         */
         BookOverviewDto: {
             characters: components["schemas"]["CharacterDto"][];
             hasContent: boolean;
@@ -9258,6 +9367,10 @@ export interface components {
             totalParts: number;
             volumes: components["schemas"]["NodeDto"][];
         };
+        /**
+         * @description A split or merge stated as a relationship between two nodes, so a reader can carry expansion
+         *     from the node that disappeared to the one that took its place.
+         */
         BookStructuralRelation: {
             kind: components["schemas"]["BookStructuralRelationKind"];
             /** Format: uuid */
@@ -9267,15 +9380,21 @@ export interface components {
         };
         /** @enum {unknown} */
         BookStructuralRelationKind: "Split" | "Merge";
+        /**
+         * @description BulkAssignPreview on the wire: what a bulk assign over the ids would write.
+         *     Paragraphs without Character items count in neither number.
+         */
         BulkAssignPreviewDto: {
             /** Format: int32 */
             characterItems: number;
             /** Format: int32 */
             paragraphsWithCharacterItems: number;
         };
+        /** @description The body of `POST …/characters/bulk-assign-preview`: the paragraphs to preview. */
         BulkAssignPreviewRequest: {
             paragraphIds: string[];
         };
+        /** @description A row of `GET …/characters/{id}/voice-rules/preview`: the voice a character's rules pick at the start of a chapter; null when none resolves. */
         ChapterVoicePreviewDto: {
             /** Format: uuid */
             chapterId: string;
@@ -9293,6 +9412,7 @@ export interface components {
             id: string;
             name: string;
         };
+        /** @description One item a character speaks, with where it sits so the reader can open there. */
         CharacterLineDto: {
             /** Format: uuid */
             chapterId: string;
@@ -9302,6 +9422,7 @@ export interface components {
             paragraphId: string;
             text: string;
         };
+        /** @description A Character's series link on the Cast page's roster; bool CharacterSeriesLinkDto.Differs: this book's Voices are not the series copy (#222). */
         CharacterSeriesLinkDto: {
             /** Format: int32 */
             bookCount: number;
@@ -9312,6 +9433,12 @@ export interface components {
             seriesId: string;
             seriesName: string;
         };
+        /**
+         * @description A cast-list row. bool CharacterSummaryDto.NarratesBook is true on the character the narrator link
+         *     points at; bool CharacterSummaryDto.IsNarrator marks the seed Narrator row itself. CharacterSeriesLinkDto? CharacterSummaryDto.SeriesLink is its
+         *     Series character when it is series-linked (ADR 0018), else null. Aliases carry their ids so the detail
+         *     can offer removal directly.
+         */
         CharacterSummaryDto: {
             aliases: components["schemas"]["CharacterAliasDto"][];
             /** Format: uuid */
@@ -9334,25 +9461,54 @@ export interface components {
         };
         /** @enum {unknown} */
         CheckpointRequestState: "Confirmed" | "Skipped" | "Open";
-        /** @enum {unknown} */
+        /**
+         * @description How the user settled a Pipeline step's confirmed checkpoint. No row means open.
+         * @enum {unknown}
+         */
         CheckpointState: "Confirmed" | "Skipped";
         CommandResponse: {
             /** Format: uuid */
             newEntityId: null | string;
         };
+        /**
+         * @description One config's share of a Throughput Run. Keyed by config id, never by name: a config renamed
+         *     mid-run stays one row, and the display name is resolved at render.
+         */
         ConfigThroughput: {
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description The serving config's id — the row's identity.
+             */
             configId: number;
+            /** @description The name last seen on a RequestStarted, for render convenience only. */
             configName: string;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description Σ `predicted_ms` over the same requests, or null if none did.
+             */
             generationMs: null | number;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Requests this config served in the run, whether or not they reported timings.
+             */
             requests: number;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Σ `predicted_n` over the requests that reported timings, or null if none did.
+             */
             tokensOut: null | number;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description This config's Run Throughput: `Σ predicted_n ÷ Σ predicted_ms`. Null when nothing
+             *     measurable arrived — never `0`, which would mean "it generated nothing".
+             */
             tokensPerSecond: null | number;
         };
+        /**
+         * @description An item in a context paragraph. string? ContextItemDto.Speaker is the character's name on a dialog
+         *     item, null when the item is dialog whose speaker is not yet attributed; narration items are
+         *     not dialog and carry no speaker.
+         */
         ContextItemDto: {
             isDialog: boolean;
             /** Format: uuid */
@@ -9378,26 +9534,44 @@ export interface components {
             /** Format: uuid */
             id: string;
         };
+        /**
+         * @description ExistingCharacterId names the roster character the row resolves onto (by its name or
+         *     alias, as apply resolves it) — the review's "Already exists" row.
+         */
         DiscoveredCharacterDto: {
             aliases: string[];
             /** Format: uuid */
             existingCharacterId: null | string;
             name: string;
         };
+        /**
+         * @description IReadOnlyList&lt;string&gt; DiscoveryOutcomeDto.Collisions: names or aliases two characters would own once every row is
+         *     applied (AliasCollisions). Advisory; the client recomputes as rows are edited.
+         */
         DiscoveryOutcomeDto: {
             characters: components["schemas"]["DiscoveredCharacterDto"][];
             collisions: string[];
             reason: null | string;
             status: components["schemas"]["DiscoveryStatus"];
         };
-        /** @enum {unknown} */
+        /**
+         * @description How character discovery ended. An answer never carries `NoLlmConfigured`: the endpoint
+         *     turns it into a 422.
+         * @enum {unknown}
+         */
         DiscoveryStatus: "Ok" | "NoLlmConfigured" | "Failed" | "ServiceUnavailable";
-        /** @enum {unknown} */
+        /**
+         * @description How planning an AI book edit ended. The planner answers all but EditPlanStatus.NoTargets,
+         *     which the caller sets when the plan parsed but its scope matched no items. `Ok` is the only
+         *     status that carries a program; the rest explain why there is nothing to do.
+         * @enum {unknown}
+         */
         EditPlanStatus: "Ok" | "NoLlmConfigured" | "Unsupported" | "Failed" | "ServiceUnavailable" | "NoTargets";
         EnqueueResponse: {
             /** Format: int32 */
             enqueued: number;
         };
+        /** @description The latched "escalating N items → config (step S)" label; null when no escalation is active. */
         EscalationState: {
             configName: null | string;
             /** Format: int32 */
@@ -9405,11 +9579,13 @@ export interface components {
             /** Format: int32 */
             step: number;
         };
+        /** @description Outcome of an ffmpeg probe. string FfmpegProbeResult.Message carries the version banner or the error. */
         FfmpegProbeResult: {
             message: string;
             success: boolean;
         };
         FfmpegTestRequest: {
+            /** @description Persisted before the probe; blank means "rely on PATH". */
             ffmpegPath?: null | string;
         };
         GenerateDesignPromptRequest: {
@@ -9420,14 +9596,23 @@ export interface components {
         };
         GenerateVoiceAudioResponse: {
             audioFileName: string;
-            /** Format: double */
+            /**
+             * Format: double
+             * @description The stored take's length, as VoiceDto reports it.
+             */
             referenceSeconds: null | number;
+            /** @description Set over the 15 s soft Reference Limit: the take was kept. */
             referenceWarning: null | string;
             transcript: string;
         };
+        /** @description Why the project can't be viewed at a step or restored right now: what is queued or running for it. */
         HistoryBusyDto: {
             reason: string;
         };
+        /**
+         * @description A project's History (`GET /api/projects/{folder}/history`): its steps newest first, the step the
+         *     Head points at, what keeps it busy (null when idle) and whether a Restore is in progress.
+         */
         HistoryDto: {
             busy: null | components["schemas"]["HistoryBusyDto"];
             /** Format: uuid */
@@ -9435,6 +9620,16 @@ export interface components {
             restoring: boolean;
             steps: components["schemas"]["HistoryStep"][];
         };
+        /**
+         * @description `StepLanded` | `StepChanged` | `StepClosed`: a step that appeared in a project's
+         *     History, an open one a later commit extended, or one that closed, with its row as
+         *     `GET /api/projects/{folder}/history` lists it. Sent to the project group. A step recorded by
+         *     one mutation lands and closes together, so both arrive back to back.
+         *     `BusyChanged` carries no step: the project's busy reason ("Attribution: 128 paragraphs left")
+         *     moved, or went null when the project went idle. A busy project can't be viewed at a step.
+         *     `Restoring`: a Restore of the project `Phase` started or finished; `Finished` carries
+         *     the Restore step it added, or no step when it added none or failed. Writes are refused in between.
+         */
         HistoryMessage: {
             folder: string;
             kind: components["schemas"]["HistoryMessageKind"];
@@ -9444,6 +9639,19 @@ export interface components {
         };
         /** @enum {unknown} */
         HistoryMessageKind: "StepLanded" | "StepChanged" | "StepClosed" | "BusyChanged" | "Restoring";
+        /**
+         * @description One <b>History step</b> as History lists it (context/history.md). int HistoryStep.Sequence is for
+         *     display only: the line of steps is the Guid? HistoryStep.ParentStepId chain from the Head, so nothing
+         *     assumes the highest sequence is the tip (ADR 0016).
+         *     string? HistoryStep.Note says what is unusual about the step, or is null: "part 2" when another commit
+         *     split its scope, how a Background run ended early ("212 of 340 paragraphs, cancelled"), or
+         *     "interrupted" when the app stopped while it was open — joined by " · ", without brackets.DateTimeOffset? HistoryStep.EndedAt is when the step closed, or, while it is open, its last change. An
+         *     interrupted step keeps the time of its last change: when it really ended is not known.
+         *     bool HistoryStep.IsOpen, not DateTimeOffset? HistoryStep.EndedAt, says whether it is open.HistoryStepKind HistoryStep.Kind says what opened the step, and StepAction? HistoryStep.Action what kind of action a
+         *     request's or Background run's step is (null on the others): the History sheet picks a row's icon
+         *     from them, never from the label, so renaming a label changes no icon.Guid? HistoryStep.RestoredFromStepId is the step a Restore step brought back; null for any other.
+         *     bool HistoryStep.CantOpen marks a step that can no longer be opened (its old schema fails to migrate).
+         */
         HistoryStep: {
             action: null | components["schemas"]["StepAction"];
             author: string;
@@ -9467,6 +9675,11 @@ export interface components {
             stepId: string;
             summary: null | string;
         };
+        /**
+         * @description One History step as `GET /history` lists it (`GET /history/{stepId}` answers one), plus
+         *     RestorePreview, what a Restore to it would cost now — null for a step that can't be
+         *     opened, and so can't be restored.
+         */
         HistoryStepDto: {
             action: null | components["schemas"]["StepAction"];
             author: string;
@@ -9490,7 +9703,10 @@ export interface components {
             stepId: string;
             summary: null | string;
         };
-        /** @enum {unknown} */
+        /**
+         * @description What opened a History step: a request, a Background run, a Restore, History starting, or an import.
+         * @enum {unknown}
+         */
         HistoryStepKind: "Request" | "BackgroundRun" | "Restore" | "Started" | "Import";
         ImportRequest: {
             /** @default false */
@@ -9504,6 +9720,7 @@ export interface components {
             /** Format: int32 */
             withAudio: number;
         };
+        /** @description What the audio queue and the review mirror say about one item. */
         ItemStatusEntry: {
             /** Format: int64 */
             audioVersion: null | number;
@@ -9511,6 +9728,10 @@ export interface components {
             review: null | components["schemas"]["AudioReviewDto"];
             status: null | components["schemas"]["AudioItemQueueStatus"];
         };
+        /**
+         * @description Per-paragraph attribution and per-item audio status deltas for one project (debounced). A null entry
+         *     means the queue forgot the paragraph or item.
+         */
         ItemStatusMessage: {
             folder: string;
             items: {
@@ -9520,10 +9741,16 @@ export interface components {
                 [key: string]: null | components["schemas"]["ParagraphStatusEntry"];
             };
         };
+        /**
+         * @description The Voice a speech item will be spoken in. string? ItemVoiceDto.VoiceName is null when no Voice
+         *     resolves; string? ItemVoiceDto.NarratedBy is the linked narrator's name on a narration item. An entry of
+         *     `GET …/nodes/Chapter/{id}/voices`.
+         */
         ItemVoiceDto: {
             narratedBy: null | string;
             voiceName: null | string;
         };
+        /** @description The body of `POST …/audio/enqueue-items`: an explicit item selection or a single retry. Ids that name no item are ignored. */
         ItemsEnqueueRequest: {
             itemIds: string[];
         };
@@ -9567,6 +9794,7 @@ export interface components {
             voiceBatch: components["schemas"]["VoiceBatchMessage"];
             watchdog: components["schemas"]["WatchdogMessage"];
         };
+        /** @description Answer to `GetSnapshot`: singleton state plus one ProjectSnapshot per joined project. */
         LiveSnapshot: {
             assembly: components["schemas"]["AssemblyState"];
             projects: {
@@ -9584,6 +9812,7 @@ export interface components {
         };
         /** @enum {unknown} */
         LlmApiType: "OpenAiCompatible";
+        /** @description `Delta` is a 100 ms batch of thinking + content text. Stream group only. */
         LlmMessage: {
             /** Format: int32 */
             configId: null | number;
@@ -9613,10 +9842,16 @@ export interface components {
             models: string[];
         };
         LlmServerConfig: {
+            /** @description Optional bearer token sent as Authorization header. */
             apiKey: null | string;
             apiType: components["schemas"]["LlmApiType"];
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Character paragraphs sent per attribution request. 1 = one paragraph per request;
+             *     greater values batch consecutive unassigned character paragraphs into a single prompt.
+             */
             attributionBatchSize: number;
+            /** @description Server base URL, e.g. http://localhost:8080. */
             baseUrl: string;
             /** Format: double */
             frequencyPenalty: null | number;
@@ -9624,17 +9859,32 @@ export interface components {
             id: number;
             /** Format: int32 */
             maxTokens: null | number;
+            /** @description Optional model id. Omitted from the request when null/blank. */
             model: null | string;
+            /** @description User-facing name for this configuration. */
             name: string;
             /** Format: double */
             presencePenalty: null | number;
+            /**
+             * @description Which attribution prompt tier this server uses. Simple = explicit-tag-only prompt,
+             *     for small models that would otherwise guess a speaker instead of escalating.
+             */
             promptStyle: components["schemas"]["AttributionPromptStyle"];
+            /**
+             * @description True when this endpoint can switch the loaded model on demand (llama.cpp router with
+             *     `--models-max 1` autoload). Gates the switch-and-wait model-load path; non-switchable
+             *     endpoints (remote OpenAI-compatible servers) leave this false.
+             */
             supportsModelSwitch: boolean;
             /** Format: double */
             temperature: null | number;
             /** Format: double */
             topP: null | number;
         };
+        /**
+         * @description How the LLM settings test send ended (Angular ticket 21), sent to the connection that started it.
+         *     The tokens themselves travel on `stream:llm`.
+         */
         LlmTestMessage: {
             /** Format: int32 */
             configId: number;
@@ -9644,6 +9894,7 @@ export interface components {
         /** @enum {unknown} */
         LlmTestMessageKind: "Done" | "Failed" | "Cancelled";
         LlmTestRequest: {
+            /** @description The live hub connection that receives the run's `llmTest` message. */
             connectionId?: null | string;
             prompt?: null | string;
         };
@@ -9652,6 +9903,12 @@ export interface components {
             configId: null | number;
             running: boolean;
         };
+        /**
+         * @description `POST /api/projects/{folder}/import/manual` body: how to re-split the source file by hand
+         *     (the manual reread dialog's form, on the wire). `volume` is read only when
+         *     `hasMultipleVolumes`, `part` only when `hasMultipleParts`; `chapter` always.
+         *     400 when a switched-on level lacks a rule.
+         */
         ManualImportRequest: {
             chapter: null | components["schemas"]["SplitRuleRequest"];
             hasMultipleParts: boolean;
@@ -9659,6 +9916,12 @@ export interface components {
             part: null | components["schemas"]["SplitRuleRequest"];
             volume: null | components["schemas"]["SplitRuleRequest"];
         };
+        /**
+         * @description NarrationReleasePreview on the wire: what a Release narration over the scope would write.
+         *     Paragraphs are the paragraphs it releases and ItemsWithAudio the
+         *     items whose audio it discards. For a Chapter or Part, SpeechMarkers are the markers
+         *     that passed (count descending, then marker); empty for a Paragraph and when nothing passes.
+         */
         NarrationReleasePreviewDto: {
             /** Format: int32 */
             itemsWithAudio: number;
@@ -9666,13 +9929,27 @@ export interface components {
             paragraphs: number;
             speechMarkers: components["schemas"]["SpeechMarkerCountDto"][];
         };
+        /**
+         * @description The body of `POST …/narration/release-preview`: the scope a Release narration would cover; the same
+         *     shape as the command, minus its type.
+         */
         NarrationReleasePreviewRequest: {
             /** Format: uuid */
             nodeId: string;
             scope: components["schemas"]["NarrationReleaseScope"];
         };
-        /** @enum {unknown} */
+        /**
+         * @description Where a ReleaseNarrationCommand reaches. Its own enum rather than
+         *     BookNodeLevel: that one has Volume, and a whole-book release is excluded on purpose.
+         * @enum {unknown}
+         */
         NarrationReleaseScope: "Part" | "Chapter" | "Paragraph";
+        /**
+         * @description Who narrates the book, projected from NarratorIdentity — the raw link
+         *     column never goes on the wire. Unlinked serialises as
+         *     NarratorIdentity NarratorIdentity.Unlinked (the seed row's id, "Narrator", false), so
+         *     there is no null case at either end.
+         */
         NarratorDto: {
             /** Format: uuid */
             characterId: string;
@@ -9682,6 +9959,7 @@ export interface components {
         NarratorOnlyModeRequest: {
             enabled: boolean;
         };
+        /** @description Exactly one of the three lists is present, chosen by the requested level. */
         NodeChildrenDto: {
             chapters: null | components["schemas"]["NodeDto"][];
             paragraphs: null | components["schemas"]["ParagraphDto"][];
@@ -9699,8 +9977,15 @@ export interface components {
             /** @default true */
             unprocessedOnly: boolean;
         };
-        /** @enum {unknown} */
+        /**
+         * @description Which kind of node an InsertNodeCommand anchors on. Also the JSON wire values.
+         * @enum {unknown}
+         */
         NodeKind: "Volume" | "Part" | "Chapter" | "Paragraph" | "ParagraphItem";
+        /**
+         * @description Per-node roll-up deltas for one project (debounced, group `project:{folder}`). A null value
+         *     means the node no longer rolls up (the folder was cleared or re-seeded without it).
+         */
         NodeStatusMessage: {
             folder: string;
             /** Format: int32 */
@@ -9709,6 +9994,10 @@ export interface components {
                 [key: string]: null | components["schemas"]["NodeStatusSummaryDto"];
             };
         };
+        /**
+         * @description NodeStatusSummary on the wire: paragraph counts under one volume/part/chapter. The
+         *     service's value is a struct, which the document can only describe with every field optional.
+         */
         NodeStatusSummaryDto: {
             attributionProcessing: boolean;
             /** Format: int32 */
@@ -9721,6 +10010,7 @@ export interface components {
             /** Format: int32 */
             review: number;
         };
+        /** @description Not the same: a suggested cell (`seriesCharacterId`, `folder`, `characterId`) or a suggested row (`members`). */
         NotTheSameRequest: {
             /** Format: uuid */
             characterId?: null | string;
@@ -9729,21 +10019,32 @@ export interface components {
             /** Format: uuid */
             seriesCharacterId?: null | string;
         };
+        /**
+         * @description Queue state only. Attribution results are per item now — read them from the book endpoint's
+         *     paragraph items, which carry the stamped character.
+         */
         ParagraphAttributionStatusDto: {
             outcome: null | components["schemas"]["ParagraphOutcome"];
             status: null | components["schemas"]["ParagraphQueueStatus"];
         };
+        /** @description A paragraph with its nearest neighbours in the same chapter, nearest last in IReadOnlyList&lt;ContextParagraphDto&gt; ParagraphContextDto.Before and first in IReadOnlyList&lt;ContextParagraphDto&gt; ParagraphContextDto.After. */
         ParagraphContextDto: {
             after: components["schemas"]["ContextParagraphDto"][];
             before: components["schemas"]["ContextParagraphDto"][];
             paragraph: components["schemas"]["ContextParagraphDto"];
         };
+        /** @description bool ParagraphDto.IsPauseParagraph: no items, or a single pause item. */
         ParagraphDto: {
             /** Format: uuid */
             id: string;
             isPauseParagraph: boolean;
             items: components["schemas"]["ParagraphItemDto"][];
         };
+        /**
+         * @description string ParagraphItemDto.OrderKey is the item's fractional position key within its paragraph (items
+         *     arrive already in that order). ApiItemType ParagraphItemDto.ItemType stays for older clients; new ones read
+         *     bool ParagraphItemDto.IsPause and the speaker.
+         */
         ParagraphItemDto: {
             audioFileName: null | string;
             /** Format: uuid */
@@ -9764,6 +10065,10 @@ export interface components {
         ParagraphOutcomeKind: "Failed" | "Unfinished";
         /** @enum {unknown} */
         ParagraphQueueStatus: "Queued" | "Processing";
+        /**
+         * @description A Character paragraph and the nodes it rolls up into — what a selection holds per row. An entry of
+         *     `GET …/nodes/{level}/{id}/paragraph-ids`.
+         */
         ParagraphRefDto: {
             /** Format: uuid */
             chapterId: string;
@@ -9774,10 +10079,16 @@ export interface components {
             /** Format: uuid */
             volumeId: string;
         };
+        /** @description What the attribution queue currently says about one paragraph; null fields mean "nothing". */
         ParagraphStatusEntry: {
             outcome: null | components["schemas"]["ParagraphOutcome"];
             status: null | components["schemas"]["ParagraphQueueStatus"];
         };
+        /**
+         * @description A configured paragraph-TTS backend. Common identity lives in columns; all
+         *     backend-specific settings are serialized into string ParagraphTtsServiceConfig.SettingsJson,
+         *     keyed by ParagraphTtsServiceType ParagraphTtsServiceConfig.Type. New backend types stay additive.
+         */
         ParagraphTtsServiceConfig: {
             enabledStepIds: string[];
             /** Format: int32 */
@@ -9788,15 +10099,24 @@ export interface components {
             toSentenceCaseConfig: null | components["schemas"]["ToSentenceCaseConfig"];
             type: components["schemas"]["ParagraphTtsServiceType"];
         };
-        /** @enum {unknown} */
+        /**
+         * @description Selects the paragraph-TTS backend and its settings shape.
+         * @enum {unknown}
+         */
         ParagraphTtsServiceType: "VoxCpm2" | "Chatterbox" | "Qwen3Base" | "Breeze";
+        /** @description The fields a TTS provider type exposes, with the recommended default per field. */
         ParagraphTtsSettingsSchema: {
             fields: components["schemas"]["SettingsFieldDto"][];
             type: components["schemas"]["ParagraphTtsServiceType"];
         };
+        /** @description The body of `POST …/attribution/enqueue-paragraphs`: an explicit selection. Ids that are not Character paragraphs are ignored. */
         ParagraphsEnqueueRequest: {
             paragraphIds: string[];
         };
+        /**
+         * @description The assembler's per-kind silences, as one object so a card saves them together;
+         *     `PUT /api/settings/audio-processing/pauses` takes the same shape.
+         */
         PauseDurationsDto: {
             /** Format: int32 */
             chapterMs: number;
@@ -9809,13 +10129,28 @@ export interface components {
             /** Format: int32 */
             volumeMs: number;
         };
-        /** @enum {unknown} */
+        /**
+         * @description Where an InsertNodeCommand puts its new node: Placement.Before / Placement.After
+         *     name a sibling at the anchor's own level, Placement.AtStart / Placement.AtEnd a first or
+         *     last child one level down — never two levels down. The member names are also the JSON wire values.
+         * @enum {unknown}
+         */
         Placement: "Before" | "After" | "AtStart" | "AtEnd";
         PlanBookEditRequest: {
             instruction: null | string;
-            /** @default false */
+            /**
+             * @description Let the model think before planning — slower, better on vague instructions.
+             * @default false
+             */
             thinking: boolean;
         };
+        /**
+         * @description Status is the planner's EditPlanStatus, or `NoTargets` when the
+         *     plan parsed but matched nothing. Only `Ok` carries a Program, the opaque session
+         *     id every later call names. Transform is the plan's TransformKind: only
+         *     `Llm` plans send requests per item, so only they have a RequestCount above 0
+         *     (the LLM requests the proposal will send) and offer per-row retries.
+         */
         PlanBookEditResponse: {
             program: null | string;
             reason: null | string;
@@ -9828,10 +10163,16 @@ export interface components {
             transform: null | components["schemas"]["TransformKind"];
             warnings: string[];
         };
+        /** @description A running GPU service the task does not need; stopped first to free VRAM. */
         PreflightConflictDto: {
             name: string;
             reason: string;
         };
+        /**
+         * @description One pre-flight run (Angular ticket 25), sent to the connection that started it. `Stage`
+         *     carries a service and its stage; `Done` carries `Ok` and, on failure, the summary
+         *     `Reason`. `Run` is the id the 202 answered with.
+         */
         PreflightMessage: {
             error: null | string;
             kind: components["schemas"]["PreflightMessageKind"];
@@ -9843,17 +10184,21 @@ export interface components {
         };
         /** @enum {unknown} */
         PreflightMessageKind: "Stage" | "Done";
+        /** @description `ready` means nothing to start and nothing to stop: the task may run now. */
         PreflightPlanDto: {
             conflicts: components["schemas"]["PreflightConflictDto"][];
             ready: boolean;
             toStart: components["schemas"]["PreflightServiceDto"][];
         };
         PreflightRunRequest: {
+            /** @description The live hub connection that receives the run's `preflight` messages. */
             connectionId?: null | string;
         };
+        /** @description 202 with the run id; every message of the run carries it. */
         PreflightRunResponse: {
             run: string;
         };
+        /** @description A required service that is not Ready, with its status. */
         PreflightServiceDto: {
             name: string;
             status: components["schemas"]["AiServiceStatus"];
@@ -9872,6 +10217,7 @@ export interface components {
             /** Format: uuid */
             itemId: string;
         };
+        /** @description bool PreviewStageDto.Applied false means the step fell back to its input; string? PreviewStageDto.Reason says why. */
         PreviewStageDto: {
             applied: boolean;
             reason: null | string;
@@ -9902,6 +10248,7 @@ export interface components {
             series: null | components["schemas"]["ProjectSeries"];
             title: string;
         };
+        /** @description The series a project is in, as its project reads show it. */
         ProjectSeries: {
             name: string;
             /** Format: double */
@@ -9909,6 +10256,10 @@ export interface components {
             /** Format: uuid */
             seriesId: string;
         };
+        /**
+         * @description Everything a project group member needs on join: current revision plus full status maps. Answers
+         *     `JoinProject`; also an entry of `LiveSnapshot.projects`.
+         */
         ProjectSnapshot: {
             folder: string;
             /** Format: int32 */
@@ -9925,6 +10276,15 @@ export interface components {
             /** Format: int64 */
             revision: number;
         };
+        /**
+         * @description The whole-project roll-up behind the pipeline stepper and the reader tree badges.
+         *     IReadOnlyDictionary&lt;string, NodeStatusSummaryDto&gt; ProjectStatusDto.Nodes is keyed by Volume/Part/Chapter id and is the same map the live hub's
+         *     `nodeStatus` deltas patch; IReadOnlyList&lt;Guid&gt; ProjectStatusDto.VolumeIds are in book order. IReadOnlyDictionary&lt;PipelineStep, StepCheckpointDto&gt; ProjectStatusDto.Checkpoints
+         *     holds only the steps the user confirmed or skipped, keyed by step id. Served by
+         *     `GET /api/projects/{folder}/status`. Item counts are items; Attribution,
+         *     Audio and Review count paragraphs, like the node summaries.
+         *     Revision is the book revision the reads started at.
+         */
         ProjectStatusDto: {
             attribution: components["schemas"]["AttributionCountsDto"];
             audio: components["schemas"]["AudioCountsDto"];
@@ -9950,6 +10310,10 @@ export interface components {
             revision: number;
             volumeIds: string[];
         };
+        /**
+         * @description One row of the project list (`GET /api/projects`). BookFileType? ProjectSummary.FileType is null for a folder
+         *     whose DB could not be opened.
+         */
         ProjectSummary: {
             /** Format: int32 */
             audioItemDone: number;
@@ -9964,15 +10328,20 @@ export interface components {
             series: null | components["schemas"]["ProjectSeries"];
             title: string;
         };
+        /** @description One prompt kind as the settings pages show it; `Template` is the resolved text. */
         PromptCatalogEntry: {
             defaultTemplate: string;
             description: string;
+            /** @description The JSON shape the LLM must answer with; null for a plain-text prompt (voice). */
             expectedResponse: null | string;
             isOverridden: boolean;
             kind: string;
+            /** @description The stored override, else DefaultTemplate. */
             template: string;
             title: string;
+            /** @description Placeholder names without braces (`book_title`). */
             tokens: string[];
+            /** @description Compatibility warnings, such as "Stored override missing …". */
             warnings: string[];
         };
         PromptPreviewRequest: {
@@ -9984,12 +10353,20 @@ export interface components {
         PromptTemplateRequest: {
             template: string;
         };
+        /**
+         * @description `DELETE …/pronunciations/{id}`: what deleting an entry cost, counted as for
+         *     PronunciationSaved.
+         */
         PronunciationDeleted: {
             /** Format: int32 */
             audioDiscardCount: number;
             /** Format: int32 */
             needsAudioCount: number;
         };
+        /**
+         * @description `POST …/pronunciations/impact` body: no Id adds, an Id edits
+         *     that entry, Delete deletes it.
+         */
         PronunciationDraftRequest: {
             /** @default false */
             delete: boolean;
@@ -9998,6 +10375,10 @@ export interface components {
             spokenForm: null | string;
             writtenForm: null | string;
         };
+        /**
+         * @description One Pronunciation and its reach in the book (`GET /api/projects/{folder}/pronunciations`): how
+         *     often its written form matches, in how many items, and how many of those items have audio.
+         */
         PronunciationEntry: {
             /** Format: uuid */
             id: string;
@@ -10010,6 +10391,11 @@ export interface components {
             withAudioCount: number;
             writtenForm: string;
         };
+        /**
+         * @description What saving a draft would do: its reach (matches, items, items with audio — for a delete, the
+         *     entry's reach now), the audio a save discards, the entries it overlaps, the entry it duplicates,
+         *     and every match in book order.
+         */
         PronunciationImpactReport: {
             /** Format: int32 */
             audioDiscardCount: number;
@@ -10023,6 +10409,12 @@ export interface components {
             /** Format: int32 */
             withAudioCount: number;
         };
+        /**
+         * @description One place the draft's written form matches: the item, where it is, and the sentence around it with
+         *     where that sentence starts in the item's text (what a try-out names it by), the match's offsets in
+         *     that sentence, and the sentence's Spoken text with the drafted list applied, with where the match's
+         *     spoken form sits in it (case carried over, as TTS will be asked to say it).
+         */
         PronunciationMatchInBook: {
             /** Format: uuid */
             chapterId: string;
@@ -10044,6 +10436,10 @@ export interface components {
             spokenMatchStart: number;
             spokenSentence: string;
         };
+        /**
+         * @description An entry whose written form holds the draft's as whole words, or is held by it. The longer one wins
+         *     where both match, so DraftWins is whether the draft's is the longer.
+         */
         PronunciationOverlap: {
             draftWins: boolean;
             /** Format: uuid */
@@ -10051,12 +10447,17 @@ export interface components {
             spokenForm: string;
             writtenForm: string;
         };
+        /** @description An entry of the list, as the impact of a draft names it. */
         PronunciationRef: {
             /** Format: uuid */
             id: string;
             spokenForm: string;
             writtenForm: string;
         };
+        /**
+         * @description A saved entry with its reach, and what saving it cost: AudioDiscardCount items lost
+         *     their audio, and NeedsAudioCount spoken items now have none.
+         */
         PronunciationSaved: {
             /** Format: int32 */
             audioDiscardCount: number;
@@ -10073,6 +10474,10 @@ export interface components {
             withAudioCount: number;
             writtenForm: string;
         };
+        /**
+         * @description One span of an item's text the list matches: where it is, the entry it names, and where the
+         *     sentence around it starts in the item's text (what a try-out names that sentence by).
+         */
         PronunciationSpan: {
             /** Format: uuid */
             itemId: string;
@@ -10085,6 +10490,10 @@ export interface components {
             /** Format: int32 */
             start: number;
         };
+        /**
+         * @description The spans in some chapters, in book order, and the entries they name (each once, by written form):
+         *     `GET …/pronunciations/matches?chapterIds=…`.
+         */
         PronunciationSpanReport: {
             pronunciations: components["schemas"]["PronunciationRef"][];
             spans: components["schemas"]["PronunciationSpan"][];
@@ -10092,6 +10501,7 @@ export interface components {
         /** @enum {unknown} */
         ProposalStatus: "Proposed" | "NoChange" | "Failed";
         ProposeBookEditRequest: {
+            /** @description The live hub connection that receives the run's `bookEdit` messages. */
             connectionId?: null | string;
             /** @default false */
             thinking: boolean;
@@ -10103,11 +10513,17 @@ export interface components {
             /** @default false */
             thinking: boolean;
         };
+        /** @description Both queues' roll-ups plus the attribution escalation banner (debounced, group `global`). */
         QueueMessage: {
             attribution: components["schemas"]["AttributionQueueSnapshot"];
             audio: components["schemas"]["AudioQueueSnapshot"];
             escalation: null | components["schemas"]["EscalationState"];
         };
+        /**
+         * @description BookMutationEffects on the wire, with IReadOnlyList&lt;BookFacets&gt; ReceiptEffects.Facets as a list of single facets
+         *     (never `None` or `All`): a `[Flags]` value would travel as one comma-joined string the
+         *     document can't describe.
+         */
         ReceiptEffects: {
             changedNothing: boolean;
             /** Format: uuid */
@@ -10121,6 +10537,7 @@ export interface components {
             scope: components["schemas"]["BookMutationScope"];
             structural: components["schemas"]["BookStructuralRelation"][];
         };
+        /** @description BookMutationReceipt as JSON with the folder flattened; `originId` untouched. */
         ReceiptMessage: {
             effects: components["schemas"]["ReceiptEffects"];
             folder: string;
@@ -10132,6 +10549,7 @@ export interface components {
             /** Format: int64 */
             revision: number;
         };
+        /** @description One row of the A/B preview picker: a generated item that still holds a Preview Source. */
         RecentAudioSampleDto: {
             characterName: null | string;
             folder: string;
@@ -10147,17 +10565,26 @@ export interface components {
         RenderedDesignPromptResponse: {
             prompt: string;
         };
+        /** @description A rung as attribution runs it. */
         ResolvedChainStepDto: {
             config: components["schemas"]["LlmServerConfig"];
+            /** @description The <em>effective</em> style — the rung's own when it set one, else the config's. */
             promptStyle: components["schemas"]["AttributionPromptStyle"];
             thinking: boolean;
         };
         /** @enum {unknown} */
         RestoreEventKind: "Started" | "Finished";
+        /** @description What restoring a step would cost now: the items that would lose their audio. */
         RestorePreviewDto: {
             /** Format: int32 */
             audioDiscardCount: number;
         };
+        /**
+         * @description A Restore's answer (`POST /api/projects/{folder}/history/{stepId}/restore`): the Restore step it
+         *     added — null when the project already was that state, so nothing changed — the items whose audio
+         *     it discarded, and the items without audio after it, the brought-back ones included: what needs
+         *     generating.
+         */
         RestoreResultDto: {
             /** Format: int32 */
             audioDiscardCount: number;
@@ -10174,6 +10601,7 @@ export interface components {
         };
         /** @enum {unknown} */
         SemanticSimilarityServiceType: "MiniLmL6" | "MpnetBaseV2";
+        /** @description The fields a semantic-similarity provider type exposes beyond its base URL. */
         SemanticSimilaritySettingsSchema: {
             fields: components["schemas"]["SettingsFieldDto"][];
             type: components["schemas"]["SemanticSimilarityServiceType"];
@@ -10194,11 +10622,18 @@ export interface components {
             position: number;
             title: string;
         };
+        /** @description One book's cell: the Character linked there, a suggestion, or neither (an empty cell, with a picker). */
         SeriesCastCellDto: {
             folder: string;
             linked: null | components["schemas"]["SeriesLinkedCellDto"];
             suggested: null | components["schemas"]["SeriesCharacterRefDto"];
         };
+        /**
+         * @description The series cast board (#213) from `GET /api/series/{id}/cast`: books in position order, one row per
+         *     Series character, with its Link suggestions (#212), computed live: each cell's
+         *     `suggested`, the IReadOnlyList&lt;SeriesSuggestedRowDto&gt; SeriesCastDto.SuggestedRows, each unlinked Character's `nameMatches`
+         *     (for an ambiguous cell's picker) and int SeriesCastDto.SuggestionCount, suggested cells and rows together.
+         */
         SeriesCastDto: {
             books: components["schemas"]["SeriesCastBookDto"][];
             rows: components["schemas"]["SeriesCastRowDto"][];
@@ -10218,6 +10653,7 @@ export interface components {
         };
         /** @enum {unknown} */
         SeriesChangeKind: "Changed" | "Deleted";
+        /** @description A linked book, its Character and its own default Voice; bool SeriesCharacterBookDto.Differs: its Voices are not the series copy (#222). */
         SeriesCharacterBookDto: {
             /** Format: uuid */
             characterId: string;
@@ -10230,6 +10666,12 @@ export interface components {
             position: number;
             title: string;
         };
+        /**
+         * @description The inline series Voice editor (#213), from `GET /api/series/{id}/characters/{scId}`.
+         *     Voices come from the series copy, whose folder takes the editor's writes;
+         *     Books are the linked books; DeleteBlocks holds the refused
+         *     deletes, keyed by Voice Id.
+         */
         SeriesCharacterDto: {
             books: components["schemas"]["SeriesCharacterBookDto"][];
             deleteBlocks: {
@@ -10243,6 +10685,7 @@ export interface components {
             characterId: string;
             name: string;
         };
+        /** @description A series on `GET /api/series`: its Books (folder, position) in position order. */
         SeriesDto: {
             books: components["schemas"]["SeriesBookDto"][];
             /** Format: uuid */
@@ -10250,6 +10693,7 @@ export interface components {
             name: string;
             poster: components["schemas"]["SeriesPosterDto"];
         };
+        /** @description The Link confirm's gains (#208, 7): the Voice names this book gains, and those the other linked books gain. */
         SeriesLinkPreviewDto: {
             bookGains: string[];
             seriesGains: string[];
@@ -10260,14 +10704,21 @@ export interface components {
             differs: boolean;
             name: string;
         };
+        /** @description A book's Character in a suggested row (#212), as Share and link and Not the same take it. */
         SeriesMemberDto: {
             /** Format: uuid */
             characterId?: null | string;
             folder?: null | string;
         };
+        /** @description Share and link, or its preview: a suggested row's members. */
         SeriesMembersRequest: {
             members?: null | components["schemas"]["SeriesMemberDto"][];
         };
+        /**
+         * @description A series registry changed, or the series was deleted (#213): a signal to read `/api/series` again,
+         *     with no payload, debounced 250 ms per series, sent to every client (group `global`). A delete inside
+         *     the window wins over the changes before it.
+         */
         SeriesMessage: {
             kind: components["schemas"]["SeriesChangeKind"];
             /** Format: uuid */
@@ -10278,6 +10729,10 @@ export interface components {
                 [key: string]: number;
             };
         };
+        /**
+         * @description The series card's image (#219): string? SeriesPosterDto.Url is null when SeriesPosterSource SeriesPosterDto.Source is None;
+         *     decimal? SeriesPosterDto.CoverPosition is the book whose cover stands in, only for Cover.
+         */
         SeriesPosterDto: {
             /** Format: double */
             coverPosition: null | number;
@@ -10286,12 +10741,15 @@ export interface components {
         };
         /** @enum {unknown} */
         SeriesPosterSource: "Uploaded" | "Cover" | "None";
+        /** @description A push or take's confirm: each book that would lose Voices, and the positional rules on them (#222). */
         SeriesResolvePreviewDto: {
             losses: components["schemas"]["SeriesVoiceLossDto"][];
         };
+        /** @description Push or take: the book whose Voices are pushed, or that takes the series copy. */
         SeriesResolveRequest: {
             folder?: null | string;
         };
+        /** @description Share and link's confirm: the Voice names each book gains, lowest position first. */
         SeriesShareAndLinkPreviewDto: {
             books: components["schemas"]["SeriesBookGainsDto"][];
         };
@@ -10301,10 +10759,15 @@ export interface components {
             folder: string;
             name: string;
         };
+        /**
+         * @description A suggested row (#223): unlinked Characters of two or more books whose names match one-to-one;
+         *     Label is the first one's name.
+         */
         SeriesSuggestedRowDto: {
             label: string;
             members: components["schemas"]["SeriesSuggestedMemberDto"][];
         };
+        /** @description A book's unlinked Character, for the pickers; IReadOnlyList&lt;Guid&gt; SeriesUnlinkedCharacterDto.NameMatches: the Series characters its names match (#212). */
         SeriesUnlinkedCharacterDto: {
             /** Format: uuid */
             characterId: string;
@@ -10312,6 +10775,7 @@ export interface components {
             name: string;
             nameMatches: string[];
         };
+        /** @description Why a Voice can't be deleted, and the books that stop it. */
         SeriesVoiceDeleteBlockDto: {
             books: components["schemas"]["SeriesVoiceDeleteBookDto"][];
             reason: components["schemas"]["SeriesVoiceDeleteReason"];
@@ -10322,7 +10786,10 @@ export interface components {
             ruleCount: number;
             title: string;
         };
-        /** @enum {unknown} */
+        /**
+         * @description Why a shared Voice can't be deleted (#205 item 9).
+         * @enum {unknown}
+         */
         SeriesVoiceDeleteReason: "PositionalRules" | "LastVoice";
         SeriesVoiceLossDto: {
             folder: string;
@@ -10331,6 +10798,11 @@ export interface components {
             title: string;
             voices: string[];
         };
+        /**
+         * @description A managed service's status as last observed, pushed after every probe, lifecycle op and watchdog
+         *     transition so chips follow without polling (Angular ticket 25). `Op` with `Ok` /
+         *     `Error` is set only when a lifecycle op produced the observation — that is what a client toasts.
+         */
         ServiceStatusMessage: {
             error: null | string;
             name: string;
@@ -10342,20 +10814,31 @@ export interface components {
             /** Format: int32 */
             id: number;
         };
+        /** @description `PUT /api/projects/{folder}/checkpoints/{step}` body: `Open` deletes the row. */
         SetCheckpointRequest: {
             state: null | components["schemas"]["CheckpointRequestState"];
         };
+        /** @description Body of `POST …/pronunciations` and `PUT …/pronunciations/{id}`. */
         SetPronunciationRequest: {
             spokenForm: null | string;
             writtenForm: null | string;
         };
+        /** @description Which settings area changed, so other clients refresh their list. */
         SettingsChangedMessage: {
             area: string;
         };
+        /**
+         * @description One editable field of a provider's settings record. string SettingsFieldDto.Key is the JSON property
+         *     name the provider's `*Settings` record serialises to, so a sparse patch of these keys
+         *     merges straight over the config's `settingsJson` (VoiceDesignSettingsMerge).
+         *     A number with both double? SettingsFieldDto.Min and double? SettingsFieldDto.Max renders as a slider. A
+         *     bool SettingsFieldDto.Nullable number may be left blank, meaning "use the server's default".
+         */
         SettingsFieldDto: {
             default: unknown;
             help: null | string;
             key: string;
+            /** @description One of `number` | `boolean` | `enum` | `string` | `text` (a string on the host, not an enum). */
             kind: string;
             label: string;
             /** Format: double */
@@ -10367,20 +10850,43 @@ export interface components {
             /** Format: double */
             step: null | number;
         };
+        /** @description One choice of an `enum` field; a null string? SettingsOptionDto.Label shows the value. */
         SettingsOptionDto: {
             label: null | string;
             value: string;
         };
-        /** @enum {unknown} */
+        /**
+         * @description The area a check sits under in the report's one table.
+         * @enum {unknown}
+         */
         SetupCheckGroup: "WorkspaceAndTools" | "AiConfigs" | "DockerServices";
-        /** @enum {unknown} */
+        /**
+         * @description Where a Full check step runs: on this machine, in a CPU container, or in the one GPU container that fits.
+         * @enum {unknown}
+         */
         SetupCheckLane: "Local" | "Cpu" | "Gpu";
+        /**
+         * @description The Setup check's Full check, sent to every client (group `global`) so the page, the app-bar
+         *     shield and every tab read one source. Each carries the whole report: the rows (the current step's
+         *     are Checking) and `FullRun`; `Done` carries the final one.
+         */
         SetupCheckMessage: {
             kind: components["schemas"]["SetupCheckMessageKind"];
             report: components["schemas"]["SetupCheckReport"];
         };
         /** @enum {unknown} */
         SetupCheckMessageKind: "Progress" | "Done";
+        /**
+         * @description The Setup check report (`GET /api/setup-check`): the rows in table order and when each tier
+         *     last ran (null: not yet).
+         *     bool SetupCheckReport.FirstRun: this start created app.db, so the web app opens on the Setup check.
+         *     DateTimeOffset SetupCheckReport.StartedAt: when this host started; the start banner's dismissal lasts for it.
+         *     bool SetupCheckReport.NoWorkspace: this host started without a usable Workspace; every other API call
+         *     is refused and the web app shows only the Setup check until the app restarts.
+         *     SetupFullRun? SetupCheckReport.FullRun: the Full check going on, null when none is. int SetupCheckReport.FullCheckEstimateSeconds:
+         *     how long a Full check is likely to take, for its confirm. string? SetupCheckReport.PutBack: after a Full
+         *     check, what it did with the containers it drove ("Put back: read2me-whisper stopped again.").
+         */
         SetupCheckReport: {
             firstRun: boolean;
             /** Format: int32 */
@@ -10396,8 +10902,19 @@ export interface components {
             /** Format: date-time */
             startedAt: string;
         };
-        /** @enum {unknown} */
+        /**
+         * @description A check's one result. SetupCheckResult.Checking is transient, while a run is on that row.
+         * @enum {unknown}
+         */
         SetupCheckResult: "Passed" | "Failed" | "NotConfirmed" | "NotRun" | "NotUsed" | "Checking";
+        /**
+         * @description One check: what the app expected and what it found. A string? SetupCheckRow.Note never changes the
+         *     result. Every row carries a fix hint; the page shows it only for rows that aren't Passed or Not used.
+         *     bool SetupCheckRow.Managed: the app can start and restart what the row checks — a docker AI service,
+         *     or a config whose every URL is one. False for the Workspace and tools, and for a config on a
+         *     URL the app doesn't manage. SetupRerun? SetupCheckRow.Rerun: what re-running this one check takes, null
+         *     when it can't be (a Quick-tier row, or a config with no active one).
+         */
         SetupCheckRow: {
             expected: string;
             fix: components["schemas"]["SetupFixHint"];
@@ -10411,13 +10928,25 @@ export interface components {
             result: components["schemas"]["SetupCheckResult"];
             tier: components["schemas"]["SetupCheckTier"];
         };
-        /** @enum {unknown} */
+        /**
+         * @description Which check judges the row: the Quick check reads, the Full check sends real requests.
+         * @enum {unknown}
+         */
         SetupCheckTier: "Quick" | "Full";
+        /**
+         * @description Where to go next: one sentence, plus a link to the Settings section that owns the value and/or
+         *     a command or file path to copy, for things outside the app; null when there is none.
+         */
         SetupFixHint: {
             copy: null | string;
             link: null | components["schemas"]["SetupSettingsLink"];
             text: string;
         };
+        /**
+         * @description The Full check going on: step int SetupFullRun.Step of int SetupFullRun.Total, its lane and what it is
+         *     doing ("Encoding a 1 s tone to .m4b"). bool SetupFullRun.Cancelling: a cancel was asked for, so the
+         *     run stops once this step ends.
+         */
         SetupFullRun: {
             cancelling: boolean;
             label: string;
@@ -10427,9 +10956,14 @@ export interface components {
             /** Format: int32 */
             total: number;
         };
+        /**
+         * @description Re-running one Full-tier check. bool SetupRerun.Gpu: it drives a GPU container, so it stops the
+         *     one running and loads a model, and the web app confirms first.
+         */
         SetupRerun: {
             gpu: boolean;
         };
+        /** @description The in-app Settings section that owns the value: an app-relative path and its label. */
         SetupSettingsLink: {
             label: string;
             path: string;
@@ -10454,20 +10988,35 @@ export interface components {
             /** Format: double */
             threshold: number;
         };
+        /**
+         * @description A speech marker a Chapter or Part release detected, as written (`Q.`, `Darcy:`, `—…—`),
+         *     and how many paragraphs it would release.
+         */
         SpeechMarkerCountDto: {
             marker: string;
             /** Format: int32 */
             paragraphs: number;
         };
+        /**
+         * @description One level's split rule. `mode` is `Prefix`, `Arabic` or `Roman`; `prefix` is
+         *     required (non-blank) when `mode` is `Prefix`, ignored otherwise.
+         */
         SplitRuleRequest: {
             mode: null | string;
             prefix?: null | string;
         };
+        /** @description A 202 answer for work the host started in the background: progress goes over the live hub. */
         StartedResponse: {
             started: boolean;
         };
         /** @enum {unknown} */
         StepAction: "Edit" | "EditWithAi" | "Insert" | "Split" | "Merge" | "Delete" | "Title" | "Pause" | "Character" | "Voice" | "Attribution" | "Pronunciation";
+        /**
+         * @description One step of the voice editor's checklist: what it is, the dials it exposes (same field shape
+         *     as the provider settings schemas, so `r2m-settings-form` renders them) and the values
+         *     those dials start at. Only dial keys appear in IReadOnlyDictionary&lt;string, JsonElement&gt; StepCatalogEntryDto.Defaults; a step's non-dial
+         *     settings (silence-trim's output floor) are fixed server-side.
+         */
         StepCatalogEntryDto: {
             blurb: string;
             defaults: Record<string, unknown>;
@@ -10475,6 +11024,10 @@ export interface components {
             label: string;
             stepId: string;
         };
+        /**
+         * @description A step's confirmed or skipped checkpoint as `/status` reports it; At is when,
+         *     kept when the row goes stale.
+         */
         StepCheckpointDto: {
             /** Format: date-time */
             at: string;
@@ -10485,6 +11038,11 @@ export interface components {
             sample: null | components["schemas"]["PreviewSampleRef"];
             settings: null | components["schemas"]["JsonElement"];
         };
+        /**
+         * @description One rendered A/B preview. bool StepPreviewResponse.AppliedOk false means the step fell back, so the
+         *     processed URL plays the unprocessed audio and string? StepPreviewResponse.Reason says why.
+         *     double? StepPreviewResponse.RemovedMs is set only after a successful render — the trim card reads it.
+         */
         StepPreviewResponse: {
             appliedOk: boolean;
             originalUrl: string;
@@ -10496,13 +11054,26 @@ export interface components {
         };
         /** Format: binary */
         Stream: string;
-        /** @enum {unknown} */
+        /**
+         * @description What a Structure rules entry is keyed by. A pause paragraph is a Paragraph to the commands
+         *     but its own anchor here: it takes no speech item at its start or end.
+         * @enum {unknown}
+         */
         StructureAnchor: "Volume" | "Part" | "Chapter" | "Paragraph" | "PauseParagraph" | "ParagraphItem";
+        /**
+         * @description One placement an anchor allows: the kind it creates (Creates), and whether that node
+         *     needs text (TextRequired).
+         */
         StructurePlacementDto: {
             creates: components["schemas"]["NodeKind"];
             placement: components["schemas"]["Placement"];
             textRequired: boolean;
         };
+        /**
+         * @description StructureRule on the wire, its enums by name. NodeKind is what a command
+         *     names the anchor as; MinimumCount is how many of this kind the book always keeps
+         *     (Volume: 1).
+         */
         StructureRuleDto: {
             anchor: components["schemas"]["StructureAnchor"];
             /** Format: int32 */
@@ -10510,10 +11081,13 @@ export interface components {
             nodeKind: components["schemas"]["NodeKind"];
             placements: components["schemas"]["StructurePlacementDto"][];
         };
+        /** @description One text-processing step a TTS config may enable. */
         TextStepDto: {
+            /** @description False for one of the config's own substitutions, which the catalog lists after the built-ins. */
             builtIn: boolean;
             description: string;
             label: string;
+            /** @description The step's own switches, stored beside the config (`toSentenceCaseConfig`); null when it has none. */
             options?: null | components["schemas"]["SettingsFieldDto"][];
             stepId: string;
         };
@@ -10531,19 +11105,58 @@ export interface components {
             /** Format: int32 */
             selectedThemeId: null | number;
         };
+        /** @description Both fields optional, so a client can flip one without knowing the other. */
         ThemeSelectionUpdateRequest: {
             followSystemPreference?: null | boolean;
             /** Format: int32 */
             selectedThemeId?: null | number;
         };
+        /**
+         * @description A read-only view of the current (or last) Throughput Run, pulled by whoever is painting.
+         *     Absence is distinguishable from zero at every point: a figure that could not be measured is
+         *     null, and a run that never happened has bool ThroughputSnapshot.HasRun false.
+         */
         ThroughputSnapshot: {
-            /** Format: double */
+            /**
+             * Format: double
+             * @description The live figure: output tok/s over a sliding TimeSpan ThroughputSnapshot.GenerationRateWindow of the
+             *     in-flight request, differenced from consecutive cumulative readings. Null whenever nothing
+             *     is currently measurable — between requests before the first token, and always once the run
+             *     has ended, because a frozen "now 87.3 tok/s" beside an idle queue reads as current and is
+             *     a lie. It says <i>steady vs stuttering</i> and nothing else; the headline is
+             *     double? ThroughputSnapshot.RunThroughput.
+             */
             generationRate: null | number;
+            /**
+             * @description The sparkline's history: exactly int ThroughputSnapshot.HistoryBuckets buckets of
+             *     int ThroughputSnapshot.HistoryBucketMsms, oldest first, spanning the last
+             *     TimeSpan ThroughputSnapshot.HistorySpan of the run. A bucket nothing was measured in is null — an empty
+             *     bucket is not a `0` bucket. All null once the run has ended, or before it has
+             *     generated anything.
+             */
             generationRateHistory: (null | number)[];
+            /**
+             * @description Whether there is a run to report at all. False before the first RunStarted;
+             *     true from then on, including after the run ends, because the total is at its most readable
+             *     exactly when it becomes final.
+             */
             hasRun: boolean;
+            /**
+             * @description Whether the run is still open. Goes false at RunEnded, at which point live
+             *     figures blank while the headline and breakdown below persist — a frozen "now 87.3 tok/s"
+             *     beside an idle queue reads as current and is a lie.
+             */
             isRunActive: boolean;
+            /**
+             * @description The run's per-config breakdown, one row per config id that served a request, so an
+             *     escalation from a 4b to a 26b doesn't blend into one meaningless average.
+             */
             perConfig: components["schemas"]["ConfigThroughput"][];
-            /** Format: double */
+            /**
+             * Format: double
+             * @description The headline: `Σ predicted_n ÷ Σ predicted_ms` across every request in the run,
+             *     summing the primitives and dividing once at the end. Null when nothing was measurable.
+             */
             runThroughput: null | number;
         };
         ToSentenceCaseConfig: {
@@ -10559,15 +11172,30 @@ export interface components {
         TranscribeVoiceResponse: {
             transcript: string;
         };
+        /**
+         * @description A configured transcription (speech-to-text) backend. Common identity lives
+         *     in columns; all backend-specific settings are serialized into
+         *     string TranscriptionServiceConfig.SettingsJson, keyed by TranscriptionServiceType TranscriptionServiceConfig.Type. This keeps new
+         *     backend types additive — no schema change per type.
+         */
         TranscriptionServiceConfig: {
             /** Format: int32 */
             id: number;
+            /** @description User-facing name for this configuration. */
             name: string;
+            /** @description Serialized type-specific settings (e.g. base URL, API token). */
             settingsJson: string;
+            /** @description Selects the backend implementation and the settings shape. */
             type: components["schemas"]["TranscriptionServiceType"];
         };
-        /** @enum {unknown} */
+        /**
+         * @description Discriminator selecting which transcription backend a
+         *     TranscriptionServiceConfig targets. The chosen type also
+         *     determines the shape of the type-specific settings blob.
+         * @enum {unknown}
+         */
         TranscriptionServiceType: "LocalWhisper";
+        /** @description The fields a transcription provider type exposes beyond its base URL. */
         TranscriptionSettingsSchema: {
             fields: components["schemas"]["SettingsFieldDto"][];
             type: components["schemas"]["TranscriptionServiceType"];
@@ -10577,6 +11205,11 @@ export interface components {
         };
         /** @enum {unknown} */
         TransformKind: "RegexReplace" | "SetTemplate" | "Llm" | "ChangeCase";
+        /**
+         * @description `POST …/pronunciations/try` body, answered with the WAV. A try-out: the sentence of
+         *     ItemId starting at SentenceStart (an impact match's `sentenceStart`), with Draft in its entry's place unless AsWritten.
+         *     Voice is `{ "voiceId": "…" }` or `"item"` (the item's own resolved voice, also when left out).
+         */
         TryPronunciationRequest: {
             asWritten: boolean;
             draft: null | components["schemas"]["PronunciationDraftRequest"];
@@ -10586,6 +11219,7 @@ export interface components {
             sentenceStart: number;
             voice: null | components["schemas"]["JsonElement"];
         };
+        /** @description `PATCH /api/projects/{folder}` body: every field optional; an omitted or null field is left as it is. */
         UpdateProjectRequest: {
             author?: null | string;
             bookTitle?: null | string;
@@ -10620,6 +11254,7 @@ export interface components {
             /** @default false */
             regenerateAll: boolean;
         };
+        /** @description Voice batch runner state for the connect-time snapshot. */
         VoiceBatchState: {
             currentOperation: null | string;
             currentVoiceName: null | string;
@@ -10644,15 +11279,26 @@ export interface components {
             /** Format: int32 */
             total: number;
         };
+        /** @description Null, blank or the default text clears the override. */
         VoiceDesignSampleTextRequest: {
             text?: null | string;
         };
+        /** @description The voice-design sample text: the stored override, else the built-in default. */
         VoiceDesignSampleTextResponse: {
             default: string;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description The longest override a PUT accepts: every designed voice speaks this text, so it bounds the take's length (the Reference Limit).
+             */
             maxLength: number;
+            /** @description The stored override; null when the built-in Default is in use. */
             text: null | string;
         };
+        /**
+         * @description A configured voice-design backend. Common identity lives in columns; all
+         *     backend-specific settings are serialized into string VoiceDesignServiceConfig.SettingsJson,
+         *     keyed by VoiceDesignServiceType VoiceDesignServiceConfig.Type. New backend types stay additive.
+         */
         VoiceDesignServiceConfig: {
             /** Format: int32 */
             id: number;
@@ -10660,8 +11306,12 @@ export interface components {
             settingsJson: string;
             type: components["schemas"]["VoiceDesignServiceType"];
         };
-        /** @enum {unknown} */
+        /**
+         * @description Selects the voice-design backend and its settings shape.
+         * @enum {unknown}
+         */
         VoiceDesignServiceType: "VoxCpm2" | "Qwen3" | "Breeze";
+        /** @description The fields a voice-design provider type exposes, with the recommended default per field. */
         VoiceDesignSettingsSchema: {
             fields: components["schemas"]["SettingsFieldDto"][];
             type: components["schemas"]["VoiceDesignServiceType"];
@@ -10673,6 +11323,14 @@ export interface components {
             audioBase64: string;
             contentType: string;
         };
+        /**
+         * @description A voice as the cast page shows it. bool VoiceDto.IsEdited is the on-disk invariant
+         *     (bool IVoiceOriginalStore.Exists(ProjectFolderId folder, Guid characterId, Guid voiceId)): the audio has been through the voice editor, so
+         *     fresh audio would discard that edit. The two override JSONs are sparse patches over the
+         *     active provider's settings, keyed as the provider's settings schema lists them.
+         *     double? VoiceDto.ReferenceSeconds is the stored audio's length (null without audio), and
+         *     string? VoiceDto.ReferenceWarning is set when it is over the Reference Limit's soft limit.
+         */
         VoiceDto: {
             audioFileName: null | string;
             /** Format: uuid */
@@ -10691,6 +11349,13 @@ export interface components {
             ttsSettingsOverrideJson: null | string;
             voiceDesignSettingsOverrideJson: null | string;
         };
+        /**
+         * @description One voice rule as `GET …/characters/{id}/voice-rules` lists it, in evaluation order: the default
+         *     rule first, then by Order. Levels are VoiceAnchorLevel names
+         *     (null on the default rule and on an open "from here on" end); a dangling anchor names a
+         *     node that no longer exists, so its title is null. string VoiceRuleDto.Order is the fractional rank
+         *     the list is sorted by (lower first; the last passing rule wins).
+         */
         VoiceRuleDto: {
             fromDangling: boolean;
             fromLevel: null | components["schemas"]["VoiceAnchorLevel"];
@@ -10712,7 +11377,10 @@ export interface components {
         };
         /** @enum {unknown} */
         VoiceSource: "Uploaded" | "Generated";
-        /** @enum {unknown} */
+        /**
+         * @description A watchdog transition; the snapshot keeps the last one per service.
+         * @enum {unknown}
+         */
         WatchdogKind: "RecoveryStarted" | "ContainerRestarted" | "ServiceHealthy" | "ServiceDown";
         WatchdogMessage: {
             kind: components["schemas"]["WatchdogKind"];
@@ -10726,5 +11394,291 @@ export interface components {
     headers: never;
     pathItems: never;
 }
+export type AiServiceDto = components['schemas']['AiServiceDto'];
+export type AiServiceOp = components['schemas']['AiServiceOp'];
+export type AiServiceStatus = components['schemas']['AiServiceStatus'];
+export type AiServiceStatusDto = components['schemas']['AiServiceStatusDto'];
+export type ApiItemType = components['schemas']['ApiItemType'];
+export type AppTheme = components['schemas']['AppTheme'];
+export type ApplyDiscoveryResponse = components['schemas']['ApplyDiscoveryResponse'];
+export type ApplyDiscoveryRow = components['schemas']['ApplyDiscoveryRow'];
+export type ApplyPreviewRequest = components['schemas']['ApplyPreviewRequest'];
+export type AssemblyMessage = components['schemas']['AssemblyMessage'];
+export type AssemblyMessageKind = components['schemas']['AssemblyMessageKind'];
+export type AssemblyOutputDto = components['schemas']['AssemblyOutputDto'];
+export type AssemblyPhase = components['schemas']['AssemblyPhase'];
+export type AssemblyStartRequest = components['schemas']['AssemblyStartRequest'];
+export type AssemblyState = components['schemas']['AssemblyState'];
+export type AssemblyStatusDto = components['schemas']['AssemblyStatusDto'];
+export type AttributionChainRequest = components['schemas']['AttributionChainRequest'];
+export type AttributionChainResponse = components['schemas']['AttributionChainResponse'];
+export type AttributionChainStepDto = components['schemas']['AttributionChainStepDto'];
+export type AttributionCountsDto = components['schemas']['AttributionCountsDto'];
+export type AttributionPromptStyle = components['schemas']['AttributionPromptStyle'];
+export type AttributionQueueSnapshot = components['schemas']['AttributionQueueSnapshot'];
+export type AudioCountsDto = components['schemas']['AudioCountsDto'];
+export type AudioEnqueueRequest = components['schemas']['AudioEnqueueRequest'];
+export type AudioGenMessage = components['schemas']['AudioGenMessage'];
+export type AudioGenMessageKind = components['schemas']['AudioGenMessageKind'];
+export type AudioItemOutcome = components['schemas']['AudioItemOutcome'];
+export type AudioItemOutcomeKind = components['schemas']['AudioItemOutcomeKind'];
+export type AudioItemQueueStatus = components['schemas']['AudioItemQueueStatus'];
+export type AudioItemRefDto = components['schemas']['AudioItemRefDto'];
+export type AudioItemStatusDto = components['schemas']['AudioItemStatusDto'];
+export type AudioPostProcessStepConfig = components['schemas']['AudioPostProcessStepConfig'];
+export type AudioProcessingFullResponse = components['schemas']['AudioProcessingFullResponse'];
+export type AudioProcessingSettings = components['schemas']['AudioProcessingSettings'];
+export type AudioProcessingUpdateRequest = components['schemas']['AudioProcessingUpdateRequest'];
+export type AudioQueueSnapshot = components['schemas']['AudioQueueSnapshot'];
+export type AudioReviewDto = components['schemas']['AudioReviewDto'];
+export type AudioReviewState = components['schemas']['AudioReviewState'];
+export type BookEditMessage = components['schemas']['BookEditMessage'];
+export type BookEditMessageKind = components['schemas']['BookEditMessageKind'];
+export type BookEditRowDto = components['schemas']['BookEditRowDto'];
+export type BookEditRunDto = components['schemas']['BookEditRunDto'];
+export type BookEditRunStatus = components['schemas']['BookEditRunStatus'];
+export type BookEditTargetKind = components['schemas']['BookEditTargetKind'];
+export type BookFacets = components['schemas']['BookFacets'];
+export type BookFileType = components['schemas']['BookFileType'];
+export type BookMutationScope = components['schemas']['BookMutationScope'];
+export type BookNodeLevel = components['schemas']['BookNodeLevel'];
+export type BookOverviewDto = components['schemas']['BookOverviewDto'];
+export type BookStructuralRelation = components['schemas']['BookStructuralRelation'];
+export type BookStructuralRelationKind = components['schemas']['BookStructuralRelationKind'];
+export type BulkAssignPreviewDto = components['schemas']['BulkAssignPreviewDto'];
+export type BulkAssignPreviewRequest = components['schemas']['BulkAssignPreviewRequest'];
+export type ChapterVoicePreviewDto = components['schemas']['ChapterVoicePreviewDto'];
+export type CharacterAliasDto = components['schemas']['CharacterAliasDto'];
+export type CharacterDto = components['schemas']['CharacterDto'];
+export type CharacterLineDto = components['schemas']['CharacterLineDto'];
+export type CharacterSeriesLinkDto = components['schemas']['CharacterSeriesLinkDto'];
+export type CharacterSummaryDto = components['schemas']['CharacterSummaryDto'];
+export type CharacterVoicesDto = components['schemas']['CharacterVoicesDto'];
+export type CheckpointRequestState = components['schemas']['CheckpointRequestState'];
+export type CheckpointState = components['schemas']['CheckpointState'];
+export type CommandResponse = components['schemas']['CommandResponse'];
+export type ConfigThroughput = components['schemas']['ConfigThroughput'];
+export type ContextItemDto = components['schemas']['ContextItemDto'];
+export type ContextParagraphDto = components['schemas']['ContextParagraphDto'];
+export type CoverImageResponse = components['schemas']['CoverImageResponse'];
+export type CreateProjectResponse = components['schemas']['CreateProjectResponse'];
+export type CreateSeriesRequest = components['schemas']['CreateSeriesRequest'];
+export type CreateSeriesResponse = components['schemas']['CreateSeriesResponse'];
+export type DiscoveredCharacterDto = components['schemas']['DiscoveredCharacterDto'];
+export type DiscoveryOutcomeDto = components['schemas']['DiscoveryOutcomeDto'];
+export type DiscoveryStatus = components['schemas']['DiscoveryStatus'];
+export type EditPlanStatus = components['schemas']['EditPlanStatus'];
+export type EnqueueResponse = components['schemas']['EnqueueResponse'];
+export type EscalationState = components['schemas']['EscalationState'];
+export type FfmpegProbeResult = components['schemas']['FfmpegProbeResult'];
+export type FfmpegTestRequest = components['schemas']['FfmpegTestRequest'];
+export type GenerateDesignPromptRequest = components['schemas']['GenerateDesignPromptRequest'];
+export type GenerateDesignPromptResponse = components['schemas']['GenerateDesignPromptResponse'];
+export type GenerateVoiceAudioResponse = components['schemas']['GenerateVoiceAudioResponse'];
+export type HistoryBusyDto = components['schemas']['HistoryBusyDto'];
+export type HistoryDto = components['schemas']['HistoryDto'];
+export type HistoryMessage = components['schemas']['HistoryMessage'];
+export type HistoryMessageKind = components['schemas']['HistoryMessageKind'];
+export type HistoryStep = components['schemas']['HistoryStep'];
+export type HistoryStepDto = components['schemas']['HistoryStepDto'];
+export type HistoryStepKind = components['schemas']['HistoryStepKind'];
+export type ImportRequest = components['schemas']['ImportRequest'];
+export type ItemCountsDto = components['schemas']['ItemCountsDto'];
+export type ItemStatusEntry = components['schemas']['ItemStatusEntry'];
+export type ItemStatusMessage = components['schemas']['ItemStatusMessage'];
+export type ItemVoiceDto = components['schemas']['ItemVoiceDto'];
+export type ItemsEnqueueRequest = components['schemas']['ItemsEnqueueRequest'];
+export type JoinSeriesRequest = components['schemas']['JoinSeriesRequest'];
+export type JoinSeriesResponse = components['schemas']['JoinSeriesResponse'];
+export type JsonElement = components['schemas']['JsonElement'];
+export type JsonObject = components['schemas']['JsonObject'];
+export type LinkSeriesCharacterRequest = components['schemas']['LinkSeriesCharacterRequest'];
+export type LiveHubMethod = components['schemas']['LiveHubMethod'];
+export type LiveMessageMap = components['schemas']['LiveMessageMap'];
+export type LiveSnapshot = components['schemas']['LiveSnapshot'];
+export type LlmApiType = components['schemas']['LlmApiType'];
+export type LlmMessage = components['schemas']['LlmMessage'];
+export type LlmMessageKind = components['schemas']['LlmMessageKind'];
+export type LlmModelsResponse = components['schemas']['LlmModelsResponse'];
+export type LlmServerConfig = components['schemas']['LlmServerConfig'];
+export type LlmTestMessage = components['schemas']['LlmTestMessage'];
+export type LlmTestMessageKind = components['schemas']['LlmTestMessageKind'];
+export type LlmTestRequest = components['schemas']['LlmTestRequest'];
+export type LlmTestStatusResponse = components['schemas']['LlmTestStatusResponse'];
+export type ManualImportRequest = components['schemas']['ManualImportRequest'];
+export type NarrationReleasePreviewDto = components['schemas']['NarrationReleasePreviewDto'];
+export type NarrationReleasePreviewRequest = components['schemas']['NarrationReleasePreviewRequest'];
+export type NarrationReleaseScope = components['schemas']['NarrationReleaseScope'];
+export type NarratorDto = components['schemas']['NarratorDto'];
+export type NarratorOnlyModeRequest = components['schemas']['NarratorOnlyModeRequest'];
+export type NodeChildrenDto = components['schemas']['NodeChildrenDto'];
+export type NodeDto = components['schemas']['NodeDto'];
+export type NodeEnqueueRequest = components['schemas']['NodeEnqueueRequest'];
+export type NodeKind = components['schemas']['NodeKind'];
+export type NodeStatusMessage = components['schemas']['NodeStatusMessage'];
+export type NodeStatusSummaryDto = components['schemas']['NodeStatusSummaryDto'];
+export type NotTheSameRequest = components['schemas']['NotTheSameRequest'];
+export type ParagraphAttributionStatusDto = components['schemas']['ParagraphAttributionStatusDto'];
+export type ParagraphContextDto = components['schemas']['ParagraphContextDto'];
+export type ParagraphDto = components['schemas']['ParagraphDto'];
+export type ParagraphItemDto = components['schemas']['ParagraphItemDto'];
+export type ParagraphOutcome = components['schemas']['ParagraphOutcome'];
+export type ParagraphOutcomeKind = components['schemas']['ParagraphOutcomeKind'];
+export type ParagraphQueueStatus = components['schemas']['ParagraphQueueStatus'];
+export type ParagraphRefDto = components['schemas']['ParagraphRefDto'];
+export type ParagraphStatusEntry = components['schemas']['ParagraphStatusEntry'];
+export type ParagraphTtsServiceConfig = components['schemas']['ParagraphTtsServiceConfig'];
+export type ParagraphTtsServiceType = components['schemas']['ParagraphTtsServiceType'];
+export type ParagraphTtsSettingsSchema = components['schemas']['ParagraphTtsSettingsSchema'];
+export type ParagraphsEnqueueRequest = components['schemas']['ParagraphsEnqueueRequest'];
+export type PauseDurationsDto = components['schemas']['PauseDurationsDto'];
+export type Placement = components['schemas']['Placement'];
+export type PlanBookEditRequest = components['schemas']['PlanBookEditRequest'];
+export type PlanBookEditResponse = components['schemas']['PlanBookEditResponse'];
+export type PreflightConflictDto = components['schemas']['PreflightConflictDto'];
+export type PreflightMessage = components['schemas']['PreflightMessage'];
+export type PreflightMessageKind = components['schemas']['PreflightMessageKind'];
+export type PreflightPlanDto = components['schemas']['PreflightPlanDto'];
+export type PreflightRunRequest = components['schemas']['PreflightRunRequest'];
+export type PreflightRunResponse = components['schemas']['PreflightRunResponse'];
+export type PreflightServiceDto = components['schemas']['PreflightServiceDto'];
+export type PreflightStage = components['schemas']['PreflightStage'];
+export type PreviewRequest = components['schemas']['PreviewRequest'];
+export type PreviewResponse = components['schemas']['PreviewResponse'];
+export type PreviewSampleRef = components['schemas']['PreviewSampleRef'];
+export type PreviewStageDto = components['schemas']['PreviewStageDto'];
+export type PreviewStepRequest = components['schemas']['PreviewStepRequest'];
+export type ProblemDetails = components['schemas']['ProblemDetails'];
+export type ProjectDetailDto = components['schemas']['ProjectDetailDto'];
+export type ProjectSeries = components['schemas']['ProjectSeries'];
+export type ProjectSnapshot = components['schemas']['ProjectSnapshot'];
+export type ProjectStatusDto = components['schemas']['ProjectStatusDto'];
+export type ProjectSummary = components['schemas']['ProjectSummary'];
+export type PromptCatalogEntry = components['schemas']['PromptCatalogEntry'];
+export type PromptPreviewRequest = components['schemas']['PromptPreviewRequest'];
+export type PromptPreviewResponse = components['schemas']['PromptPreviewResponse'];
+export type PromptTemplateRequest = components['schemas']['PromptTemplateRequest'];
+export type PronunciationDeleted = components['schemas']['PronunciationDeleted'];
+export type PronunciationDraftRequest = components['schemas']['PronunciationDraftRequest'];
+export type PronunciationEntry = components['schemas']['PronunciationEntry'];
+export type PronunciationImpactReport = components['schemas']['PronunciationImpactReport'];
+export type PronunciationMatchInBook = components['schemas']['PronunciationMatchInBook'];
+export type PronunciationOverlap = components['schemas']['PronunciationOverlap'];
+export type PronunciationRef = components['schemas']['PronunciationRef'];
+export type PronunciationSaved = components['schemas']['PronunciationSaved'];
+export type PronunciationSpan = components['schemas']['PronunciationSpan'];
+export type PronunciationSpanReport = components['schemas']['PronunciationSpanReport'];
+export type ProposalStatus = components['schemas']['ProposalStatus'];
+export type ProposeBookEditRequest = components['schemas']['ProposeBookEditRequest'];
+export type ProposeOneBookEditRequest = components['schemas']['ProposeOneBookEditRequest'];
+export type QueueMessage = components['schemas']['QueueMessage'];
+export type ReceiptEffects = components['schemas']['ReceiptEffects'];
+export type ReceiptMessage = components['schemas']['ReceiptMessage'];
+export type RecentAudioSampleDto = components['schemas']['RecentAudioSampleDto'];
+export type RenameSeriesRequest = components['schemas']['RenameSeriesRequest'];
+export type RenderedDesignPromptResponse = components['schemas']['RenderedDesignPromptResponse'];
+export type ResolvedChainStepDto = components['schemas']['ResolvedChainStepDto'];
+export type RestoreEventKind = components['schemas']['RestoreEventKind'];
+export type RestorePreviewDto = components['schemas']['RestorePreviewDto'];
+export type RestoreResultDto = components['schemas']['RestoreResultDto'];
+export type SemanticSimilarityServiceConfig = components['schemas']['SemanticSimilarityServiceConfig'];
+export type SemanticSimilarityServiceType = components['schemas']['SemanticSimilarityServiceType'];
+export type SemanticSimilaritySettingsSchema = components['schemas']['SemanticSimilaritySettingsSchema'];
+export type SeriesBookDto = components['schemas']['SeriesBookDto'];
+export type SeriesBookGainsDto = components['schemas']['SeriesBookGainsDto'];
+export type SeriesCastBookDto = components['schemas']['SeriesCastBookDto'];
+export type SeriesCastCellDto = components['schemas']['SeriesCastCellDto'];
+export type SeriesCastDto = components['schemas']['SeriesCastDto'];
+export type SeriesCastRowDto = components['schemas']['SeriesCastRowDto'];
+export type SeriesChangeKind = components['schemas']['SeriesChangeKind'];
+export type SeriesCharacterBookDto = components['schemas']['SeriesCharacterBookDto'];
+export type SeriesCharacterDto = components['schemas']['SeriesCharacterDto'];
+export type SeriesCharacterRefDto = components['schemas']['SeriesCharacterRefDto'];
+export type SeriesDto = components['schemas']['SeriesDto'];
+export type SeriesLinkPreviewDto = components['schemas']['SeriesLinkPreviewDto'];
+export type SeriesLinkedCellDto = components['schemas']['SeriesLinkedCellDto'];
+export type SeriesMemberDto = components['schemas']['SeriesMemberDto'];
+export type SeriesMembersRequest = components['schemas']['SeriesMembersRequest'];
+export type SeriesMessage = components['schemas']['SeriesMessage'];
+export type SeriesPositionsRequest = components['schemas']['SeriesPositionsRequest'];
+export type SeriesPosterDto = components['schemas']['SeriesPosterDto'];
+export type SeriesPosterSource = components['schemas']['SeriesPosterSource'];
+export type SeriesResolvePreviewDto = components['schemas']['SeriesResolvePreviewDto'];
+export type SeriesResolveRequest = components['schemas']['SeriesResolveRequest'];
+export type SeriesShareAndLinkPreviewDto = components['schemas']['SeriesShareAndLinkPreviewDto'];
+export type SeriesSuggestedMemberDto = components['schemas']['SeriesSuggestedMemberDto'];
+export type SeriesSuggestedRowDto = components['schemas']['SeriesSuggestedRowDto'];
+export type SeriesUnlinkedCharacterDto = components['schemas']['SeriesUnlinkedCharacterDto'];
+export type SeriesVoiceDeleteBlockDto = components['schemas']['SeriesVoiceDeleteBlockDto'];
+export type SeriesVoiceDeleteBookDto = components['schemas']['SeriesVoiceDeleteBookDto'];
+export type SeriesVoiceDeleteReason = components['schemas']['SeriesVoiceDeleteReason'];
+export type SeriesVoiceLossDto = components['schemas']['SeriesVoiceLossDto'];
+export type ServiceStatusMessage = components['schemas']['ServiceStatusMessage'];
+export type SetActiveRequest = components['schemas']['SetActiveRequest'];
+export type SetCheckpointRequest = components['schemas']['SetCheckpointRequest'];
+export type SetPronunciationRequest = components['schemas']['SetPronunciationRequest'];
+export type SettingsChangedMessage = components['schemas']['SettingsChangedMessage'];
+export type SettingsFieldDto = components['schemas']['SettingsFieldDto'];
+export type SettingsOptionDto = components['schemas']['SettingsOptionDto'];
+export type SetupCheckGroup = components['schemas']['SetupCheckGroup'];
+export type SetupCheckLane = components['schemas']['SetupCheckLane'];
+export type SetupCheckMessage = components['schemas']['SetupCheckMessage'];
+export type SetupCheckMessageKind = components['schemas']['SetupCheckMessageKind'];
+export type SetupCheckReport = components['schemas']['SetupCheckReport'];
+export type SetupCheckResult = components['schemas']['SetupCheckResult'];
+export type SetupCheckRow = components['schemas']['SetupCheckRow'];
+export type SetupCheckTier = components['schemas']['SetupCheckTier'];
+export type SetupFixHint = components['schemas']['SetupFixHint'];
+export type SetupFullRun = components['schemas']['SetupFullRun'];
+export type SetupRerun = components['schemas']['SetupRerun'];
+export type SetupSettingsLink = components['schemas']['SetupSettingsLink'];
+export type ShareSeriesCharacterRequest = components['schemas']['ShareSeriesCharacterRequest'];
+export type ShareSeriesCharacterResponse = components['schemas']['ShareSeriesCharacterResponse'];
+export type SimilarityTestRequest = components['schemas']['SimilarityTestRequest'];
+export type SimilarityTestResponse = components['schemas']['SimilarityTestResponse'];
+export type SpeechMarkerCountDto = components['schemas']['SpeechMarkerCountDto'];
+export type SplitRuleRequest = components['schemas']['SplitRuleRequest'];
+export type StartedResponse = components['schemas']['StartedResponse'];
+export type StepAction = components['schemas']['StepAction'];
+export type StepCatalogEntryDto = components['schemas']['StepCatalogEntryDto'];
+export type StepCheckpointDto = components['schemas']['StepCheckpointDto'];
+export type StepPreviewRequest = components['schemas']['StepPreviewRequest'];
+export type StepPreviewResponse = components['schemas']['StepPreviewResponse'];
+export type Stream = components['schemas']['Stream'];
+export type StructureAnchor = components['schemas']['StructureAnchor'];
+export type StructurePlacementDto = components['schemas']['StructurePlacementDto'];
+export type StructureRuleDto = components['schemas']['StructureRuleDto'];
+export type TextStepDto = components['schemas']['TextStepDto'];
+export type TextSubstitutionStep = components['schemas']['TextSubstitutionStep'];
+export type ThemeSelectionDto = components['schemas']['ThemeSelectionDto'];
+export type ThemeSelectionUpdateRequest = components['schemas']['ThemeSelectionUpdateRequest'];
+export type ThroughputSnapshot = components['schemas']['ThroughputSnapshot'];
+export type ToSentenceCaseConfig = components['schemas']['ToSentenceCaseConfig'];
+export type TranscribeVoiceResponse = components['schemas']['TranscribeVoiceResponse'];
+export type TranscriptionServiceConfig = components['schemas']['TranscriptionServiceConfig'];
+export type TranscriptionServiceType = components['schemas']['TranscriptionServiceType'];
+export type TranscriptionSettingsSchema = components['schemas']['TranscriptionSettingsSchema'];
+export type TranscriptionTestResponse = components['schemas']['TranscriptionTestResponse'];
+export type TransformKind = components['schemas']['TransformKind'];
+export type TryPronunciationRequest = components['schemas']['TryPronunciationRequest'];
+export type UpdateProjectRequest = components['schemas']['UpdateProjectRequest'];
+export type VoiceAnchorLevel = components['schemas']['VoiceAnchorLevel'];
+export type VoiceBatchMessage = components['schemas']['VoiceBatchMessage'];
+export type VoiceBatchMessageKind = components['schemas']['VoiceBatchMessageKind'];
+export type VoiceBatchStartRequest = components['schemas']['VoiceBatchStartRequest'];
+export type VoiceBatchState = components['schemas']['VoiceBatchState'];
+export type VoiceBatchStatusDto = components['schemas']['VoiceBatchStatusDto'];
+export type VoiceDesignSampleTextRequest = components['schemas']['VoiceDesignSampleTextRequest'];
+export type VoiceDesignSampleTextResponse = components['schemas']['VoiceDesignSampleTextResponse'];
+export type VoiceDesignServiceConfig = components['schemas']['VoiceDesignServiceConfig'];
+export type VoiceDesignServiceType = components['schemas']['VoiceDesignServiceType'];
+export type VoiceDesignSettingsSchema = components['schemas']['VoiceDesignSettingsSchema'];
+export type VoiceDesignTestRequest = components['schemas']['VoiceDesignTestRequest'];
+export type VoiceDesignTestResponse = components['schemas']['VoiceDesignTestResponse'];
+export type VoiceDto = components['schemas']['VoiceDto'];
+export type VoiceRuleDto = components['schemas']['VoiceRuleDto'];
+export type VoiceSource = components['schemas']['VoiceSource'];
+export type WatchdogKind = components['schemas']['WatchdogKind'];
+export type WatchdogMessage = components['schemas']['WatchdogMessage'];
 export type $defs = Record<string, never>;
 export type operations = Record<string, never>;

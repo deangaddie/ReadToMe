@@ -8,16 +8,15 @@ import type {
   LlmTestRequest,
   LlmTestStatusResponse,
   ParagraphTtsServiceType,
-  ProviderSettingsSchema,
   SemanticSimilarityServiceType,
-  SettingsConfig,
   SimilarityTestResponse,
   TextStepDto,
   TranscriptionServiceType,
   VoiceDesignSampleTextResponse,
   VoiceDesignServiceType,
   VoiceDesignTestResponse,
-} from './dtos';
+} from './schema';
+import type { ProviderSettingsSchema, SettingsConfig } from './dtos';
 
 /** The five generic config areas `SettingsEndpoints.MapArea` serves. */
 export type SettingsArea =

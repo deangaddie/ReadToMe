@@ -4,8 +4,9 @@ import type {
   Guid,
   PronunciationMatchInBook,
   TryVoice,
+  QueueMessage,
+  VoiceBatchState,
 } from '@app/api';
-import type { QueueMessage, VoiceBatchState } from '@app/live/live-messages';
 import { isAttributionActive, isAudioActive } from '@app/activity/activity-jobs';
 import type { TryOutPlaying } from './try-out-player';
 

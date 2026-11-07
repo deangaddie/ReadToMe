@@ -1,6 +1,6 @@
 import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
-import type { ApplyDiscoveryResponse, ApplyDiscoveryRow, DiscoveryOutcomeDto } from './dtos';
+import type { ApplyDiscoveryResponse, ApplyDiscoveryRow, DiscoveryOutcomeDto } from './schema';
 
 /** `DiscoveryEndpoints.cs`: synchronous LLM character discovery and its apply step. */
 export class DiscoveryApi {

@@ -40,11 +40,10 @@ namespace Read2Me.Services.Llm
         /// <summary>
         /// Parses a batch response. Every paragraph index in <paramref name="requestedIndexes"/> must
         /// be answered or the whole parse fails; extra (unrequested) indexes are ignored — both trial
-        /// models also answer for context paragraphs. Duplicate indexes: first entry wins. Note the
-        /// contrast with <see cref="CharacterBatchAttributionParser"/>, which tolerantly drops
-        /// unusable entries: here escalation needs the whole paragraph (any unanswered paragraph
-        /// index = ParseFailure), so the parse is all-or-nothing at chunk level. Tolerance applies
-        /// only *within* an answered paragraph, where unusable items are dropped.
+        /// models also answer for context paragraphs. Duplicate indexes: first entry wins.
+        /// Escalation needs the whole paragraph (any unanswered paragraph index = ParseFailure), so the
+        /// parse is all-or-nothing at chunk level. Tolerance applies only *within* an answered
+        /// paragraph, where unusable items are dropped.
         /// </summary>
         public static bool TryParseBatch(
             string raw, IReadOnlyCollection<int> requestedIndexes,

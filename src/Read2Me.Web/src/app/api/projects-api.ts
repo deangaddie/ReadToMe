@@ -2,19 +2,17 @@ import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import type {
   CoverImageResponse,
-  CreateProjectRequest,
   CreateProjectResponse,
-  Guid,
-  CheckpointRequestState,
   ManualImportRequest,
-  NodeLevel,
+  BookNodeLevel,
+  CheckpointRequestState,
   NodeStatusSummaryDto,
-  PipelineStepId,
   ProjectDetailDto,
   ProjectStatusDto,
   ProjectSummary,
   UpdateProjectRequest,
-} from './dtos';
+} from './schema';
+import type { CreateProjectRequest, Guid, PipelineStepId } from './dtos';
 
 /** Cover uploads the host accepts (`ProjectEndpoints.SaveCoverAsync`): same list, same limit. */
 export const COVER_ACCEPT = '.jpg,.jpeg,.png,.webp';
@@ -94,7 +92,7 @@ export class ProjectsApi {
     return this.api.get('/api/projects/{folder}/status', { path: { folder } });
   }
 
-  nodeStatus(folder: string, level: NodeLevel, id: Guid): Promise<NodeStatusSummaryDto> {
+  nodeStatus(folder: string, level: BookNodeLevel, id: Guid): Promise<NodeStatusSummaryDto> {
     return this.api.get('/api/projects/{folder}/nodes/{level}/{id}/status', {
       path: { folder, level, id },
     });

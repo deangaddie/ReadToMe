@@ -1,6 +1,7 @@
 import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
-import type { BookEditRowDto, BookEditRunDto, Guid, PlanBookEditResponse } from './dtos';
+import type { BookEditRowDto, BookEditRunDto, PlanBookEditResponse } from './schema';
+import type { Guid } from './dtos';
 
 /**
  * `BookEditEndpoints.cs` (ticket 19): the AI book-edit flow. The plan lives on the host under an

@@ -167,7 +167,7 @@ namespace Read2Me.Services.Characters
 
     /// <summary>
     /// One chunk pipeline, where a single paragraph is a chunk of 1: every ask goes through
-    /// <see cref="RunOnce"/>, and the two branches that can add a second ask — self-consistency and
+    /// <see cref="RunOnceAsync"/>, and the two branches that can add a second ask — self-consistency and
     /// the final-rung parse-failure fallback — sit above it in <see cref="RunChunkAsync"/>. Request
     /// construction (context load, roster, template, budget) belongs to
     /// <see cref="AttributionRequestBuilder"/>; what is left here is control flow plus the

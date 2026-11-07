@@ -1,7 +1,7 @@
+import type { AiServiceOp, WatchdogKind, WatchdogMessage } from '@app/api';
 import { type AiServiceDto, type AiServiceStatus, AiServicesApi, toApiError } from '@app/api';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
-import type { AiServiceOp, WatchdogKind, WatchdogMessage } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast';
 

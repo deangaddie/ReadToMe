@@ -23,6 +23,7 @@ namespace Read2Me.App.Api
     /// <param name="ConnectionId">The live hub connection that receives the run's <c>preflight</c> messages.</param>
     public sealed record PreflightRunRequest(string? ConnectionId = null);
 
+    /// <summary>202 with the run id; every message of the run carries it.</summary>
     public sealed record PreflightRunResponse(string Run);
 
     /// <summary>

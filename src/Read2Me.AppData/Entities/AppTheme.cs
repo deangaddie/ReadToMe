@@ -1,5 +1,6 @@
 namespace Read2Me.AppData.Entities
 {
+    /// <summary>A theme row. The optional colours are null where the palette default applies.</summary>
     public class AppTheme
     {
         public int Id { get; set; }

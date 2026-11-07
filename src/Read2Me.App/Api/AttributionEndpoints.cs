@@ -11,7 +11,7 @@ using Read2Me.Services.UseCases;
 namespace Read2Me.App.Api
 {
     public sealed record NodeEnqueueRequest(BookNodeLevel Level, Guid NodeId, bool UnprocessedOnly = true);
-    /// <summary>An explicit selection. Ids that are not Character paragraphs are ignored.</summary>
+    /// <summary>The body of <c>POST …/attribution/enqueue-paragraphs</c>: an explicit selection. Ids that are not Character paragraphs are ignored.</summary>
     public sealed record ParagraphsEnqueueRequest(Guid[] ParagraphIds);
     public sealed record EnqueueResponse(int Enqueued)
     {

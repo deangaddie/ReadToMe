@@ -10,4 +10,14 @@
     <WarningsNotAsErrors>NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
   </PropertyGroup>
 
+  <!--
+    The host's projects emit XML docs, because the host's OpenAPI document takes its schema descriptions
+    from them, and openapi-typescript turns those into the web app's JSDoc (ADR 0017). Not every member
+    needs a summary (CS1591), and a summary documents only the parameters worth a word (CS1573).
+  -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Read2Me.App' or '$(MSBuildProjectName)' == 'Read2Me.Services' or '$(MSBuildProjectName)' == 'Read2Me.Core' or '$(MSBuildProjectName)' == 'Read2Me.AppData' or '$(MSBuildProjectName)' == 'Read2Me.Data'">
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+  </PropertyGroup>
+
 </Project>

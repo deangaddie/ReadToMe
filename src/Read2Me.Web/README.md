@@ -50,10 +50,11 @@ bundler does not see it until then.
   (`src/assets/fonts/MaterialSymbolsRounded.woff2`) is a subset holding only those names. To use a
   new icon, add its name to the union, run `bun run icons`, and commit the font and
   `icons.manifest.json` with it.
-- `src/app/api/` — `ApiClient` (the only place that calls `fetch`), the wire shapes in `dtos.ts`,
-  the `BookCommand` union and the generated `schema.d.ts` (checked in).
-- `src/app/live/` — the `/hubs/live` client. Its message types (`live-messages.ts`) are aliases over
-  the generated `schema.d.ts`, like the HTTP shapes.
+- `src/app/api/` — `ApiClient` (the only place that calls `fetch`), the `BookCommand` union and the
+  wire shapes: generated into `schema.d.ts` (checked in) under their C# names, plus the hand-written
+  rest in `dtos.ts`.
+- `src/app/live/` — the `/hubs/live` client. Its message types are generated into `schema.d.ts`,
+  like the HTTP shapes; `live-messages.ts` holds what has no wire counterpart.
 - `src/app/app.routes.ts`, `src/app/route-meta.ts` — the route table and per-route metadata.
 - `src/app/shell/`, `src/app/pages/` — the shell frame and the screens; an unknown path renders
   `pages/not-found-page.ts`.

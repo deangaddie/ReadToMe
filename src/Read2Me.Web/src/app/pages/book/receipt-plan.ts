@@ -1,4 +1,5 @@
-import { type BookFacets, type Receipt, hasFacet } from '@app/live/live-messages';
+import type { BookFacets } from '@app/api';
+import { type Receipt, hasFacet } from '@app/live/live-messages';
 
 /** What the reader holds for one loaded chapter, as far as matching a receipt goes. */
 export interface LoadedChapter {

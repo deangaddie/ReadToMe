@@ -1,6 +1,6 @@
+import type { ThroughputSnapshot } from '@app/api';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { render } from 'lit-html';
-import type { ThroughputSnapshot } from '@app/live/live-messages';
 import { sparkline, sparklinePoints, throughput } from './throughput';
 import { configThroughput } from '../../testing/live-messages';
 

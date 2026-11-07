@@ -1,9 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { BookOverviewDto, ParagraphDto, ProjectDetailDto } from '@app/api';
+import type {
+  BookOverviewDto,
+  ParagraphDto,
+  ProjectDetailDto,
+  BookFacets,
+  LiveSnapshot,
+} from '@app/api';
 import { Emitter } from '@app/core/emitter';
 import { override, resetServices } from '@app/core/services';
 import { signal } from '@app/core/signals';
-import type { BookFacets, LiveSnapshot, Receipt } from '@app/live/live-messages';
+import type { Receipt } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast';
 import { STRUCTURE_RULES } from '../../../testing/structure-rules';

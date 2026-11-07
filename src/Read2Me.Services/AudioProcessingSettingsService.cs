@@ -10,14 +10,10 @@ using Read2Me.Services.Events;
 namespace Read2Me.Services
 {
     /// <summary>
-    /// Single-row settings for the audio post-processing pipeline: the ffmpeg executable
-    /// path and the WER pass threshold. Mirrors the single-row upsert pattern used by
-    /// <see cref="ThemeService"/> / <see cref="VoiceDesignSettingsService"/>.
-    /// </summary>
-    /// <summary>
-    /// Snapshot of the audio post-processing settings row, with defaults already applied for
-    /// a missing row. <see cref="FfmpegPath"/> is the ffmpeg every consumer runs: the
-    /// <see cref="SavedFfmpegPath"/>, else the <see cref="ConfiguredFfmpegPath"/>, else null (PATH).
+    /// Snapshot of the audio post-processing settings row (<c>AudioProcessingSettingsService.GetAsync()</c>),
+    /// with defaults already applied for a missing row. <paramref name="FfmpegPath"/> is the ffmpeg every
+    /// consumer runs: the <paramref name="SavedFfmpegPath"/>, else the
+    /// <paramref name="ConfiguredFfmpegPath"/>, else null (PATH).
     /// </summary>
     public readonly record struct AudioProcessingSettings(
         string? FfmpegPath,
@@ -42,6 +38,11 @@ namespace Read2Me.Services
         public string? Value => AudioProcessingSettingsService.NormalizeFfmpegPath(read());
     }
 
+    /// <summary>
+    /// Single-row settings for the audio post-processing pipeline: the ffmpeg executable
+    /// path and the WER pass threshold. Mirrors the single-row upsert pattern used by
+    /// <see cref="ThemeService"/> / <see cref="VoiceDesignSettingsService"/>.
+    /// </summary>
     public class AudioProcessingSettingsService
     {
         public const double DefaultWerThreshold = 0.15;

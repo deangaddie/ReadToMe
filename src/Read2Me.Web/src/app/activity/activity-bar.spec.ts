@@ -1,9 +1,9 @@
+import type { QueueMessage } from '@app/api';
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { AssemblyApi, AttributionApi, AudioApi, VoicesApi } from '@app/api';
 import { override, resetServices, use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { IDLE_ASSEMBLY, IDLE_VOICE_BATCH } from '@app/live/live-state';
-import type { QueueMessage } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { ConfirmService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';

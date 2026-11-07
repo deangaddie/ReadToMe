@@ -1,11 +1,7 @@
 import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
-import type {
-  AiTaskKind,
-  PreflightPlanDto,
-  PreflightRunRequest,
-  PreflightRunResponse,
-} from './dtos';
+import type { PreflightPlanDto, PreflightRunRequest, PreflightRunResponse } from './schema';
+import type { AiTaskKind } from './dtos';
 
 /**
  * `PreflightEndpoints.cs` (ticket 25): what a task needs before it may touch its AI services, and

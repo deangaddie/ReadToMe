@@ -12,7 +12,7 @@ namespace Read2Me.App.Api
 {
     public sealed record ThemeSelectionDto(int? SelectedThemeId, bool FollowSystemPreference);
 
-    /// Both fields optional so a client can flip one without knowing the other.
+    /// <summary>Both fields optional, so a client can flip one without knowing the other.</summary>
     public sealed record ThemeSelectionUpdateRequest(int? SelectedThemeId = null, bool? FollowSystemPreference = null);
 
     /// <summary>

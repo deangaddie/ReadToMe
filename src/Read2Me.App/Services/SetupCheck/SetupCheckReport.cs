@@ -93,7 +93,8 @@ namespace Read2Me.App.Services.SetupCheck
     public sealed record SetupRerun(bool Gpu);
 
     /// <summary>
-    /// The Setup check report: the rows in table order and when each tier last ran (null: not yet).
+    /// The Setup check report (<c>GET /api/setup-check</c>): the rows in table order and when each tier
+    /// last ran (null: not yet).
     /// <see cref="FirstRun"/>: this start created app.db, so the web app opens on the Setup check.
     /// <see cref="StartedAt"/>: when this host started; the start banner's dismissal lasts for it.
     /// <see cref="NoWorkspace"/>: this host started without a usable Workspace; every other API call

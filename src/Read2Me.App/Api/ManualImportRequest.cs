@@ -6,6 +6,7 @@ namespace Read2Me.App.Api
     /// <c>POST /api/projects/{folder}/import/manual</c> body: how to re-split the source file by hand
     /// (the manual reread dialog's form, on the wire). <c>volume</c> is read only when
     /// <c>hasMultipleVolumes</c>, <c>part</c> only when <c>hasMultipleParts</c>; <c>chapter</c> always.
+    /// 400 when a switched-on level lacks a rule.
     /// </summary>
     public sealed record ManualImportRequest(
         bool HasMultipleVolumes,
@@ -57,7 +58,10 @@ namespace Read2Me.App.Api
         }
     }
 
-    /// <summary>One level's split rule. <c>mode</c> is <c>Prefix</c>, <c>Arabic</c> or <c>Roman</c>.</summary>
+    /// <summary>
+    /// One level's split rule. <c>mode</c> is <c>Prefix</c>, <c>Arabic</c> or <c>Roman</c>; <c>prefix</c> is
+    /// required (non-blank) when <c>mode</c> is <c>Prefix</c>, ignored otherwise.
+    /// </summary>
     public sealed record SplitRuleRequest(string? Mode, string? Prefix = null)
     {
         public const string ModeNames = "Prefix, Arabic, Roman";

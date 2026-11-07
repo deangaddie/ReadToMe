@@ -1,3 +1,4 @@
+import type { BookEditMessage } from '@app/api';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { LlmStreamFeed } from '@app/activity/stream-feed';
 import {
@@ -9,7 +10,6 @@ import {
 import { Emitter } from '@app/core/emitter';
 import { override, resetServices } from '@app/core/services';
 import { signal } from '@app/core/signals';
-import type { BookEditMessage } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { Preflight } from '@app/shared/preflight';
 import { ConfirmService } from '@app/ui/dialogs';

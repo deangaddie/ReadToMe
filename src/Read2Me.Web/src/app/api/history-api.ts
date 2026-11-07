@@ -1,6 +1,7 @@
 import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
-import type { Guid, HistoryDto, HistoryStepDto, RestoreResultDto } from './dtos';
+import type { HistoryDto, HistoryStepDto, RestoreResultDto } from './schema';
+import type { Guid } from './dtos';
 
 /** `HistoryEndpoints.cs`: a project's History. */
 export class HistoryApi {

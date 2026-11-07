@@ -11,16 +11,18 @@
  * "Known types" 400 whenever a host is reachable, and the exhaustiveness check at the bottom fails
  * `bun run typecheck` when the union and the list drift apart.
  */
-import type { Guid, NarrationReleaseScope } from './dtos';
+import type {
+  BookEditTargetKind,
+  NarrationReleaseScope,
+  NodeKind,
+  Placement,
+  VoiceAnchorLevel,
+} from './schema';
+import type { Guid } from './dtos';
 
 export type MergeDirection = 'Previous' | 'Next';
 export type InsertPosition = 'Before' | 'After';
-/** Where `InsertNode` puts its node: Before/After a sibling, AtStart/AtEnd a first or last child. */
-export type Placement = 'Before' | 'After' | 'AtStart' | 'AtEnd';
-export type NodeKind = 'Volume' | 'Part' | 'Chapter' | 'Paragraph' | 'ParagraphItem';
 export type RuleMoveDirection = 'Up' | 'Down';
-export type VoiceAnchorLevel = 'Volume' | 'Part' | 'Chapter' | 'Paragraph' | 'ParagraphItem';
-export type BookEditTargetKind = 'VolumeTitle' | 'PartTitle' | 'ChapterTitle' | 'ParagraphItemText';
 /** `AddTitles` levels (`TitleLevel`). */
 export type TitleLevelName = 'Book' | 'Volume' | 'Part' | 'Chapter';
 export type { PauseKind } from './dtos';

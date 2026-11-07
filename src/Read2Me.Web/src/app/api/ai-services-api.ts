@@ -1,7 +1,7 @@
 import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import { ApiError } from './api-error';
-import type { AiServiceDto, AiServiceStatusDto } from './dtos';
+import type { AiServiceDto, AiServiceStatusDto } from './schema';
 
 /**
  * `AiServiceEndpoints.cs`: the Docker AI service catalog, live health probes, and the manual

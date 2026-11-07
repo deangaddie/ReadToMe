@@ -15,12 +15,18 @@ namespace Read2Me.App.Api
     public sealed record LlmTestRequest(string? Prompt = null, string? ConnectionId = null);
     public sealed record LlmTestStatusResponse(bool Running, int? ConfigId);
 
+    /// <summary>One stored attribution chain rung.</summary>
     /// <param name="PromptStyle">Null stores no style: the rung inherits its config's own.</param>
     public sealed record AttributionChainStepDto(int ConfigId, bool Thinking, AttributionPromptStyle? PromptStyle = null);
     public sealed record AttributionChainRequest(IReadOnlyList<AttributionChainStepDto>? Steps = null, bool SelfConsistency = false);
 
+    /// <summary>A rung as attribution runs it.</summary>
     /// <param name="PromptStyle">The <em>effective</em> style — the rung's own when it set one, else the config's.</param>
     public sealed record ResolvedChainStepDto(LlmServerConfig Config, bool Thinking, AttributionPromptStyle PromptStyle);
+    /// <summary>
+    /// The stored chain, plus <paramref name="Resolved"/> (the chain attribution runs: deduped, and the default
+    /// config alone when <paramref name="Steps"/> is empty) and every config a step may name.
+    /// </summary>
     public sealed record AttributionChainResponse(
         IReadOnlyList<AttributionChainStepDto> Steps,
         bool SelfConsistency,

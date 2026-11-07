@@ -7,7 +7,9 @@ then src/app/api/schema.d.ts from it.
 Runs the one explicit E2E test that writes the document (OpenApiContractTests.Write_the_contract). It boots the host
 in-proc on the E2E fixture's own temp Workspace, so no real Workspace is read or migrated. The test writes canonical
 JSON: object keys sorted at every depth, `servers` dropped, array order kept, so one host always gives the same bytes.
-Then it runs `bun run api:types` (openapi-typescript over the checked-in openapi.json).
+Then it runs `bun run api:types` (openapi-typescript over the checked-in openapi.json). schema.d.ts exports every
+component as a root type under its C# name, which `@app/api` re-exports, so a new DTO needs no hand-typed alias; the
+C# XML docs reach it as JSDoc.
 
 When either file changed, it says so: commit both, and fix whatever web code `bun run typecheck` then points at.
 It doesn't fail on a change; the gate's later typecheck is the comparison.

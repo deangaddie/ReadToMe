@@ -8,7 +8,7 @@ import type {
   SeriesMemberDto,
   SeriesResolvePreviewDto,
   SeriesShareAndLinkPreviewDto,
-} from './dtos';
+} from './schema';
 
 /**
  * `SeriesEndpoints.cs`: the series registry and its lifecycle (Series lifecycle, #206). Books are

@@ -44,8 +44,9 @@ public sealed class DeltaBatcher
 
 /// <summary>
 /// Trailing-edge debounce: the first pulse starts a window, any number of further pulses ride it,
-/// and one flush fires when the window closes. Latency is bounded by <see cref="Window"/> and the
-/// rate by 1/<see cref="Window"/> however hard the source pulses.
+/// and one flush fires when the window closes. Latency is bounded by the window
+/// (<see cref="DefaultWindow"/> unless one is given) and the rate by one flush per window, however
+/// hard the source pulses.
 /// </summary>
 public sealed class Debouncer
 {

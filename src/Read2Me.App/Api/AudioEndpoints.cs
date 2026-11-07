@@ -12,11 +12,11 @@ namespace Read2Me.App.Api
 {
     public sealed record AudioEnqueueRequest(
         BookNodeLevel Level, Guid NodeId, bool NeedsAudioOnly = true, bool NarratorOnlyMode = false);
-    /// <summary>An explicit item selection or a single retry. Ids that name no item are ignored.</summary>
+    /// <summary>The body of <c>POST …/audio/enqueue-items</c>: an explicit item selection or a single retry. Ids that name no item are ignored.</summary>
     public sealed record ItemsEnqueueRequest(Guid[] ItemIds);
     public sealed record AudioItemStatusDto(AudioItemQueueStatus? Status, AudioItemOutcome? Outcome, long? AudioVersion);
 
-    /// <summary><see cref="AudioReviewInfo"/> on the wire, shared with the live hub's item status.</summary>
+    /// <summary><see cref="AudioReviewInfo"/> on the wire, shared with the live hub's item status; nulls are sent explicitly.</summary>
     public sealed record AudioReviewDto(
         AudioReviewState State, bool NormalizeOk, string? NormalizeReason, bool VerifyOk, double? Wer,
         string? VerifyReason, string? Transcript, string? OriginalTextSnapshot)

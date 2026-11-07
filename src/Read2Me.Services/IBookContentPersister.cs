@@ -4,7 +4,7 @@ using Read2Me.Data;
 namespace Read2Me.Services
 {
     /// <summary>
-    /// Turns read Book content into rows on <paramref name="db"/>'s change tracker.
+    /// Turns read Book content into rows on <c>db</c>'s change tracker.
     /// <para>
     /// It stages only: no <c>SaveChanges</c>, no transaction, no commit. The import mutation that
     /// calls it is already inside <see cref="Mutations.BookMutations"/>' transaction, and a Book that
