@@ -189,20 +189,36 @@ public class LiveRelayTests : IAsyncLifetime
         Assert.All(_hub.Method("llm"), m => Assert.Equal(LiveGroups.StreamLlm, m.Target));
     }
 
+    /// <summary>
+    /// Publishing never waits on the hub: with the drain loop parked on the gate (released only in
+    /// <see cref="DisposeAsync"/>), more deltas than the channel holds all go in, and the channel sheds
+    /// the oldest. The publishes run off the test thread so a blocking Publish fails here, after a hang
+    /// guard, instead of hanging the run; the guard is not a speed budget.
+    /// </summary>
     [Fact]
-    public async Task Publish_returns_immediately_while_the_drain_loop_is_blocked()
+    public async Task Publish_returns_while_the_drain_loop_is_blocked_and_the_channel_sheds_the_oldest()
     {
         _hub.Gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _watchdog.Publish(new ServiceHealthy("llama")); // first send parks the drain loop on the gate
         await WaitForAsync(() => _hub.Method("watchdog").Count == 1);
 
-        var sw = Stopwatch.StartNew();
-        for (var i = 0; i < 20_000; i++)
-            _llm.Publish(new ContentDelta("x"));
-        sw.Stop();
+        var published = 0;
+        var publishing = Task.Run(() =>
+        {
+            for (var i = 0; i < LiveRelay.ChannelCapacity * 2; i++)
+            {
+                _llm.Publish(new ContentDelta("x"));
+                published++;
+            }
+        }, TestContext.Current.CancellationToken);
+        var finished = await Task.WhenAny(publishing, Task.Delay(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
 
-        Assert.True(sw.ElapsedMilliseconds < 1000, $"20k publishes took {sw.ElapsedMilliseconds} ms with the drain blocked");
+        Assert.True(finished == publishing,
+            $"Publish blocked behind the parked drain loop: {published} of {LiveRelay.ChannelCapacity * 2} deltas went in");
+        await publishing;
+        Assert.False(_hub.Gate.Task.IsCompleted); // the drain is still parked
         Assert.Single(_hub.Method("watchdog")); // nothing else got through while blocked
+        Assert.Empty(_hub.Method("llm"));
         Assert.True(_relay.Dropped > 0, "the bounded channel should have shed the oldest deltas rather than block");
     }
 
