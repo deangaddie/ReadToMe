@@ -33,7 +33,6 @@ namespace Read2Me.Services.Series
         private SeriesRegistry Registry => services.GetRequiredService<SeriesRegistry>();
         private SeriesVoiceReplicator Replicator => services.GetRequiredService<SeriesVoiceReplicator>();
         private SeriesSnapshotLoader Loader => services.GetRequiredService<SeriesSnapshotLoader>();
-        private SeriesRegistryLock Gate => services.GetRequiredService<SeriesRegistryLock>();
 
         public async Task<BookCommitPlan> PlanAsync(BookMutation mutation, CancellationToken ct)
         {
@@ -47,7 +46,7 @@ namespace Read2Me.Services.Series
                     return BookCommitPlan.Refuse(new BookMutationOutcome.Rejected(BookMutationRejection.Blocked,
                         $"{name} is linked to a series character. Unlink {name} first, or merge the other way."));
 
-                case DeleteCharacterMutation delete when await PeersAsync(folder, delete.CharacterId, ct) is not null:
+                case DeleteCharacterMutation delete when await RemembersAsync(folder, delete.CharacterId, ct):
                     return BookCommitPlan.After(_ => Registry.ForgetCharacterAsync(folder, delete.CharacterId));
             }
 
@@ -71,14 +70,18 @@ namespace Read2Me.Services.Series
                     : Task.CompletedTask);
         }
 
+        // These reads take no lock (#246), so a book's commit doesn't wait behind a series write.
+
         /// <summary>The Character's peers from the registry layer alone: no Characters or Voices are read.</summary>
-        private async Task<SeriesPeers?> PeersAsync(ProjectFolderId folder, Guid characterId, CancellationToken ct)
-        {
-            using var _ = await Gate.EnterAsync(ct);
-            return await Loader.LoadSeriesOfAsync(folder, withCasts: false, ct) is ({ } series, var projectId)
+        private async Task<SeriesPeers?> PeersAsync(ProjectFolderId folder, Guid characterId, CancellationToken ct) =>
+            await Loader.LoadSeriesOfAsync(folder, withCasts: false, ct) is ({ } series, var projectId)
                 ? series.Peers(projectId, characterId)
                 : null;
-        }
+
+        /// <summary>Whether the series names the Character in a link or a <i>Not the same</i>, from the registry layer alone.</summary>
+        private async Task<bool> RemembersAsync(ProjectFolderId folder, Guid characterId, CancellationToken ct) =>
+            await Loader.LoadSeriesOfAsync(folder, withCasts: false, ct) is ({ } series, var projectId)
+            && series.Remembers(projectId, characterId);
 
         /// <summary>
         /// The Character's peers when it is linked and another book is linked too, with the Voices
@@ -86,7 +89,6 @@ namespace Read2Me.Services.Series
         /// </summary>
         private async Task<(SeriesSnapshot Series, SeriesPeers Peers)?> VoicedPeersAsync(ProjectFolderId folder, Guid characterId, CancellationToken ct)
         {
-            using var _ = await Gate.EnterAsync(ct);
             if (await Loader.LoadSeriesOfAsync(folder, withCasts: false, ct) is not ({ } series, var projectId)) return null;
             if (series.Peers(projectId, characterId) is not { Others.Count: > 0 } peers) return null;
             return (await Loader.WithVoicesAsync(series, [peers.SeriesCharacterId], ct), peers);
