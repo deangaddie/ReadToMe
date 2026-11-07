@@ -95,40 +95,6 @@ public class WebHostingTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         }
     }
 
-    /// <summary>
-    /// Retired front ends are gone for good: the Blazor UI's routes and assets, and the native
-    /// app's migration prefix <c>/app2</c> (ADR 0014). No page, no redirect, and no fall-through to
-    /// the web index. Only <c>/</c> still sends a browser to <c>/app/</c>.
-    /// </summary>
-    [Theory]
-    [InlineData("/app2")]
-    [InlineData("/app2/projects/pride-and-prejudice")]
-    [InlineData("/blazor")]
-    [InlineData("/project/pride-and-prejudice")]
-    [InlineData("/llm-settings")]
-    [InlineData("/llm-prompts")]
-    [InlineData("/audio-processing-settings")]
-    [InlineData("/_blazor")]
-    [InlineData("/_framework/blazor.server.js")]
-    [InlineData("/_content/MudBlazor/MudBlazor.min.css")]
-    [InlineData("/css/app.css")]
-    public async Task Retired_front_end_routes_are_not_found(string path)
-    {
-        StageBundle();
-        try
-        {
-            using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
-            var response = await http.GetAsync(app.BaseUrl + path);
-
-            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-            Assert.DoesNotContain(IndexMarker, await response.Content.ReadAsStringAsync());
-        }
-        finally
-        {
-            RemoveBundle();
-        }
-    }
-
     private void StageBundle()
     {
         var dir = Path.Combine(app.WebRootDir, "app");

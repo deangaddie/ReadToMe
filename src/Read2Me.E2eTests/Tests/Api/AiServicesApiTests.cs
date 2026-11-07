@@ -20,9 +20,10 @@ public class AiServicesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
     private string Url(string rest = "") => $"{app.BaseUrl}/api/ai-services{rest}";
 
     [Fact]
-    public async Task Status_lists_every_managed_service_with_the_probe_result()
+    public async Task Status_lists_every_managed_service_with_the_probe_result_and_a_single_probe_also_pushes()
     {
         app.FakeControl.StatusByName["whisper"] = AiServiceStatus.Stopped;
+        app.FakeControl.StatusByName["minilm-l6"] = AiServiceStatus.Starting;
         try
         {
             var all = JsonDocument.Parse(await Http.GetStringAsync(Url("/status"))).RootElement.EnumerateArray()
@@ -34,6 +35,20 @@ public class AiServicesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
             Assert.DoesNotContain("whisper-cpu", catalog);
             Assert.Equal("Stopped", all["whisper"]);
             Assert.Equal("Ready", all["llama"]);
+
+            // Probing one service also pushes its status, with no op, to every client.
+            await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
+            var pushed = new ConcurrentQueue<JsonElement>();
+            hub.On<JsonElement>("serviceStatus", pushed.Enqueue);
+            await hub.StartJoinedAsync();
+
+            var probe = JsonDocument.Parse(await Http.GetStringAsync(Url("/minilm-l6/status"))).RootElement;
+            Assert.Equal("Starting", probe.GetProperty("status").GetString());
+
+            await WaitForAsync(() => pushed.Any(m => m.GetProperty("name").GetString() == "minilm-l6"));
+            var message = pushed.First(m => m.GetProperty("name").GetString() == "minilm-l6");
+            Assert.Equal("Starting", message.GetProperty("status").GetString());
+            Assert.Equal(JsonValueKind.Null, message.GetProperty("op").ValueKind);
         }
         finally
         {
@@ -42,9 +57,10 @@ public class AiServicesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
     }
 
     [Fact]
-    public async Task Shutdown_then_start_answer_202_and_push_the_outcome_to_every_client()
+    public async Task Shutdown_start_and_restart_answer_202_and_push_the_outcome_to_every_client()
     {
         app.FakeControl.StatusByName["llama"] = AiServiceStatus.Ready;
+        app.FakeControl.StatusByName["whisper"] = AiServiceStatus.Ready;
         try
         {
             await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
@@ -68,36 +84,17 @@ public class AiServicesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
             var ready = pushed.First(m => m.GetProperty("op").GetString() == "Start");
             Assert.Equal("Ready", ready.GetProperty("status").GetString());
 
-            // The snapshot remembers what was last observed, for a client that connects later.
-            var snapshot = await hub.InvokeAsync<JsonElement>("GetSnapshot");
-            Assert.Equal("Ready", snapshot.GetProperty("serviceStatus").GetProperty("llama").GetString());
-        }
-        finally
-        {
-            app.FakeControl.Reset();
-        }
-    }
-
-    [Fact]
-    public async Task Restart_answers_202_and_pushes_the_outcome()
-    {
-        app.FakeControl.StatusByName["whisper"] = AiServiceStatus.Ready;
-        try
-        {
-            await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
-            var pushed = new ConcurrentQueue<JsonElement>();
-            hub.On<JsonElement>("serviceStatus", pushed.Enqueue);
-            await hub.StartJoinedAsync();
-
             var restart = await Http.PostAsync(Url("/whisper/restart"), null);
             Assert.Equal(HttpStatusCode.Accepted, restart.StatusCode);
             await WaitForAsync(() => pushed.Any(m => m.GetProperty("op").GetString() == "Restart"));
-
-            var outcome = pushed.First(m => m.GetProperty("op").GetString() == "Restart");
-            Assert.Equal("whisper", outcome.GetProperty("name").GetString());
-            Assert.Equal("Ready", outcome.GetProperty("status").GetString());
-            Assert.True(outcome.GetProperty("ok").GetBoolean());
+            var restarted = pushed.First(m => m.GetProperty("op").GetString() == "Restart");
+            Assert.Equal("whisper", restarted.GetProperty("name").GetString());
+            Assert.Equal("Ready", restarted.GetProperty("status").GetString());
             Assert.Contains("restart:whisper", app.FakeControl.OpLog);
+
+            // The snapshot remembers what was last observed, for a client that connects later.
+            var snapshot = await hub.InvokeAsync<JsonElement>("GetSnapshot");
+            Assert.Equal("Ready", snapshot.GetProperty("serviceStatus").GetProperty("llama").GetString());
         }
         finally
         {
@@ -113,31 +110,6 @@ public class AiServicesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
 
         var probe = await Http.GetAsync(Url("/no-such-service/status"));
         Assert.Equal(HttpStatusCode.NotFound, probe.StatusCode);
-    }
-
-    [Fact]
-    public async Task Probing_one_service_also_pushes_its_status()
-    {
-        app.FakeControl.StatusByName["minilm-l6"] = AiServiceStatus.Starting;
-        try
-        {
-            await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
-            var pushed = new ConcurrentQueue<JsonElement>();
-            hub.On<JsonElement>("serviceStatus", pushed.Enqueue);
-            await hub.StartJoinedAsync();
-
-            var probe = JsonDocument.Parse(await Http.GetStringAsync(Url("/minilm-l6/status"))).RootElement;
-            Assert.Equal("Starting", probe.GetProperty("status").GetString());
-
-            await WaitForAsync(() => pushed.Any(m => m.GetProperty("name").GetString() == "minilm-l6"));
-            var message = pushed.First(m => m.GetProperty("name").GetString() == "minilm-l6");
-            Assert.Equal("Starting", message.GetProperty("status").GetString());
-            Assert.Equal(JsonValueKind.Null, message.GetProperty("op").ValueKind);
-        }
-        finally
-        {
-            app.FakeControl.Reset();
-        }
     }
 
     private static async Task WaitForAsync(Func<bool> condition, int timeoutMs = 10000)

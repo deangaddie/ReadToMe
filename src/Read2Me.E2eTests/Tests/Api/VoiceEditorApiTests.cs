@@ -10,7 +10,8 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// WAVs → apply-by-previewId, restore, and the stored original. Asserts on the <b>files</b> as well as
 /// the DTOs — the invariant is <c>{voiceId}.orig.wav</c> exists ⟺ the voice has been edited.
 /// Filters are ffmpeg-gated and may skip in this fixture; a skipped stage still answers its input, so
-/// the round trip holds either way and <c>applied</c> is deliberately not asserted.
+/// the round trip holds either way and <c>applied</c> is deliberately not asserted. Preview expiry is
+/// PreviewStoreTests.
 /// </summary>
 public class VoiceEditorApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
@@ -174,22 +175,5 @@ public class VoiceEditorApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
         Assert.Equal(HttpStatusCode.UnprocessableEntity, crossed.StatusCode);
         Assert.Empty(Directory.EnumerateFiles(
             Path.Combine(app.WorkspaceDir, folder, "voices"), "*.orig.wav", SearchOption.AllDirectories));
-    }
-
-    [Fact]
-    public async Task Preview_urls_and_apply_stop_working_after_expiry()
-    {
-        var (folder, _, voiceId) = await SeedAsync("api-voice-editor-expiry");
-        var preview = await PreviewAsync(folder, voiceId, TwoSteps());
-        var previewId = preview.GetProperty("previewId").GetString()!;
-        var url = preview.GetProperty("stages")[0].GetProperty("url").GetString()!;
-
-        Assert.Equal(HttpStatusCode.OK, (await Http.GetAsync($"{app.BaseUrl}{url}")).StatusCode);
-
-        app.Clock.Advance(TimeSpan.FromMinutes(31));
-
-        Assert.Equal(HttpStatusCode.NotFound, (await Http.GetAsync($"{app.BaseUrl}{url}")).StatusCode);
-        var apply = await Http.PostAsJsonAsync($"{EditorUrl(folder, voiceId)}/apply", new { previewId });
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, apply.StatusCode);
     }
 }

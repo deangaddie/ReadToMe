@@ -4,7 +4,10 @@ using Read2Me.E2eTests.Infrastructure;
 
 namespace Read2Me.E2eTests.Tests.Api;
 
-/// <summary>Provider settings schemas (Angular ticket 16): one descriptor per provider type.</summary>
+/// <summary>
+/// Provider settings schemas: the wire shape of one descriptor. Its 400s (an unknown type, the removed
+/// Chatterbox Turbo) are asserted once, in <c>ProviderSettingsApiTests</c>.
+/// </summary>
 public class ProviderSchemaApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
@@ -37,33 +40,5 @@ public class ProviderSchemaApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
         // Connection and app-level chunking knobs are per-config, never per-voice.
         Assert.DoesNotContain("baseUrl", keys);
         Assert.DoesNotContain("maxChunkChars", keys);
-    }
-
-    [Fact]
-    public async Task Schema_takes_only_the_member_name_and_rejects_unknown_types()
-    {
-        var named = JsonDocument.Parse(
-            await Http.GetStringAsync($"{app.BaseUrl}/api/settings/paragraph-tts/schema?type=Chatterbox")).RootElement;
-        Assert.Equal("Chatterbox", named.GetProperty("type").GetString());
-
-        // One wire form (#166): a number or another casing names no type.
-        foreach (var loose in new[] { "1", "chatterbox" })
-        {
-            var response = await Http.GetAsync($"{app.BaseUrl}/api/settings/paragraph-tts/schema?type={loose}");
-            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        }
-
-        var unknown = await Http.GetAsync($"{app.BaseUrl}/api/settings/voice-design/schema?type=Nope");
-        Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
-
-        var missing = await Http.GetAsync($"{app.BaseUrl}/api/settings/paragraph-tts/schema");
-        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
-
-        // Chatterbox Turbo was removed (ADR 0010); its reserved value 2 is no provider type.
-        foreach (var removed in new[] { "ChatterboxTurbo", "2" })
-        {
-            var response = await Http.GetAsync($"{app.BaseUrl}/api/settings/paragraph-tts/schema?type={removed}");
-            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        }
     }
 }

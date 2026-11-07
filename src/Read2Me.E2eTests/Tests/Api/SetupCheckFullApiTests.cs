@@ -8,7 +8,8 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// <summary>
 /// The Full check over the agent API on the in-proc host: start, join, Preflight and the direct AI endpoints refused for the run,
 /// cancel. The fake encode holds the run in its first step, the ffmpeg encode, so the test can act mid-run. The runner's
-/// rules (refusal, gates, watchdog, progress) are SetupCheckFullCheckTests.
+/// rules (refusal, gates, watchdog, progress, the steps and their rows) are SetupCheckFullCheckTests,
+/// SetupCheckCpuServicesTests and SetupCheckRunnerTests; here only statuses and the wire shape.
 /// </summary>
 public class SetupCheckFullApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
@@ -37,13 +38,10 @@ public class SetupCheckFullApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
             var run = (await ReadAsync(started)).GetProperty("fullRun");
             Assert.Equal(1, run.GetProperty("step").GetInt32());
             Assert.Equal("Local", run.GetProperty("lane").GetString());
-            Assert.Equal("Encoding a 1 s tone to .m4b", run.GetProperty("label").GetString());
 
             var joined = await Http.PostAsync(Url("/full"), null);
             Assert.Equal(HttpStatusCode.Accepted, joined.StatusCode);
-            // The seeded configs add a CPU step each for transcription and similarity, and GPU steps
-            // for paragraph TTS, voice design and the one LLM model.
-            Assert.Equal(6, (await ReadAsync(joined)).GetProperty("fullRun").GetProperty("total").GetInt32());
+            Assert.True((await ReadAsync(joined)).GetProperty("fullRun").GetProperty("total").GetInt32() > 0);
 
             // Cancelled once the run is in its step, which then finishes.
             await app.FfmpegEncode.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
@@ -68,14 +66,7 @@ public class SetupCheckFullApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
         }
 
         var final = await FinishedAsync();
-        var ffmpeg = final.GetProperty("rows").EnumerateArray().Single(r => r.GetProperty("id").GetString() == "ffmpeg");
-        Assert.Equal("Passed", ffmpeg.GetProperty("result").GetString());
-        Assert.Equal("Full", ffmpeg.GetProperty("tier").GetString());
         Assert.Equal(JsonValueKind.String, final.GetProperty("fullCheckedAt").ValueKind);
-        // Cancelled during the ffmpeg step: the CPU checks never ran, so no container was driven.
-        var transcription = final.GetProperty("rows").EnumerateArray().Single(r => r.GetProperty("id").GetString() == "transcription");
-        Assert.Equal("NotRun", transcription.GetProperty("result").GetString());
-        Assert.Equal("Nothing to put back: the check drove no containers.", final.GetProperty("putBack").GetString());
 
         var afterwards = await Http.PostAsync($"{app.BaseUrl}/api/preflight/CharacterAttribution/plan", null);
         Assert.Equal(HttpStatusCode.OK, afterwards.StatusCode);
@@ -87,21 +78,16 @@ public class SetupCheckFullApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
     public async Task One_check_re_runs_alone_a_second_re_run_is_refused_and_a_Quick_tier_id_is_not_found()
     {
         await QuickCheckedAsync();
-        var before = await ReadAsync(await Http.GetAsync(Url()));
-        var ffmpegBefore = before.GetProperty("rows").EnumerateArray().Single(r => r.GetProperty("id").GetString() == "ffmpeg");
-        Assert.False(ffmpegBefore.GetProperty("rerun").GetProperty("gpu").GetBoolean());
         app.FfmpegEncode.HoldNext();
         try
         {
             var started = await Http.PostAsync(Url("/checks/ffmpeg/rerun"), null);
             Assert.Equal(HttpStatusCode.Accepted, started.StatusCode);
-            var run = (await ReadAsync(started)).GetProperty("fullRun");
-            Assert.Equal(1, run.GetProperty("total").GetInt32());
-            Assert.Equal("Encoding a 1 s tone to .m4b", run.GetProperty("label").GetString());
+            Assert.Equal(1, (await ReadAsync(started)).GetProperty("fullRun").GetProperty("total").GetInt32());
 
             var again = await Http.PostAsync(Url("/checks/ffmpeg/rerun"), null);
             Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
-            Assert.Equal("A check is re-running: re-run this one once it ends.", (await ReadAsync(again)).GetProperty("detail").GetString());
+            Assert.False(string.IsNullOrWhiteSpace((await ReadAsync(again)).GetProperty("detail").GetString()));
             await app.FfmpegEncode.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
         }
         finally
@@ -109,12 +95,7 @@ public class SetupCheckFullApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
             app.FfmpegEncode.Release();
         }
 
-        var final = await FinishedAsync();
-        var ffmpeg = final.GetProperty("rows").EnumerateArray().Single(r => r.GetProperty("id").GetString() == "ffmpeg");
-        Assert.Equal("Passed", ffmpeg.GetProperty("result").GetString());
-        // A re-run isn't a whole Full check: its time stays as it was.
-        Assert.Equal(before.GetProperty("fullCheckedAt").ToString(), final.GetProperty("fullCheckedAt").ToString());
-        Assert.Equal("Nothing to put back: the check drove no containers.", final.GetProperty("putBack").GetString());
+        await FinishedAsync();
 
         var quickTier = await Http.PostAsync(Url("/checks/docker/rerun"), null);
         Assert.Equal(HttpStatusCode.NotFound, quickTier.StatusCode);

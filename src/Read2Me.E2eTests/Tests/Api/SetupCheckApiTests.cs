@@ -8,38 +8,30 @@ namespace Read2Me.E2eTests.Tests.Api;
 
 /// <summary>
 /// <c>/api/setup-check</c> on the in-proc host: the start-up Quick check fills the report by
-/// itself, and a requested one replaces it. The rules behind each row are SetupCheckRunnerTests.
+/// itself, and a requested one replaces it. The rows (their ids, order, results and notes) are the
+/// rules of SetupCheckRunnerTests; here only their wire fields are read.
 /// </summary>
 public class SetupCheckApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 
-    private static readonly string[] AllIds =
-    [
-        "workspace", "ffmpeg", "docker",
-        "llm", "attribution-chain", "paragraph-tts", "voice-design", "transcription", "similarity",
-        "container-llama", "container-audiocpp", "container-whisper", "container-minilm-l6", "container-mpnet-base-v2",
-    ];
-
     [Fact]
     public async Task The_start_up_quick_check_fills_the_report_and_a_requested_one_replaces_it()
     {
         var atStart = await ReportAfterStartAsync();
-        Assert.Equal(AllIds, Ids(atStart));
+        Assert.NotEmpty(atStart.GetProperty("rows").EnumerateArray());
         Assert.Equal(JsonValueKind.Null, atStart.GetProperty("fullCheckedAt").ValueKind);
         Assert.False(atStart.GetProperty("noWorkspace").GetBoolean());
         // With a Workspace, the hosted services that touch app.db run.
         Assert.All(app.Services.GetServices<IHostedService>().OfType<WorkspaceHostedService>(), s => Assert.NotNull(s.Running));
 
-        var workspace = atStart.GetProperty("rows")[0];
-        Assert.Equal("WorkspaceAndTools", workspace.GetProperty("group").GetString());
-        Assert.Equal("Quick", workspace.GetProperty("tier").GetString());
-        Assert.Equal("Passed", workspace.GetProperty("result").GetString());
-        Assert.Equal(app.WorkspaceDir, workspace.GetProperty("found").GetString());
-        Assert.False(string.IsNullOrEmpty(workspace.GetProperty("fix").GetProperty("text").GetString()));
+        // The wire fields of a row, as names (enums go out as their member names).
+        foreach (var row in atStart.GetProperty("rows").EnumerateArray())
+            foreach (var field in new[] { "id", "group", "tier", "result" })
+                Assert.Equal(JsonValueKind.String, row.GetProperty(field).ValueKind);
 
         var ran = await ReadAsync(await Http.PostAsync($"{app.BaseUrl}/api/setup-check/quick", null));
-        Assert.Equal(AllIds, Ids(ran));
+        Assert.Equal(Ids(atStart), Ids(ran));
         Assert.True(QuickCheckedAt(ran) > QuickCheckedAt(atStart));
 
         var read = await ReadAsync(await Http.GetAsync($"{app.BaseUrl}/api/setup-check"));
