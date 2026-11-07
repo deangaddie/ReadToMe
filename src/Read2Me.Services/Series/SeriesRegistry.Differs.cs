@@ -1,20 +1,17 @@
-using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
-using Read2Me.Services.Audio;
 using Read2Me.Services.Events;
 using Read2Me.Services.History;
-using Read2Me.Services.Mutations;
-using VoiceEntity = Read2Me.Data.Entities.Voice;
 
 namespace Read2Me.Services.Series
 {
     /// <summary>
     /// Differs from series (#222, #205 item 5): a linked book whose copy of a Series character's
-    /// Voices is not the <b>series copy</b> (<see cref="SeriesCopyChoice"/>). It is found live, by
-    /// comparing each book's Voices and reference audio, so a copy that failed to write and a
-    /// Restore to older Voices end in the same state with nothing stored. The user resolves it by
-    /// pushing a book's Voices to every other linked book, or taking the series copy into it.
+    /// Voices is not the <b>Series copy</b> (<see cref="SeriesCopyChoice"/>). It is found live from
+    /// the snapshot's Voices layer, by comparing each book's Voices and reference audio, so a copy
+    /// that failed to write and a Restore to older Voices end in the same state with nothing stored.
+    /// The user resolves it by pushing a book's Voices to every other linked book, or taking the
+    /// Series copy into it.
     /// </summary>
     public sealed partial class SeriesRegistry
     {
@@ -32,7 +29,7 @@ namespace Read2Me.Services.Series
             ResolveAsync(seriesId, seriesCharacterId, folder, push: true, ct);
 
         /// <summary>
-        /// Take: the series copy's Voices are copied into this book, a "Take series voices" step
+        /// Take: the Series copy's Voices are copied into this book, a "Take series voices" step
         /// there. Refused unless the book differs.
         /// </summary>
         public Task<SeriesResult<bool>> TakeAsync(Guid seriesId, Guid seriesCharacterId, string folder, CancellationToken ct = default) =>
@@ -46,28 +43,34 @@ namespace Read2Me.Services.Series
             Guid seriesId, Guid seriesCharacterId, string folder, bool push, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            var loaded = await LoadHealedAsync(seriesId, ct);
-            if (loaded.Value is not { } series) return loaded.Refusal!;
-            var planned = await PlanResolveAsync(series, seriesCharacterId, folder, push);
-            if (planned.Value is not { } plan) return planned.Refusal!;
-            return new SeriesResolvePreview(await LossesAsync(plan.Source, plan.Targets));
+            var planned = await PlanResolveAsync(seriesId, seriesCharacterId, folder, push, ct);
+            if (planned.Value is not ({ } series, { } plan)) return planned.Refusal!;
+            return new SeriesResolvePreview(series.Losses(seriesCharacterId, plan.Source, plan.Targets));
         }
 
-        private async Task<SeriesResult<SeriesResolvePlan>> PlanResolveAsync(
-            SeriesSnapshot series, Guid seriesCharacterId, string folder, bool push) =>
-            series.PlanResolve(seriesCharacterId, folder, push, await ChooseAsync(series.Id, series.LinkedPeers(seriesCharacterId)));
+        private sealed record PlannedResolve(SeriesSnapshot Series, SeriesResolvePlan Plan);
+
+        /// <summary>The series with the Voices layer of the Series character, and the push or take planned from it.</summary>
+        private async Task<SeriesResult<PlannedResolve>> PlanResolveAsync(
+            Guid seriesId, Guid seriesCharacterId, string folder, bool push, CancellationToken ct)
+        {
+            var loaded = await LoadHealedAsync(seriesId, ct);
+            if (loaded.Value is not { } registryLayer) return loaded.Refusal!;
+            var series = await loader.WithVoicesAsync(registryLayer, [seriesCharacterId], ct);
+            var planned = series.PlanResolve(seriesCharacterId, folder, push);
+            if (planned.Value is not { } plan) return planned.Refusal!;
+            return new PlannedResolve(series, plan);
+        }
 
         private async Task<SeriesResult<bool>> ResolveAsync(
             Guid seriesId, Guid seriesCharacterId, string folder, bool push, CancellationToken ct)
         {
             using var hold = await gate.EnterAsync(ct);
-            var loaded = await LoadHealedAsync(seriesId, ct);
-            if (loaded.Value is not { } series) return loaded.Refusal!;
-            var planned = await PlanResolveAsync(series, seriesCharacterId, folder, push);
-            if (planned.Value is not { } plan) return planned.Refusal!;
+            var planned = await PlanResolveAsync(seriesId, seriesCharacterId, folder, push, ct);
+            if (planned.Value is not ({ } series, { } plan)) return planned.Refusal!;
 
             // The source's whole set: each target holds exactly these afterwards.
-            var source = await VoicesAsync(plan.Source.FolderId, plan.Source.CharacterId);
+            var source = series.VoicesOf(seriesCharacterId, plan.Source);
             var writes = SeriesCopies.InWriteOrder(plan.Targets)
                 .Select(t => new SeriesVoiceWrite(t, new SeriesVoiceChange.Replace(source)))
                 .ToList();
@@ -78,86 +81,6 @@ namespace Read2Me.Services.Series
                 .Select(r => (Title: plan.Linked.First(p => p.Folder == r.Folder).Title, Reason: r.Failure!))
                 .ToList();
             return failures.Count > 0 ? SeriesRefusal.CopiesFailed(failures) : true;
-        }
-
-        // ---- reads -------------------------------------------------------------------------------
-
-        /// <summary>
-        /// The other linked books an edit made in <see cref="SeriesPeers.Self"/> should bring back in
-        /// line (#208, 5): when that book holds the series copy, every book that differs from it and
-        /// would lose no positional rules; else none, since a differing book's edit resolves nothing silently.
-        /// </summary>
-        public async Task<IReadOnlySet<string>> DifferingPeersAsync(SeriesPeers peers)
-        {
-            using var _ = await gate.EnterAsync(CancellationToken.None);
-            var choice = await ChooseAsync(peers.SeriesId, [peers.Self, .. peers.Others]);
-            if (choice is null || !string.Equals(choice.SeriesCopyFolder, peers.Self.Folder, StringComparison.OrdinalIgnoreCase))
-                return new HashSet<string>();
-
-            // Nothing asks first here, so a book that would lose positional rules is left differing for a push or take.
-            var differing = peers.Others.Where(p => choice.DiffersFrom(p.Folder)).ToList();
-            var losing = (await LossesAsync(peers.Self, differing)).Where(l => l.RuleCount > 0).Select(l => l.Folder).ToHashSet();
-            return differing.Select(p => p.Folder).Where(f => !losing.Contains(f)).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        }
-
-        // ---- internals ---------------------------------------------------------------------------
-
-        /// <summary>A linked book's Voices of the Series character, and their version.</summary>
-        private sealed record HeldVoices(SeriesPeer Book, IReadOnlyList<VoiceEntity> Voices, string Version);
-
-        /// <summary>Each book's Voices; a book whose Voices can't be read is logged and left out.</summary>
-        private async Task<IReadOnlyList<HeldVoices>> HeldAsync(Guid seriesId, IEnumerable<SeriesPeer> books)
-        {
-            var held = new List<HeldVoices>();
-            foreach (var book in books)
-            {
-                try
-                {
-                    var voices = await characters.GetCharacterVoicesAsync(book.FolderId, book.CharacterId);
-                    var folder = fs.GetProjectFolderPath(book.FolderId);
-                    var states = new List<SeriesVoiceState>(voices.Count);
-                    foreach (var v in voices)
-                        states.Add(new SeriesVoiceState(v.Id, v.Name, v.Description, v.Source, v.DesignPrompt, v.Transcript,
-                            v.VoiceDesignSettingsOverrideJson, v.TtsSettingsOverrideJson, await AudioHashAsync(folder, v.AudioFileName)));
-                    held.Add(new HeldVoices(book, voices, SeriesVoiceVersion.Of(states)));
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    logger.LogWarning(ex, "Series {SeriesId}: the Voices of '{Folder}' could not be read", seriesId, book.Folder);
-                }
-            }
-            return held;
-        }
-
-        /// <summary>What replacing each target's Voices with <paramref name="source"/>'s set removes; a book losing nothing is left out.</summary>
-        private async Task<IReadOnlyList<SeriesVoiceLoss>> LossesAsync(SeriesPeer source, IEnumerable<SeriesPeer> targets)
-        {
-            var kept = (await characters.GetCharacterVoicesAsync(source.FolderId, source.CharacterId)).Select(v => v.Id).ToHashSet();
-            var losses = new List<SeriesVoiceLoss>();
-            foreach (var target in targets)
-            {
-                var held = (await characters.GetCharacterVoicesAsync(target.FolderId, target.CharacterId)).Select(v => (v.Id, v.Name)).ToList();
-                var rules = (await characters.GetCharacterVoiceRulesAsync(target.FolderId, target.CharacterId))
-                    .Where(r => !r.IsDefault).Select(r => r.VoiceId).ToList();
-                if (SeriesVoiceLosses.Of(target.Folder, target.Title, kept, held, rules) is { } loss) losses.Add(loss);
-            }
-            return losses;
-        }
-
-        private static SeriesCopyChoice.Choice? Choose(IReadOnlyList<HeldVoices> held) =>
-            held.Count == 0
-                ? null
-                : SeriesCopyChoice.Choose(held.Select(h => new SeriesCopyChoice.Book(h.Book.Folder, h.Book.Position, h.Version)).ToList());
-
-        private async Task<SeriesCopyChoice.Choice?> ChooseAsync(Guid seriesId, IEnumerable<SeriesPeer> books) =>
-            Choose(await HeldAsync(seriesId, books));
-
-        /// <summary>The reference audio's content hash; a named file that is missing hashes as such.</summary>
-        private async Task<string?> AudioHashAsync(string projectFolder, string? audioFileName)
-        {
-            if (audioFileName is not { Length: > 0 }) return null;
-            var path = Path.Combine(projectFolder, audioFileName);
-            return File.Exists(path) ? await audioHashes.HashAsync(path) : "missing";
         }
     }
 

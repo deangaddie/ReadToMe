@@ -32,6 +32,10 @@ namespace Read2Me.Tests.Services.Series
         private static readonly Guid WatsonInStudy = Guid.NewGuid();
         private static readonly Guid WatsonInSign = Guid.NewGuid();
         private static readonly Guid DeletedInSign = Guid.NewGuid();
+        private static readonly Guid Holmes = Guid.NewGuid();
+        private static readonly Guid HolmesInStudy = Guid.NewGuid();
+        private static readonly Guid HolmesInSign = Guid.NewGuid();
+        private static readonly Guid ArmyDoctor = Guid.NewGuid();
 
         private readonly ServiceProvider _root;
         private Guid _study;
@@ -101,8 +105,50 @@ namespace Read2Me.Tests.Services.Series
             Assert.Equal(0, workspace.Unreadable);
             Assert.Equal(_sign, projectId);
             Assert.Empty(series.Casts);
+            Assert.Empty(series.Voices);
             Assert.Equal([Study], series.Peers(_sign, WatsonInSign)!.Others.Select(p => p.Folder));
             Assert.Equal(new ProjectSeries(SeriesId, "Sherlock Holmes", 2m), forSign.MembershipOf(signId));
+        }
+
+        [Fact]
+        public async Task The_Voices_layer_loads_only_for_the_Series_characters_asked_about_and_deletes_nothing()
+        {
+            await SeedAsync();
+            await SeedVoicesAsync();
+
+            var series = await LoadAsync(async l =>
+                await l.WithVoicesAsync((await l.LoadSeriesAsync(SeriesId, withCasts: true, Ct)).Value!, [Watson], Ct));
+
+            Assert.Equal([Watson], series.Voices.Keys);
+            Assert.Equal([Study, Sign], series.Voices[Watson].Select(h => h.Book.Folder));
+            var inSign = series.Voices[Watson][1];
+            Assert.Equal((WatsonInSign, ArmyDoctor), (inSign.Book.CharacterId, Assert.Single(inSign.Voices).Id));
+            Assert.Equal([ArmyDoctor], inSign.PositionalRuleVoices);
+            Assert.Equal(ArmyDoctor, inSign.DefaultVoiceId);
+            // The same Voice with the same reference audio, each under its own Character's folder: no book differs.
+            Assert.Equal(series.Voices[Watson][0].Version, inSign.Version);
+            Assert.False(series.Differs(Watson, Sign));
+            Assert.Null(series.SeriesCopy(Holmes));
+
+            await using var db = await SeriesDbContext.OpenAsync(SeriesFolder, Ct);
+            Assert.Equal(3, await db.Books.CountAsync(Ct));
+            Assert.Equal(6, await db.Links.CountAsync(Ct));
+            Assert.Equal(1, await db.NotTheSame.CountAsync(Ct));
+        }
+
+        [Fact]
+        public async Task A_book_whose_reference_audio_differs_differs_from_series()
+        {
+            await SeedAsync();
+            await SeedVoicesAsync();
+            await File.WriteAllBytesAsync(Path.Combine(TempDir, Sign, AudioOf(WatsonInSign)), [9, 9, 9, 9, 9], Ct);
+
+            var series = await LoadAsync(async l =>
+                await l.WithVoicesAsync((await l.LoadSeriesAsync(SeriesId, withCasts: true, Ct)).Value!, [Watson], Ct));
+
+            // A tie goes to the lowest Series position, so the Study holds the Series copy.
+            Assert.Equal(Study, series.SeriesCopy(Watson)!.SeriesCopyFolder);
+            Assert.True(series.Differs(Watson, Sign));
         }
 
         [Fact]
@@ -126,10 +172,12 @@ namespace Read2Me.Tests.Services.Series
             await new BookHierarchyBuilder(() => OpenBookDbAsync(Study))
                 .WithProject(title: "A Study in Scarlet", author: "Arthur Conan Doyle")
                 .WithCharacter("watson", new Character { Id = WatsonInStudy, Name = "Dr. Watson" })
+                .WithCharacter("holmes", new Character { Id = HolmesInStudy, Name = "Sherlock Holmes" })
                 .BuildAsync();
             await new BookHierarchyBuilder(() => OpenBookDbAsync(Sign))
                 .WithProject(title: "The Sign of the Four", author: "Arthur Conan Doyle")
                 .WithCharacter("watson", new Character { Id = WatsonInSign, Name = "Dr. Watson" })
+                .WithCharacter("holmes", new Character { Id = HolmesInSign, Name = "Sherlock Holmes" })
                 .BuildAsync();
             _study = await ProjectIdAsync(Study);
             _sign = await ProjectIdAsync(Sign);
@@ -149,6 +197,38 @@ namespace Read2Me.Tests.Services.Series
                 new SeriesLink { SeriesCharacterId = Orphan, ProjectId = _sign, CharacterId = DeletedInSign });
             db.NotTheSame.Add(new NotTheSameRow { Id = Guid.NewGuid(), SeriesCharacterId = Watson, ProjectId = _sign, CharacterId = DeletedInSign });
             await db.SaveChangesAsync(Ct);
+        }
+
+        private static string AudioOf(Guid characterId) => $"voices/{characterId}/army-doctor.wav";
+
+        /// <summary>
+        /// Holmes becomes a second Series character, linked in both books. Dr. Watson holds "Army
+        /// doctor" in both, with the same reference audio and the Sign's one positional rule on it.
+        /// </summary>
+        private async Task SeedVoicesAsync()
+        {
+            await using (var series = await SeriesDbContext.OpenAsync(SeriesFolder, Ct))
+            {
+                series.Characters.Add(new SeriesCharacterRow { Id = Holmes });
+                series.Links.AddRange(
+                    new SeriesLink { SeriesCharacterId = Holmes, ProjectId = _study, CharacterId = HolmesInStudy },
+                    new SeriesLink { SeriesCharacterId = Holmes, ProjectId = _sign, CharacterId = HolmesInSign });
+                await series.SaveChangesAsync(Ct);
+            }
+
+            foreach (var (folder, watson) in new[] { (Study, WatsonInStudy), (Sign, WatsonInSign) })
+            {
+                var audio = Path.Combine(TempDir, folder, AudioOf(watson));
+                Directory.CreateDirectory(Path.GetDirectoryName(audio)!);
+                await File.WriteAllBytesAsync(audio, [1, 2, 3], Ct);
+
+                await using var db = await OpenBookDbAsync(folder);
+                db.Voices.Add(new Read2Me.Data.Entities.Voice { Id = ArmyDoctor, CharacterId = watson, Name = "Army doctor", AudioFileName = AudioOf(watson) });
+                db.VoiceRules.Add(new VoiceRule { Id = Guid.NewGuid(), CharacterId = watson, VoiceId = ArmyDoctor, Rank = "a", IsDefault = true });
+                if (folder == Sign)
+                    db.VoiceRules.Add(new VoiceRule { Id = Guid.NewGuid(), CharacterId = watson, VoiceId = ArmyDoctor, Rank = "b" });
+                await db.SaveChangesAsync(Ct);
+            }
         }
 
         private async Task<ProjectDbContext> OpenBookDbAsync(string folder)
