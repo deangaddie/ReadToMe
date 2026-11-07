@@ -13,31 +13,6 @@ namespace Read2Me.Services.Series
     /// </summary>
     public sealed partial class SeriesRegistry
     {
-        /// <summary>One book's Character, named by folder, as the suggested-row routes take them.</summary>
-        public readonly record struct SeriesMemberRef(string Folder, Guid CharacterId);
-
-        // ---- reads -------------------------------------------------------------------------------
-
-        /// <summary>
-        /// What <i>Share and link</i> would copy, for its confirm: the names of the Voices each book
-        /// gains, lowest position first. Every book ends up holding every member's Voices.
-        /// </summary>
-        public async Task<SeriesResult<IReadOnlyList<SeriesBookGains>>> PreviewShareAndLinkAsync(
-            Guid seriesId, IReadOnlyList<SeriesMemberRef> members, CancellationToken ct = default)
-        {
-            var loaded = await loader.LoadSeriesAsync(seriesId, withCasts: true, ct);
-            if (loaded.Value is not { } series) return loaded.Refusal!;
-            var picked = series.UnlinkedMembers(members);
-            if (picked.Value is not { } chosen) return picked.Refusal!;
-
-            var held = new List<(SeriesMemberBook Book, IReadOnlyList<Mutations.SeriesVoiceCopy> Voices)>();
-            foreach (var (book, character) in chosen)
-                held.Add((book, (await VoicesAsync(book.FolderId, character.CharacterId)).Select(v => v.Voice).ToList()));
-            return SeriesSnapshot.ShareAndLinkPreview(held).ToList();
-        }
-
-        // ---- writes ------------------------------------------------------------------------------
-
         /// <summary>
         /// <i>Share and link</i> on a suggested row: a Series character made from the lowest-positioned
         /// book's Character, then each other one linked to it in position order, each link running
@@ -60,8 +35,8 @@ namespace Read2Me.Services.Series
                     // Each link plans against the links and Voices left by the ones before it.
                     var reloaded = await loader.LoadSeriesAsync(seriesId, withCasts: true, ct);
                     if (reloaded.Value is not { } now) return reloaded.Refusal!;
-                    var (plan, refused) = await PlanLinkAsync(now, id, book.Folder, character.CharacterId);
-                    if (plan is null) return refused!;
+                    var planned = await loader.PlanLinkAsync(now, id, book.Folder, character.CharacterId);
+                    if (planned.Value is not { } plan) return planned.Refusal!;
                     if (await RunLinkAsync(seriesId, id, character.CharacterId, plan, hold, ct) is { } failed) return failed;
                 }
             }

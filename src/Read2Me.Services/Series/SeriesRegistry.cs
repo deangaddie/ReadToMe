@@ -9,15 +9,16 @@ using Read2Me.Services.Mutations;
 namespace Read2Me.Services.Series
 {
     /// <summary>
-    /// The series registries of the Workspace and their lifecycle (#206, ADR 0018): one
+    /// The writes to the series registries of the Workspace (#206, ADR 0018): one
     /// <c>.series/{seriesId}/series.db</c> per series, holding its name and its members by project
     /// Id with their Series positions. Books are addressed by folder here and stored by Id.
     /// <para>
     /// Nothing here is a Book mutation: a registry write changes no project, makes no History step
     /// and carries no origin. Every write signals <see cref="SeriesChanged"/> so other clients read
-    /// again. Reads are answered from a <see cref="SeriesSnapshot"/>, which filters stale rows (a
-    /// member whose project has gone, a link to a Character that has gone) and deletes nothing; a
-    /// write that loads a series deletes that series' stale rows first (writes heal).
+    /// again. Reads live on <see cref="SeriesSnapshotLoader"/> (#247): a <see cref="SeriesSnapshot"/>
+    /// filters stale rows (a member whose project has gone, a link to a Character that has gone) and
+    /// deletes nothing; a write that loads a series deletes that series' stale rows first (writes heal).
+    /// Voices written into peer books go through <see cref="SeriesVoiceReplicator"/>.
     /// </para>
     /// <para>
     /// Every write runs under one process-wide lock and loads its snapshot inside it: the rules span
@@ -28,7 +29,6 @@ namespace Read2Me.Services.Series
     /// </para>
     /// </summary>
     public sealed partial class SeriesRegistry(
-        ICharacterReader characters,
         SeriesSnapshotLoader loader,
         SeriesRegistryLock gate,
         EventBroadcaster<SeriesChanged> changes,
@@ -39,30 +39,6 @@ namespace Read2Me.Services.Series
 
         /// <summary>The uploaded poster's file name in the series folder, before its extension.</summary>
         public const string PosterName = "poster";
-
-        // ---- reads -------------------------------------------------------------------------------
-
-        /// <summary>Every readable series, by name; each one's books in position order.</summary>
-        public async Task<IReadOnlyList<SeriesView>> ListAsync(CancellationToken ct = default) =>
-            (await loader.LoadWorkspaceAsync(ct)).List();
-
-        public async Task<SeriesResult<SeriesView>> GetAsync(Guid seriesId, CancellationToken ct = default)
-        {
-            var loaded = await loader.LoadSeriesAsync(seriesId, withCasts: false, ct);
-            return loaded.Value is { } series ? series.View() : loaded.Refusal!;
-        }
-
-        /// <summary>Each member folder's series, for the project reads.</summary>
-        public async Task<IReadOnlyDictionary<string, ProjectSeries>> MembershipsAsync(CancellationToken ct = default) =>
-            (await loader.LoadWorkspaceAsync(ct)).Memberships();
-
-        /// <summary>One project's series, or null. Reads only that project and the registries, not every project.</summary>
-        public async Task<ProjectSeries?> MembershipOfAsync(ProjectFolderId folder, CancellationToken ct = default)
-        {
-            return await loader.LoadForProjectAsync(folder, ct) is { } found
-                ? found.Workspace.MembershipOf(found.ProjectId)
-                : null;
-        }
 
         // ---- series writes -----------------------------------------------------------------------
 

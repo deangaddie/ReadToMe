@@ -53,7 +53,7 @@ namespace Read2Me.App.Api
         }
 
         private static async Task<Results<Ok<IReadOnlyList<ProjectSummary>>, ProblemHttpResult>> ListAsync(
-            ProjectUseCases useCases, SeriesRegistry series, CancellationToken ct)
+            ProjectUseCases useCases, SeriesSnapshotLoader series, CancellationToken ct)
         {
             var result = await useCases.GetSummariesAsync();
             if (!result.IsSuccess)
@@ -91,7 +91,7 @@ namespace Read2Me.App.Api
         }
 
         private static async Task<Results<Ok<ProjectDetailDto>, NotFound, ProblemHttpResult>> GetAsync(
-            string folder, IFileSystem fs, IProjectCatalogReader reader, ProjectHistory history, SeriesRegistry series, CancellationToken ct)
+            string folder, IFileSystem fs, IProjectCatalogReader reader, ProjectHistory history, SeriesSnapshotLoader series, CancellationToken ct)
         {
             if (!TryResolve(folder, fs, out var folderId))
                 return TypedResults.NotFound();
@@ -121,7 +121,7 @@ namespace Read2Me.App.Api
 
         private static async Task<Results<Ok<ProjectDetailDto>, NotFound, ProblemHttpResult>> UpdateAsync(
             string folder, UpdateProjectRequest? body, IFileSystem fs, IProjectCatalogReader reader,
-            ProjectUseCases useCases, SeriesRegistry series, CancellationToken ct)
+            ProjectUseCases useCases, SeriesSnapshotLoader series, CancellationToken ct)
         {
             if (!TryResolve(folder, fs, out var folderId))
                 return TypedResults.NotFound();
@@ -190,7 +190,7 @@ namespace Read2Me.App.Api
         }
 
         private static async Task<Results<Ok<ProjectDetailDto>, NotFound, ProblemHttpResult>> DetailAsync(
-            ProjectFolderId folderId, IProjectCatalogReader reader, SeriesRegistry series, CancellationToken ct)
+            ProjectFolderId folderId, IProjectCatalogReader reader, SeriesSnapshotLoader series, CancellationToken ct)
         {
             var project = await reader.GetProjectAsync(folderId);
             if (project is null) return TypedResults.NotFound();

@@ -13,7 +13,7 @@ namespace Read2Me.Services.Series
     /// for the Series characters a call names (<see cref="WithVoicesAsync"/>). It only reads: stale
     /// rows are left in place for a write to heal.
     /// </summary>
-    public sealed class SeriesSnapshotLoader(
+    public sealed partial class SeriesSnapshotLoader(
         IFileSystem fs,
         IProjectCatalogReader projects,
         ICharacterReader characters,

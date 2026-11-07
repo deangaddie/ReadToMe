@@ -76,7 +76,7 @@ namespace Read2Me.App.Api
         }
 
         private static async Task<Results<Ok<List<CharacterSummaryDto>>, NotFound>> GetSummaryAsync(
-            string folder, IFileSystem fs, ICharacterReader characters, IProjectCatalogReader catalog, SeriesRegistry series,
+            string folder, IFileSystem fs, ICharacterReader characters, IProjectCatalogReader catalog, SeriesSnapshotLoader series,
             CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))

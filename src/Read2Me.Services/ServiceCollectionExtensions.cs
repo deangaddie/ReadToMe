@@ -126,8 +126,9 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<Events.EventBroadcaster<Events.SeriesChanged>>();
         services.TryAddSingleton<Series.SeriesRegistryLock>();
         services.TryAddSingleton<Series.VoiceAudioHashes>();
-        // The registry layer of a series, read with no lock and no healing (#234).
+        // Every series read (#247): the snapshot of a series, read with no lock and no healing (#234).
         services.AddScoped<Series.SeriesSnapshotLoader>();
+        // Every series.db write: takes the lock, heals, plans from a snapshot.
         services.AddScoped<Series.SeriesRegistry>();
         // The only writer of Voices into peer books (link gains, push/take, copy after commit).
         services.AddScoped<Series.SeriesVoiceReplicator>();
