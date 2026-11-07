@@ -64,6 +64,15 @@ namespace Read2Me.Services.Series
     /// <summary>A push or take: the book whose Voices are copied, the books they replace, and the step label.</summary>
     public sealed record SeriesResolvePlan(SeriesPeer Source, IReadOnlyList<SeriesPeer> Targets, string Step, IReadOnlyList<SeriesPeer> Linked);
 
+    /// <summary>A push or take planned from a snapshot with its Series character's Voices layer, and that snapshot.</summary>
+    public sealed record SeriesPlannedResolve(SeriesSnapshot Series, SeriesResolvePlan Plan);
+
+    /// <summary>A checked link: the series it was planned on, the joining book and the Voice merge.</summary>
+    public sealed record SeriesLinkPlan(SeriesSnapshot Series, SeriesMemberBook Book, SeriesVoiceMerge.Plan<SeriesVoiceSource> Merge);
+
+    /// <summary>One book's Character, named by folder, as the suggested-row routes take them.</summary>
+    public readonly record struct SeriesMemberRef(string Folder, Guid CharacterId);
+
     /// <summary>
     /// One series as every read sees it (#234): the registry layer (members, Series positions, links,
     /// <i>Not the same</i> and the project index), when loaded each member book's Characters, and,

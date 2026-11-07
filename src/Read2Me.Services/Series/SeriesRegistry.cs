@@ -22,10 +22,7 @@ namespace Read2Me.Services.Series
     /// </para>
     /// <para>
     /// Every write runs under one process-wide lock and loads its snapshot inside it: the rules span
-    /// series (a name is unique in the Workspace, a book is in at most one series). Reads take no
-    /// lock, so they don't wait behind a series Voice copy; one made while a copy runs may briefly
-    /// show a book as differing, and the <c>series</c> signal that ends the copy makes the client
-    /// read again.
+    /// series (a name is unique in the Workspace, a book is in at most one series).
     /// </para>
     /// </summary>
     public sealed partial class SeriesRegistry(
