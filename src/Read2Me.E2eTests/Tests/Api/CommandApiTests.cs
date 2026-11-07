@@ -19,7 +19,7 @@ public class CommandApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             new StringContent(json, Encoding.UTF8, "application/json"));
 
     [Fact]
-    public async Task CreateCharacter_returns_id_and_shows_in_characters()
+    public async Task CreateCharacter_routes_by_discriminator_and_answers_200()
     {
         var folder = $"api-cmd-{Guid.NewGuid():N}";
         await app.SeedProjectAsync(folder, "Cmd Book", "Author");
@@ -28,26 +28,15 @@ public class CommandApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             """{ "type": "CreateCharacter", "name": "Ganondorf" }""");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.True(doc.RootElement.GetProperty("newEntityId").GetGuid() != Guid.Empty);
-
-        var characters = JsonDocument.Parse(
-            await Http.GetStringAsync($"{app.BaseUrl}/api/projects/{folder}/characters"));
-        Assert.Contains("Ganondorf", characters.RootElement.EnumerateArray()
-            .Select(c => c.GetProperty("name").GetString()));
     }
 
     [Fact]
-    public async Task SetParagraphCharacter_attributes_the_paragraph()
+    public async Task SetParagraphCharacter_routes_by_discriminator_and_answers_200()
     {
         var folder = $"api-cmd2-{Guid.NewGuid():N}";
         var builder = await app.SeedProjectAsync(folder, "Cmd Book 2", "Author", characterName: "Alice");
         var paragraphId = builder.ParagraphId("p2");
-        var characters = JsonDocument.Parse(
-            await Http.GetStringAsync($"{app.BaseUrl}/api/projects/{folder}/characters"));
-        var characterId = characters.RootElement.EnumerateArray()
-            .Single(c => c.GetProperty("name").GetString() == "Alice")
-            .GetProperty("id").GetGuid();
+        var characterId = builder.CharacterId("Alice");
 
         var response = await PostCommandAsync(folder,
             $$"""{ "type": "SetParagraphCharacter", "paragraphId": "{{paragraphId}}", "characterId": "{{characterId}}" }""");

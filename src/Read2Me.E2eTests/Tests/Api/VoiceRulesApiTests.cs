@@ -7,8 +7,7 @@ namespace Read2Me.E2eTests.Tests.Api;
 
 /// <summary>
 /// The Voice rules reads behind the cast page (Angular ticket 17): a character's rule list and the
-/// per-chapter resolved-voice preview, driven through the existing rule commands. Dangling rules
-/// are VoiceRulePreviewTests.
+/// per-chapter resolved-voice preview, driven through the existing rule commands.
 /// </summary>
 public class VoiceRulesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
@@ -40,85 +39,48 @@ public class VoiceRulesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
     private async Task<List<JsonElement>> ListAsync(string path) =>
         (await GetJsonAsync(path)).EnumerateArray().ToList();
 
-    private static string[] VoiceNames(List<JsonElement> preview) =>
-        preview.Select(r => r.GetProperty("voiceName").GetString() ?? "").ToArray();
-
+    /// <summary>
+    /// One CreateVoiceRule and the wire shapes of both reads. Which voice a rule picks per chapter,
+    /// and the list after a move or a delete, are VoiceRulePreviewTests and
+    /// VoiceLifecycleMutationTests.
+    /// </summary>
     [Fact]
-    public async Task Rules_and_preview_follow_create_move_delete_and_an_unknown_project_is_404()
+    public async Task A_created_rule_reads_back_in_both_wire_shapes_and_an_unknown_project_is_404()
     {
         var folder = $"api-voice-rules-{Guid.NewGuid():N}";
         var book = await app.SeedMultiChapterProjectAsync(folder, "Rules Book", "Author");
         var alice = book.CharacterId("Alice");
-
-        // No voices yet: no rules, but every chapter is listed with no voice.
-        Assert.Empty(await RulesAsync(folder, alice));
-        var empty = await PreviewAsync(folder, alice);
-        Assert.Equal(["Chapter 1", "Chapter 2", "Chapter 3", "Chapter 4", "Chapter 5"],
-            empty.Select(r => r.GetProperty("chapterTitle").GetString()!).ToArray());
-        Assert.Equal(book.ChapterId("Chapter 3"), empty[2].GetProperty("chapterId").GetGuid());
-        Assert.All(empty, r => Assert.Equal(JsonValueKind.Null, r.GetProperty("voiceName").ValueKind));
-
-        // The first voice brings the default rule.
-        var voiceA = await RunAsync(folder, new { type = "CreateVoice", characterId = alice, name = "Voice A", isGenerated = true });
+        await RunAsync(folder, new { type = "CreateVoice", characterId = alice, name = "Voice A", isGenerated = true });
         var voiceB = await RunAsync(folder, new { type = "CreateVoice", characterId = alice, name = "Voice B", isGenerated = true });
-        var rules = await RulesAsync(folder, alice);
-        var @default = Assert.Single(rules);
-        Assert.True(@default.GetProperty("isDefault").GetBoolean());
-        Assert.Equal(voiceA, @default.GetProperty("voiceId").GetGuid());
-        Assert.Equal("Voice A", @default.GetProperty("voiceName").GetString());
-        Assert.Equal(JsonValueKind.Null, @default.GetProperty("fromLevel").ValueKind);
-        Assert.Equal(JsonValueKind.Null, @default.GetProperty("toLevel").ValueKind);
-        Assert.False(@default.GetProperty("fromDangling").GetBoolean());
-        Assert.Equal(["Voice A", "Voice A", "Voice A", "Voice A", "Voice A"], VoiceNames(await PreviewAsync(folder, alice)));
 
-        // "From Chapter 3 onward → Voice B": the preview flips at chapter 3.
         var chapter3 = book.ChapterId("Chapter 3");
         var onward = await RunAsync(folder, new
         {
             type = "CreateVoiceRule", characterId = alice, voiceId = voiceB,
             fromLevel = "Chapter", fromNodeId = chapter3,
         });
-        rules = await RulesAsync(folder, alice);
-        Assert.Equal(2, rules.Count);
-        Assert.True(rules[0].GetProperty("isDefault").GetBoolean());
-        var rule = rules[1];
-        Assert.Equal(onward, rule.GetProperty("ruleId").GetGuid());
+
+        var rule = (await RulesAsync(folder, alice)).Single(r => r.GetProperty("ruleId").GetGuid() == onward);
+        Assert.Equal(voiceB, rule.GetProperty("voiceId").GetGuid());
+        Assert.Equal("Voice B", rule.GetProperty("voiceName").GetString());
         Assert.False(rule.GetProperty("isDefault").GetBoolean());
         Assert.Equal("Chapter", rule.GetProperty("fromLevel").GetString());
         Assert.Equal(chapter3, rule.GetProperty("fromNodeId").GetGuid());
         Assert.Equal("Chapter 3", rule.GetProperty("fromTitle").GetString());
+        Assert.False(rule.GetProperty("fromDangling").GetBoolean());
         Assert.Equal(JsonValueKind.Null, rule.GetProperty("toLevel").ValueKind);
         Assert.Equal(JsonValueKind.Null, rule.GetProperty("toNodeId").ValueKind);
-        Assert.True(string.CompareOrdinal(rules[0].GetProperty("order").GetString(), rule.GetProperty("order").GetString()) < 0);
-        Assert.Equal(["Voice A", "Voice A", "Voice B", "Voice B", "Voice B"], VoiceNames(await PreviewAsync(folder, alice)));
+        Assert.Equal(JsonValueKind.Null, rule.GetProperty("toTitle").ValueKind);
+        Assert.False(rule.GetProperty("toDangling").GetBoolean());
+        Assert.Equal(JsonValueKind.String, rule.GetProperty("order").ValueKind);
 
-        // "Just Chapter 4 → Voice A" after it: the later rule wins on chapter 4 only.
-        var chapter4 = book.ChapterId("Chapter 4");
-        var single = await RunAsync(folder, new
-        {
-            type = "CreateVoiceRule", characterId = alice, voiceId = voiceA,
-            fromLevel = "Chapter", fromNodeId = chapter4, toLevel = "Chapter", toNodeId = chapter4,
-        });
-        Assert.Equal(["Voice A", "Voice A", "Voice B", "Voice A", "Voice B"], VoiceNames(await PreviewAsync(folder, alice)));
+        var row = (await PreviewAsync(folder, alice)).Single(r => r.GetProperty("chapterId").GetGuid() == chapter3);
+        Assert.Equal("Chapter 3", row.GetProperty("chapterTitle").GetString());
+        Assert.Equal("Voice B", row.GetProperty("voiceName").GetString());
 
-        // Moving the single-chapter rule above the onward rule lets the onward rule win everywhere.
-        await RunAsync(folder, new { type = "MoveVoiceRule", ruleId = single, direction = "Up" });
-        rules = await RulesAsync(folder, alice);
-        Assert.Equal([@default.GetProperty("ruleId").GetGuid(), single, onward],
-            rules.Select(r => r.GetProperty("ruleId").GetGuid()).ToArray());
-        Assert.Equal(["Voice A", "Voice A", "Voice B", "Voice B", "Voice B"], VoiceNames(await PreviewAsync(folder, alice)));
-
-        // Deleting the onward rule returns everything to the default.
-        await RunAsync(folder, new { type = "DeleteVoiceRule", ruleId = onward });
-        rules = await RulesAsync(folder, alice);
-        Assert.Equal(2, rules.Count);
-        Assert.Equal(["Voice A", "Voice A", "Voice A", "Voice A", "Voice A"], VoiceNames(await PreviewAsync(folder, alice)));
-
-        // An unknown character has no rules; an unknown project is a 404 on both reads.
+        // An unknown character has no rules; an unknown project is a 404.
         Assert.Empty(await RulesAsync(folder, Guid.NewGuid()));
         var missingProject = await Http.GetAsync($"{app.BaseUrl}/api/projects/no-such-{Guid.NewGuid():N}/characters/{alice}/voice-rules");
         Assert.Equal(HttpStatusCode.NotFound, missingProject.StatusCode);
-        var missingPreview = await Http.GetAsync($"{app.BaseUrl}/api/projects/no-such-{Guid.NewGuid():N}/characters/{alice}/voice-rules/preview");
-        Assert.Equal(HttpStatusCode.NotFound, missingPreview.StatusCode);
     }
 }

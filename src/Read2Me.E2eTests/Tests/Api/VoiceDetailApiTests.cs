@@ -52,32 +52,25 @@ public class VoiceDetailApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
         return new MultipartFormDataContent { { content, "file", fileName } };
     }
 
+    /// <summary>
+    /// The Reference Limit on an upload. The limits, their messages and the voice left unchanged
+    /// on a refusal are ReferenceLimitTests and FileAudioPipelineTests
+    /// (StoreAsync_OverTheHardLimit_StoresNothing_…); this pins the 422 with its <c>detail</c>.
+    /// </summary>
     [Fact]
-    public async Task Upload_over_the_hard_reference_limit_is_422_and_leaves_the_voice_unchanged()
+    public async Task Upload_over_the_hard_reference_limit_is_422_with_a_detail()
     {
         var folder = $"api-voice-toolong-{Guid.NewGuid():N}";
         await app.SeedProjectAsync(folder, "Voice Too Long", "Author");
         var aliceId = await CharacterIdAsync(folder, "Alice");
         var voiceId = await CreateVoiceAsync(folder, aliceId, "Reference Voice", isGenerated: false);
-        var first = await Http.PutAsync(
-            $"{app.BaseUrl}/api/projects/{folder}/voices/{voiceId}/audio", WavForm("short.wav", 5_000));
-        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
-        var before = JsonDocument.Parse(
-            await Http.GetStringAsync($"{app.BaseUrl}/api/projects/{folder}/voices/{voiceId}")).RootElement;
-        var path = Path.Combine(app.WorkspaceDir, folder,
-            before.GetProperty("audioFileName").GetString()!.Replace('/', Path.DirectorySeparatorChar));
-        var bytesBefore = await File.ReadAllBytesAsync(path);
 
         var response = await Http.PutAsync(
             $"{app.BaseUrl}/api/projects/{folder}/voices/{voiceId}/audio", WavForm("long.wav", 31_000));
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        Assert.Contains("30 s or shorter", problem.GetProperty("detail").GetString());
-        var after = JsonDocument.Parse(
-            await Http.GetStringAsync($"{app.BaseUrl}/api/projects/{folder}/voices/{voiceId}")).RootElement;
-        Assert.Equal(before.GetProperty("audioFileName").GetString(), after.GetProperty("audioFileName").GetString());
-        Assert.Equal(bytesBefore, await File.ReadAllBytesAsync(path));
+        Assert.False(string.IsNullOrEmpty(problem.GetProperty("detail").GetString()));
     }
 
     [Fact]
@@ -94,14 +87,13 @@ public class VoiceDetailApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var uploaded = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
         Assert.False(string.IsNullOrEmpty(uploaded.GetProperty("audioFileName").GetString()));
-        Assert.Equal(20.0, uploaded.GetProperty("referenceSeconds").GetDouble(), precision: 1);
-        Assert.Contains("15 s", uploaded.GetProperty("referenceWarning").GetString());
+        Assert.False(string.IsNullOrEmpty(uploaded.GetProperty("referenceWarning").GetString()));
 
         // The list reads it back from the stored WAV's header: no stored column.
         var listed = JsonDocument.Parse(await Http.GetStringAsync(
                 $"{app.BaseUrl}/api/projects/{folder}/characters/{aliceId}/voices"))
             .RootElement.GetProperty("voices").EnumerateArray().Single(v => v.GetProperty("id").GetGuid() == voiceId);
-        Assert.Contains("15 s", listed.GetProperty("referenceWarning").GetString());
+        Assert.False(string.IsNullOrEmpty(listed.GetProperty("referenceWarning").GetString()));
     }
 
     [Fact]
@@ -198,15 +190,16 @@ public class VoiceDetailApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
         var folder = $"api-voice-prompt-{Guid.NewGuid():N}";
         await app.SeedProjectAsync(folder, "Prompt Book", "P. Author");
         var aliceId = await CharacterIdAsync(folder, "Alice");
-        app.FakeAi.LlmReply = _ => "  A warm, unhurried alto with a faint Scottish lilt.  ";
+        app.FakeAi.LlmReply = _ => "A warm, unhurried alto.";
 
         var render = await Http.PostAsync(
             $"{app.BaseUrl}/api/projects/{folder}/characters/{aliceId}/design-prompt/render", null);
         Assert.Equal(HttpStatusCode.OK, render.StatusCode);
+        // What the render holds is VoiceDesignPromptServiceTests (BuildRenderedPrompt_…), and the
+        // trimmed reply is its GenerateWithPrompt_Success_….
         var rendered = JsonDocument.Parse(await render.Content.ReadAsStringAsync())
             .RootElement.GetProperty("prompt").GetString();
-        Assert.Contains("Alice", rendered);
-        Assert.Contains("Prompt Book", rendered);
+        Assert.False(string.IsNullOrEmpty(rendered));
 
         var generate = await Http.PostAsJsonAsync(
             $"{app.BaseUrl}/api/projects/{folder}/characters/{aliceId}/design-prompt/generate",
@@ -214,7 +207,7 @@ public class VoiceDetailApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
         Assert.Equal(HttpStatusCode.OK, generate.StatusCode);
         var designPrompt = JsonDocument.Parse(await generate.Content.ReadAsStringAsync())
             .RootElement.GetProperty("designPrompt").GetString();
-        Assert.Equal("A warm, unhurried alto with a faint Scottish lilt.", designPrompt);
+        Assert.False(string.IsNullOrEmpty(designPrompt));
 
         // Nothing was persisted: the character still has no voices.
         var voices = JsonDocument.Parse(await Http.GetStringAsync(

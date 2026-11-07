@@ -11,7 +11,8 @@ namespace Read2Me.E2eTests.Tests.Api;
 
 /// <summary>
 /// The reads behind the web reader (ticket 10): the enriched chapter children, resolved voice
-/// names per chapter and the sparse audio review map.
+/// names per chapter and the sparse audio review map. Voice resolution is VoiceResolverTests and
+/// the review rows are ProjectReaderTests and AudioRecordingMutationTests (Dismiss).
 /// </summary>
 public class ReaderApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
@@ -59,13 +60,10 @@ public class ReaderApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         // The unattributed dialog line has no speaker, so no voice resolves.
         var dialog = voices.GetProperty(book.ItemId("line1").ToString());
         Assert.Equal(JsonValueKind.Null, dialog.GetProperty("voiceName").ValueKind);
+        // The endpoint leaves pause items out; no unit test pins that filter.
         Assert.Equal(3, voices.EnumerateObject().Count());
-        // Unlinked, the project detail names the seed Narrator row: never null.
-        var unlinkedNarrator = (await GetJsonAsync($"/api/projects/{folder}")).GetProperty("narrator");
-        Assert.False(unlinkedNarrator.GetProperty("isLinked").GetBoolean());
-        Assert.Equal("Narrator", unlinkedNarrator.GetProperty("displayName").GetString());
-        Assert.Equal(ProjectDbContext.NarratorId, unlinkedNarrator.GetProperty("characterId").GetGuid());
 
+        // Who the narrator is, linked or not, is NarratorIdentityTests; this is its wire form.
         var link = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
             new { type = "SetNarratorCharacter", characterId = book.CharacterId("Watson") });
         Assert.Equal(HttpStatusCode.OK, link.StatusCode);
@@ -117,40 +115,6 @@ public class ReaderApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Assert.False(review.Value.GetProperty("verifyOk").GetBoolean());
         Assert.Equal(0.42, review.Value.GetProperty("wer").GetDouble());
         Assert.Equal("WER above threshold", review.Value.GetProperty("verifyReason").GetString());
-    }
-
-    /// <summary>
-    /// The reader's flag and Dismiss as the web client sends them: a failed verify reads back as
-    /// NeedsReview, and once dismissed it reads back as Dismissed, so a reload keeps it dismissed.
-    /// </summary>
-    [Fact]
-    public async Task A_dismissed_review_reads_back_as_dismissed()
-    {
-        var folder = $"api-reader-dismiss-{Guid.NewGuid():N}";
-        var book = await app.SeedProjectAsync(folder, "Dismiss Book", "Author");
-        var itemId = book.ItemId("n1");
-        var path = $"/api/projects/{folder}/audio/reviews";
-
-        var flag = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/commands", new
-        {
-            type = "SetAudioReview",
-            paragraphItemId = itemId,
-            normalizeOk = true,
-            verifyOk = false,
-            wer = 0.4,
-            verifyReason = "transcript drifted",
-        });
-        Assert.Equal(HttpStatusCode.OK, flag.StatusCode);
-        Assert.Equal("NeedsReview", (await GetJsonAsync(path)).GetProperty(itemId.ToString()).GetProperty("state").GetString());
-
-        var dismiss = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
-            new { type = "DismissAudioReview", paragraphItemId = itemId });
-        Assert.Equal(HttpStatusCode.OK, dismiss.StatusCode);
-
-        var review = Assert.Single((await GetJsonAsync(path)).EnumerateObject());
-        Assert.Equal(itemId.ToString(), review.Name);
-        Assert.Equal("Dismissed", review.Value.GetProperty("state").GetString());
-        Assert.Equal("transcript drifted", review.Value.GetProperty("verifyReason").GetString());
     }
 
     [Fact]

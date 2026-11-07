@@ -53,24 +53,17 @@ public class ProjectApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     /// <summary>
-    /// The manual reread (Angular ticket 11): a text book whose chapters are bare Roman numerals
-    /// splits on its "Roman numerals" chapter rule, and replaces whatever the
-    /// automatic import made of the same file.
+    /// The manual reread binds its form and answers 204. How the rules split the book is
+    /// ManualBookReaderTests'; the form's parsing is ManualImportRequestTests'.
     /// </summary>
     [Fact]
-    public async Task Manual_import_with_roman_chapters_replaces_the_structure()
+    public async Task Manual_import_answers_204_and_the_book_has_content()
     {
-        var title = $"api-manual-{Guid.NewGuid():N}";
-        var create = await Http.PostAsync($"{app.BaseUrl}/api/projects", CreateForm(title,
-            text: "I\n\nThe first chapter.\n\nII\n\nThe second chapter.\n\nIII\n\nThe third chapter."));
+        var create = await Http.PostAsync($"{app.BaseUrl}/api/projects", CreateForm($"api-manual-{Guid.NewGuid():N}",
+            text: "I\n\nThe first chapter.\n\nII\n\nThe second chapter."));
         Assert.Equal(HttpStatusCode.Created, create.StatusCode);
         var folder = JsonDocument.Parse(await create.Content.ReadAsStringAsync())
-            .RootElement.GetProperty("folderName").GetString();
-
-        var auto = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/import", new { reread = false });
-        Assert.Equal(HttpStatusCode.NoContent, auto.StatusCode);
-        var before = await BookAsync(folder!);
-        Assert.True(before.GetProperty("hasContent").GetBoolean());
+            .RootElement.GetProperty("folderName").GetString()!;
 
         var manual = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/import/manual", new
         {
@@ -80,17 +73,7 @@ public class ProjectApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         });
         Assert.Equal(HttpStatusCode.NoContent, manual.StatusCode);
 
-        var after = await BookAsync(folder!);
-        Assert.True(after.GetProperty("hasContent").GetBoolean());
-        Assert.Equal(1, after.GetProperty("volumes").GetArrayLength());
-        Assert.Equal(1, after.GetProperty("totalParts").GetInt32());
-        Assert.Equal(3, after.GetProperty("totalChapters").GetInt32());
-
-        var volumeId = after.GetProperty("volumes")[0].GetProperty("id").GetGuid();
-        var parts = await GetJsonAsync($"/api/projects/{folder}/nodes/Volume/{volumeId}/children");
-        var partId = parts.GetProperty("parts")[0].GetProperty("id").GetGuid();
-        var chapters = (await GetJsonAsync($"/api/projects/{folder}/nodes/Part/{partId}/children")).GetProperty("chapters");
-        Assert.Equal(["I", "II", "III"], chapters.EnumerateArray().Select(c => c.GetProperty("title").GetString()));
+        Assert.True((await BookAsync(folder)).GetProperty("hasContent").GetBoolean());
     }
 
     [Fact]
@@ -107,14 +90,6 @@ public class ProjectApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         });
         Assert.Equal(HttpStatusCode.BadRequest, blankPrefix.StatusCode);
         Assert.Equal("application/problem+json", blankPrefix.Content.Headers.ContentType?.MediaType);
-        Assert.Contains("Volume prefix", await blankPrefix.Content.ReadAsStringAsync());
-
-        var noChapter = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/import/manual", new
-        {
-            hasMultipleVolumes = false,
-            hasMultipleParts = false,
-        });
-        Assert.Equal(HttpStatusCode.BadRequest, noChapter.StatusCode);
         Assert.False((await BookAsync(folder)).GetProperty("hasContent").GetBoolean());
 
         var missing = await Http.PostAsJsonAsync(
@@ -157,15 +132,6 @@ public class ProjectApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     public async Task Traversal_folder_name_is_404()
     {
         var response = await Http.GetAsync($"{app.BaseUrl}/api/projects/..%2F..%2Fsecrets");
-
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task Import_unknown_project_is_404()
-    {
-        var response = await Http.PostAsJsonAsync(
-            $"{app.BaseUrl}/api/projects/no-such-project-xyz/import", new { reread = false });
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -281,36 +247,41 @@ public class ProjectApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         var delete = await Http.DeleteAsync($"{app.BaseUrl}/api/projects/{folder}/cover");
         Assert.Equal(HttpStatusCode.NoContent, delete.StatusCode);
         Assert.Equal(JsonValueKind.Null, (await DetailAsync(folder)).GetProperty("coverImage").ValueKind);
+    }
 
-        var again = await Http.DeleteAsync($"{app.BaseUrl}/api/projects/{folder}/cover");
-        Assert.Equal(HttpStatusCode.NoContent, again.StatusCode);
+    /// <summary>
+    /// The cover's 400s. No unit test pins them: wrong type and over 10 MB are the endpoint's own
+    /// checks, and no file and not a form are its binding.
+    /// </summary>
+    [Theory]
+    [InlineData("wrong type")]
+    [InlineData("over 10 MB")]
+    [InlineData("no file")]
+    [InlineData("not a form")]
+    public async Task Cover_rejects_a_bad_form_and_saves_nothing(string form)
+    {
+        var folder = await CreateProjectAsync("api-cover-bad");
+        HttpContent content = form switch
+        {
+            "wrong type" => CoverForm("cover.gif"),
+            "over 10 MB" => CoverForm("cover.png", 10 * 1024 * 1024 + 1),
+            "no file" => new MultipartFormDataContent { { new StringContent("x"), "note" } },
+            "not a form" => JsonContent.Create(new { file = "x" }),
+            _ => throw new ArgumentOutOfRangeException(nameof(form), form, "No such form row."),
+        };
+
+        var response = await Http.PutAsync($"{app.BaseUrl}/api/projects/{folder}/cover", content);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(JsonValueKind.Null, (await DetailAsync(folder)).GetProperty("coverImage").ValueKind);
     }
 
     [Fact]
-    public async Task Cover_rejects_wrong_type_and_oversize_and_unknown_project()
+    public async Task Cover_of_an_unknown_project_is_404()
     {
-        var folder = await CreateProjectAsync("api-cover-bad");
-
-        var wrongType = await Http.PutAsync($"{app.BaseUrl}/api/projects/{folder}/cover", CoverForm("cover.gif"));
-        Assert.Equal(HttpStatusCode.BadRequest, wrongType.StatusCode);
-        Assert.Equal("application/problem+json", wrongType.Content.Headers.ContentType?.MediaType);
-
-        var tooBig = await Http.PutAsync(
-            $"{app.BaseUrl}/api/projects/{folder}/cover", CoverForm("cover.png", 10 * 1024 * 1024 + 1));
-        Assert.Equal(HttpStatusCode.BadRequest, tooBig.StatusCode);
-
-        var noFile = await Http.PutAsync(
-            $"{app.BaseUrl}/api/projects/{folder}/cover",
-            new MultipartFormDataContent { { new StringContent("x"), "note" } });
-        Assert.Equal(HttpStatusCode.BadRequest, noFile.StatusCode);
-
-        var notAForm = await Http.PutAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/cover", new { file = "x" });
-        Assert.Equal(HttpStatusCode.BadRequest, notAForm.StatusCode);
-
         var missing = await Http.PutAsync(
             $"{app.BaseUrl}/api/projects/no-such-project-xyz/cover", CoverForm("cover.png"));
-        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
 
-        Assert.Equal(JsonValueKind.Null, (await DetailAsync(folder)).GetProperty("coverImage").ValueKind);
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
     }
 }

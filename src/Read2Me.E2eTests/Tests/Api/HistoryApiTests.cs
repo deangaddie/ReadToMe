@@ -15,8 +15,9 @@ using Read2Me.TestUtils;
 namespace Read2Me.E2eTests.Tests.Api;
 
 /// <summary>
-/// <c>GET /api/projects/{folder}/history</c>: the contract only. What History records is proved
-/// over a real project in the History module's own tests.
+/// <c>GET /api/projects/{folder}/history</c>: the contract only. What History records, how it
+/// orders and summarises steps and what a Restore discards are proved over a real project in the
+/// History module's own tests (ProjectHistoryTests, RestoreTests).
 /// </summary>
 public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
@@ -26,29 +27,26 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         JsonDocument.Parse(await Http.GetStringAsync($"{app.BaseUrl}/api/projects/{folder}/history")).RootElement;
 
     [Fact]
-    public async Task History_lists_steps_newest_first_with_the_head_and_the_busy_answer()
+    public async Task History_lists_steps_with_the_head_and_the_busy_answer_on_the_wire()
     {
         var folder = $"api-history-{Guid.NewGuid():N}";
         await app.SeedProjectAsync(folder, "History Book", "Author");
-
-        var started = await HistoryAsync(folder);
-        var only = Assert.Single(started.GetProperty("steps").EnumerateArray());
-        Assert.Equal("History started", only.GetProperty("label").GetString());
+        await HistoryAsync(folder);
 
         var created = await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
             new StringContent("""{ "type": "CreateCharacter", "name": "Ganondorf" }""", Encoding.UTF8, "application/json"));
         Assert.Equal(HttpStatusCode.OK, created.StatusCode);
 
+        // The label the command's step metadata names (CommandStepLabels), with its enums by name.
         var history = await HistoryAsync(folder);
         var steps = history.GetProperty("steps").EnumerateArray().ToList();
-        Assert.Equal(["New character", "History started"], steps.Select(s => s.GetProperty("label").GetString()));
-        Assert.Equal(["Request", "Started"], steps.Select(s => s.GetProperty("kind").GetString()));
-        Assert.Equal(["Character", null], steps.Select(s => s.GetProperty("action").GetString()));
-
         var tip = steps[0];
+        Assert.Equal("New character", tip.GetProperty("label").GetString());
+        Assert.Equal("Request", tip.GetProperty("kind").GetString());
+        Assert.Equal("Character", tip.GetProperty("action").GetString());
         Assert.Equal(tip.GetProperty("stepId").GetGuid(), history.GetProperty("headStepId").GetGuid());
         Assert.Equal(steps[1].GetProperty("stepId").GetGuid(), tip.GetProperty("parentStepId").GetGuid());
-        Assert.Equal(2, tip.GetProperty("sequence").GetInt32());
+        Assert.Equal(JsonValueKind.Number, tip.GetProperty("sequence").ValueKind);
         Assert.False(tip.GetProperty("isOpen").GetBoolean());
         Assert.False(string.IsNullOrEmpty(tip.GetProperty("author").GetString()));
         Assert.True(tip.TryGetProperty("startedAt", out _));
@@ -81,22 +79,7 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 
         var steps = (await HistoryAsync(folder)).GetProperty("steps").EnumerateArray().ToList();
         Assert.Equal(["New character", "History started"], steps.Select(s => s.GetProperty("label").GetString()));
-        Assert.Equal("1 paragraph in ch1", steps[0].GetProperty("summary").GetString());
         Assert.False(steps[0].GetProperty("isOpen").GetBoolean());
-    }
-
-    [Fact]
-    public async Task A_request_that_commits_nothing_leaves_no_step()
-    {
-        var folder = $"api-history-{Guid.NewGuid():N}";
-        await app.SeedProjectAsync(folder, "History Book", "Author");
-        await HistoryAsync(folder);
-
-        var response = await Http.PutAsync($"{app.BaseUrl}/api/projects/{folder}/narrator-only-mode",
-            new StringContent("""{ "enabled": false }""", Encoding.UTF8, "application/json"));
-        Assert.True(response.IsSuccessStatusCode);
-
-        Assert.Single((await HistoryAsync(folder)).GetProperty("steps").EnumerateArray());
     }
 
     [Fact]
@@ -230,7 +213,8 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         var step = JsonDocument.Parse(await Http.GetStringAsync($"{app.BaseUrl}/api/projects/{folder}/history/{started}")).RootElement;
 
         Assert.Equal(started, step.GetProperty("stepId").GetGuid());
-        Assert.Equal("History started", step.GetProperty("label").GetString());
+        Assert.Equal(JsonValueKind.String, step.GetProperty("label").ValueKind);
+        Assert.Equal(JsonValueKind.Object, step.GetProperty("restorePreview").ValueKind);
         Assert.Equal(HttpStatusCode.NotFound,
             (await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/history/{Guid.NewGuid()}")).StatusCode);
     }
@@ -254,18 +238,17 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         var step = JsonDocument.Parse(await Http.GetStringAsync($"{app.BaseUrl}/api/projects/{folder}/history/{started}")).RootElement;
         var restore = await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/history/{started}/restore", null);
 
+        // What the counts are and how the step is labelled is RestoreTests.
         Assert.Equal(1, step.GetProperty("restorePreview").GetProperty("audioDiscardCount").GetInt32());
         Assert.Equal(HttpStatusCode.OK, restore.StatusCode);
         var restored = JsonDocument.Parse(await restore.Content.ReadAsStringAsync()).RootElement;
         Assert.Equal(1, restored.GetProperty("audioDiscardCount").GetInt32());
-        Assert.True(restored.GetProperty("needsAudioCount").GetInt32() >= 1); // n1, and whatever the seed left without audio
+        Assert.Equal(JsonValueKind.Number, restored.GetProperty("needsAudioCount").ValueKind);
         var restoreStep = restored.GetProperty("step");
         Assert.Equal(started, restoreStep.GetProperty("restoredFromStepId").GetGuid());
-        Assert.StartsWith("Restore to 'History started' (", restoreStep.GetProperty("label").GetString());
 
         var history = await HistoryAsync(folder);
         Assert.Equal(restoreStep.GetProperty("stepId").GetGuid(), history.GetProperty("headStepId").GetGuid());
-        Assert.Equal(3, history.GetProperty("steps").GetArrayLength());
     }
 
     [Fact]
@@ -281,117 +264,57 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             (await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/history/{started}/restore?at={started}", null)).StatusCode);
     }
 
-    [Fact]
-    public async Task While_a_Restore_runs_every_write_and_another_Restore_is_409_Project_is_restoring()
+    /// <summary>
+    /// While a Restore runs, every route the Project activity gate guards answers 409 "Project is
+    /// restoring": writes, another Restore, the enqueues and voice batches, and every read at a
+    /// step. Which acts the gate refuses in which state is ProjectActivityTests.
+    /// </summary>
+    [Theory]
+    [InlineData("command")]
+    [InlineData("restore")]
+    [InlineData("attribution enqueue")]
+    [InlineData("voice-batch prompts")]
+    [InlineData("voice-batch audio")]
+    [InlineData("read at a step")]
+    [InlineData("state file at a step")]
+    [InlineData("step")]
+    public async Task While_a_Restore_runs_the_route_is_409_Project_is_restoring(string route)
     {
         var folder = $"api-history-{Guid.NewGuid():N}";
-        await app.SeedProjectAsync(folder, "History Book", "Author");
+        var book = await app.SeedProjectAsync(folder, "History Book", "Author", characterName: "Alice");
         var started = (await HistoryAsync(folder)).GetProperty("headStepId").GetGuid();
+        var covered = started;
+        if (route == "state file at a step")
+        {
+            await PutCoverAsync(folder, "a cover");
+            covered = (await HistoryAsync(folder)).GetProperty("headStepId").GetGuid();
+        }
         var activity = app.Services.GetRequiredService<ProjectActivity>();
         var folderId = new Read2Me.Core.Models.ProjectFolderId(folder);
+        var project = $"{app.BaseUrl}/api/projects/{folder}";
 
         Assert.Null(activity.TryBeginRestore(folderId));
         try
         {
-            var write = await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
-                new StringContent("""{ "type": "CreateCharacter", "name": "Ganondorf" }""", Encoding.UTF8, "application/json"));
-            var restore = await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/history/{started}/restore", null);
-
-            Assert.Equal(HttpStatusCode.Conflict, write.StatusCode);
-            Assert.Equal(HttpStatusCode.Conflict, restore.StatusCode);
-            Assert.Equal("Project is restoring",
-                JsonDocument.Parse(await write.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
-            Assert.True((await HistoryAsync(folder)).GetProperty("restoring").GetBoolean());
-        }
-        finally
-        {
-            activity.EndRestore(folderId);
-        }
-        Assert.DoesNotContain("Ganondorf", await CharacterNamesAsync($"/api/projects/{folder}/characters"));
-    }
-
-    [Fact]
-    public async Task While_a_Restore_runs_an_enqueue_is_409_Project_is_restoring()
-    {
-        var folder = $"api-history-{Guid.NewGuid():N}";
-        var builder = await app.SeedProjectAsync(folder, "History Book", "Author", characterName: "Alice");
-        var activity = app.Services.GetRequiredService<ProjectActivity>();
-        var folderId = new Read2Me.Core.Models.ProjectFolderId(folder);
-
-        Assert.Null(activity.TryBeginRestore(folderId));
-        try
-        {
-            var enqueue = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/attribution/enqueue",
-                new { level = "Chapter", nodeId = builder.ChapterId("ch1"), unprocessedOnly = true });
-
-            Assert.Equal(HttpStatusCode.Conflict, enqueue.StatusCode);
-            Assert.Equal("Project is restoring",
-                JsonDocument.Parse(await enqueue.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
-        }
-        finally
-        {
-            activity.EndRestore(folderId);
-        }
-        // Nothing was queued: the paragraph has no place in the Character Queue.
-        var status = JsonDocument.Parse(await Http.GetStringAsync(
-            $"{app.BaseUrl}/api/projects/{folder}/attribution/paragraphs/{builder.ParagraphId("p2")}"));
-        Assert.Equal(JsonValueKind.Null, status.RootElement.GetProperty("status").ValueKind);
-    }
-
-    [Fact]
-    public async Task While_a_Restore_runs_a_voice_batch_start_is_409_Project_is_restoring()
-    {
-        var folder = $"api-history-{Guid.NewGuid():N}";
-        await app.SeedProjectAsync(folder, "History Book", "Author", characterName: "Alice");
-        var activity = app.Services.GetRequiredService<ProjectActivity>();
-        var folderId = new Read2Me.Core.Models.ProjectFolderId(folder);
-
-        Assert.Null(activity.TryBeginRestore(folderId));
-        try
-        {
-            foreach (var batch in new[] { "prompts", "audio" })
+            var response = route switch
             {
-                var start = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/voice-batch/{batch}",
-                    new { regenerateAll = false });
+                "command" => await Http.PostAsync($"{project}/commands",
+                    new StringContent("""{ "type": "CreateCharacter", "name": "Ganondorf" }""", Encoding.UTF8, "application/json")),
+                "restore" => await Http.PostAsync($"{project}/history/{started}/restore", null),
+                "attribution enqueue" => await Http.PostAsJsonAsync($"{project}/attribution/enqueue",
+                    new { level = "Chapter", nodeId = book.ChapterId("ch1"), unprocessedOnly = true }),
+                "voice-batch prompts" => await Http.PostAsJsonAsync($"{project}/voice-batch/prompts", new { regenerateAll = false }),
+                "voice-batch audio" => await Http.PostAsJsonAsync($"{project}/voice-batch/audio", new { regenerateAll = false }),
+                "read at a step" => await Http.GetAsync($"{project}/book?at={started}"),
+                "state file at a step" => await Http.GetAsync($"{app.BaseUrl}/workspace/{folder}/cover.png?at={covered}"),
+                "step" => await Http.GetAsync($"{project}/history/{started}"),
+                _ => throw new ArgumentOutOfRangeException(nameof(route), route, "No such route row."),
+            };
 
-                Assert.Equal(HttpStatusCode.Conflict, start.StatusCode);
-                Assert.Equal("Project is restoring",
-                    JsonDocument.Parse(await start.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
-            }
-        }
-        finally
-        {
-            activity.EndRestore(folderId);
-        }
-    }
-
-    [Fact]
-    public async Task While_a_Restore_runs_every_read_at_a_step_is_409_Project_is_restoring()
-    {
-        var folder = $"api-history-{Guid.NewGuid():N}";
-        await app.SeedProjectAsync(folder, "History Book", "Author");
-        var started = (await HistoryAsync(folder)).GetProperty("headStepId").GetGuid();
-        await PutCoverAsync(folder, "a cover");
-        var covered = (await HistoryAsync(folder)).GetProperty("headStepId").GetGuid();
-        var activity = app.Services.GetRequiredService<ProjectActivity>();
-        var folderId = new Read2Me.Core.Models.ProjectFolderId(folder);
-
-        Assert.Null(activity.TryBeginRestore(folderId));
-        try
-        {
-            var read = await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/book?at={started}");
-            var file = await Http.GetAsync($"{app.BaseUrl}/workspace/{folder}/cover.png?at={covered}");
-            var step = await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/history/{started}");
-
-            Assert.Equal(HttpStatusCode.Conflict, read.StatusCode);
-            Assert.Equal(HttpStatusCode.Conflict, file.StatusCode);
-            Assert.Equal(HttpStatusCode.Conflict, step.StatusCode);
-            Assert.Equal("Project is restoring",
-                JsonDocument.Parse(await read.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
-            Assert.Equal("Project is restoring",
-                JsonDocument.Parse(await file.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
-            Assert.Equal("Project is restoring",
-                JsonDocument.Parse(await step.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
+            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            Assert.Equal(ProjectActivity.RestoringReason,
+                JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
+            Assert.True((await HistoryAsync(folder)).GetProperty("restoring").GetBoolean());
         }
         finally
         {

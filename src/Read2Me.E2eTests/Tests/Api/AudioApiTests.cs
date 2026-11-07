@@ -14,14 +14,21 @@ namespace Read2Me.E2eTests.Tests.Api;
 
 /// <summary>
 /// Audio generation over HTTP: enqueue narration items for a chapter, poll the
-/// queue, confirm the wav landed and the item endpoint reflects completion.
+/// queue, confirm the wav landed, was verified and the item endpoint reflects completion.
 /// </summary>
 public class AudioApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
     private static readonly HttpClient Http = new();
 
+    /// <summary>
+    /// The audio round trip: enqueue a chapter, the take lands on disk and is served from the
+    /// workspace mount, and fake-whisper echoes the synthesised text back (valid because the audio
+    /// queue is serial), so the take is transcribed and verified and leaves no AudioReviews row. The
+    /// request body each provider sends is its client tests; which items a chapter enqueue takes is
+    /// ProjectReaderTests (GetAudioItemRefsAsync_…).
+    /// </summary>
     [Fact]
-    public async Task Enqueue_poll_and_audio_lands_on_disk_and_is_served_from_the_workspace()
+    public async Task Enqueue_poll_and_audio_lands_is_verified_and_is_served_from_the_workspace()
     {
         app.FakeAi.Reset();
         var folder = $"api-audio-{Guid.NewGuid():N}";
@@ -30,15 +37,25 @@ public class AudioApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         var chapterId = builder.ChapterId("ch1");
         var itemId = builder.ItemId("n1");
 
-        var enqueue = await Http.PostAsJsonAsync(
-            $"{app.BaseUrl}/api/projects/{folder}/audio/enqueue",
-            new { level = "Chapter", nodeId = chapterId, needsAudioOnly = true });
-        Assert.Equal(HttpStatusCode.Accepted, enqueue.StatusCode);
-        var enqueued = JsonDocument.Parse(await enqueue.Content.ReadAsStringAsync())
-            .RootElement.GetProperty("enqueued").GetInt32();
-        Assert.Equal(2, enqueued); // n1 + n2 narration; unattributed character line excluded
+        var events = new List<AudioGenEvent>();
+        var broadcaster = app.Services.GetRequiredService<EventBroadcaster<AudioGenEvent>>();
+        void Capture(AudioGenEvent e) { lock (events) events.Add(e); }
+        broadcaster.Event += Capture;
+        try
+        {
+            var enqueue = await Http.PostAsJsonAsync(
+                $"{app.BaseUrl}/api/projects/{folder}/audio/enqueue",
+                new { level = "Chapter", nodeId = chapterId, needsAudioOnly = true });
+            Assert.Equal(HttpStatusCode.Accepted, enqueue.StatusCode);
+            Assert.Equal(JsonValueKind.Number, JsonDocument.Parse(await enqueue.Content.ReadAsStringAsync())
+                .RootElement.GetProperty("enqueued").ValueKind);
 
-        await app.WaitForQueueDrainAsync("/api/audio/queue", timeoutSeconds: 60);
+            await app.WaitForQueueDrainAsync("/api/audio/queue", timeoutSeconds: 60);
+        }
+        finally
+        {
+            broadcaster.Event -= Capture;
+        }
 
         Assert.True(File.Exists(Path.Combine(app.WorkspaceDir, folder, "audio", $"{itemId}.wav")));
 
@@ -65,24 +82,27 @@ public class AudioApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             await File.ReadAllBytesAsync(Path.Combine(app.WorkspaceDir, folder, "audio", $"{itemId}.wav")),
             await take.Content.ReadAsByteArrayAsync());
 
-        // The seeded VoxCPM2 config speaks on audio.cpp: a controllable clone, reference but no transcript.
+        // The seeded VoxCPM2 config is the one that spoke.
         List<JsonObject> bodies;
         lock (app.FakeAi.AudioCppSpeechBodies) bodies = [.. app.FakeAi.AudioCppSpeechBodies];
-        Assert.Contains(bodies, b => b["input"]!.GetValue<string>() == "It was a dark and stormy night.");
-        Assert.All(bodies, b =>
-        {
-            Assert.Equal("voxcpm2", b["model"]!.GetValue<string>());
-            Assert.Equal("base64", b["voice_ref"]!["type"]!.GetValue<string>());
-            Assert.False(b.ContainsKey("reference_text"));
-        });
+        Assert.NotEmpty(bodies);
+        Assert.All(bodies, b => Assert.Equal("voxcpm2", b["model"]!.GetValue<string>()));
+
+        AudioGenEvent[] captured;
+        lock (events) captured = [.. events];
+        Assert.Single(captured.OfType<Transcribed>(), e => e.Id == itemId);
+        Assert.True(Assert.Single(captured.OfType<Verified>(), e => e.Id == itemId).Ok);
+
+        var factory = app.Services.GetRequiredService<IProjectDbContextFactory>();
+        await using var db = await factory.CreateAsync(Path.Combine(app.WorkspaceDir, folder));
+        Assert.False(await db.AudioReviews.AsNoTracking().AnyAsync(r => r.ParagraphItemId == itemId));
     }
 
     /// <summary>
     /// The wiring for a provider other than the default: with the Qwen3-Base config active, an
-    /// audio-queue run goes through that provider's client to audio.cpp, carrying the voice's stored
-    /// transcript as the ICL reference text. Every provider's client and the body it sends are unit
-    /// tests (ProviderClientRegistrationTests and each *ParagraphTtsClientTests class), so one
-    /// provider stands for the rest here.
+    /// audio-queue run goes through that provider's client to audio.cpp. Every provider's client and
+    /// the body it sends are unit tests (ProviderClientRegistrationTests and each
+    /// *ParagraphTtsClientTests class), so one provider stands for the rest here.
     /// </summary>
     [Fact]
     public async Task An_active_provider_config_generates_through_its_own_audiocpp_client()
@@ -110,68 +130,13 @@ public class AudioApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             Assert.True(File.Exists(Path.Combine(app.WorkspaceDir, folder, "audio", $"{itemId}.wav")));
             List<JsonObject> bodies;
             lock (app.FakeAi.AudioCppSpeechBodies) bodies = [.. app.FakeAi.AudioCppSpeechBodies];
-            Assert.Equal(2, bodies.Count); // n1 + n2
-            Assert.Contains(bodies, b => b["input"]!.GetValue<string>() == "It was a dark and stormy night.");
-            Assert.All(bodies, b =>
-            {
-                Assert.Equal("qwen3-base", b["model"]!.GetValue<string>());
-                Assert.Equal("base64", b["voice_ref"]!["type"]!.GetValue<string>());
-                Assert.Equal("The narrator's reference line.", b["reference_text"]!.GetValue<string>());
-                Assert.Equal("auto", b["language"]!.GetValue<string>());
-                Assert.Equal(["seed"], b["options"]!.AsObject().Select(o => o.Key));
-            });
+            Assert.NotEmpty(bodies);
+            Assert.All(bodies, b => Assert.Equal("qwen3-base", b["model"]!.GetValue<string>()));
         }
         finally
         {
             if (previous is { } id) await tts.SetActiveConfigAsync(id);
         }
-    }
-
-    /// <summary>
-    /// The verify half of the audio round trip: fake-whisper echoes the synthesised text back (valid
-    /// because the audio queue is serial), so the take is transcribed, passes the WER check without
-    /// a semantic rescue, and leaves no AudioReviews row — a row exists only for a failed stage.
-    /// </summary>
-    [Fact]
-    public async Task A_take_is_transcribed_back_and_verified_without_a_review()
-    {
-        app.FakeAi.Reset();
-        var folder = $"api-audio-verify-{Guid.NewGuid():N}";
-        var builder = await app.SeedProjectAsync(folder, "Audio Verify Book", "Author");
-        await app.SeedNarratorVoiceAsync(folder);
-        var itemId = builder.ItemId("n1");
-
-        var events = new List<AudioGenEvent>();
-        var broadcaster = app.Services.GetRequiredService<EventBroadcaster<AudioGenEvent>>();
-        void Capture(AudioGenEvent e) { lock (events) events.Add(e); }
-        broadcaster.Event += Capture;
-        try
-        {
-            var enqueue = await Http.PostAsJsonAsync(
-                $"{app.BaseUrl}/api/projects/{folder}/audio/enqueue",
-                new { level = "Chapter", nodeId = builder.ChapterId("ch1"), needsAudioOnly = true });
-            Assert.Equal(HttpStatusCode.Accepted, enqueue.StatusCode);
-            await app.WaitForQueueDrainAsync("/api/audio/queue", timeoutSeconds: 60);
-        }
-        finally
-        {
-            broadcaster.Event -= Capture;
-        }
-
-        AudioGenEvent[] captured;
-        lock (events) captured = [.. events];
-        var transcribed = Assert.Single(captured.OfType<Transcribed>(), e => e.Id == itemId);
-        Assert.Equal("It was a dark and stormy night.", transcribed.Transcript);
-        var verified = Assert.Single(captured.OfType<Verified>(), e => e.Id == itemId);
-        Assert.True(verified.Ok);
-        Assert.Equal(0, verified.Wer);
-        Assert.False(verified.Rescued);
-
-        var factory = app.Services.GetRequiredService<IProjectDbContextFactory>();
-        await using var db = await factory.CreateAsync(Path.Combine(app.WorkspaceDir, folder));
-        var item = await db.ParagraphItems.AsNoTracking().SingleAsync(pi => pi.Id == itemId);
-        Assert.Equal($"audio/{itemId}.wav", item.AudioFileName);
-        Assert.False(await db.AudioReviews.AsNoTracking().AnyAsync(r => r.ParagraphItemId == itemId));
     }
 
     [Fact]

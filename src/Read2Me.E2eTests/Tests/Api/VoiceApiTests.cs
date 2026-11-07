@@ -44,11 +44,9 @@ public class VoiceApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         var aliceId = await CharacterIdAsync(folder, "Alice");
         var voicesDoc = JsonDocument.Parse(await Http.GetStringAsync(
             $"{app.BaseUrl}/api/projects/{folder}/characters/{aliceId}/voices"));
-        var voices = voicesDoc.RootElement.GetProperty("voices");
-        Assert.Equal(1, voices.GetArrayLength());
-        var voice = voices[0];
-        Assert.Equal("Main Voice", voice.GetProperty("name").GetString());
-        Assert.Equal("A clear adult voice.", voice.GetProperty("designPrompt").GetString());
+        // What the plan writes is VoiceBatchRunnerIntegrationTests; here one voice has to land.
+        var voice = voicesDoc.RootElement.GetProperty("voices")[0];
+        Assert.Equal(JsonValueKind.String, voice.GetProperty("designPrompt").ValueKind);
         var voiceId = voice.GetProperty("id").GetGuid();
 
         // Single-voice audio generation against fake-audiocpp + fake-whisper.
@@ -61,18 +59,16 @@ public class VoiceApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Assert.True(File.Exists(Path.Combine(app.WorkspaceDir, folder,
             audioFileName!.Replace('/', Path.DirectorySeparatorChar))));
 
-        // The seeded VoxCPM2 config designs on audio.cpp: no reference, the prompt as the (control) prefix.
+        // The seeded VoxCPM2 config is the one that designed; the body it sends is its client tests.
         JsonObject body;
         lock (app.FakeAi.AudioCppSpeechBodies) body = app.FakeAi.AudioCppSpeechBodies[^1];
         Assert.Equal("voxcpm2", body["model"]!.GetValue<string>());
-        Assert.StartsWith("(A clear adult voice.)", body["input"]!.GetValue<string>());
-        Assert.False(body.ContainsKey("voice_ref"));
     }
 
     /// <summary>
     /// The wiring for a design provider other than the default: with the Qwen3 config active,
-    /// generating a voice's audio sends its design prompt to fake-audiocpp as the instruction on a
-    /// no-reference <c>qwen3-design</c> request. Every design provider's client and body are unit
+    /// generating a voice's audio goes to fake-audiocpp as a <c>qwen3-design</c> request. Every
+    /// design provider's client and body are unit
     /// tests (ProviderClientRegistrationTests and each *VoiceDesignClientTests class), so one
     /// provider stands for the rest here.
     /// </summary>
@@ -82,14 +78,12 @@ public class VoiceApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         var body = await DesignOneVoiceAsync(WorkspaceSeeder.Qwen3DesignConfigName);
 
         Assert.Equal("qwen3-design", body["model"]!.GetValue<string>());
-        Assert.Equal("A clear adult voice.", body["options"]!["instruction"]!.GetValue<string>());
-        Assert.False(body.ContainsKey("voice_ref"));
-        Assert.False(body.ContainsKey("reference_text"));
     }
 
     /// <summary>
     /// Generate audio carrying an unsaved design prompt: one request designs from that prompt and
-    /// stores it with the take, so the edit and the audio land together.
+    /// stores it with the take, so the edit and the audio land together. The endpoint picks the
+    /// prompt, so no unit test pins it.
     /// </summary>
     [Fact]
     public async Task Generate_audio_with_a_design_prompt_designs_from_it_and_stores_it_with_the_take()
@@ -102,6 +96,7 @@ public class VoiceApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             new { designPrompt = "A gravelly old voice." });
 
         Assert.Equal(HttpStatusCode.OK, gen.StatusCode);
+        // The endpoint hands the sent prompt to the design, not the stored one.
         JsonObject body;
         lock (app.FakeAi.AudioCppSpeechBodies) body = Assert.Single(app.FakeAi.AudioCppSpeechBodies);
         Assert.StartsWith("(A gravelly old voice.)", body["input"]!.GetValue<string>());
@@ -179,8 +174,9 @@ public class VoiceApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 
     /// <summary>
     /// The Reference Limit on a designed take, measured after the host normalises it: over 15 s it
-    /// is kept and the answer warns; over 30 s generation fails with advice about the sample text,
-    /// and the voice keeps the audio it had.
+    /// is kept and the answer carries <c>referenceWarning</c>; over 30 s generation is a 422 with a
+    /// <c>detail</c>. The limits, their messages and the take kept on a refusal are
+    /// ReferenceLimitTests and VoiceAudioGeneratorTests.
     /// </summary>
     [Fact]
     public async Task A_designed_take_over_the_Reference_Limit_is_warned_or_refused()
@@ -193,25 +189,13 @@ public class VoiceApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             var kept = await Http.PostAsync(generate, null);
             Assert.Equal(HttpStatusCode.OK, kept.StatusCode);
             var body = JsonDocument.Parse(await kept.Content.ReadAsStringAsync()).RootElement;
-            Assert.Equal(16.0, body.GetProperty("referenceSeconds").GetDouble(), precision: 1);
-            Assert.Contains("15 s soft limit", body.GetProperty("referenceWarning").GetString());
-            var audioFileName = body.GetProperty("audioFileName").GetString()!;
-            var stored = await File.ReadAllBytesAsync(Path.Combine(app.WorkspaceDir, folder,
-                audioFileName.Replace('/', Path.DirectorySeparatorChar)));
+            Assert.False(string.IsNullOrEmpty(body.GetProperty("referenceWarning").GetString()));
 
             app.FakeAi.AudioCppTakeMs = 31_000;
             var refused = await Http.PostAsync(generate, null);
             Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
             var problem = JsonDocument.Parse(await refused.Content.ReadAsStringAsync()).RootElement;
-            Assert.Contains("shorten the voice-design sample text", problem.GetProperty("detail").GetString());
-
-            var voice = JsonDocument.Parse(await Http.GetStringAsync(
-                    $"{app.BaseUrl}/api/projects/{folder}/characters/{aliceId}/voices"))
-                .RootElement.GetProperty("voices")[0];
-            Assert.Equal(audioFileName, voice.GetProperty("audioFileName").GetString());
-            Assert.Equal(16.0, voice.GetProperty("referenceSeconds").GetDouble(), precision: 1);
-            Assert.Equal(stored, await File.ReadAllBytesAsync(Path.Combine(app.WorkspaceDir, folder,
-                audioFileName.Replace('/', Path.DirectorySeparatorChar))));
+            Assert.False(string.IsNullOrEmpty(problem.GetProperty("detail").GetString()));
         }
         finally
         {

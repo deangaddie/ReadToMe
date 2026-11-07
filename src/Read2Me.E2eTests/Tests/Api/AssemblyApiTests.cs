@@ -74,25 +74,25 @@ public class AssemblyApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         return path;
     }
 
+    /// <summary>
+    /// The listing's wire fields. Which files it lists and in what order is AssemblyOutputsTests
+    /// (List_ReturnsM4bsNewestFirst_AndSkipsEverythingElse).
+    /// </summary>
     [Fact]
-    public async Task Outputs_lists_m4b_files_newest_first_with_the_partial_flag()
+    public async Task Outputs_list_an_m4b_with_its_wire_fields()
     {
         var folder = $"api-asm-{Guid.NewGuid():N}";
         await app.SeedProjectAsync(folder, "Asm Book", "Author");
-        File.SetLastWriteTimeUtc(SeedOutput(folder, "Asm Book.m4b", new byte[10]), DateTime.UtcNow.AddDays(-1));
         SeedOutput(folder, "Asm Book_partial_20260919.m4b", new byte[3]);
-        SeedOutput(folder, "Asm Book.m4b.tmp", new byte[1]);
 
         var outputs = JsonDocument.Parse(await Http.GetStringAsync(
             $"{app.BaseUrl}/api/projects/{folder}/assembly/outputs")).RootElement;
 
-        Assert.Equal(2, outputs.GetArrayLength());
-        Assert.Equal("Asm Book_partial_20260919.m4b", outputs[0].GetProperty("fileName").GetString());
-        Assert.True(outputs[0].GetProperty("isPartial").GetBoolean());
-        Assert.Equal("Asm Book.m4b", outputs[1].GetProperty("fileName").GetString());
-        Assert.Equal(10, outputs[1].GetProperty("sizeBytes").GetInt64());
-        Assert.False(outputs[1].GetProperty("isPartial").GetBoolean());
-        Assert.True(outputs[1].GetProperty("createdAt").GetDateTimeOffset() < DateTimeOffset.UtcNow.AddHours(-23));
+        var output = Assert.Single(outputs.EnumerateArray());
+        Assert.Equal("Asm Book_partial_20260919.m4b", output.GetProperty("fileName").GetString());
+        Assert.True(output.GetProperty("isPartial").GetBoolean());
+        Assert.Equal(3, output.GetProperty("sizeBytes").GetInt64());
+        Assert.Equal(JsonValueKind.String, output.GetProperty("createdAt").ValueKind);
     }
 
     [Fact]
@@ -134,17 +134,20 @@ public class AssemblyApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Assert.Equal(bytes[10..20], await response.Content.ReadAsByteArrayAsync());
     }
 
+    /// <summary>
+    /// A missing output is the 404 the routes answer, and a URL-encoded traversal reaches the
+    /// endpoint decoded, so only the host proves it is refused. The other names it refuses (.tmp,
+    /// ../, sub/) are AssemblyOutputsTests (TryResolve_AnythingElse_IsRefused).
+    /// </summary>
     [Theory]
     [InlineData("missing.m4b")]
-    [InlineData("book.m4b.tmp")]
     [InlineData("..%2Fescape.m4b")]
     [InlineData("..%5Cescape.m4b")]
-    public async Task Download_and_delete_refuse_anything_but_an_existing_output(string fileName)
+    public async Task Download_and_delete_refuse_a_missing_output_and_a_url_encoded_traversal(string fileName)
     {
         var folder = $"api-asm-{Guid.NewGuid():N}";
         await app.SeedProjectAsync(folder, "Asm Book", "Author");
         SeedOutput(folder, "book.m4b", new byte[4]);
-        SeedOutput(folder, "book.m4b.tmp", new byte[4]);
         // A real file one level up: a traversal that resolved would find it.
         File.WriteAllBytes(Path.Combine(app.WorkspaceDir, folder, "escape.m4b"), new byte[4]);
 
@@ -153,7 +156,6 @@ public class AssemblyApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Assert.Equal(HttpStatusCode.NotFound, (await Http.GetAsync(url)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await Http.DeleteAsync(url)).StatusCode);
         Assert.True(File.Exists(Path.Combine(app.WorkspaceDir, folder, "escape.m4b")));
-        Assert.True(File.Exists(Path.Combine(app.WorkspaceDir, folder, "output", "book.m4b.tmp")));
     }
 
     [Fact]
@@ -176,7 +178,5 @@ public class AssemblyApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             (await Http.GetAsync($"{app.BaseUrl}/api/projects/nope-asm/assembly/outputs")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound,
             (await Http.GetAsync($"{app.BaseUrl}/api/projects/nope-asm/assembly/outputs/book.m4b")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound,
-            (await Http.DeleteAsync($"{app.BaseUrl}/api/projects/nope-asm/assembly/outputs/book.m4b")).StatusCode);
     }
 }

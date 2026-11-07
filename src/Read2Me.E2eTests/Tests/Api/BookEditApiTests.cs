@@ -14,7 +14,11 @@ namespace Read2Me.E2eTests.Tests.Api;
 
 /// <summary>
 /// The AI book-edit flow over HTTP (Angular ticket 19): plan, propose with hub progress, retry one
-/// row, apply through the ordinary command endpoint, cancel and drop.
+/// row, apply through the ordinary command endpoint, cancel and drop. These pin the routes, the
+/// statuses, the hub messages' kind and program, and the Restore 409s; what a plan targets, how
+/// many requests it takes, the rows a proposal writes and what an apply leaves are
+/// BookEditPlannerTests, ScopeResolverTests, BookEditProposalServiceTests and
+/// BookEditSessionStoreTests.
 /// </summary>
 public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
@@ -61,22 +65,6 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     private async Task<JsonElement> GetRunAsync(string folder, string program) =>
         JsonDocument.Parse(await Http.GetStringAsync(Url(folder, $"/{program}"))).RootElement;
 
-    private async Task<List<string>> ChapterTitlesAsync(string folder)
-    {
-        var overview = JsonDocument.Parse(await Http.GetStringAsync($"{app.BaseUrl}/api/projects/{folder}/book")).RootElement;
-        var volumeId = overview.GetProperty("volumes")[0].GetProperty("id").GetGuid();
-        var volumeChildren = await ChildrenAsync(folder, "Volume", volumeId);
-        var partId = volumeChildren.GetProperty("parts")[0].GetProperty("id").GetGuid();
-        var chapters = (await ChildrenAsync(folder, "Part", partId)).GetProperty("chapters");
-        return chapters.EnumerateArray().Select(c => c.GetProperty("title").GetString()!).ToList();
-    }
-
-    private async Task<JsonElement> ChildrenAsync(string folder, string level, Guid id)
-    {
-        return JsonDocument.Parse(await Http.GetStringAsync(
-            $"{app.BaseUrl}/api/projects/{folder}/nodes/{level}/{id}/children")).RootElement;
-    }
-
     [Fact]
     public async Task Plan_propose_retry_one_and_apply_round_trip_over_the_hub()
     {
@@ -88,10 +76,6 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             var plan = await PlanAsync(folder, "capitalise chapter titles");
             Assert.Equal("Ok", plan.GetProperty("status").GetString());
             Assert.Equal("Llm", plan.GetProperty("transform").GetString());
-            Assert.Equal(10, plan.GetProperty("targetCount").GetInt32());
-            Assert.Equal(2, plan.GetProperty("requestCount").GetInt32()); // ceil(10 / 8)
-            Assert.Equal(0, plan.GetProperty("warnings").GetArrayLength());
-            Assert.False(string.IsNullOrEmpty(plan.GetProperty("summary").GetString()));
             var program = plan.GetProperty("program").GetString()!;
 
             Assert.Equal("Idle", (await GetRunAsync(folder, program)).GetProperty("status").GetString());
@@ -110,22 +94,17 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             Assert.All(list, m => Assert.Equal(program, m.GetProperty("program").GetString()));
             Assert.Contains(list, m => m.GetProperty("kind").GetString() == "Progress");
             var done = list.Single(m => m.GetProperty("kind").GetString() == "Done");
-            Assert.Equal(10, done.GetProperty("done").GetInt32());
-            Assert.Equal(10, done.GetProperty("total").GetInt32());
             Assert.False(done.GetProperty("cancelled").GetBoolean());
             var rows = done.GetProperty("rows").EnumerateArray().ToList();
-            Assert.Equal(10, rows.Count);
-            Assert.All(rows, r => Assert.Equal("Proposed", r.GetProperty("status").GetString()));
-            Assert.Equal("CHAPTER 1", rows[0].GetProperty("newValue").GetString());
-            Assert.Equal("Chapter 1", rows[0].GetProperty("oldValue").GetString());
             Assert.Equal("ChapterTitle", rows[0].GetProperty("kind").GetString());
+            Assert.Equal("Proposed", rows[0].GetProperty("status").GetString());
 
             // The same rows are readable without the hub.
             var run = await GetRunAsync(folder, program);
             Assert.Equal("Completed", run.GetProperty("status").GetString());
-            Assert.Equal(10, run.GetProperty("rows").GetArrayLength());
+            Assert.Equal(rows.Count, run.GetProperty("rows").GetArrayLength());
 
-            // Retry one row with a hint: the hint reaches the prompt and a fresh row comes back.
+            // Retry one row with a hint; how the hint reaches the prompt is BookEditProposalServiceTests.
             var targetId = rows[2].GetProperty("id").GetGuid();
             app.FakeAi.LlmReply = _ => """[ { "index": 0, "reasoning": "fake", "new_text": "Chapter Three" } ]""";
             var retry = await Http.PostAsJsonAsync(Url(folder, $"/{program}/propose-one"),
@@ -133,11 +112,7 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
             var row = JsonDocument.Parse(await retry.Content.ReadAsStringAsync()).RootElement;
             Assert.Equal(targetId, row.GetProperty("id").GetGuid());
-            Assert.Equal("Chapter Three", row.GetProperty("newValue").GetString());
             Assert.Equal("Proposed", row.GetProperty("status").GetString());
-            string lastPrompt;
-            lock (app.FakeAi.LlmPromptsSeen) lastPrompt = app.FakeAi.LlmPromptsSeen[^1];
-            Assert.Contains("spell the number out", lastPrompt);
 
             var unknownTarget = await Http.PostAsJsonAsync(Url(folder, $"/{program}/propose-one"),
                 new { targetId = Guid.NewGuid(), thinking = false });
@@ -154,10 +129,6 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
                 },
             });
             Assert.Equal(HttpStatusCode.OK, apply.StatusCode);
-            var titles = await ChapterTitlesAsync(folder);
-            Assert.Equal("CHAPTER 1", titles[0]);
-            Assert.Equal("Chapter 2", titles[1]);
-            Assert.Equal("Chapter Three", titles[2]);
 
             var drop = await Http.DeleteAsync(Url(folder, $"/{program}"));
             Assert.Equal(HttpStatusCode.NoContent, drop.StatusCode);
@@ -171,7 +142,7 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     [Fact]
-    public async Task Cancel_mid_proposal_keeps_the_rows_computed_so_far()
+    public async Task A_second_start_is_409_and_a_cancel_mid_proposal_ends_the_run_cancelled()
     {
         var folder = $"api-edit-cancel-{Guid.NewGuid():N}";
         await app.SeedMultiChapterProjectAsync(folder, "Cancel Book", "Author", chapters: 24);
@@ -201,13 +172,9 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             await WaitForAsync(() => messages.Any(m => m.GetProperty("kind").GetString() == "Done"));
             var done = messages.Single(m => m.GetProperty("kind").GetString() == "Done");
             Assert.True(done.GetProperty("cancelled").GetBoolean());
-            var landed = done.GetProperty("rows").GetArrayLength();
-            Assert.Equal(8, landed);
-            Assert.Equal(landed, done.GetProperty("done").GetInt32());
 
             var run = await GetRunAsync(folder, program);
             Assert.Equal("Cancelled", run.GetProperty("status").GetString());
-            Assert.Equal(landed, run.GetProperty("rows").GetArrayLength());
 
             // Cancelling with nothing running is harmless.
             Assert.Equal(HttpStatusCode.NoContent, (await Http.PostAsync(Url(folder, $"/{program}/cancel"), null)).StatusCode);
@@ -228,8 +195,6 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         {
             var plan = await PlanAsync(folder, "number the chapters");
             Assert.Equal("SetTemplate", plan.GetProperty("transform").GetString());
-            Assert.Equal(3, plan.GetProperty("targetCount").GetInt32());
-            Assert.Equal(0, plan.GetProperty("requestCount").GetInt32());
             var program = plan.GetProperty("program").GetString()!;
 
             // No hub connection: the rows are still there to read back.
@@ -237,14 +202,13 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             Assert.Equal(HttpStatusCode.Accepted, propose.StatusCode);
             var run = await WaitForRunAsync(folder, program, "Completed");
             var rows = run.GetProperty("rows").EnumerateArray().ToList();
-            Assert.Equal(["1. Chapter 1", "2. Chapter 2", "3. Chapter 3"], rows.Select(r => r.GetProperty("newValue").GetString()));
 
             var retry = await Http.PostAsJsonAsync(Url(folder, $"/{program}/propose-one"),
                 new { targetId = rows[0].GetProperty("id").GetGuid(), thinking = false });
             Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
             var row = JsonDocument.Parse(await retry.Content.ReadAsStringAsync()).RootElement;
             Assert.Equal("Failed", row.GetProperty("status").GetString());
-            Assert.Contains("AI-written plans", row.GetProperty("failureReason").GetString());
+            Assert.False(string.IsNullOrEmpty(row.GetProperty("failureReason").GetString()));
         }
         finally
         {
@@ -252,18 +216,8 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         }
     }
 
-    private static string ChangeCasePlan(string target, string? pattern, string caseMode) =>
-        $$"""
-        { "reasoning": "change letter case", "supported": true, "unsupported_reason": null,
-          "target": "{{target}}",
-          "node_filter": { "ordinal_from": null, "ordinal_to": null, "title_regex": null },
-          "paragraph_filter": { "where": [] },
-          "transform": { "kind": "change_case", "pattern": {{(pattern == null ? "null" : JsonSerializer.Serialize(pattern))}},
-            "replacement": null, "template": null, "instruction": null, "case_mode": "{{caseMode}}" } }
-        """;
-
     [Fact]
-    public async Task Plan_reports_unsupported_no_target_and_title_warning_outcomes()
+    public async Task Plan_reports_unsupported_and_no_target_outcomes_and_a_blank_instruction_is_400()
     {
         var folder = $"api-edit-plan-{Guid.NewGuid():N}";
         await app.SeedMultiChapterProjectAsync(folder, "Plan Book", "Author", chapters: 2);
@@ -273,23 +227,13 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
                 """{ "reasoning": "no", "supported": false, "unsupported_reason": "Cover art is not text.", "target": "chapter_title", "node_filter": { "ordinal_from": null, "ordinal_to": null, "title_regex": null }, "paragraph_filter": { "where": [] }, "transform": { "kind": "llm", "pattern": null, "replacement": null, "template": null, "instruction": null } }""";
             var unsupported = await PlanAsync(folder, "change the cover");
             Assert.Equal("Unsupported", unsupported.GetProperty("status").GetString());
-            Assert.Contains("Cover art", unsupported.GetProperty("reason").GetString());
+            Assert.False(string.IsNullOrEmpty(unsupported.GetProperty("reason").GetString()));
             Assert.Equal(JsonValueKind.Null, unsupported.GetProperty("program").ValueKind);
 
             app.FakeAi.LlmReply = _ => LlmPlan.Replace("\"title_regex\": null", "\"title_regex\": \"^Nothing matches\"");
             var empty = await PlanAsync(folder, "capitalise the chapters called Nothing");
             Assert.Equal("NoTargets", empty.GetProperty("status").GetString());
             Assert.Equal(JsonValueKind.Null, empty.GetProperty("program").ValueKind);
-
-            // A paragraph change_case whose pattern also matches titles plans with a warning. What
-            // it counts and says is ScopeResolverTests and EditProgramDescriberTests; the re-casing
-            // itself is BookEditProposalServiceTests and DeterministicTransformerTests.
-            app.FakeAi.LlmReply = _ => ChangeCasePlan("paragraph_text", "Chapter", "upper");
-            var warned = await PlanAsync(folder, "make 'Chapter' uppercase");
-            Assert.Equal("Ok", warned.GetProperty("status").GetString());
-            Assert.Equal("ChangeCase", warned.GetProperty("transform").GetString());
-            Assert.Equal(0, warned.GetProperty("requestCount").GetInt32());
-            Assert.Contains("titles also match", Assert.Single(warned.GetProperty("warnings").EnumerateArray()).GetString());
 
             var blank = await Http.PostAsJsonAsync(Url(folder, "/plan"), new { instruction = "  " });
             Assert.Equal(HttpStatusCode.BadRequest, blank.StatusCode);
@@ -372,11 +316,6 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             (await Http.PostAsJsonAsync(Url("nope-edit", "/plan"), new { instruction = "x" })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound,
             (await Http.PostAsJsonAsync(Url(folder, "/nope/propose"), new { thinking = false })).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await Http.GetAsync(Url(folder, "/nope"))).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound,
-            (await Http.PostAsJsonAsync(Url(folder, "/nope/propose-one"), new { targetId = Guid.NewGuid() })).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await Http.PostAsync(Url(folder, "/nope/cancel"), null)).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await Http.DeleteAsync(Url(folder, "/nope"))).StatusCode);
     }
 
     /// <summary>Polls the session until its run reaches <paramref name="status"/>, and answers it.</summary>

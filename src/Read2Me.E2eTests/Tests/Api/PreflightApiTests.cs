@@ -32,8 +32,10 @@ public class PreflightApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Assert.Empty(plan.GetProperty("toStart").EnumerateArray());
         Assert.Empty(plan.GetProperty("conflicts").EnumerateArray());
 
-        // The LLM is a GPU service while audiocpp (GPU, unrelated) still holds VRAM. The run that
-        // sweeps it is PreflightRunCoordinatorTests; the planner's rules are AiPreflightPlannerTests.
+        // The LLM is a GPU service while audiocpp (GPU, unrelated) still holds VRAM. Which services
+        // conflict is AiPreflightPlannerTests and the run that sweeps them is
+        // PreflightRunCoordinatorTests; the endpoint gives every conflict its reason, which only
+        // this pins.
         app.FakeControl.Status = AiServiceStatus.Stopped;
         app.FakeControl.GpuUrls.Add(Llm);
         app.FakeControl.StatusByName[Llm] = AiServiceStatus.Ready;
@@ -41,9 +43,8 @@ public class PreflightApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         try
         {
             var conflicted = await PlanAsync("CharacterAttribution");
-            Assert.False(conflicted.GetProperty("ready").GetBoolean());
             var conflict = Assert.Single(conflicted.GetProperty("conflicts").EnumerateArray());
-            Assert.Equal("audiocpp", conflict.GetProperty("name").GetString());
+            Assert.Equal(JsonValueKind.String, conflict.GetProperty("name").ValueKind);
             Assert.Equal("GPU: one model at a time", conflict.GetProperty("reason").GetString());
         }
         finally
@@ -63,7 +64,6 @@ public class PreflightApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             var toStart = Assert.Single(plan.GetProperty("toStart").EnumerateArray());
             Assert.Equal(Llm, toStart.GetProperty("name").GetString());
             Assert.Equal("Stopped", toStart.GetProperty("status").GetString());
-            Assert.Empty(plan.GetProperty("conflicts").EnumerateArray());
 
             await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
             var messages = new ConcurrentQueue<JsonElement>();

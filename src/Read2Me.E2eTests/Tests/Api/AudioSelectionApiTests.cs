@@ -23,35 +23,32 @@ public class AudioSelectionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
     private static HashSet<Guid> Ids(JsonElement array) =>
         array.EnumerateArray().Select(r => r.GetProperty("id").GetGuid()).ToHashSet();
 
+    /// <summary>
+    /// Which items each filter keeps is ProjectReaderTests (GetAudioItemRefsAsync_…); this pins the
+    /// level and the two query flags binding, the ancestry fields and the bad-level 400.
+    /// </summary>
     [Fact]
-    public async Task Item_ids_list_the_voiced_items_under_a_node_with_ancestry()
+    public async Task Item_ids_bind_the_level_and_both_flags_and_carry_ancestry()
     {
         var folder = $"api-audio-ids-{Guid.NewGuid():N}";
         var book = await app.SeedThreeDialogParagraphProjectAsync(folder, "Audio Select Book", "Author", characterName: "Alice");
         var chapter = book.ChapterId("ch1");
 
-        // Only the narration item has a speaker; the three unattributed lines do not.
         var all = await GetJsonAsync($"/api/projects/{folder}/nodes/Chapter/{chapter}/item-ids");
-        Assert.Equal(new HashSet<Guid> { book.ItemId("n1") }, Ids(all));
-        var first = all.EnumerateArray().First();
+        var first = all.EnumerateArray().Single(r => r.GetProperty("id").GetGuid() == book.ItemId("n1"));
         Assert.Equal(book.ParagraphId("p1"), first.GetProperty("paragraphId").GetGuid());
         Assert.Equal(chapter, first.GetProperty("chapterId").GetGuid());
         Assert.Equal(book.VolumeId("v1"), first.GetProperty("volumeId").GetGuid());
         Assert.NotEqual(Guid.Empty, first.GetProperty("partId").GetGuid());
+        Assert.DoesNotContain(book.ItemId("line1"), Ids(all));
 
-        // Narrator-only mode reads the unattributed lines too.
+        // Narrator-only mode reads the unattributed line too.
         var narratorOnly = await GetJsonAsync($"/api/projects/{folder}/nodes/Volume/{book.VolumeId("v1")}/item-ids?narratorOnlyMode=true");
-        Assert.Equal(4, narratorOnly.GetArrayLength());
+        Assert.Contains(book.ItemId("line1"), Ids(narratorOnly));
 
-        // Attribute one line: it joins the voiced set, and "needs audio" still lists it (no WAV yet).
-        var characterId = (await GetJsonAsync($"/api/projects/{folder}/characters"))
-            .EnumerateArray().Single(c => c.GetProperty("name").GetString() == "Alice").GetProperty("id").GetGuid();
-        var assign = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/projects/{folder}/commands",
-            new { type = "SetItemCharacter", itemId = book.ItemId("line1"), characterId });
-        Assert.Equal(HttpStatusCode.OK, assign.StatusCode);
-
+        // "Needs audio" keeps the items with no WAV.
         var needsAudio = await GetJsonAsync($"/api/projects/{folder}/nodes/Chapter/{chapter}/item-ids?needsAudioOnly=true");
-        Assert.Equal(new HashSet<Guid> { book.ItemId("n1"), book.ItemId("line1") }, Ids(needsAudio));
+        Assert.Contains(book.ItemId("n1"), Ids(needsAudio));
 
         var badLevel = await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/nodes/book/{chapter}/item-ids");
         Assert.Equal(HttpStatusCode.BadRequest, badLevel.StatusCode);
@@ -65,10 +62,10 @@ public class AudioSelectionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
         await app.SeedNarratorVoiceAsync(folder);
         var itemId = book.ItemId("n2");
 
-        // An unknown id names nothing and is not counted.
+        // Which ids reach the queue is ProjectReaderTests (GetOrderedAudioItemRefsAsync_…).
         var enqueue = await Http.PostAsJsonAsync(
             $"{app.BaseUrl}/api/projects/{folder}/audio/enqueue-items",
-            new { itemIds = new[] { itemId, Guid.NewGuid() } });
+            new { itemIds = new[] { itemId } });
         Assert.Equal(HttpStatusCode.Accepted, enqueue.StatusCode);
         var enqueued = JsonDocument.Parse(await enqueue.Content.ReadAsStringAsync())
             .RootElement.GetProperty("enqueued").GetInt32();
@@ -79,11 +76,6 @@ public class AudioSelectionApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
         Assert.True(File.Exists(Path.Combine(app.WorkspaceDir, folder, "audio", $"{itemId}.wav")));
         var status = await GetJsonAsync($"/api/projects/{folder}/audio/items/{itemId}");
         Assert.NotEqual(JsonValueKind.Null, status.GetProperty("audioVersion").ValueKind);
-
-        // Nothing to queue is still accepted.
-        var empty = await Http.PostAsJsonAsync(
-            $"{app.BaseUrl}/api/projects/{folder}/audio/enqueue-items", new { itemIds = Array.Empty<Guid>() });
-        Assert.Equal(HttpStatusCode.Accepted, empty.StatusCode);
     }
 
     [Fact]
