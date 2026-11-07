@@ -25,8 +25,7 @@ namespace Read2Me.Services.Series
         public async Task<SeriesResult<IReadOnlyList<SeriesBookGains>>> PreviewShareAndLinkAsync(
             Guid seriesId, IReadOnlyList<SeriesMemberRef> members, CancellationToken ct = default)
         {
-            using var _ = await gate.EnterAsync(ct);
-            var loaded = await LoadHealedAsync(seriesId, ct);
+            var loaded = await loader.LoadSeriesAsync(seriesId, withCasts: true, ct);
             if (loaded.Value is not { } series) return loaded.Refusal!;
             var picked = series.UnlinkedMembers(members);
             if (picked.Value is not { } chosen) return picked.Refusal!;

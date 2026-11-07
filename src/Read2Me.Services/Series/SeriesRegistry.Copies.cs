@@ -21,8 +21,7 @@ namespace Read2Me.Services.Series
         public async Task<SeriesResult<SeriesCharacterView>> CharacterAsync(
             Guid seriesId, Guid seriesCharacterId, CancellationToken ct = default)
         {
-            using var _ = await gate.EnterAsync(ct);
-            var loaded = await LoadHealedAsync(seriesId, ct);
+            var loaded = await loader.LoadSeriesAsync(seriesId, withCasts: true, ct);
             if (loaded.Value is not { } series) return loaded.Refusal!;
             if (!series.IsSeriesCharacter(seriesCharacterId)) return SeriesRefusal.UnknownSeriesCharacter;
             return (await loader.WithVoicesAsync(series, [seriesCharacterId], ct)).Character(seriesCharacterId);
@@ -31,16 +30,22 @@ namespace Read2Me.Services.Series
         // ---- writes ------------------------------------------------------------------------------
 
         /// <summary>
-        /// A linked Character was deleted from its book: its link goes, and the Series character too
-        /// when no book is linked any more. The other books keep their Voices.
+        /// A Character the series remembers (linked, or named by a <i>Not the same</i>) was deleted
+        /// from its book: its link goes, and the Series character too when no book is linked any
+        /// more, and so does every <i>Not the same</i> naming it. A write, so the series' other stale
+        /// rows go first. The other books keep their Voices.
         /// </summary>
         public async Task ForgetCharacterAsync(ProjectFolderId folder, Guid characterId, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            if (await loader.LoadSeriesOfAsync(folder, withCasts: false, ct) is not ({ } series, var projectId)) return;
-            if (series.Peers(projectId, characterId) is null) return;
+            if (await loader.LoadSeriesOfAsync(folder, withCasts: true, ct) is not ({ } series, var projectId)) return;
+            if (!series.Remembers(projectId, characterId)) return;
+            await HealAsync(series, ct);
             await using (var db = await Data.Series.SeriesDbContext.OpenAsync(FolderOf(series.Id), ct))
+            {
+                ForgetNotTheSame(db, [new(projectId, characterId)]);
                 await RemoveLinksAsync(db, l => l.ProjectId == projectId && l.CharacterId == characterId, ct);
+            }
             Signal(series.Id, SeriesChangeKind.Changed);
         }
 

@@ -326,7 +326,7 @@ public class SeriesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     [Fact]
-    public async Task A_series_whose_book_folder_went_missing_reads_without_it_and_drops_its_entry()
+    public async Task A_series_whose_book_folder_went_missing_reads_without_it_and_its_next_write_drops_the_entry()
     {
         var holmes = await SeedHolmesAsync();
         var id = await CreateAsync(UniqueName(), holmes.Scarlet);
@@ -335,7 +335,10 @@ public class SeriesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Directory.Delete(Path.Combine(app.WorkspaceDir, holmes.Four), recursive: true);
 
         Assert.Equal([(holmes.Scarlet, 1m)], Books((await SeriesAsync(id))!.Value));
-        Assert.Equal(1, await StoredBookCountAsync(id));
+        Assert.Equal(2, await StoredBookCountAsync(id)); // reads change nothing (#246)
+
+        Assert.Equal(HttpStatusCode.OK, (await Http.PatchAsJsonAsync($"{app.BaseUrl}/api/series/{id}", new { name = UniqueName() })).StatusCode);
+        Assert.Equal(1, await StoredBookCountAsync(id)); // writes heal
     }
 
     [Fact]

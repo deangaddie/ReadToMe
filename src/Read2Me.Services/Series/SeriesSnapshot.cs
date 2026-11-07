@@ -230,6 +230,15 @@ namespace Read2Me.Services.Series
         }
 
         /// <summary>
+        /// Whether series.db names the Character, in a link or a <i>Not the same</i>, stale rows
+        /// included: its delete then has rows to forget. Needs only the registry layer.
+        /// </summary>
+        public bool Remembers(Guid projectId, Guid characterId) =>
+            _record.Links.Any(l => l.ProjectId == projectId && l.CharacterId == characterId)
+            || _record.NotTheSame.Any(n => (n.ProjectId == projectId && n.CharacterId == characterId)
+                                           || (n.OtherProjectId == projectId && n.OtherCharacterId == characterId));
+
+        /// <summary>
         /// The series link of each of a book's linked Characters, for the Cast page's roster. It
         /// differs from series only where the Voices layer of its Series character is loaded.
         /// </summary>

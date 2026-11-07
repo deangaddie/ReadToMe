@@ -25,8 +25,7 @@ namespace Read2Me.Services.Series
         /// </summary>
         public async Task<SeriesResult<SeriesCastView>> CastAsync(Guid seriesId, CancellationToken ct = default)
         {
-            using var _ = await gate.EnterAsync(ct);
-            var loaded = await LoadHealedAsync(seriesId, ct);
+            var loaded = await loader.LoadSeriesAsync(seriesId, withCasts: true, ct);
             if (loaded.Value is not { } series) return loaded.Refusal!;
             return (await loader.WithVoicesAsync(series, series.Links.Select(l => l.SeriesCharacterId), ct)).Cast();
         }
@@ -39,8 +38,7 @@ namespace Read2Me.Services.Series
         public async Task<SeriesResult<SeriesLinkPreview>> PreviewLinkAsync(
             Guid seriesId, Guid seriesCharacterId, string folder, Guid characterId, CancellationToken ct = default)
         {
-            using var _ = await gate.EnterAsync(ct);
-            var loaded = await LoadHealedAsync(seriesId, ct);
+            var loaded = await loader.LoadSeriesAsync(seriesId, withCasts: true, ct);
             if (loaded.Value is not { } series) return loaded.Refusal!;
             var (plan, refusal) = await PlanLinkAsync(series, seriesCharacterId, folder, characterId);
             if (plan is null) return refusal!;
@@ -53,7 +51,6 @@ namespace Read2Me.Services.Series
         /// </summary>
         public async Task<IReadOnlyDictionary<Guid, CharacterSeriesLink>> LinksOfAsync(ProjectFolderId folder, CancellationToken ct = default)
         {
-            using var _ = await gate.EnterAsync(ct);
             if (await loader.LoadSeriesOfAsync(folder, withCasts: true, ct) is not { } found)
                 return new Dictionary<Guid, CharacterSeriesLink>();
             var (series, projectId) = found;

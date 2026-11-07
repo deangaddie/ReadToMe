@@ -17,11 +17,14 @@ namespace Read2Me.Services.Series
     /// and carries no origin. Every write signals <see cref="SeriesChanged"/> so other clients read
     /// again. Reads are answered from a <see cref="SeriesSnapshot"/>, which filters stale rows (a
     /// member whose project has gone, a link to a Character that has gone) and deletes nothing; a
-    /// write that loads a series deletes that series' stale rows first.
+    /// write that loads a series deletes that series' stale rows first (writes heal).
     /// </para>
     /// <para>
-    /// Every call, reads included, runs under one process-wide lock: the rules span series (a name
-    /// is unique in the Workspace, a book is in at most one series).
+    /// Every write runs under one process-wide lock and loads its snapshot inside it: the rules span
+    /// series (a name is unique in the Workspace, a book is in at most one series). Reads take no
+    /// lock, so they don't wait behind a series Voice copy; one made while a copy runs may briefly
+    /// show a book as differing, and the <c>series</c> signal that ends the copy makes the client
+    /// read again.
     /// </para>
     /// </summary>
     public sealed partial class SeriesRegistry(
@@ -40,34 +43,22 @@ namespace Read2Me.Services.Series
         // ---- reads -------------------------------------------------------------------------------
 
         /// <summary>Every readable series, by name; each one's books in position order.</summary>
-        public async Task<IReadOnlyList<SeriesView>> ListAsync(CancellationToken ct = default)
-        {
-            using var _ = await gate.EnterAsync(ct);
-            var workspace = await loader.LoadWorkspaceAsync(ct);
-            foreach (var series in workspace.All) await HealAsync(series, ct);
-            return workspace.List();
-        }
+        public async Task<IReadOnlyList<SeriesView>> ListAsync(CancellationToken ct = default) =>
+            (await loader.LoadWorkspaceAsync(ct)).List();
 
         public async Task<SeriesResult<SeriesView>> GetAsync(Guid seriesId, CancellationToken ct = default)
         {
-            using var _ = await gate.EnterAsync(ct);
-            var loaded = await LoadHealedAsync(seriesId, ct, withCasts: false);
+            var loaded = await loader.LoadSeriesAsync(seriesId, withCasts: false, ct);
             return loaded.Value is { } series ? series.View() : loaded.Refusal!;
         }
 
         /// <summary>Each member folder's series, for the project reads.</summary>
-        public async Task<IReadOnlyDictionary<string, ProjectSeries>> MembershipsAsync(CancellationToken ct = default)
-        {
-            using var _ = await gate.EnterAsync(ct);
-            var workspace = await loader.LoadWorkspaceAsync(ct);
-            foreach (var series in workspace.All) await HealAsync(series, ct);
-            return workspace.Memberships();
-        }
+        public async Task<IReadOnlyDictionary<string, ProjectSeries>> MembershipsAsync(CancellationToken ct = default) =>
+            (await loader.LoadWorkspaceAsync(ct)).Memberships();
 
         /// <summary>One project's series, or null. Reads only that project and the registries, not every project.</summary>
         public async Task<ProjectSeries?> MembershipOfAsync(ProjectFolderId folder, CancellationToken ct = default)
         {
-            using var _ = await gate.EnterAsync(ct);
             return await loader.LoadForProjectAsync(folder, ct) is { } found
                 ? found.Workspace.MembershipOf(found.ProjectId)
                 : null;
@@ -178,8 +169,8 @@ namespace Read2Me.Services.Series
         public async Task<SeriesResult<bool>> ClearPosterAsync(Guid seriesId, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            var found = await loader.FindRecordAsync(seriesId, ct);
-            if (found.Value is null) return found.Refusal!;
+            var loaded = await LoadHealedAsync(seriesId, ct, withCasts: false);
+            if (loaded.Value is null) return loaded.Refusal!;
 
             var files = SeriesSnapshotLoader.PosterFiles(FolderOf(seriesId));
             foreach (var file in files)
@@ -306,10 +297,7 @@ namespace Read2Me.Services.Series
             return loaded;
         }
 
-        /// <summary>
-        /// Deletes the stale rows <paramref name="series"/> filters out. The reads that healed before
-        /// the snapshot (#234) still call it until healing moves to the writes alone (#246).
-        /// </summary>
+        /// <summary>Deletes the stale rows <paramref name="series"/> filters out; only writes call it, under the lock.</summary>
         private async Task HealAsync(SeriesSnapshot series, CancellationToken ct)
         {
             if (!series.HasStaleRows) return;
@@ -383,7 +371,7 @@ namespace Read2Me.Services.Series
     public sealed record ProjectSeries(Guid SeriesId, string Name, decimal Position);
 
     /// <summary>
-    /// The one lock every registry call takes (process-wide, so a singleton): a name's uniqueness and
+    /// The one lock every registry write takes (process-wide, so a singleton; reads take none): a name's uniqueness and
     /// a book's single series are facts across registries. A <see cref="Hold"/> is the proof that a
     /// caller holds it, for work that runs inside the caller's hold (<see cref="SeriesVoiceReplicator"/>).
     /// </summary>
