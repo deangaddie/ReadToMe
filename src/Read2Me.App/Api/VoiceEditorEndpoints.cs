@@ -218,8 +218,8 @@ namespace Read2Me.App.Api
     }
 
     /// <summary>
-    /// The voice-scope step list as the editor shows it: labels and blurbs from <see cref="VoiceStepRow"/>,
-    /// dial ranges from each step's settings, defaults from
+    /// The voice-scope step list as the editor shows it: labels and blurbs from
+    /// <see cref="LabelFor"/> and <see cref="BlurbFor"/>, dial ranges from each step's settings, defaults from
     /// <see cref="AudioPostProcessStepDefaults"/>. Chain order is the defaults' order — the client
     /// ticks steps, it never orders them.
     /// </summary>
@@ -288,7 +288,6 @@ namespace Read2Me.App.Api
 
         private static StepCatalogEntryDto Entry(AudioPostProcessStepConfig defaults)
         {
-            var row = VoiceStepRow.From(defaults);
             var dials = DialsFor(defaults.StepId);
             var values = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
             if (defaults.Settings is { } settings)
@@ -297,10 +296,32 @@ namespace Read2Me.App.Api
                         values[dial.Key] = value.Clone();
 
             return new StepCatalogEntryDto(
-                defaults.StepId, row.Label, row.Blurb,
+                defaults.StepId, LabelFor(defaults.StepId), BlurbFor(defaults.StepId),
                 dials.Select(d => d with { Default = values.TryGetValue(d.Key, out var v) ? v : null }).ToList(),
                 values);
         }
+
+        /// <summary>The step's name in the editor's checklist; an unknown step shows its id.</summary>
+        private static string LabelFor(string stepId) => stepId switch
+        {
+            AudioPostProcessStepIds.DePlosive => "De-plosive",
+            AudioPostProcessStepIds.Denoise => "Denoise",
+            AudioPostProcessStepIds.HissReduce => "Hiss reduce",
+            AudioPostProcessStepIds.ConsonantSoften => "Consonant soften",
+            AudioPostProcessStepIds.SilenceTrim => "Silence trim",
+            _ => stepId,
+        };
+
+        /// <summary>The one-line description under the step's name; empty for an unknown step.</summary>
+        private static string BlurbFor(string stepId) => stepId switch
+        {
+            AudioPostProcessStepIds.DePlosive => "Cuts the subsonic thump a 'p' or 'b' puts into the mic.",
+            AudioPostProcessStepIds.Denoise => "Removes broadband room noise and hum.",
+            AudioPostProcessStepIds.HissReduce => "Attenuates hiss above 5 kHz only, leaving speech untouched.",
+            AudioPostProcessStepIds.ConsonantSoften => "Tames harsh sibilants.",
+            AudioPostProcessStepIds.SilenceTrim => "Trims dead air from the start and end.",
+            _ => "",
+        };
 
         private static IReadOnlyList<SettingsFieldDto> DialsFor(string stepId) => stepId switch
         {
