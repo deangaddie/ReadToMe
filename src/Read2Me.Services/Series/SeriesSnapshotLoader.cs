@@ -11,7 +11,8 @@ namespace Read2Me.Services.Series
     /// Builds <see cref="SeriesSnapshot"/>s (#234): the registry layer from the <c>.series/{id}/series.db</c>
     /// files and the project catalog, when asked each member book's Characters, and the Voices layer
     /// for the Series characters a call names (<see cref="WithVoicesAsync"/>). It only reads: stale
-    /// rows are left in place for a write to heal.
+    /// rows are left in place for a write to heal. The reads the API answers, and the link and
+    /// push/take plans the registry's writes use, are in <c>SeriesSnapshotLoader.Reads.cs</c> (#247).
     /// </summary>
     public sealed partial class SeriesSnapshotLoader(
         IFileSystem fs,
