@@ -24,6 +24,7 @@ public class PronunciationPanelTests(E2eAppFixture app, PlaywrightFixture pw) : 
             (await panel.BoundingBoxAsync())!);
     }
 
+    // Needs a real browser: the third column is real grid layout.
     [Fact]
     public async Task On_a_wide_page_the_panel_is_a_third_column_beside_the_tree_and_the_reader()
     {
@@ -38,6 +39,7 @@ public class PronunciationPanelTests(E2eAppFixture app, PlaywrightFixture pw) : 
         Assert.True(reader.Width >= 400, $"reader squeezed to {reader.Width} px");
     }
 
+    // Needs a real browser: floating over the reader's edge is real layout under a real breakpoint.
     [Fact]
     public async Task On_a_narrow_page_the_panel_floats_over_the_reader_s_right_edge()
     {

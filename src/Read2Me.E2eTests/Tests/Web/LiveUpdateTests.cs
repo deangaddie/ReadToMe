@@ -12,6 +12,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// </summary>
 public class LiveUpdateTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
+    // Needs a real browser: it is the one test of the bundle's SignalR client against the real hub.
     [Fact]
     public async Task After_losing_the_hub_a_split_in_one_browser_reaches_the_other_within_two_seconds()
     {

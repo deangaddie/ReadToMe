@@ -19,6 +19,7 @@ public class NodeMenuTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBas
         () => document.activeElement?.closest('[role="menuitem"]')?.dataset.entry ?? null
         """;
 
+    // Needs a real browser: the menu is a top-layer popover and focus returns through a real modal confirm.
     [Fact]
     public async Task The_anchor_survives_a_receipt_re_rendering_the_tree_and_focus_returns_to_the_tree_item()
     {

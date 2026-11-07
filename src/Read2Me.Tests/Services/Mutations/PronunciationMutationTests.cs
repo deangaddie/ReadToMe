@@ -51,6 +51,8 @@ public class PronunciationMutationTests : ProjectDbTestBase
         var effects = await AppliedAsync(new PronunciationDraft(null, "  Holmes ", " Hol   mz "));
 
         Assert.Equal([_book.ItemId("n1")], effects.ParagraphItemIds); // n2 matches too, but has no audio to lose
+        // The receipt's Pronunciations facet is what an open Book view rereads its marks on.
+        Assert.True(effects.Facets.HasFlag(BookFacets.Pronunciations));
         Assert.Equal(["n3"], await WithAudioAsync());
         var stored = Assert.Single(await ListAsync());
         Assert.Equal((effects.CreatedId, "Holmes", "Hol mz"), (stored.Id, stored.WrittenForm, stored.SpokenForm));

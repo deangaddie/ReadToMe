@@ -15,6 +15,7 @@ public class ProjectsSeriesLayoutTests(E2eAppFixture app, PlaywrightFixture pw) 
 {
     private static readonly HttpClient Http = new();
 
+    // Needs a real browser: where the panel lands in the grid is real grid layout.
     [Fact]
     public async Task An_open_series_panel_spans_the_grid_after_the_clicked_cards_row()
     {

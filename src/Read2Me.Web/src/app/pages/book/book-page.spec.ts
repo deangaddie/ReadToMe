@@ -4,6 +4,7 @@ import {
   type BookOverviewDto,
   type ParagraphDto,
   type ProjectStatusDto,
+  type PronunciationSpanReport,
   STALE_READ_ONLY,
   StepView,
   VIEWING_READ_ONLY,
@@ -11,6 +12,7 @@ import {
 import { Router, type RouteDef } from '@app/core/router';
 import { override, resetServices, use } from '@app/core/services';
 import type { Receipt } from '@app/live/live-messages';
+import { REFETCH_DEBOUNCE_MS } from '@app/shared/debounced';
 import { Preflight } from '@app/shared/preflight';
 import { type ConfirmOptions, ConfirmService, PromptService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
@@ -948,6 +950,25 @@ describe('r2m-book-page', () => {
       expect(store.mode()).toBe('speakers');
     });
 
+    it('back to current turns the edit controls on again', async () => {
+      use(StepView).view('dracula', 's8');
+      await start('projects/dracula/book');
+      // The shell mounts the page afresh for the current project.
+      const current = () => document.querySelector<BookPage>('r2m-book-page')!;
+      const actions = () =>
+        current().querySelector<HTMLButtonElement>('[data-testid=book-actions]')!;
+      expect(actions().disabled).toBe(true);
+
+      use(StepView).clear('dracula');
+      for (let i = 0; i < 4; i++) await settle();
+      await current().rendered();
+
+      expect(actions().disabled).toBe(false);
+      expect(reason(actions())).toBeNull();
+      const trigger = current().querySelector<HTMLButtonElement>('.r2m-node-menu__trigger')!;
+      expect(trigger.disabled).toBe(false);
+    });
+
     it('the selection bar keeps Clear but Attribute is off with the reason', async () => {
       use(StepView).view('dracula', 's8');
       const { page } = await start('projects/dracula/book');
@@ -1345,4 +1366,45 @@ describe('r2m-book-page', () => {
     expect(page.querySelector('.book__stale')).toBeNull();
     expect(page.querySelectorAll('.r2m-paragraph[data-chapter-id=c1]').length).toBe(1);
   });
+
+  it('marks the open reader when a Pronunciation saved elsewhere reaches it on the hub', async () => {
+    const matches = `${BASE}/pronunciations/matches`;
+    let report: PronunciationSpanReport = { pronunciations: [], spans: [] };
+    api.on('GET', matches, () => report);
+    const { page } = await start('projects/dracula/book');
+    await afterRefetch();
+    expect(page.querySelector('.r2m-pron-mark')).toBeNull();
+
+    report = {
+      pronunciations: [{ id: 'pron', writtenForm: 'p1', spokenForm: 'PEE-one' }],
+      spans: [{ itemId: 'p1-i', start: 1, length: 2, pronunciationId: 'pron', sentenceStart: 0 }],
+    };
+    live.emit('receipt', {
+      folder: 'dracula',
+      mutationName: 'SetPronunciationMutation',
+      mutationId: 'm2',
+      revision: 2,
+      originId: 'elsewhere',
+      isOwn: false,
+      effects: {
+        scope: 'Exact',
+        createdId: 'pron',
+        createdParentId: null,
+        facets: ['Pronunciations'],
+        nodeIds: [],
+        paragraphIds: [],
+        paragraphItemIds: [],
+        structural: [],
+        changedNothing: false,
+      },
+    } as Receipt);
+    await afterRefetch();
+    await page.rendered();
+
+    const marks = page.querySelectorAll('.r2m-paragraph[data-paragraph-id=p1] .r2m-pron-mark');
+    expect(Array.from(marks, (m) => m.textContent)).toEqual(['p1']);
+  });
 });
+
+/** Waits out the debounce that bursts of signals share before a read again. */
+const afterRefetch = () => new Promise((r) => setTimeout(r, REFETCH_DEBOUNCE_MS + 30));

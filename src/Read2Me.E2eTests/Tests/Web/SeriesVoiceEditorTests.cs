@@ -8,15 +8,14 @@ namespace Read2Me.E2eTests.Tests.Web;
 
 /// <summary>
 /// The inline series Voice editors on the series cast board (#221): two rows' editors open at once,
-/// each directly under its own row (layout), and a Voice renamed in one book through the API makes
-/// an open editor read again through the hub's real <c>series</c> signal. Everything else is
-/// spec-tested.
+/// each directly under its own row. Layout only: an open editor reading again on the hub's
+/// <c>series</c> signal and everything else are spec-tested (series-voice-editor.spec.ts).
 /// </summary>
 public class SeriesVoiceEditorTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
     private static readonly HttpClient Http = new();
 
-    private sealed record Seeded(Guid Series, Guid Watson, Guid Holmes, string Scarlet, string Four, Guid FourWatson, Guid ArmyDoctor);
+    private sealed record Seeded(Guid Series, Guid Watson, Guid Holmes);
 
     /// <summary>Two Holmes books in a series, Watson and Holmes shared from Scarlet and linked in Four, each with a Voice.</summary>
     private async Task<Seeded> SeedAsync()
@@ -29,7 +28,7 @@ public class SeriesVoiceEditorTests(E2eAppFixture app, PlaywrightFixture pw) : E
         var fourWatson = fourBook.CharacterId("Watson");
         var scarletHolmes = await RunAsync(scarlet, new { type = "CreateCharacter", name = "Sherlock Holmes" });
         var fourHolmes = await RunAsync(four, new { type = "CreateCharacter", name = "Sherlock Holmes" });
-        var armyDoctor = await RunAsync(scarlet, new { type = "CreateVoice", characterId = scarletWatson, name = "Army doctor" });
+        await RunAsync(scarlet, new { type = "CreateVoice", characterId = scarletWatson, name = "Army doctor" });
         await RunAsync(scarlet, new { type = "CreateVoice", characterId = scarletHolmes, name = "Consulting detective" });
 
         var created = await Http.PostAsJsonAsync($"{App.BaseUrl}/api/series", new { name = $"Sherlock Holmes {tag}", folder = scarlet });
@@ -47,8 +46,7 @@ public class SeriesVoiceEditorTests(E2eAppFixture app, PlaywrightFixture pw) : E
             return id;
         }
 
-        return new Seeded(series, await ShareAndLinkAsync(scarletWatson, fourWatson), await ShareAndLinkAsync(scarletHolmes, fourHolmes),
-            scarlet, four, fourWatson, armyDoctor);
+        return new Seeded(series, await ShareAndLinkAsync(scarletWatson, fourWatson), await ShareAndLinkAsync(scarletHolmes, fourHolmes));
     }
 
     private async Task<Guid> RunAsync(string folder, object command)
@@ -63,6 +61,7 @@ public class SeriesVoiceEditorTests(E2eAppFixture app, PlaywrightFixture pw) : E
 
     private ILocator EditorRow(Guid seriesCharacter) => Page.Locator($"r2m-series-cast-board tr[data-editor-for=\"{seriesCharacter}\"]");
 
+    // Needs a real browser: where each editor row sits is real table layout.
     [Fact]
     public async Task Two_rows_Voice_editors_open_at_once_each_directly_under_its_row()
     {
@@ -90,19 +89,5 @@ public class SeriesVoiceEditorTests(E2eAppFixture app, PlaywrightFixture pw) : E
         // Each editor spans the board's width, not one cell.
         Assert.True(Math.Abs(holmesEditor.Width - holmesRow.Width) < 2,
             $"Holmes' editor (w={holmesEditor.Width}) should be as wide as its row (w={holmesRow.Width})");
-    }
-
-    [Fact]
-    public async Task A_Voice_renamed_in_another_book_shows_in_an_open_editor_through_the_series_signal()
-    {
-        var seeded = await SeedAsync();
-        await GotoAppAsync($"projects?series={seeded.Series}&character={seeded.Watson}");
-        var voice = EditorRow(seeded.Watson).Locator($"tr[data-voice-id=\"{seeded.ArmyDoctor}\"] .series-voices__name");
-        await Expect(voice).ToHaveTextAsync("Army doctor");
-
-        // Through the other book's per-book route, from outside the page: only the hub can tell it.
-        await RunAsync(seeded.Four, new { type = "UpdateVoice", voiceId = seeded.ArmyDoctor, name = "Old campaigner" });
-
-        await Expect(voice).ToHaveTextAsync("Old campaigner");
     }
 }

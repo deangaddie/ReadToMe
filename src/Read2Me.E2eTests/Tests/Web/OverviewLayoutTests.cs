@@ -14,6 +14,7 @@ namespace Read2Me.E2eTests.Tests.Web;
 /// </summary>
 public class OverviewLayoutTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
 {
+    // Needs a real browser: the order and the split head row come from a real breakpoint's layout.
     [Fact]
     public async Task At_phone_width_the_stepper_leads_and_help_opens_inline_under_a_split_head_row()
     {

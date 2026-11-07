@@ -17,6 +17,7 @@ public class RowHighlightTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTes
     private const string FocusInMenu = "() => !!document.activeElement?.closest('[role=\"menu\"]')";
     private const string BlurFocus = "() => document.activeElement?.blur()";
 
+    // Needs a real browser: the highlight is computed style held while focus is in a top-layer popover.
     [Fact]
     public async Task An_item_and_its_paragraph_stay_highlighted_while_the_item_menu_is_open()
     {

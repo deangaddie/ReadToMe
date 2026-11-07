@@ -83,6 +83,7 @@ public class BigBookTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase
         }
         """;
 
+    // Needs a real browser: scroll anchoring over prepends and the menu's top-layer placement need real layout.
     [Fact]
     public async Task Deep_link_holds_the_header_at_the_top_over_three_prepends_and_a_row_menu_opens_on_its_trigger()
     {
@@ -131,6 +132,7 @@ public class BigBookTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase
         AssertAnchored((await trigger.BoundingBoxAsync())!, (await menu.BoundingBoxAsync())!);
     }
 
+    // Needs a real browser: a resize reflows real layout, which happy-dom does not have.
     [Fact]
     public async Task Anchoring_holds_over_a_narrow_and_a_wide_resize()
     {

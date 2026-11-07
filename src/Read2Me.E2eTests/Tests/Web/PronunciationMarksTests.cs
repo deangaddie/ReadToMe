@@ -7,8 +7,9 @@ namespace Read2Me.E2eTests.Tests.Web;
 
 /// <summary>
 /// The Book view's Pronunciation marks (pronunciation ticket 15) where only a browser can tell:
-/// the hover card is a top-layer popover drawn over the reader beside its mark, and a list change
-/// made elsewhere reaches an open Book view's marks over the real hub. The seed's items read
+/// the hover card is a top-layer popover drawn over the reader beside its mark. A list change made
+/// elsewhere reaching an open Book view is spec-tested over FakeLive (book-page.spec.ts,
+/// pronunciation-marks-store.spec.ts). The seed's items read
 /// "It was a dark and stormy night.", "“Hello there,” she said." and "The rain kept falling."
 /// </summary>
 public class PronunciationMarksTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBase(app, pw)
@@ -22,6 +23,7 @@ public class PronunciationMarksTests(E2eAppFixture app, PlaywrightFixture pw) : 
         Assert.Equal(HttpStatusCode.Created, added.StatusCode);
     }
 
+    // Needs a real browser: the card is a top-layer popover anchored by real layout.
     [Fact]
     public async Task Hovering_a_mark_shows_its_card_in_the_top_layer_over_the_reader()
     {
@@ -54,19 +56,5 @@ public class PronunciationMarksTests(E2eAppFixture app, PlaywrightFixture pw) : 
         await Expect(card).ToBeVisibleAsync();
         await Page.Mouse.MoveAsync(0, 0);
         await Expect(card).ToBeHiddenAsync();
-    }
-
-    [Fact]
-    public async Task A_pronunciation_saved_elsewhere_marks_an_open_Book_view()
-    {
-        await App.SeedProjectAsync("pron-marks-live", "Marks Book", "A. Author");
-
-        await GotoAppAsync("projects/pron-marks-live/book");
-        await Expect(Page.Locator(".r2m-paragraph__prose").First).ToContainTextAsync("stormy");
-        await Expect(Page.Locator(".r2m-pron-mark")).ToHaveCountAsync(0);
-
-        await AddAsync("pron-marks-live", "rain", "RAYN");
-
-        await Expect(Page.Locator(".r2m-pron-mark")).ToHaveTextAsync(["rain"], new() { Timeout = 5_000 });
     }
 }

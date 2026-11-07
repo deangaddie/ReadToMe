@@ -353,11 +353,16 @@ describe('r2m-series-voice-editor', () => {
     expect(el.querySelector('tr[data-editor-for]')).toBeNull();
   });
 
-  it('reads again on the series signal for its series only', async () => {
-    const el = await mount();
+  it('reads again on the series signal for its series only, showing what changed', async () => {
+    let answer = detail();
+    const el = await mount(() => answer);
     const reads = () => api.calls('GET', DETAIL).length;
+    const name = () => rowOf(el, 'v1').querySelector('.series-voices__name')?.textContent;
     expect(reads()).toBe(1);
+    expect(name()).toBe('Army doctor');
 
+    // Renamed in another book, say: only the signal tells this editor.
+    answer = detail({ voices: [voice('v1', 'Field surgeon'), voice('v2', 'Old campaigner')] });
     live.emit('series', { seriesId: 'other', kind: 'Changed' });
     await settle();
     expect(reads()).toBe(1);
@@ -366,6 +371,7 @@ describe('r2m-series-voice-editor', () => {
     await settle();
     expect(reads()).toBe(2);
     await el.rendered();
+    expect(name()).toBe('Field surgeon');
   });
 
   /** Scarlet holds the series copy; Four differs (a Restore there, say). */
