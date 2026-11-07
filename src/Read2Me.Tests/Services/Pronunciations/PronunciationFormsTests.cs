@@ -34,4 +34,19 @@ public class PronunciationFormsTests
     {
         Assert.NotNull(PronunciationForms.WrittenProblem(written));
     }
+
+    [Fact]
+    public void AWrittenForm_PastOneHundredCharacters_IsAProblem()
+    {
+        Assert.Null(PronunciationForms.WrittenProblem(new string('a', 100)));
+        Assert.NotNull(PronunciationForms.WrittenProblem(new string('a', 101)));
+    }
+
+    [Fact]
+    public void ASpokenForm_IsRequired_AndAtMostTwoHundredCharacters()
+    {
+        Assert.NotNull(PronunciationForms.SpokenProblem(""));
+        Assert.Null(PronunciationForms.SpokenProblem(new string('b', 200)));
+        Assert.NotNull(PronunciationForms.SpokenProblem(new string('b', 201)));
+    }
 }

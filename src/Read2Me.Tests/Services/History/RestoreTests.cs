@@ -14,6 +14,7 @@ using Read2Me.Services.Events;
 using Read2Me.Services.History;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.Mutations.Implementations;
+using Read2Me.Services.Pronunciations;
 using Read2Me.Services.Queueing;
 using Read2Me.TestUtils;
 using Read2Me.Tests.Infrastructure;
@@ -194,6 +195,114 @@ public class RestoreTests : ProjectDbTestBase
         await using var db = await OpenDbAsync();
         Assert.Equal("i1-later.wav", (await db.ParagraphItems.SingleAsync(i => i.Id == _book.ItemId("i1"), TestContext.Current.CancellationToken)).AudioFileName);
         Assert.Equal(_book.ItemId("i1"), (await db.AudioReviews.SingleAsync(TestContext.Current.CancellationToken)).ParagraphItemId);
+    }
+
+    // ── a Restore across a Pronunciation change discards by Spoken text ─────
+
+    [Fact]
+    public async Task Restore_ToBeforeAPronunciationAdd_DiscardsTheAudioOfItsMatches_AndKeepsTheRest()
+    {
+        await SeedAsync();
+        await CommitAsync(new CreateCharacterMutation(_folder, "Alice"));
+        var target = await TipAsync();
+        await SetPronunciationAsync(new PronunciationDraft(null, "One", "Wun"));
+        await RecordTakeAsync("i1", "i1.wav");
+        await RecordTakeAsync("i2", "i2.wav");
+
+        var preview = await PreviewAsync(target);
+        var restored = Assert.IsType<RestoreOutcome.Restored>(await RestoreAsync(target));
+
+        Assert.Equal((1, 1), (preview, restored.AudioDiscardCount));
+        Assert.Equal(2, restored.NeedsAudioCount); // i1 discarded, i3 never had any
+        Assert.Equal([null, "i2.wav", null], await AudioFilesAsync());
+    }
+
+    [Fact]
+    public async Task Restore_ToBeforeAPronunciationDelete_DiscardsTheAudioOfTheEntrysOldMatches()
+    {
+        await SeedAsync();
+        var two = await SetPronunciationAsync(new PronunciationDraft(null, "Two", "Too"));
+        var target = await TipAsync();
+        await SetPronunciationAsync(new PronunciationDraft(two, null, null, Delete: true));
+        await RecordTakeAsync("i2", "i2.wav");
+        await RecordTakeAsync("i3", "i3.wav");
+
+        var restored = Assert.IsType<RestoreOutcome.Restored>(await RestoreAsync(target));
+
+        Assert.Equal(1, restored.AudioDiscardCount);
+        Assert.Equal([null, null, "i3.wav"], await AudioFilesAsync());
+    }
+
+    [Fact]
+    public async Task Restore_ToBeforeASpokenFormEdit_DiscardsTheAudioOfTheEntrysMatches_AndBringsBackTheOldForm()
+    {
+        await SeedAsync();
+        var two = await SetPronunciationAsync(new PronunciationDraft(null, "Two", "Too"));
+        var target = await TipAsync();
+        await SetPronunciationAsync(new PronunciationDraft(two, "Two", "Tew"));
+        await RecordTakeAsync("i2", "i2.wav");
+        await RecordTakeAsync("i3", "i3.wav");
+
+        var restored = Assert.IsType<RestoreOutcome.Restored>(await RestoreAsync(target));
+
+        Assert.Equal(1, restored.AudioDiscardCount);
+        Assert.Equal([null, null, "i3.wav"], await AudioFilesAsync());
+        await using var db = await OpenDbAsync();
+        Assert.Equal("Too", (await db.Pronunciations.SingleAsync(TestContext.Current.CancellationToken)).SpokenForm);
+    }
+
+    [Fact]
+    public async Task ARestoreThatLeavesTheListAsItIs_KeepsTheAudioOfItsMatches()
+    {
+        await SeedAsync();
+        await SetPronunciationAsync(new PronunciationDraft(null, "Two", "Too"));
+        var target = await TipAsync();
+        await CommitAsync(new UpdateParagraphItemTextMutation(_folder, _book.ItemId("i3"), "Three more"));
+        foreach (var item in new[] { "i1", "i2", "i3" })
+            await RecordTakeAsync(item, $"{item}.wav");
+
+        var restored = Assert.IsType<RestoreOutcome.Restored>(await RestoreAsync(target));
+
+        Assert.Equal(1, restored.AudioDiscardCount); // i3, whose text the Restore changes back
+        Assert.Equal(["i1.wav", "i2.wav", null], await AudioFilesAsync());
+    }
+
+    [Fact]
+    public async Task AnItemWhoseTextAndSpokenTextBothChangeInARestore_IsCountedOnce()
+    {
+        await SeedAsync();
+        await CommitAsync(new CreateCharacterMutation(_folder, "Alice"));
+        var target = await TipAsync();
+        await CommitAsync(new UpdateParagraphItemTextMutation(_folder, _book.ItemId("i1"), "Holmes ran."));
+        await SetPronunciationAsync(new PronunciationDraft(null, "Holmes", "Holmz"));
+        foreach (var item in new[] { "i1", "i2", "i3" })
+            await RecordTakeAsync(item, $"{item}.wav");
+
+        var preview = await PreviewAsync(target);
+        var restored = Assert.IsType<RestoreOutcome.Restored>(await RestoreAsync(target));
+
+        Assert.Equal((1, 1), (preview, restored.AudioDiscardCount));
+        Assert.Equal([null, "i2.wav", "i3.wav"], await AudioFilesAsync());
+    }
+
+    /// <summary>
+    /// The entry the Restore takes away still matches the item, but "Helsing" alone already says what
+    /// it said: the Spoken text is the same, so the take is still right.
+    /// </summary>
+    [Fact]
+    public async Task APronunciationChangeThatLeavesAnItemsSpokenTextAsItIs_KeepsItsAudio()
+    {
+        await SeedAsync();
+        await CommitAsync(new UpdateParagraphItemTextMutation(_folder, _book.ItemId("i1"), "Van Helsing fell."));
+        await SetPronunciationAsync(new PronunciationDraft(null, "Helsing", "HEL-sing"));
+        var target = await TipAsync();
+        await SetPronunciationAsync(new PronunciationDraft(null, "Van Helsing", "Van HEL-sing"));
+        await RecordTakeAsync("i1", "i1.wav");
+
+        var restored = Assert.IsType<RestoreOutcome.Restored>(await RestoreAsync(target));
+
+        Assert.Equal(0, restored.AudioDiscardCount);
+        Assert.Equal(["i1.wav", null, null], await AudioFilesAsync());
     }
 
     [Fact]
@@ -511,6 +620,22 @@ public class RestoreTests : ProjectDbTestBase
     private async Task RecordTakeAsync(Guid itemId, string path) =>
         Assert.IsType<BookMutationOutcome.Committed>(await CommitAsync(new RecordParagraphItemAudioMutation(_folder, itemId, path,
             new AudioReviewVerdict(true, null, false, 0.5, "too many errors", "heard", "said"))));
+
+    /// <summary>Commits the list change and answers the entry's id.</summary>
+    private async Task<Guid> SetPronunciationAsync(PronunciationDraft draft)
+    {
+        var effects = Assert.IsType<BookMutationOutcome.Committed>(
+            await CommitAsync(new SetPronunciationMutation(_folder, draft))).Receipt.Effects;
+        return effects.CreatedId ?? draft.Id!.Value;
+    }
+
+    /// <summary>The audio file of i1, i2 and i3, in that order.</summary>
+    private async Task<List<string?>> AudioFilesAsync()
+    {
+        await using var db = await OpenDbAsync();
+        var audio = await db.ParagraphItems.ToDictionaryAsync(i => i.Id, i => i.AudioFileName, TestContext.Current.CancellationToken);
+        return [.. new[] { "i1", "i2", "i3" }.Select(i => audio[_book.ItemId(i)])];
+    }
 
     private async Task<Guid> TipAsync() => (await History.ListAsync(_folder)).HeadStepId!.Value;
 
