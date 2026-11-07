@@ -433,9 +433,6 @@ namespace Read2Me.Tests.Services.Series
             Assert.Equal((StudyFolder, "A Study in Scarlet", 2), (loss.Folder, loss.Title, loss.RuleCount));
             Assert.Equal(["Narrating"], loss.Voices);
             Assert.Equal([ArmyDoctor], snapshot.VoicesOf(Watson, take.Source).Select(v => v.Voice.Id));
-            // Pushing the Study's set takes nothing away from the others.
-            var push = snapshot.PlanResolve(Watson, StudyFolder, push: true).Value!;
-            Assert.Empty(snapshot.Losses(Watson, push.Source, push.Targets));
         }
 
         [Fact]
@@ -451,21 +448,13 @@ namespace Read2Me.Tests.Services.Series
             Assert.Empty(AllThreeLinked().DifferingPeers(fromStudy));
         }
 
+        /// <summary>Which deletes are refused is <c>SeriesVoiceCopyRulesTests</c>'; the editor test below wires one.</summary>
         [Fact]
-        public void Deleting_a_shared_Voice_is_blocked_by_other_books_positional_rules_then_by_their_last_Voice()
+        public void A_book_whose_Voices_were_not_read_does_not_block_a_delete()
         {
             var peers = AllThreeLinked().Peers(Sign, WatsonInSign)!;
 
-            var ruled = AllThreeLinked(studyRules: [ArmyDoctor, ArmyDoctor]).VoiceDeleteBlock(peers, ArmyDoctor)!;
-            var last = AllThreeLinked().VoiceDeleteBlock(peers, ArmyDoctor)!;
-
-            Assert.Equal(SeriesVoiceDeleteReason.PositionalRules, ruled.Reason);
-            Assert.Equal([new SeriesVoiceDeleteBook(StudyFolder, "A Study in Scarlet", 2)], ruled.Books);
-            Assert.Equal(SeriesVoiceDeleteReason.LastVoice, last.Reason);
-            Assert.Equal([new SeriesVoiceDeleteBook(HoundFolder, "The Hound of the Baskervilles", 0)], last.Books);
-            // Deleting "Narrating" in the Sign: no other book's rule uses it, and none holds it alone.
-            Assert.Null(AllThreeLinked().VoiceDeleteBlock(peers, Narrating));
-            // A book whose Voices weren't read doesn't count here; the commit hook fails the delete on it.
+            // The Hound holds "Army doctor" alone, but its Voices weren't read: the commit hook fails the delete on it.
             var houndUnread = AllThreeLinked(withHound: false);
             Assert.Null(houndUnread.VoiceDeleteBlock(peers, ArmyDoctor));
             Assert.False(houndUnread.VoicesRead(Watson, peers.Others.Single(p => p.Folder == HoundFolder)));

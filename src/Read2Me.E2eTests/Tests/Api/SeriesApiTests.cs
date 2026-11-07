@@ -8,59 +8,31 @@ using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
 using Read2Me.Data.Series;
 using Read2Me.E2eTests.Infrastructure;
+using static Read2Me.E2eTests.Tests.Api.SeriesSeed;
 
 namespace Read2Me.E2eTests.Tests.Api;
 
 /// <summary>
-/// The series registry and its lifecycle (#217): <c>/api/series</c>, membership and the position
-/// set, the <c>series</c> field on the project reads, and every refusal the Series Agent API
-/// (#213) lists. The books are the sample series (#209): Holmes, in publication order.
+/// The series registry's routes (#217): <c>/api/series</c>, membership, the position set, the poster
+/// (#219), the <c>series</c> field on the project reads and the delete-project cascade, with the
+/// status each refusal maps to. Positions, ties and poster choice are the Series unit tests' to pin
+/// (<c>SeriesPositionsTests</c>, <c>SeriesSnapshotTests</c>); these prove only what a host proves.
 /// </summary>
 public class SeriesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
-    private static readonly HttpClient Http = new();
+    private readonly SeriesSeed seed = new(app);
 
-    private sealed record Holmes(string Scarlet, string Four, string Adventures);
-
-    /// <summary>Three fresh Holmes projects; folders and series names are unique per test (one host per class).</summary>
-    private async Task<Holmes> SeedHolmesAsync()
-    {
-        var tag = Guid.NewGuid().ToString("N")[..8];
-        var books = new Holmes($"scarlet-{tag}", $"four-{tag}", $"adventures-{tag}");
-        await app.SeedProjectAsync(books.Scarlet, "A Study in Scarlet", "Arthur Conan Doyle", "Watson");
-        await app.SeedProjectAsync(books.Four, "The Sign of the Four", "Arthur Conan Doyle", "Watson");
-        await app.SeedProjectAsync(books.Adventures, "The Adventures of Sherlock Holmes", "Arthur Conan Doyle", "Watson");
-        return books;
-    }
-
-    private static string UniqueName(string name = "Sherlock Holmes") => $"{name} {Guid.NewGuid():N}"[..(name.Length + 9)];
-
-    private async Task<Guid> CreateAsync(string name, string? folder = null)
-    {
-        var response = await Http.PostAsJsonAsync($"{app.BaseUrl}/api/series", new { name, folder });
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        return (await JsonAsync(response)).GetProperty("id").GetGuid();
-    }
-
-    private async Task<HttpResponseMessage> JoinAsync(Guid series, string folder, bool? move = null) =>
+    private Task<HttpResponseMessage> TryJoinAsync(Guid series, string folder, bool? move = null) =>
         move is null
-            ? await Http.PutAsJsonAsync($"{app.BaseUrl}/api/series/{series}/books/{folder}", new { }) // move left out: false
-            : await Http.PutAsJsonAsync($"{app.BaseUrl}/api/series/{series}/books/{folder}", new { move });
-
-    private async Task<decimal> JoinedAtAsync(Guid series, string folder, bool? move = null)
-    {
-        var response = await JoinAsync(series, folder, move);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        return (await JsonAsync(response)).GetProperty("position").GetDecimal();
-    }
+            ? Http.PutAsJsonAsync(seed.Url($"/api/series/{series}/books/{folder}"), new { }) // move left out: false
+            : Http.PutAsJsonAsync(seed.Url($"/api/series/{series}/books/{folder}"), new { move });
 
     private Task<HttpResponseMessage> SetPositionsAsync(Guid series, object positions) =>
-        Http.PutAsJsonAsync($"{app.BaseUrl}/api/series/{series}/positions", new { positions });
+        Http.PutAsJsonAsync(seed.Url($"/api/series/{series}/positions"), new { positions });
 
-    private async Task<JsonElement?> SeriesAsync(Guid id)
+    private async Task<JsonElement?> SeriesReadAsync(Guid id)
     {
-        var all = await GetJsonAsync("/api/series");
-        foreach (var series in all.EnumerateArray())
+        foreach (var series in (await seed.GetJsonAsync("/api/series")).EnumerateArray())
             if (series.GetProperty("id").GetGuid() == id)
                 return series;
         return null;
@@ -71,227 +43,158 @@ public class SeriesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             .Select(b => (b.GetProperty("folder").GetString()!, b.GetProperty("position").GetDecimal()));
 
     private async Task<JsonElement> ProjectRowAsync(string folder) =>
-        (await GetJsonAsync("/api/projects")).EnumerateArray()
+        (await seed.GetJsonAsync("/api/projects")).EnumerateArray()
             .Single(p => p.GetProperty("folderName").GetString() == folder);
 
-    private async Task<JsonElement> GetJsonAsync(string path)
-    {
-        var response = await Http.GetAsync($"{app.BaseUrl}{path}");
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        return await JsonAsync(response);
-    }
-
-    private static async Task<JsonElement> JsonAsync(HttpResponseMessage response) =>
-        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.Clone();
-
-    private static async Task AssertProblemAsync(HttpResponseMessage response, HttpStatusCode status, params string[] named)
-    {
-        Assert.Equal(status, response.StatusCode);
-        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
-        var detail = (await JsonAsync(response)).GetProperty("detail").GetString();
-        foreach (var name in named)
-            Assert.Contains(name, detail);
-    }
-
-    private string RegistryPath(Guid series) =>
-        Path.Combine(app.WorkspaceDir, ".series", series.ToString("D"), SeriesDbContext.DbFileName);
+    private string RegistryPath(Guid series) => Path.Combine(seed.RegistryFolder(series), SeriesDbContext.DbFileName);
 
     private async Task<int> StoredBookCountAsync(Guid series)
     {
-        await using var db = await SeriesDbContext.OpenAsync(Path.GetDirectoryName(RegistryPath(series))!);
+        await using var db = await seed.OpenRegistryAsync(series);
         return await db.Books.CountAsync();
     }
 
-    // ---- create, list, project reads ------------------------------------------------------------
+    // ---- create, list, rename, project reads ------------------------------------------------------
 
     [Fact]
-    public async Task A_series_created_from_a_book_starts_with_it_as_Book_1_and_the_project_reads_say_so()
+    public async Task A_series_created_from_a_book_is_on_disk_and_the_project_reads_say_so()
     {
-        var holmes = await SeedHolmesAsync();
+        var books = await seed.BooksAsync(2);
+        var (scarlet, four) = (books[0], books[1]);
         var name = UniqueName();
 
-        var id = await CreateAsync($"  {name}  ", holmes.Scarlet);
+        var id = await seed.CreateSeriesAsync($"  {name}  ", scarlet.Folder);
 
         Assert.True(File.Exists(RegistryPath(id)));
-        var series = (await SeriesAsync(id))!.Value;
+        var series = (await SeriesReadAsync(id))!.Value;
         Assert.Equal(name, series.GetProperty("name").GetString()); // trimmed
-        Assert.Equal([(holmes.Scarlet, 1m)], Books(series));
+        Assert.Equal([(scarlet.Folder, 1m)], Books(series));
 
-        var row = await ProjectRowAsync(holmes.Scarlet);
+        var row = await ProjectRowAsync(scarlet.Folder);
         Assert.Equal(id, row.GetProperty("series").GetProperty("seriesId").GetGuid());
         Assert.Equal(name, row.GetProperty("series").GetProperty("name").GetString());
         Assert.Equal(1m, row.GetProperty("series").GetProperty("position").GetDecimal());
-        Assert.Equal(JsonValueKind.Null, (await ProjectRowAsync(holmes.Four)).GetProperty("series").ValueKind);
+        Assert.Equal(JsonValueKind.Null, (await ProjectRowAsync(four.Folder)).GetProperty("series").ValueKind);
 
-        var detail = await GetJsonAsync($"/api/projects/{holmes.Scarlet}");
-        Assert.Equal(id, detail.GetProperty("series").GetProperty("seriesId").GetGuid());
-        Assert.Equal(JsonValueKind.Null, (await GetJsonAsync($"/api/projects/{holmes.Four}")).GetProperty("series").ValueKind);
+        Assert.Equal(id, (await seed.GetJsonAsync($"/api/projects/{scarlet.Folder}")).GetProperty("series").GetProperty("seriesId").GetGuid());
+        Assert.Equal(JsonValueKind.Null, (await seed.GetJsonAsync($"/api/projects/{four.Folder}")).GetProperty("series").ValueKind);
     }
 
     [Fact]
     public async Task A_series_created_by_name_only_starts_empty()
     {
-        var id = await CreateAsync(UniqueName("Empty"));
+        var id = await seed.CreateSeriesAsync(UniqueName("Empty"));
 
-        Assert.Empty(Books((await SeriesAsync(id))!.Value));
+        Assert.Empty(Books((await SeriesReadAsync(id))!.Value));
     }
 
     [Fact]
     public async Task A_blank_name_is_400_on_create_and_rename()
     {
-        await AssertProblemAsync(await Http.PostAsJsonAsync($"{app.BaseUrl}/api/series", new { name = "   " }),
-            HttpStatusCode.BadRequest);
-        var id = await CreateAsync(UniqueName());
-        await AssertProblemAsync(await Http.PatchAsJsonAsync($"{app.BaseUrl}/api/series/{id}", new { name = "" }),
-            HttpStatusCode.BadRequest);
+        await AssertProblemAsync(await Http.PostAsJsonAsync(seed.Url("/api/series"), new { name = "   " }), HttpStatusCode.BadRequest);
+        var id = await seed.CreateSeriesAsync(UniqueName());
+        await AssertProblemAsync(await Http.PatchAsJsonAsync(seed.Url($"/api/series/{id}"), new { name = "" }), HttpStatusCode.BadRequest);
     }
 
     [Fact]
     public async Task Names_are_unique_ignoring_case_and_a_rename_applies_at_once()
     {
         var name = UniqueName();
-        var first = await CreateAsync(name);
+        var first = await seed.CreateSeriesAsync(name);
 
-        await AssertProblemAsync(await Http.PostAsJsonAsync($"{app.BaseUrl}/api/series", new { name = name.ToUpperInvariant() }),
+        await AssertProblemAsync(await Http.PostAsJsonAsync(seed.Url("/api/series"), new { name = name.ToUpperInvariant() }),
             HttpStatusCode.Conflict, name);
 
-        var second = await CreateAsync(UniqueName("Other"));
-        await AssertProblemAsync(await Http.PatchAsJsonAsync($"{app.BaseUrl}/api/series/{second}", new { name = name.ToLowerInvariant() }),
+        var second = await seed.CreateSeriesAsync(UniqueName("Other"));
+        await AssertProblemAsync(await Http.PatchAsJsonAsync(seed.Url($"/api/series/{second}"), new { name = name.ToLowerInvariant() }),
             HttpStatusCode.Conflict, name);
 
         // A series may change the case of its own name.
-        var renamed = await Http.PatchAsJsonAsync($"{app.BaseUrl}/api/series/{first}", new { name = name.ToUpperInvariant() });
+        var renamed = await Http.PatchAsJsonAsync(seed.Url($"/api/series/{first}"), new { name = name.ToUpperInvariant() });
         Assert.Equal(HttpStatusCode.OK, renamed.StatusCode);
         Assert.Equal(name.ToUpperInvariant(), (await JsonAsync(renamed)).GetProperty("name").GetString());
-        Assert.Equal(name.ToUpperInvariant(), (await SeriesAsync(first))!.Value.GetProperty("name").GetString());
-    }
-
-    [Fact]
-    public async Task Creating_with_an_unknown_folder_is_404()
-    {
-        await AssertProblemAsync(
-            await Http.PostAsJsonAsync($"{app.BaseUrl}/api/series", new { name = UniqueName(), folder = "no-such-book" }),
-            HttpStatusCode.NotFound, "no-such-book");
+        Assert.Equal(name.ToUpperInvariant(), (await SeriesReadAsync(first))!.Value.GetProperty("name").GetString());
     }
 
     // ---- join, move, leave ----------------------------------------------------------------------
 
+    /// <summary>Which position a book joins at is <c>SeriesPositionsTests</c>'; here, the routes and that joining twice saves nothing.</summary>
     [Fact]
-    public async Task A_joining_book_gets_the_next_whole_number_and_joining_again_changes_nothing()
+    public async Task A_book_joins_once_and_leaves_and_the_project_reads_follow()
     {
-        var holmes = await SeedHolmesAsync();
-        var id = await CreateAsync(UniqueName(), holmes.Scarlet);
+        var holmes = await seed.SeriesAsync(books: 2, members: 1);
 
-        Assert.Equal(2m, await JoinedAtAsync(id, holmes.Four));
-        Assert.Equal(HttpStatusCode.OK, (await SetPositionsAsync(id,
-            new Dictionary<string, decimal> { [holmes.Scarlet] = 1m, [holmes.Four] = 2.5m })).StatusCode);
-        Assert.Equal(3m, await JoinedAtAsync(id, holmes.Adventures, move: false));
-        Assert.Equal(2.5m, await JoinedAtAsync(id, holmes.Four));
+        Assert.Equal(2m, await seed.JoinAsync(holmes.Series, holmes.Four.Folder));
+        Assert.Equal(2m, await seed.JoinAsync(holmes.Series, holmes.Four.Folder));
+        Assert.Equal(2, await StoredBookCountAsync(holmes.Series));
 
-        Assert.Equal([(holmes.Scarlet, 1m), (holmes.Four, 2.5m), (holmes.Adventures, 3m)], Books((await SeriesAsync(id))!.Value));
+        Assert.Equal(HttpStatusCode.NoContent, (await Http.DeleteAsync(seed.Url($"/api/series/{holmes.Series}/books/{holmes.Four.Folder}"))).StatusCode);
+        Assert.Equal([(holmes.Scarlet.Folder, 1m)], Books((await SeriesReadAsync(holmes.Series))!.Value));
+        Assert.Equal(JsonValueKind.Null, (await ProjectRowAsync(holmes.Four.Folder)).GetProperty("series").ValueKind);
+
+        // The last book leaving keeps the series.
+        await Http.DeleteAsync(seed.Url($"/api/series/{holmes.Series}/books/{holmes.Scarlet.Folder}"));
+        Assert.Empty(Books((await SeriesReadAsync(holmes.Series))!.Value));
     }
 
     [Fact]
-    public async Task A_book_in_another_series_is_refused_naming_it_unless_moved()
+    public async Task A_book_in_another_series_is_409_naming_it_on_join_and_create_unless_moved()
     {
-        var holmes = await SeedHolmesAsync();
-        var fromName = UniqueName("Doyle");
-        var from = await CreateAsync(fromName, holmes.Scarlet);
-        await JoinedAtAsync(from, holmes.Four);
-        var to = await CreateAsync(UniqueName());
+        var holmes = await seed.SeriesAsync(books: 2);
+        var fromName = (await SeriesReadAsync(holmes.Series))!.Value.GetProperty("name").GetString()!;
+        var to = await seed.CreateSeriesAsync(UniqueName());
 
-        await AssertProblemAsync(await JoinAsync(to, holmes.Scarlet), HttpStatusCode.Conflict, fromName, "A Study in Scarlet");
-
-        Assert.Equal(1m, await JoinedAtAsync(to, holmes.Scarlet, move: true));
-        Assert.Equal([(holmes.Four, 2m)], Books((await SeriesAsync(from))!.Value)); // not renumbered
-        Assert.Equal([(holmes.Scarlet, 1m)], Books((await SeriesAsync(to))!.Value));
-        Assert.Equal(to, (await ProjectRowAsync(holmes.Scarlet)).GetProperty("series").GetProperty("seriesId").GetGuid());
-    }
-
-    [Fact]
-    public async Task Creating_from_a_book_in_another_series_is_409()
-    {
-        var holmes = await SeedHolmesAsync();
-        var name = UniqueName();
-        await CreateAsync(name, holmes.Scarlet);
-
+        await AssertProblemAsync(await TryJoinAsync(to, holmes.Scarlet.Folder), HttpStatusCode.Conflict, fromName, "A Study in Scarlet");
         await AssertProblemAsync(
-            await Http.PostAsJsonAsync($"{app.BaseUrl}/api/series", new { name = UniqueName("Other"), folder = holmes.Scarlet }),
-            HttpStatusCode.Conflict, name);
-    }
+            await Http.PostAsJsonAsync(seed.Url("/api/series"), new { name = UniqueName("Other"), folder = holmes.Scarlet.Folder }),
+            HttpStatusCode.Conflict, fromName);
 
-    [Fact]
-    public async Task Leaving_renumbers_nobody_and_the_last_book_leaving_keeps_the_series()
-    {
-        var holmes = await SeedHolmesAsync();
-        var id = await CreateAsync(UniqueName(), holmes.Scarlet);
-        await JoinedAtAsync(id, holmes.Four);
-        await JoinedAtAsync(id, holmes.Adventures);
-
-        Assert.Equal(HttpStatusCode.NoContent, (await Http.DeleteAsync($"{app.BaseUrl}/api/series/{id}/books/{holmes.Four}")).StatusCode);
-        Assert.Equal([(holmes.Scarlet, 1m), (holmes.Adventures, 3m)], Books((await SeriesAsync(id))!.Value));
-        Assert.Equal(JsonValueKind.Null, (await ProjectRowAsync(holmes.Four)).GetProperty("series").ValueKind);
-
-        await Http.DeleteAsync($"{app.BaseUrl}/api/series/{id}/books/{holmes.Scarlet}");
-        await Http.DeleteAsync($"{app.BaseUrl}/api/series/{id}/books/{holmes.Adventures}");
-        Assert.Empty(Books((await SeriesAsync(id))!.Value));
+        var moved = await TryJoinAsync(to, holmes.Scarlet.Folder, move: true);
+        Assert.Equal(HttpStatusCode.OK, moved.StatusCode);
+        Assert.Equal([holmes.Four.Folder], Books((await SeriesReadAsync(holmes.Series))!.Value).Select(b => b.Folder));
+        Assert.Equal(to, (await ProjectRowAsync(holmes.Scarlet.Folder)).GetProperty("series").GetProperty("seriesId").GetGuid());
     }
 
     [Fact]
     public async Task Unknown_series_folders_and_non_members_are_404()
     {
-        var holmes = await SeedHolmesAsync();
-        var id = await CreateAsync(UniqueName(), holmes.Scarlet);
+        var holmes = await seed.SeriesAsync(books: 2, members: 1);
         var unknown = Guid.NewGuid();
 
-        Assert.Equal(HttpStatusCode.NotFound, (await Http.PatchAsJsonAsync($"{app.BaseUrl}/api/series/{unknown}", new { name = UniqueName() })).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await Http.DeleteAsync($"{app.BaseUrl}/api/series/{unknown}")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await JoinAsync(unknown, holmes.Four)).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await Http.DeleteAsync($"{app.BaseUrl}/api/series/{unknown}/books/{holmes.Scarlet}")).StatusCode);
+        await AssertProblemAsync(await Http.PostAsJsonAsync(seed.Url("/api/series"), new { name = UniqueName(), folder = "no-such-book" }),
+            HttpStatusCode.NotFound, "no-such-book");
+        Assert.Equal(HttpStatusCode.NotFound, (await Http.PatchAsJsonAsync(seed.Url($"/api/series/{unknown}"), new { name = UniqueName() })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Http.DeleteAsync(seed.Url($"/api/series/{unknown}"))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await TryJoinAsync(unknown, holmes.Four.Folder)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Http.DeleteAsync(seed.Url($"/api/series/{unknown}/books/{holmes.Scarlet.Folder}"))).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await SetPositionsAsync(unknown, new Dictionary<string, decimal>())).StatusCode);
 
-        await AssertProblemAsync(await JoinAsync(id, "no-such-book"), HttpStatusCode.NotFound, "no-such-book");
-        await AssertProblemAsync(await Http.DeleteAsync($"{app.BaseUrl}/api/series/{id}/books/no-such-book"), HttpStatusCode.NotFound);
-        await AssertProblemAsync(await Http.DeleteAsync($"{app.BaseUrl}/api/series/{id}/books/{holmes.Four}"),
+        await AssertProblemAsync(await TryJoinAsync(holmes.Series, "no-such-book"), HttpStatusCode.NotFound, "no-such-book");
+        await AssertProblemAsync(await Http.DeleteAsync(seed.Url($"/api/series/{holmes.Series}/books/no-such-book")), HttpStatusCode.NotFound);
+        await AssertProblemAsync(await Http.DeleteAsync(seed.Url($"/api/series/{holmes.Series}/books/{holmes.Four.Folder}")),
             HttpStatusCode.NotFound, "The Sign of the Four");
     }
 
     // ---- the position set -----------------------------------------------------------------------
 
+    /// <summary>Which sets are malformed, stale or tied is <c>SeriesPositionsTests</c>'; here, the status of each and that a refusal saves nothing.</summary>
     [Fact]
-    public async Task Positions_save_as_one_set_so_a_swap_works()
+    public async Task A_position_set_saves_as_one_and_a_malformed_set_is_400_and_a_stale_one_409_saving_nothing()
     {
-        var holmes = await SeedHolmesAsync();
-        var id = await CreateAsync(UniqueName(), holmes.Scarlet);
-        await JoinedAtAsync(id, holmes.Four);
+        var holmes = await seed.SeriesAsync(books: 2);
 
-        var swapped = await SetPositionsAsync(id, new Dictionary<string, decimal> { [holmes.Scarlet] = 2m, [holmes.Four] = 1m });
+        await AssertProblemAsync(await SetPositionsAsync(holmes.Series,
+            new Dictionary<string, decimal> { [holmes.Scarlet.Folder] = -1m, [holmes.Four.Folder] = 2m }), HttpStatusCode.BadRequest);
+        await AssertProblemAsync(await SetPositionsAsync(holmes.Series,
+            new Dictionary<string, decimal> { [holmes.Scarlet.Folder] = 1m }), HttpStatusCode.Conflict);
+        Assert.Equal([(holmes.Scarlet.Folder, 1m), (holmes.Four.Folder, 2m)], Books((await SeriesReadAsync(holmes.Series))!.Value));
+
+        var swapped = await SetPositionsAsync(holmes.Series,
+            new Dictionary<string, decimal> { [holmes.Scarlet.Folder] = 2m, [holmes.Four.Folder] = 1m });
 
         Assert.Equal(HttpStatusCode.OK, swapped.StatusCode);
-        Assert.Equal([(holmes.Four, 1m), (holmes.Scarlet, 2m)], Books(await JsonAsync(swapped)));
-        Assert.Equal([(holmes.Four, 1m), (holmes.Scarlet, 2m)], Books((await SeriesAsync(id))!.Value));
-    }
-
-    [Fact]
-    public async Task A_bad_position_is_400_a_stale_set_409_and_a_tie_409_naming_both_books()
-    {
-        var holmes = await SeedHolmesAsync();
-        var id = await CreateAsync(UniqueName(), holmes.Scarlet);
-        await JoinedAtAsync(id, holmes.Four);
-
-        await AssertProblemAsync(await SetPositionsAsync(id, new Dictionary<string, decimal> { [holmes.Scarlet] = -1m, [holmes.Four] = 2m }),
-            HttpStatusCode.BadRequest);
-        await AssertProblemAsync(await SetPositionsAsync(id, new Dictionary<string, decimal> { [holmes.Scarlet] = 1m, [holmes.Four] = 1.505m }),
-            HttpStatusCode.BadRequest);
-        await AssertProblemAsync(await SetPositionsAsync(id, new Dictionary<string, decimal> { [holmes.Scarlet] = 1m }),
-            HttpStatusCode.Conflict);
-        await AssertProblemAsync(await SetPositionsAsync(id,
-                new Dictionary<string, decimal> { [holmes.Scarlet] = 1m, [holmes.Four] = 2m, [holmes.Adventures] = 3m }),
-            HttpStatusCode.Conflict);
-        await AssertProblemAsync(await SetPositionsAsync(id, new Dictionary<string, decimal> { [holmes.Scarlet] = 2m, [holmes.Four] = 2m }),
-            HttpStatusCode.Conflict, "A Study in Scarlet", "The Sign of the Four");
-
-        Assert.Equal([(holmes.Scarlet, 1m), (holmes.Four, 2m)], Books((await SeriesAsync(id))!.Value)); // nothing saved
+        Assert.Equal([(holmes.Four.Folder, 1m), (holmes.Scarlet.Folder, 2m)], Books(await JsonAsync(swapped)));
+        Assert.Equal([(holmes.Four.Folder, 1m), (holmes.Scarlet.Folder, 2m)], Books((await SeriesReadAsync(holmes.Series))!.Value));
     }
 
     // ---- delete ---------------------------------------------------------------------------------
@@ -299,62 +202,43 @@ public class SeriesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     [Fact]
     public async Task Deleting_a_series_removes_its_registry_and_keeps_every_book()
     {
-        var holmes = await SeedHolmesAsync();
-        var id = await CreateAsync(UniqueName(), holmes.Scarlet);
-        await JoinedAtAsync(id, holmes.Four);
+        var holmes = await seed.SeriesAsync(books: 2);
 
-        Assert.Equal(HttpStatusCode.NoContent, (await Http.DeleteAsync($"{app.BaseUrl}/api/series/{id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await Http.DeleteAsync(seed.Url($"/api/series/{holmes.Series}"))).StatusCode);
 
-        Assert.False(Directory.Exists(Path.GetDirectoryName(RegistryPath(id))));
-        Assert.Null(await SeriesAsync(id));
-        Assert.Equal(JsonValueKind.Null, (await ProjectRowAsync(holmes.Scarlet)).GetProperty("series").ValueKind);
-        Assert.Equal(HttpStatusCode.OK, (await Http.GetAsync($"{app.BaseUrl}/api/projects/{holmes.Four}")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await Http.DeleteAsync($"{app.BaseUrl}/api/series/{id}")).StatusCode);
+        Assert.False(Directory.Exists(seed.RegistryFolder(holmes.Series)));
+        Assert.Null(await SeriesReadAsync(holmes.Series));
+        Assert.Equal(JsonValueKind.Null, (await ProjectRowAsync(holmes.Scarlet.Folder)).GetProperty("series").ValueKind);
+        Assert.Equal(HttpStatusCode.OK, (await Http.GetAsync(seed.Url($"/api/projects/{holmes.Four.Folder}"))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Http.DeleteAsync(seed.Url($"/api/series/{holmes.Series}"))).StatusCode);
     }
 
     [Fact]
     public async Task Deleting_a_member_project_removes_its_registry_entry_at_once()
     {
-        var holmes = await SeedHolmesAsync();
-        var id = await CreateAsync(UniqueName(), holmes.Scarlet);
-        await JoinedAtAsync(id, holmes.Four);
+        var holmes = await seed.SeriesAsync(books: 2);
 
-        Assert.Equal(HttpStatusCode.NoContent, (await Http.DeleteAsync($"{app.BaseUrl}/api/projects/{holmes.Scarlet}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await Http.DeleteAsync(seed.Url($"/api/projects/{holmes.Scarlet.Folder}"))).StatusCode);
 
-        Assert.Equal(1, await StoredBookCountAsync(id)); // before any series read could heal it
-        Assert.Equal([(holmes.Four, 2m)], Books((await SeriesAsync(id))!.Value));
+        Assert.Equal(1, await StoredBookCountAsync(holmes.Series)); // before any series read could heal it
+        Assert.Equal([(holmes.Four.Folder, 2m)], Books((await SeriesReadAsync(holmes.Series))!.Value));
     }
 
-    [Fact]
-    public async Task A_series_whose_book_folder_went_missing_reads_without_it_and_its_next_write_drops_the_entry()
-    {
-        var holmes = await SeedHolmesAsync();
-        var id = await CreateAsync(UniqueName(), holmes.Scarlet);
-        await JoinedAtAsync(id, holmes.Four);
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        Directory.Delete(Path.Combine(app.WorkspaceDir, holmes.Four), recursive: true);
-
-        Assert.Equal([(holmes.Scarlet, 1m)], Books((await SeriesAsync(id))!.Value));
-        Assert.Equal(2, await StoredBookCountAsync(id)); // reads change nothing (#246)
-
-        Assert.Equal(HttpStatusCode.OK, (await Http.PatchAsJsonAsync($"{app.BaseUrl}/api/series/{id}", new { name = UniqueName() })).StatusCode);
-        Assert.Equal(1, await StoredBookCountAsync(id)); // writes heal
-    }
+    // ---- what can't be read is a 422 ------------------------------------------------------------
 
     [Fact]
     public async Task A_corrupt_registry_is_left_out_of_reads_and_blocks_writes_whose_rules_it_could_break()
     {
-        var holmes = await SeedHolmesAsync();
-        var id = await CreateAsync(UniqueName(), holmes.Scarlet);
-        var corrupt = Path.Combine(app.WorkspaceDir, ".series", Guid.NewGuid().ToString("D"));
+        var holmes = await seed.SeriesAsync(books: 2, members: 1);
+        var corrupt = seed.RegistryFolder(Guid.NewGuid());
         Directory.CreateDirectory(corrupt);
         await File.WriteAllTextAsync(Path.Combine(corrupt, SeriesDbContext.DbFileName), "not a database");
         try
         {
-            Assert.NotNull(await SeriesAsync(id));
-            await AssertProblemAsync(await Http.PostAsJsonAsync($"{app.BaseUrl}/api/series", new { name = UniqueName() }),
+            Assert.NotNull(await SeriesReadAsync(holmes.Series));
+            await AssertProblemAsync(await Http.PostAsJsonAsync(seed.Url("/api/series"), new { name = UniqueName() }),
                 HttpStatusCode.UnprocessableEntity);
-            await AssertProblemAsync(await JoinAsync(id, holmes.Four), HttpStatusCode.UnprocessableEntity);
+            await AssertProblemAsync(await TryJoinAsync(holmes.Series, holmes.Four.Folder), HttpStatusCode.UnprocessableEntity);
         }
         finally
         {
@@ -365,23 +249,21 @@ public class SeriesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 
     /// <summary>
     /// A member whose project.db is there but can't be read is neither healed away nor left out of
-    /// a position save: the set can't name it, so the save is a 422, not a crash.
+    /// a position save: the set can't name it, so the save is a 422, not a crash. No unit test pins
+    /// this refusal, so it stays here.
     /// </summary>
     [Fact]
     public async Task An_unreadable_member_blocks_a_position_save_and_is_not_dropped()
     {
-        var holmes = await SeedHolmesAsync();
-        var id = await CreateAsync(UniqueName(), holmes.Scarlet);
-        await JoinedAtAsync(id, holmes.Four);
-        var fourFolder = Path.Combine(app.WorkspaceDir, holmes.Four);
+        var holmes = await seed.SeriesAsync(books: 2);
+        var fourFolder = Path.Combine(app.WorkspaceDir, holmes.Four.Folder);
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         await File.WriteAllTextAsync(Path.Combine(fourFolder, "project.db"), "not a database");
         try
         {
-            await AssertProblemAsync(await SetPositionsAsync(id, new Dictionary<string, decimal> { [holmes.Scarlet] = 1m }),
+            await AssertProblemAsync(await SetPositionsAsync(holmes.Series, new Dictionary<string, decimal> { [holmes.Scarlet.Folder] = 1m }),
                 HttpStatusCode.UnprocessableEntity);
-            Assert.Equal([(holmes.Scarlet, 1m)], Books((await SeriesAsync(id))!.Value));
-            Assert.Equal(2, await StoredBookCountAsync(id));
+            Assert.Equal(2, await StoredBookCountAsync(holmes.Series));
         }
         finally
         {
@@ -403,21 +285,15 @@ public class SeriesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     private async Task<HttpResponseMessage> PutPosterAsync(Guid series, byte[] bytes, string fileName = "poster.png")
     {
         using var form = ImageForm(bytes, fileName);
-        return await Http.PutAsync($"{app.BaseUrl}/api/series/{series}/poster", form);
+        return await Http.PutAsync(seed.Url($"/api/series/{series}/poster"), form);
     }
 
-    private async Task PutCoverAsync(string folder, string content)
-    {
-        using var form = ImageForm(Encoding.UTF8.GetBytes(content), "cover.png");
-        Assert.Equal(HttpStatusCode.OK, (await Http.PutAsync($"{app.BaseUrl}/api/projects/{folder}/cover", form)).StatusCode);
-    }
-
-    private async Task<JsonElement> PosterAsync(Guid series) => (await SeriesAsync(series))!.Value.GetProperty("poster");
+    private async Task<JsonElement> PosterAsync(Guid series) => (await SeriesReadAsync(series))!.Value.GetProperty("poster");
 
     /// <summary>The bytes the poster's URL serves now.</summary>
     private async Task<string> ServedAsync(JsonElement poster)
     {
-        var response = await Http.GetAsync($"{app.BaseUrl}{poster.GetProperty("url").GetString()}");
+        var response = await Http.GetAsync(seed.Url(poster.GetProperty("url").GetString()!));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return await response.Content.ReadAsStringAsync();
     }
@@ -425,9 +301,7 @@ public class SeriesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     [Fact]
     public async Task An_uploaded_poster_is_served_and_a_replacement_takes_its_place()
     {
-        var holmes = await SeedHolmesAsync();
-        var id = await CreateAsync(UniqueName(), holmes.Scarlet);
-        await PutCoverAsync(holmes.Scarlet, "scarlet cover");
+        var id = await seed.CreateSeriesAsync(UniqueName());
 
         var uploaded = await PutPosterAsync(id, Encoding.UTF8.GetBytes("first poster"));
         Assert.Equal(HttpStatusCode.OK, uploaded.StatusCode);
@@ -435,10 +309,8 @@ public class SeriesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 
         var poster = await PosterAsync(id);
         Assert.Equal("Uploaded", poster.GetProperty("source").GetString());
-        Assert.Equal(JsonValueKind.Null, poster.GetProperty("coverPosition").ValueKind);
-        Assert.Equal("first poster", await ServedAsync(poster)); // ahead of the book's cover
-        var served = await Http.GetAsync($"{app.BaseUrl}/api/series/{id}/poster");
-        Assert.Equal("image/png", served.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("first poster", await ServedAsync(poster));
+        Assert.Equal("image/png", (await Http.GetAsync(seed.Url($"/api/series/{id}/poster"))).Content.Headers.ContentType?.MediaType);
 
         await Task.Delay(20); // a later write time, so the URL's version moves on
         Assert.Equal(HttpStatusCode.OK, (await PutPosterAsync(id, Encoding.UTF8.GetBytes("second poster"), "Second.JPG")).StatusCode);
@@ -446,77 +318,46 @@ public class SeriesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         var replaced = await PosterAsync(id);
         Assert.NotEqual(poster.GetProperty("url").GetString(), replaced.GetProperty("url").GetString());
         Assert.Equal("second poster", await ServedAsync(replaced));
-        Assert.Equal("image/jpeg", (await Http.GetAsync($"{app.BaseUrl}/api/series/{id}/poster")).Content.Headers.ContentType?.MediaType);
+        Assert.Equal("image/jpeg", (await Http.GetAsync(seed.Url($"/api/series/{id}/poster"))).Content.Headers.ContentType?.MediaType);
         Assert.Equal(["poster.jpg"], // the earlier upload is gone
-            Directory.GetFiles(Path.GetDirectoryName(RegistryPath(id))!, "poster*").Select(Path.GetFileName));
+            Directory.GetFiles(seed.RegistryFolder(id), "poster*").Select(Path.GetFileName));
     }
 
     [Fact]
-    public async Task A_wrong_type_or_oversize_poster_is_400_and_an_unknown_series_404()
+    public async Task A_wrong_type_or_oversize_poster_is_400_and_an_unknown_series_or_no_poster_404()
     {
-        var id = await CreateAsync(UniqueName());
+        var id = await seed.CreateSeriesAsync(UniqueName());
 
         await AssertProblemAsync(await PutPosterAsync(id, [1, 2, 3], "poster.gif"), HttpStatusCode.BadRequest, ".png");
         await AssertProblemAsync(await PutPosterAsync(id, new byte[10 * 1024 * 1024 + 1]), HttpStatusCode.BadRequest, "10 MB");
-        Assert.Equal("None", (await PosterAsync(id)).GetProperty("source").GetString());
-
-        Assert.Equal(HttpStatusCode.NotFound, (await PutPosterAsync(Guid.NewGuid(), [1])).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await Http.DeleteAsync($"{app.BaseUrl}/api/series/{Guid.NewGuid()}/poster")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await Http.GetAsync($"{app.BaseUrl}/api/series/{Guid.NewGuid()}/poster")).StatusCode);
-    }
-
-    [Fact]
-    public async Task Clearing_the_poster_is_204_also_with_none_and_the_cover_shows_again()
-    {
-        var holmes = await SeedHolmesAsync();
-        var id = await CreateAsync(UniqueName(), holmes.Scarlet);
-        await PutCoverAsync(holmes.Scarlet, "scarlet cover");
-
-        Assert.Equal(HttpStatusCode.NoContent, (await Http.DeleteAsync($"{app.BaseUrl}/api/series/{id}/poster")).StatusCode);
-
-        await PutPosterAsync(id, Encoding.UTF8.GetBytes("a poster"));
-        Assert.Equal(HttpStatusCode.NoContent, (await Http.DeleteAsync($"{app.BaseUrl}/api/series/{id}/poster")).StatusCode);
-
-        var poster = await PosterAsync(id);
-        Assert.Equal("Cover", poster.GetProperty("source").GetString());
-        Assert.Equal("scarlet cover", await ServedAsync(poster));
-    }
-
-    [Fact]
-    public async Task The_fallback_is_the_cover_of_the_lowest_positioned_book_and_follows_a_reorder()
-    {
-        var holmes = await SeedHolmesAsync();
-        var id = await CreateAsync(UniqueName(), holmes.Scarlet);
-        await JoinedAtAsync(id, holmes.Four);
-        await PutCoverAsync(holmes.Scarlet, "scarlet cover");
-        await PutCoverAsync(holmes.Four, "four cover");
-
-        var poster = await PosterAsync(id);
-        Assert.Equal("Cover", poster.GetProperty("source").GetString());
-        Assert.Equal(1m, poster.GetProperty("coverPosition").GetDecimal());
-        Assert.Equal("scarlet cover", await ServedAsync(poster));
-
-        await SetPositionsAsync(id, new Dictionary<string, decimal> { [holmes.Scarlet] = 3m, [holmes.Four] = 2m });
-
-        poster = await PosterAsync(id);
-        Assert.Equal(2m, poster.GetProperty("coverPosition").GetDecimal());
-        Assert.Equal("four cover", await ServedAsync(poster));
-
-        // Only the lowest book's cover counts: without one, the card shows the placeholder.
-        Assert.Equal(HttpStatusCode.NoContent, (await Http.DeleteAsync($"{app.BaseUrl}/api/projects/{holmes.Four}/cover")).StatusCode);
-        Assert.Equal("None", (await PosterAsync(id)).GetProperty("source").GetString());
-    }
-
-    [Fact]
-    public async Task An_empty_series_has_no_poster()
-    {
-        var id = await CreateAsync(UniqueName());
 
         var poster = await PosterAsync(id);
         Assert.Equal("None", poster.GetProperty("source").GetString());
         Assert.Equal(JsonValueKind.Null, poster.GetProperty("url").ValueKind);
-        Assert.Equal(JsonValueKind.Null, poster.GetProperty("coverPosition").ValueKind);
-        Assert.Equal(HttpStatusCode.NotFound, (await Http.GetAsync($"{app.BaseUrl}/api/series/{id}/poster")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Http.GetAsync(seed.Url($"/api/series/{id}/poster"))).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await PutPosterAsync(Guid.NewGuid(), [1])).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Http.DeleteAsync(seed.Url($"/api/series/{Guid.NewGuid()}/poster"))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Http.GetAsync(seed.Url($"/api/series/{Guid.NewGuid()}/poster"))).StatusCode);
+    }
+
+    /// <summary>Which book's cover stands in is <c>SeriesSnapshotTests</c>'; here, that clearing is a 204 and the fallback is served.</summary>
+    [Fact]
+    public async Task Clearing_the_poster_is_204_also_with_none_and_the_cover_is_served_in_its_place()
+    {
+        var holmes = await seed.SeriesAsync(books: 1);
+        using (var cover = ImageForm(Encoding.UTF8.GetBytes("scarlet cover"), "cover.png"))
+            Assert.Equal(HttpStatusCode.OK, (await Http.PutAsync(seed.Url($"/api/projects/{holmes.Scarlet.Folder}/cover"), cover)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await Http.DeleteAsync(seed.Url($"/api/series/{holmes.Series}/poster"))).StatusCode);
+
+        await PutPosterAsync(holmes.Series, Encoding.UTF8.GetBytes("a poster"));
+        Assert.Equal(HttpStatusCode.NoContent, (await Http.DeleteAsync(seed.Url($"/api/series/{holmes.Series}/poster"))).StatusCode);
+
+        var poster = await PosterAsync(holmes.Series);
+        Assert.Equal("Cover", poster.GetProperty("source").GetString());
+        Assert.Equal(1m, poster.GetProperty("coverPosition").GetDecimal());
+        Assert.Equal("scarlet cover", await ServedAsync(poster));
     }
 
     // ---- no History, no origin, the hub signal --------------------------------------------------
@@ -524,24 +365,24 @@ public class SeriesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     [Fact]
     public async Task Registry_writes_make_no_History_step_ignore_the_origin_and_signal_the_hub()
     {
-        var holmes = await SeedHolmesAsync();
-        var stepsBefore = await StepCountAsync(holmes.Four);
-        await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
+        var four = (await seed.BooksAsync(1))[0];
+        var stepsBefore = (await seed.HistoryLabelsAsync(four)).Count;
+        await using var hub = new HubConnectionBuilder().WithUrl(seed.Url("/hubs/live")).Build();
         var messages = new ConcurrentQueue<JsonElement>();
         hub.On<JsonElement>("series", messages.Enqueue);
         await hub.StartJoinedAsync();
 
-        var id = await CreateAsync(UniqueName());
-        using (var join = new HttpRequestMessage(HttpMethod.Put, $"{app.BaseUrl}/api/series/{id}/books/{holmes.Four}"))
+        var id = await seed.CreateSeriesAsync(UniqueName());
+        using (var join = new HttpRequestMessage(HttpMethod.Put, seed.Url($"/api/series/{id}/books/{four.Folder}")))
         {
             join.Headers.Add("X-Origin-Id", Guid.NewGuid().ToString());
             join.Content = JsonContent.Create(new { move = false });
             Assert.Equal(HttpStatusCode.OK, (await Http.SendAsync(join)).StatusCode);
         }
-        await SetPositionsAsync(id, new Dictionary<string, decimal> { [holmes.Four] = 4m });
-        await Http.PatchAsJsonAsync($"{app.BaseUrl}/api/series/{id}", new { name = UniqueName("Renamed") });
+        await SetPositionsAsync(id, new Dictionary<string, decimal> { [four.Folder] = 4m });
+        await Http.PatchAsJsonAsync(seed.Url($"/api/series/{id}"), new { name = UniqueName("Renamed") });
 
-        Assert.Equal(stepsBefore, await StepCountAsync(holmes.Four));
+        Assert.Equal(stepsBefore, (await seed.HistoryLabelsAsync(four)).Count);
 
         // The writes land inside one 250 ms window, so they arrive as few messages: a re-read
         // signal with no payload and no origin.
@@ -550,12 +391,9 @@ public class SeriesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Assert.Equal("Changed", changed.GetProperty("kind").GetString());
         Assert.False(changed.TryGetProperty("originId", out _));
 
-        await Http.DeleteAsync($"{app.BaseUrl}/api/series/{id}");
+        await Http.DeleteAsync(seed.Url($"/api/series/{id}"));
         await WaitForAsync(() => messages.Any(m => m.GetProperty("seriesId").GetGuid() == id && m.GetProperty("kind").GetString() == "Deleted"));
     }
-
-    private async Task<int> StepCountAsync(string folder) =>
-        (await GetJsonAsync($"/api/projects/{folder}/history")).GetProperty("steps").GetArrayLength();
 
     private static async Task WaitForAsync(Func<bool> condition, int timeoutMs = 5000)
     {
