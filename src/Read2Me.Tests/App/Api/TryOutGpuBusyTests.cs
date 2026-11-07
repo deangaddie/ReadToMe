@@ -71,17 +71,21 @@ public sealed class TryOutGpuBusyTests : IDisposable
 
     /// <summary>
     /// The batch's scope factory: the batch waits in it, so it stays running until the test ends,
-    /// and is then cancelled before it reads anything.
+    /// and is then cancelled before it reads anything. The wait is bounded: were the batch ever to
+    /// run its work on the caller's thread, the test would fail here rather than hang.
     /// </summary>
     private sealed class HeldScopes : IServiceScopeFactory
     {
+        private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(30);
         private readonly ManualResetEventSlim _released = new();
 
         public void Release() => _released.Set();
 
         public IServiceScope CreateScope()
         {
-            _released.Wait();
+            if (!_released.Wait(HangGuard))
+                throw new TimeoutException(
+                    $"The voice batch held its scope for {HangGuard.TotalSeconds:0} s without the test ending: StartGeneratePrompts may be running its work synchronously.");
             throw new OperationCanceledException("The test has ended.");
         }
     }
