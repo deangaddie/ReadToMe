@@ -43,18 +43,5 @@ namespace Read2Me.Services.Audio
             if (_reviews.TryRemove(new AudioReviewKey(folder, paragraphItemId), out _))
                 Changed?.Invoke();
         }
-
-        /// <summary>Replaces all in-memory state for a folder with the supplied rows (sparse).</summary>
-        public void Hydrate(ProjectFolderId folder, IEnumerable<(Guid ParagraphItemId, AudioReviewInfo Info)> rows)
-        {
-            foreach (var key in _reviews.Keys)
-                if (key.Folder.Equals(folder))
-                    _reviews.TryRemove(key, out _);
-
-            foreach (var (itemId, info) in rows)
-                _reviews[new AudioReviewKey(folder, itemId)] = info;
-
-            Changed?.Invoke();
-        }
     }
 }

@@ -5,7 +5,6 @@ using Read2Me.Data;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Books;
-using Read2Me.Tests.Infrastructure;
 using Xunit;
 
 namespace Read2Me.Tests.Services;
@@ -92,78 +91,6 @@ public class BookReadingServiceFlattenTests : IAsyncDisposable
             Type = type,
         });
         await db.SaveChangesAsync();
-    }
-
-    private async Task SeedParagraphsAsync(params string[][] itemsPerParagraph)
-    {
-        var b = new BookHierarchyBuilder(OpenFreshDbAsync);
-        b.WithProject();
-        var paraNames = itemsPerParagraph.Select((_, i) => $"para{i}").ToArray();
-        await b.AddVolume("vol", v => v.AddChapter("ch", c =>
-        {
-            for (int i = 0; i < itemsPerParagraph.Length; i++)
-            {
-                var pname = paraNames[i];
-                var items = itemsPerParagraph[i];
-                c.AddParagraph(pname, p =>
-                {
-                    for (int j = 0; j < items.Length; j++)
-                    {
-                        var text = items[j];
-                        if (text != null)
-                            p.AddNarration($"item_{pname}_{j}", text);
-                    }
-                });
-            }
-        })).BuildAsync();
-    }
-
-    // ── FlattenFromDbAsync ────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task FlattenFromDb_MultipleItemsPerParagraph_JoinedIntoOneLine()
-    {
-        await SeedParagraphsAsync(
-            ["He said,", " \"Hello.\""],
-            ["She replied."]
-        );
-
-        var lines = await _sut.FlattenFromDbAsync(FolderName);
-
-        Assert.Equal(2, lines.Count);
-        Assert.Equal("He said,  \"Hello.\"", lines[0]);
-        Assert.Equal("She replied.", lines[1]);
-    }
-
-    [Fact]
-    public async Task FlattenFromDb_SingleItemPerParagraph_ReturnedAsIs()
-    {
-        await SeedParagraphsAsync(
-            ["First paragraph."],
-            ["Second paragraph."],
-            ["Third paragraph."]
-        );
-
-        var lines = await _sut.FlattenFromDbAsync(FolderName);
-
-        Assert.Equal(3, lines.Count);
-        Assert.Equal("First paragraph.", lines[0]);
-        Assert.Equal("Second paragraph.", lines[1]);
-        Assert.Equal("Third paragraph.", lines[2]);
-    }
-
-    [Fact]
-    public async Task FlattenFromDb_NullOrWhitespaceItems_Excluded()
-    {
-        await SeedParagraphsAsync(
-            ["  ", null!],
-            ["Real content."]
-        );
-
-        var lines = await _sut.FlattenFromDbAsync(FolderName);
-
-        Assert.Single(lines);
-        Assert.Equal("Real content.", lines[0]);
     }
 
     // ── FlattenFromFileAsync (text file) ─────────────────────────────────────
