@@ -4,6 +4,7 @@ using Read2Me.Core.Models;
 using Read2Me.Data.Series;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Events;
+using Read2Me.Services.History;
 using Read2Me.Services.Mutations;
 
 namespace Read2Me.Services.Series
@@ -159,10 +160,10 @@ namespace Read2Me.Services.Series
         public async Task<SeriesResult<bool>> LinkAsync(
             Guid seriesId, Guid seriesCharacterId, string folder, Guid characterId, CancellationToken ct = default)
         {
-            using var _ = await gate.EnterAsync(ct);
+            using var hold = await gate.EnterAsync(ct);
             var (plan, refusal) = await PlanLinkAsync(seriesId, seriesCharacterId, folder, characterId, ct);
             if (plan is null) return refusal!;
-            if (await RunLinkAsync(seriesId, seriesCharacterId, characterId, plan, ct) is { } failed) return failed;
+            if (await RunLinkAsync(seriesId, seriesCharacterId, characterId, plan, hold, ct) is { } failed) return failed;
             Signal(seriesId, SeriesChangeKind.Changed);
             return true;
         }
@@ -181,14 +182,17 @@ namespace Read2Me.Services.Series
 
         /// <summary>Runs a planned link; a refusal when the joining book's half didn't commit and nothing was linked.</summary>
         private async Task<SeriesRefusal?> RunLinkAsync(
-            Guid seriesId, Guid seriesCharacterId, Guid characterId, LinkPlan plan, CancellationToken ct)
+            Guid seriesId, Guid seriesCharacterId, Guid characterId, LinkPlan plan, SeriesRegistryLock.Hold hold, CancellationToken ct)
         {
             var book = plan.Book;
             if (plan.Merge.JoiningGains.Count > 0)
             {
-                var outcome = await GainAsync(book, characterId, plan.Merge.JoiningGains.Select(g => g.Voice), ct);
-                if (outcome is BookMutationOutcome.Rejected rejected)
-                    return SeriesRefusal.VoicesNotWritten(book.Title, rejected.Message, rejected.Reason == BookMutationRejection.Conflict);
+                var joining = new SeriesVoiceWrite(
+                    new SeriesPeer(book.Folder, book.Title, book.Position, characterId),
+                    new SeriesVoiceChange.Gain(plan.Merge.JoiningGains.Select(g => g.Voice.Source).ToList()));
+                var result = (await replicator.WriteAsync([joining], LinkStep, hold, ct))[0];
+                if (result.Failure is { } reason)
+                    return SeriesRefusal.VoicesNotWritten(book.Title, reason, result.Rejection == BookMutationRejection.Conflict);
             }
 
             await using (var db = await SeriesDbContext.OpenAsync(FolderOf(seriesId), ct))
@@ -200,28 +204,19 @@ namespace Read2Me.Services.Series
 
             // The link stands from here: a book that can't take its Voices is logged and the rest go on
             // (it then differs from series, #222).
-            foreach (var gains in plan.Merge.LinkedGains)
+            var writes = plan.Merge.LinkedGains.Select(gains =>
             {
                 var other = plan.State.Books.First(b => b.Folder == gains.Folder);
                 var otherCharacter = plan.State.LinkOf(seriesCharacterId, other.ProjectId)!.CharacterId;
-                string? failure;
-                try
-                {
-                    failure = await GainAsync(other, otherCharacter, gains.Voices, ct) is BookMutationOutcome.Rejected rejected
-                        ? rejected.Message
-                        : null;
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    logger.LogWarning(ex, "Series {SeriesId}: copying Voices into '{Folder}' threw", seriesId, other.Folder);
-                    failure = ex.Message;
-                }
-                if (failure is not null)
-                    logger.LogWarning("Series {SeriesId}: linking left '{Folder}' without {Count} Voices: {Reason}",
-                        seriesId, other.Folder, gains.Voices.Count, failure);
-            }
+                return new SeriesVoiceWrite(
+                    new SeriesPeer(other.Folder, other.Title, other.Position, otherCharacter),
+                    new SeriesVoiceChange.Gain(gains.Voices.Select(v => v.Source).ToList()));
+            }).ToList();
+            if (writes.Count > 0) await replicator.WriteAsync(writes, LinkStep, hold, ct);
             return null;
         }
+
+        private static readonly SeriesVoiceStep LinkStep = new(GainSeriesVoicesMutation.LinkLabel, StepAction.Voice);
 
         /// <summary>Unlink: the book keeps its own copy of the Voices, and edits stop crossing books.</summary>
         public async Task<SeriesResult<bool>> UnlinkAsync(Guid seriesId, Guid seriesCharacterId, string folder, CancellationToken ct = default)
@@ -272,7 +267,10 @@ namespace Read2Me.Services.Series
         private sealed record LinkPlan(LinkState State, LinkBook Book, SeriesVoiceMerge.Plan<SourcedVoice> Merge);
 
         /// <summary>A Voice as one book holds it: where its files are, and the row to copy.</summary>
-        private sealed record SourcedVoice(LinkBook Book, Guid CharacterId, SeriesVoiceCopy Voice);
+        private sealed record SourcedVoice(LinkBook Book, Guid CharacterId, SeriesVoiceCopy Voice)
+        {
+            public SeriesVoiceSource Source => new(Book.FolderId, CharacterId, Voice);
+        }
 
         private static LinkBook? MemberOf(LinkState state, string folder) =>
             state.Books.FirstOrDefault(b => string.Equals(b.Folder, folder, StringComparison.OrdinalIgnoreCase));
@@ -375,72 +373,6 @@ namespace Read2Me.Services.Series
                     v.Id, v.Name, v.Description, v.Source, v.DesignPrompt, v.Transcript, v.AudioFileName,
                     v.VoiceDesignSettingsOverrideJson, v.TtsSettingsOverrideJson, v.CreatedUtc)))
                 .ToList();
-
-        /// <summary>
-        /// Copies each Voice's reference audio and stored original into <paramref name="target"/>
-        /// under its Character's folder, then commits the rows (ADR 0007: the files exist before the
-        /// Book names them). A copy the commit doesn't take is removed again.
-        /// </summary>
-        private async Task<BookMutationOutcome> GainAsync(
-            LinkBook target, Guid characterId, IEnumerable<SourcedVoice> voices, CancellationToken ct)
-        {
-            var targetFolder = fs.GetProjectFolderPath(target.FolderId);
-            var written = new List<string>();
-            var copies = new List<SeriesVoiceCopy>();
-            try
-            {
-                foreach (var source in voices)
-                {
-                    var sourceFolder = fs.GetProjectFolderPath(source.Book.FolderId);
-                    string? audio = null;
-                    if (source.Voice.AudioFileName is { Length: > 0 } from
-                        && File.Exists(Path.Combine(sourceFolder, from)))
-                    {
-                        audio = $"voices/{characterId}/{Path.GetFileName(from)}";
-                        Copy(Path.Combine(sourceFolder, from), Path.Combine(targetFolder, audio), written);
-
-                        var original = Path.Combine(sourceFolder, VoiceOriginalStore.PathOf(source.CharacterId, source.Voice.Id));
-                        if (File.Exists(original))
-                            Copy(original, Path.Combine(targetFolder, VoiceOriginalStore.PathOf(characterId, source.Voice.Id)), written);
-                    }
-                    copies.Add(source.Voice with { AudioFileName = audio });
-                }
-
-                var outcome = await mutations.CommitAsync(new GainSeriesVoicesMutation(target.FolderId, characterId, copies), ct);
-                if (outcome is not BookMutationOutcome.Committed)
-                    Discard(written);
-                return outcome;
-            }
-            catch
-            {
-                Discard(written);
-                throw;
-            }
-        }
-
-        /// <summary>Copies a file to a path nothing holds yet; one already there is left alone.</summary>
-        private static void Copy(string from, string to, List<string> written)
-        {
-            if (File.Exists(to)) return;
-            Directory.CreateDirectory(Path.GetDirectoryName(to)!);
-            File.Copy(from, to);
-            written.Add(to);
-        }
-
-        private void Discard(IEnumerable<string> written)
-        {
-            foreach (var file in written)
-            {
-                try
-                {
-                    File.Delete(file);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Could not remove the copied Voice file '{File}'.", file);
-                }
-            }
-        }
 
         private async Task<IReadOnlyList<SeriesLinkRules.Link>> LoadLinksAsync(Guid seriesId, CancellationToken ct)
         {

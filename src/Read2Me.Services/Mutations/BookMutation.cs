@@ -694,10 +694,15 @@ public sealed record SeriesVoiceCopy(
 public sealed record GainSeriesVoicesMutation(
     ProjectFolderId FolderId, Guid CharacterId, IReadOnlyList<SeriesVoiceCopy> Voices) : ProjectStateMutation(FolderId)
 {
-    /// <summary>The copied reference audio and originals land under names History has not seen, so it hashes them with the commit.</summary>
+    public const string LinkLabel = "Link series character";
+
+    /// <summary>The copied reference audio and originals may land over this book's own, so History hashes them with the commit.</summary>
     public override StateFileOwners WritesFiles => new(Voices.Select(v => v.Id).ToList());
 
-    internal override (string Label, StepAction Action)? OwnStep => ("Link series character", StepAction.Voice);
+    /// <summary>The History step's label and action; a link's by default.</summary>
+    public (string Label, StepAction Action) Step { get; init; } = (LinkLabel, StepAction.Voice);
+
+    internal override (string Label, StepAction Action)? OwnStep => Step;
 }
 
 /// <summary>

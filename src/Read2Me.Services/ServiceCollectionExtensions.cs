@@ -127,6 +127,8 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<Series.SeriesRegistryLock>();
         services.TryAddSingleton<Series.VoiceAudioHashes>();
         services.AddScoped<Series.SeriesRegistry>();
+        // The only writer of Voices into peer books (link gains, push/take, copy after commit).
+        services.AddScoped<Series.SeriesVoiceReplicator>();
         // Shared Voice edits (ADR 0018): copied into the other linked books after each commit.
         services.TryAddEnumerable(ServiceDescriptor.Scoped<Mutations.IBookCommitHook, Series.SeriesVoiceCopier>());
         services.AddOptions<Mutations.BookMutationOptions>();

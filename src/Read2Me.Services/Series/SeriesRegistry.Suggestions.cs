@@ -54,7 +54,7 @@ namespace Read2Me.Services.Series
         public async Task<SeriesResult<Guid>> ShareAndLinkAsync(
             Guid seriesId, IReadOnlyList<SeriesMemberRef> members, CancellationToken ct = default)
         {
-            using var _ = await gate.EnterAsync(ct);
+            using var hold = await gate.EnterAsync(ct);
             var (state, refusal) = await LinkStateAsync(seriesId, ct);
             if (state is null) return refusal!;
             var (picked, invalid) = await UnlinkedMembersAsync(state, members);
@@ -67,7 +67,7 @@ namespace Read2Me.Services.Series
                 {
                     var (plan, refused) = await PlanLinkAsync(seriesId, id, book.Folder, character.CharacterId, ct);
                     if (plan is null) return refused!;
-                    if (await RunLinkAsync(seriesId, id, character.CharacterId, plan, ct) is { } failed) return failed;
+                    if (await RunLinkAsync(seriesId, id, character.CharacterId, plan, hold, ct) is { } failed) return failed;
                 }
             }
             finally
