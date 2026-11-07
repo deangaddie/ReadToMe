@@ -48,19 +48,5 @@ namespace Read2Me.Tests.Services.Audio
             Assert.Null(svc.ReviewOf(_folder, itemId));
             Assert.Equal(1, changed);
         }
-
-        [Fact]
-        public void Hydrate_ReplacesFolderState()
-        {
-            var svc = new AudioReviewService();
-            var stale = Guid.NewGuid();
-            svc.Set(_folder, stale, Info());
-
-            var fresh = Guid.NewGuid();
-            svc.Hydrate(_folder, [(fresh, Info(AudioReviewState.Dismissed))]);
-
-            Assert.Null(svc.ReviewOf(_folder, stale));
-            Assert.Equal(AudioReviewState.Dismissed, svc.ReviewOf(_folder, fresh)!.State);
-        }
     }
 }

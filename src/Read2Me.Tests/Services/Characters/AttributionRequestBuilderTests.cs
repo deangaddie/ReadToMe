@@ -137,8 +137,12 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task CustomContextWindow_PassedToReader()
         {
+            await using (var db = await Factory.CreateDbContextAsync())
+            {
+                db.PromptSettings.Add(new LlmPromptSettings { ContextParagraphsBefore = 7, ContextParagraphsAfter = 3 });
+                await db.SaveChangesAsync();
+            }
             var prompts = NewPrompts();
-            await prompts.SetContextWindowAsync(7, 3);
 
             var p = Para("Preview");
             var reader = new BatchReaderFake([Ctx((p, "Hello world"))], project: Project());

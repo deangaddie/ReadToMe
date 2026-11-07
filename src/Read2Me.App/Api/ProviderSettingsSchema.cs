@@ -60,7 +60,7 @@ namespace Read2Me.App.Api
     /// One static descriptor per TTS / voice-design provider (Angular ticket 16): the tunable fields
     /// of the provider's settings record, each with its allowed range and the <c>Recommended</c>
     /// record's default. Connection settings (<c>baseUrl</c>) and the app-level chunking / carrier knobs are not here —
-    /// they are per-config, never per-voice, exactly as the <c>*SettingsDiff</c> classes skip them.
+    /// they are per-config, never per-voice.
     /// </summary>
     public static class ProviderSettingsSchema
     {

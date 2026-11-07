@@ -239,40 +239,5 @@ namespace Read2Me.Tests.Services
             Assert.Equal(PromptTemplates.DefaultContextParagraphsBefore, before);
             Assert.Equal(PromptTemplates.DefaultContextParagraphsAfter, after);
         }
-
-        [Fact]
-        public async Task SetContextWindow_ThenGet_ReturnsStoredValues()
-        {
-            var svc = NewService();
-            await svc.SetContextWindowAsync(2, 1);
-            var (before, after) = await svc.GetContextWindowAsync();
-            Assert.Equal(2, before);
-            Assert.Equal(1, after);
-        }
-
-        [Fact]
-        public async Task SetContextWindowTwice_StillSingleRow()
-        {
-            var svc = NewService();
-            await svc.SetContextWindowAsync(3, 0);
-            await svc.SetContextWindowAsync(5, 2);
-
-            await using var db = await Factory.CreateDbContextAsync();
-            Assert.Equal(1, await db.PromptSettings.CountAsync());
-
-            var (before, after) = await svc.GetContextWindowAsync();
-            Assert.Equal(5, before);
-            Assert.Equal(2, after);
-        }
-
-        [Fact]
-        public async Task SetContextWindow_FiresOnChanged()
-        {
-            var svc = NewService();
-            int count = 0;
-            svc.OnChanged += () => count++;
-            await svc.SetContextWindowAsync(4, 0);
-            Assert.Equal(1, count);
-        }
     }
 }

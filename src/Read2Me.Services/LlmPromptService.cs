@@ -234,17 +234,6 @@ namespace Read2Me.Services
             );
         }
 
-        public async Task SetContextWindowAsync(int before, int after)
-        {
-            _logger.LogInformation("Saving context window: {Before} before, {After} after", before, after);
-            await using var db = await _dbFactory.CreateDbContextAsync();
-            var row = await EnsureRowAsync(db);
-            row.ContextParagraphsBefore = before;
-            row.ContextParagraphsAfter = after;
-            await db.SaveChangesAsync();
-            NotifyChanged();
-        }
-
         public async Task SetVoicePlanPromptAsync(string template)
         {
             _logger.LogInformation("Saving voice plan prompt template");

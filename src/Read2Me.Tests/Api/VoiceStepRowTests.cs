@@ -17,18 +17,5 @@ namespace Read2Me.Tests.Api
             Assert.Equal(60, Row(AudioPostProcessStepIds.DePlosive).CutoffHz);
             Assert.Equal(ConsonantSoftenPresets.Light, Row(AudioPostProcessStepIds.ConsonantSoften).Preset);
         }
-
-        [Fact]
-        public void A_ticked_row_builds_the_config_its_dials_describe()
-        {
-            var trim = Row(AudioPostProcessStepIds.SilenceTrim);
-            trim.ThresholdDb = -40;
-
-            var settings = trim.BuildConfig().GetSettings<SilenceTrimSettings>()!;
-
-            Assert.Equal(-40, settings.ThresholdDb);
-            // The Voice-scope guard rides along — it is a property of (step, scope), not of the dial.
-            Assert.Equal(1000, settings.MinOutputMs);
-        }
     }
 }

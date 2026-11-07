@@ -1,4 +1,4 @@
-import { speakerColor, speakerHue } from './speaker-color';
+import { speakerHue } from './speaker-color';
 
 describe('speakerHue', () => {
   it('is deterministic for the same id', () => {
@@ -21,17 +21,5 @@ describe('speakerHue', () => {
   it('spreads nearby ids across the circle rather than clustering them', () => {
     const hues = new Set(Array.from({ length: 50 }, (_, i) => speakerHue(`speaker-${i}`)));
     expect(hues.size).toBeGreaterThan(35);
-  });
-});
-
-describe('speakerColor', () => {
-  it('uses fixed saturation and lightness per scheme, varying only the hue', () => {
-    const light = speakerColor('elizabeth', 'light');
-    const dark = speakerColor('elizabeth', 'dark');
-    expect(light.hue).toBe(dark.hue);
-    expect(light.foreground).toBe(`hsl(${light.hue} 55% 36%)`);
-    expect(light.background).toBe(`hsl(${light.hue} 55% 93%)`);
-    expect(dark.foreground).toBe(`hsl(${dark.hue} 60% 74%)`);
-    expect(dark.background).toBe(`hsl(${dark.hue} 60% 20%)`);
   });
 });

@@ -30,7 +30,6 @@ namespace Read2Me.App.Api
         public string Preset { get; set; } = "";
         public double ThresholdDb { get; set; }
         public int PadMs { get; set; }
-        private double _minOutputMs;
 
         // ── Last render's outcome ────────────────────────────────────────────────
 
@@ -65,32 +64,11 @@ namespace Read2Me.App.Api
                     var trim = defaults.GetSettings<SilenceTrimSettings>() ?? new SilenceTrimSettings();
                     row.ThresholdDb = trim.ThresholdDb;
                     row.PadMs = trim.PadMs;
-                    row._minOutputMs = trim.MinOutputMs;
                     break;
             }
 
             return row;
         }
-
-        /// <summary>
-        /// The config this row's dials describe. <c>Enabled</c> is meaningless in Voice scope — the tick
-        /// is what puts the step in the chain — so it is always true here: a step in the chain runs.
-        /// </summary>
-        public AudioPostProcessStepConfig BuildConfig() => StepId switch
-        {
-            AudioPostProcessStepIds.DePlosive =>
-                AudioPostProcessStepConfig.Create(StepId, true, new DePlosiveSettings(CutoffHz)),
-            AudioPostProcessStepIds.Denoise =>
-                AudioPostProcessStepConfig.Create(StepId, true, new DenoiseSettings(Strength)),
-            AudioPostProcessStepIds.HissReduce =>
-                AudioPostProcessStepConfig.Create(StepId, true, new HissReduceSettings { Preset = Preset }),
-            AudioPostProcessStepIds.ConsonantSoften =>
-                AudioPostProcessStepConfig.Create(StepId, true, new ConsonantSoftenSettings { Preset = Preset }),
-            AudioPostProcessStepIds.SilenceTrim =>
-                AudioPostProcessStepConfig.Create(
-                    StepId, true, new SilenceTrimSettings(ThresholdDb, PadMs, _minOutputMs)),
-            _ => throw new InvalidOperationException($"No settings shape for step '{StepId}'"),
-        };
 
         internal void RecordOutcome(ChainStepOutcome outcome)
         {
