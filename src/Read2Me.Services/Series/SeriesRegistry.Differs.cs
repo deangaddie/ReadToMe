@@ -35,42 +35,13 @@ namespace Read2Me.Services.Series
         public Task<SeriesResult<bool>> TakeAsync(Guid seriesId, Guid seriesCharacterId, string folder, CancellationToken ct = default) =>
             ResolveAsync(seriesId, seriesCharacterId, folder, push: false, ct);
 
-        /// <summary>
-        /// What a push from, or take into, <paramref name="folder"/> would remove, for its confirm: each
-        /// target book that loses Voices, with the positional rules on them. Refused as the write would be.
-        /// </summary>
-        public async Task<SeriesResult<SeriesResolvePreview>> PreviewResolveAsync(
-            Guid seriesId, Guid seriesCharacterId, string folder, bool push, CancellationToken ct = default)
-        {
-            var planned = await PlanResolveAsync(seriesId, seriesCharacterId, folder, push, heal: false, ct);
-            if (planned.Value is not ({ } series, { } plan)) return planned.Refusal!;
-            return new SeriesResolvePreview(series.Losses(seriesCharacterId, plan.Source, plan.Targets));
-        }
-
-        private sealed record PlannedResolve(SeriesSnapshot Series, SeriesResolvePlan Plan);
-
-        /// <summary>
-        /// The series with the Voices layer of the Series character, and the push or take planned from
-        /// it. With <paramref name="heal"/> (the write, under the lock) the series' stale rows go first.
-        /// </summary>
-        private async Task<SeriesResult<PlannedResolve>> PlanResolveAsync(
-            Guid seriesId, Guid seriesCharacterId, string folder, bool push, bool heal, CancellationToken ct)
-        {
-            var loaded = heal
-                ? await LoadHealedAsync(seriesId, ct)
-                : await loader.LoadSeriesAsync(seriesId, withCasts: true, ct);
-            if (loaded.Value is not { } registryLayer) return loaded.Refusal!;
-            var series = await loader.WithVoicesAsync(registryLayer, [seriesCharacterId], ct);
-            var planned = series.PlanResolve(seriesCharacterId, folder, push);
-            if (planned.Value is not { } plan) return planned.Refusal!;
-            return new PlannedResolve(series, plan);
-        }
-
         private async Task<SeriesResult<bool>> ResolveAsync(
             Guid seriesId, Guid seriesCharacterId, string folder, bool push, CancellationToken ct)
         {
             using var hold = await gate.EnterAsync(ct);
-            var planned = await PlanResolveAsync(seriesId, seriesCharacterId, folder, push, heal: true, ct);
+            var loaded = await LoadHealedAsync(seriesId, ct);
+            if (loaded.Value is not { } registryLayer) return loaded.Refusal!;
+            var planned = await loader.PlanResolveAsync(registryLayer, seriesCharacterId, folder, push, ct);
             if (planned.Value is not ({ } series, { } plan)) return planned.Refusal!;
 
             // The source's whole set: each target holds exactly these afterwards.

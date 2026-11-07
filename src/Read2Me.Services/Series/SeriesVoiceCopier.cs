@@ -66,7 +66,7 @@ namespace Read2Me.Services.Series
 
             return BookCommitPlan.After(change =>
                 (change.Receipt.Effects.Facets & SeriesVoiceEdits.SignalledFacets) != 0
-                    ? Registry.SignalMemberAsync(folder)
+                    ? SignalMemberAsync(folder)
                     : Task.CompletedTask);
         }
 
@@ -82,6 +82,13 @@ namespace Read2Me.Services.Series
         private async Task<bool> RemembersAsync(ProjectFolderId folder, Guid characterId, CancellationToken ct) =>
             await Loader.LoadSeriesOfAsync(folder, withCasts: false, ct) is ({ } series, var projectId)
             && series.Remembers(projectId, characterId);
+
+        /// <summary>A member book committed something the series cast board shows: its series reads again (#213, Hub).</summary>
+        private async Task SignalMemberAsync(ProjectFolderId folder)
+        {
+            if (await Loader.MembershipOfAsync(folder) is { } series)
+                changes.Publish(new SeriesChanged(series.SeriesId, SeriesChangeKind.Changed));
+        }
 
         /// <summary>
         /// The Character's peers when it is linked and another book is linked too, with the Voices

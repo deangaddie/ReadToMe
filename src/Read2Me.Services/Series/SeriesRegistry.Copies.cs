@@ -12,23 +12,6 @@ namespace Read2Me.Services.Series
     /// </summary>
     public sealed partial class SeriesRegistry
     {
-        // ---- reads -------------------------------------------------------------------------------
-
-        /// <summary>
-        /// The inline series Voice editor's read (#213): the Voices of the Series copy, each linked
-        /// book with its Character and its default, and the Voices whose delete is refused.
-        /// </summary>
-        public async Task<SeriesResult<SeriesCharacterView>> CharacterAsync(
-            Guid seriesId, Guid seriesCharacterId, CancellationToken ct = default)
-        {
-            var loaded = await loader.LoadSeriesAsync(seriesId, withCasts: true, ct);
-            if (loaded.Value is not { } series) return loaded.Refusal!;
-            if (!series.IsSeriesCharacter(seriesCharacterId)) return SeriesRefusal.UnknownSeriesCharacter;
-            return (await loader.WithVoicesAsync(series, [seriesCharacterId], ct)).Character(seriesCharacterId);
-        }
-
-        // ---- writes ------------------------------------------------------------------------------
-
         /// <summary>
         /// A Character the series remembers (linked, or named by a <i>Not the same</i>) was deleted
         /// from its book: its link goes, and the Series character too when no book is linked any
@@ -47,13 +30,6 @@ namespace Read2Me.Services.Series
                 await RemoveLinksAsync(db, l => l.ProjectId == projectId && l.CharacterId == characterId, ct);
             }
             Signal(series.Id, SeriesChangeKind.Changed);
-        }
-
-        /// <summary>A member book committed something the series cast board shows: its series reads again (#213, Hub).</summary>
-        public async Task SignalMemberAsync(ProjectFolderId folder, CancellationToken ct = default)
-        {
-            if (await MembershipOfAsync(folder, ct) is { } series)
-                Signal(series.SeriesId, SeriesChangeKind.Changed);
         }
     }
 }

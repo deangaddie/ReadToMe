@@ -104,12 +104,12 @@ namespace Read2Me.App.Api
                 : TypedResults.Problem("Expected a JSON body with 'folder'.", statusCode: StatusCodes.Status400BadRequest);
 
         private static Task<Results<Ok<SeriesResolvePreviewDto>, ProblemHttpResult>> PreviewPushAsync(
-            Guid id, Guid seriesCharacterId, string folder, SeriesRegistry registry, CancellationToken ct) =>
-            PreviewAsync(registry.PreviewResolveAsync(id, seriesCharacterId, folder, push: true, ct));
+            Guid id, Guid seriesCharacterId, string folder, SeriesSnapshotLoader reads, CancellationToken ct) =>
+            PreviewAsync(reads.PreviewResolveAsync(id, seriesCharacterId, folder, push: true, ct));
 
         private static Task<Results<Ok<SeriesResolvePreviewDto>, ProblemHttpResult>> PreviewTakeAsync(
-            Guid id, Guid seriesCharacterId, string folder, SeriesRegistry registry, CancellationToken ct) =>
-            PreviewAsync(registry.PreviewResolveAsync(id, seriesCharacterId, folder, push: false, ct));
+            Guid id, Guid seriesCharacterId, string folder, SeriesSnapshotLoader reads, CancellationToken ct) =>
+            PreviewAsync(reads.PreviewResolveAsync(id, seriesCharacterId, folder, push: false, ct));
 
         private static async Task<Results<Ok<SeriesResolvePreviewDto>, ProblemHttpResult>> PreviewAsync(Task<SeriesResult<SeriesResolvePreview>> read)
         {
@@ -124,9 +124,9 @@ namespace Read2Me.App.Api
             result.Refusal is { } refusal ? Refused(refusal) : TypedResults.NoContent();
 
         private static async Task<Results<PhysicalFileHttpResult, NotFound, ProblemHttpResult>> GetPosterAsync(
-            Guid id, SeriesRegistry registry, CancellationToken ct)
+            Guid id, SeriesSnapshotLoader reads, CancellationToken ct)
         {
-            var result = await registry.GetAsync(id, ct);
+            var result = await reads.GetAsync(id, ct);
             if (result.Refusal is { } refusal) return Refused(refusal);
             if (result.Value!.Poster.Path is not { } path) return TypedResults.NotFound();
 
@@ -154,9 +154,9 @@ namespace Read2Me.App.Api
             return result.Refusal is { } refusal ? Refused(refusal) : TypedResults.NoContent();
         }
 
-        private static async Task<Ok<IReadOnlyList<SeriesDto>>> ListAsync(SeriesRegistry registry, CancellationToken ct)
+        private static async Task<Ok<IReadOnlyList<SeriesDto>>> ListAsync(SeriesSnapshotLoader reads, CancellationToken ct)
         {
-            var all = await registry.ListAsync(ct);
+            var all = await reads.ListAsync(ct);
             return TypedResults.Ok<IReadOnlyList<SeriesDto>>(all.Select(SeriesDto.From).ToList());
         }
 
@@ -208,9 +208,9 @@ namespace Read2Me.App.Api
 
         // ---- Series characters and links (#220) ----------------------------------------------------
 
-        private static async Task<Results<Ok<SeriesCastDto>, ProblemHttpResult>> CastAsync(Guid id, SeriesRegistry registry, CancellationToken ct)
+        private static async Task<Results<Ok<SeriesCastDto>, ProblemHttpResult>> CastAsync(Guid id, SeriesSnapshotLoader reads, CancellationToken ct)
         {
-            var result = await registry.CastAsync(id, ct);
+            var result = await reads.CastAsync(id, ct);
             return result.Refusal is { } refusal ? Refused(refusal) : TypedResults.Ok(SeriesCastDto.From(result.Value!));
         }
 
@@ -244,18 +244,18 @@ namespace Read2Me.App.Api
         }
 
         private static async Task<Results<Ok<SeriesLinkPreviewDto>, ProblemHttpResult>> PreviewLinkAsync(
-            Guid id, Guid seriesCharacterId, string folder, Guid characterId, SeriesRegistry registry, CancellationToken ct)
+            Guid id, Guid seriesCharacterId, string folder, Guid characterId, SeriesSnapshotLoader reads, CancellationToken ct)
         {
-            var result = await registry.PreviewLinkAsync(id, seriesCharacterId, folder, characterId, ct);
+            var result = await reads.PreviewLinkAsync(id, seriesCharacterId, folder, characterId, ct);
             return result.Refusal is { } refusal
                 ? Refused(refusal)
                 : TypedResults.Ok(new SeriesLinkPreviewDto(result.Value!.BookGains, result.Value.SeriesGains));
         }
 
         private static async Task<Results<Ok<SeriesCharacterDto>, ProblemHttpResult>> CharacterAsync(
-            Guid id, Guid seriesCharacterId, SeriesRegistry registry, IVoiceOriginalStore originals, IFileSystem fs, CancellationToken ct)
+            Guid id, Guid seriesCharacterId, SeriesSnapshotLoader reads, IVoiceOriginalStore originals, IFileSystem fs, CancellationToken ct)
         {
-            var result = await registry.CharacterAsync(id, seriesCharacterId, ct);
+            var result = await reads.CharacterAsync(id, seriesCharacterId, ct);
             if (result.Refusal is { } refusal) return Refused(refusal);
             var view = result.Value!;
             var copyFolder = new ProjectFolderId(view.SeriesCopyFolder);
@@ -284,10 +284,10 @@ namespace Read2Me.App.Api
         }
 
         private static async Task<Results<Ok<SeriesShareAndLinkPreviewDto>, ProblemHttpResult>> PreviewShareAndLinkAsync(
-            Guid id, SeriesMembersRequest? body, SeriesRegistry registry, CancellationToken ct)
+            Guid id, SeriesMembersRequest? body, SeriesSnapshotLoader reads, CancellationToken ct)
         {
             if (MembersOf(body?.Members) is not { } members) return MembersExpected();
-            var result = await registry.PreviewShareAndLinkAsync(id, members, ct);
+            var result = await reads.PreviewShareAndLinkAsync(id, members, ct);
             return result.Refusal is { } refusal
                 ? Refused(refusal)
                 : TypedResults.Ok(new SeriesShareAndLinkPreviewDto(
@@ -312,10 +312,10 @@ namespace Read2Me.App.Api
         }
 
         /// <summary>Each member's folder and Character, or null when one lacks either.</summary>
-        private static IReadOnlyList<SeriesRegistry.SeriesMemberRef>? MembersOf(IReadOnlyList<SeriesMemberDto>? members) =>
+        private static IReadOnlyList<SeriesMemberRef>? MembersOf(IReadOnlyList<SeriesMemberDto>? members) =>
             members is null || members.Any(m => m.Folder is not { Length: > 0 } || m.CharacterId is null)
                 ? null
-                : members.Select(m => new SeriesRegistry.SeriesMemberRef(m.Folder!, m.CharacterId!.Value)).ToList();
+                : members.Select(m => new SeriesMemberRef(m.Folder!, m.CharacterId!.Value)).ToList();
 
         private static ProblemHttpResult MembersExpected() => TypedResults.Problem(
             "Expected a JSON body { members: [{ folder, characterId }, ...] }.", statusCode: StatusCodes.Status400BadRequest);

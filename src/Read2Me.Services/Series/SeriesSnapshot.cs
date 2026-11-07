@@ -367,7 +367,7 @@ namespace Read2Me.Services.Series
         /// an unlinked Character of a member book.
         /// </summary>
         public SeriesResult<IReadOnlyList<(SeriesMemberBook Book, SeriesCastCharacter Character)>> UnlinkedMembers(
-            IReadOnlyList<SeriesRegistry.SeriesMemberRef> members)
+            IReadOnlyList<SeriesMemberRef> members)
         {
             if (members.Count < 2) return SeriesRefusal.TooFewMembers;
             var picked = new List<(SeriesMemberBook Book, SeriesCastCharacter Character)>();

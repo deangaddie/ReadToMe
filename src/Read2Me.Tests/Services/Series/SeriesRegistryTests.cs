@@ -14,11 +14,11 @@ using Xunit;
 namespace Read2Me.Tests.Services.Series
 {
     /// <summary>
-    /// The series registry (#234, #246) over a real <c>series.db</c> and migrated books in a temp
-    /// Workspace: reads change nothing and take no lock; writes heal. "Sherlock Holmes" holds "A
-    /// Study in Scarlet" and "The Sign of the Four", plus a member whose project was deleted outside
-    /// the app; Dr. Watson is linked in both books, and the Sign also keeps a link to a Character
-    /// deleted outside the app and a <i>Not the same</i> naming it.
+    /// The series registry and its reads (#234, #246, #247) over a real <c>series.db</c> and migrated
+    /// books in a temp Workspace: reads change nothing and take no lock; writes heal. "Sherlock
+    /// Holmes" holds "A Study in Scarlet" and "The Sign of the Four", plus a member whose project
+    /// was deleted outside the app; Dr. Watson is linked in both books, and the Sign also keeps a
+    /// link to a Character deleted outside the app and a <i>Not the same</i> naming it.
     /// </summary>
     public class SeriesRegistryTests : ProjectDbTestBase
     {
@@ -60,11 +60,11 @@ namespace Read2Me.Tests.Services.Series
         {
             await SeedAsync();
 
-            var view = (await RegistryAsync(r => r.GetAsync(SeriesId, Ct))).Value!;
-            var cast = (await RegistryAsync(r => r.CastAsync(SeriesId, Ct))).Value!;
-            await RegistryAsync(r => r.ListAsync(Ct));
-            await RegistryAsync(r => r.MembershipsAsync(Ct));
-            await RegistryAsync(r => r.LinksOfAsync(new ProjectFolderId(Sign), Ct));
+            var view = (await ReadAsync(r => r.GetAsync(SeriesId, Ct))).Value!;
+            var cast = (await ReadAsync(r => r.CastAsync(SeriesId, Ct))).Value!;
+            await ReadAsync(r => r.ListAsync(Ct));
+            await ReadAsync(r => r.MembershipsAsync(Ct));
+            await ReadAsync(r => r.LinksOfAsync(new ProjectFolderId(Sign), Ct));
 
             Assert.Equal([Study, Sign], view.Books.Select(b => b.Folder));
             Assert.Equal(Watson, Assert.Single(cast.Rows).SeriesCharacterId);
@@ -103,16 +103,16 @@ namespace Read2Me.Tests.Services.Series
             using var hold = await _root.GetRequiredService<SeriesRegistryLock>().EnterAsync(Ct);
 
             var budget = TimeSpan.FromSeconds(10);
-            await RegistryAsync(r => r.ListAsync(Ct)).WaitAsync(budget, Ct);
-            await RegistryAsync(r => r.GetAsync(SeriesId, Ct)).WaitAsync(budget, Ct);
-            await RegistryAsync(r => r.MembershipsAsync(Ct)).WaitAsync(budget, Ct);
-            await RegistryAsync(r => r.MembershipOfAsync(new ProjectFolderId(Sign), Ct)).WaitAsync(budget, Ct);
-            await RegistryAsync(r => r.CastAsync(SeriesId, Ct)).WaitAsync(budget, Ct);
-            await RegistryAsync(r => r.LinksOfAsync(new ProjectFolderId(Sign), Ct)).WaitAsync(budget, Ct);
-            await RegistryAsync(r => r.CharacterAsync(SeriesId, Watson, Ct)).WaitAsync(budget, Ct);
-            await RegistryAsync(r => r.PreviewLinkAsync(SeriesId, Watson, Sign, Guid.NewGuid(), Ct)).WaitAsync(budget, Ct);
-            await RegistryAsync(r => r.PreviewResolveAsync(SeriesId, Watson, Sign, push: true, Ct)).WaitAsync(budget, Ct);
-            await RegistryAsync(r => r.PreviewShareAndLinkAsync(SeriesId,
+            await ReadAsync(r => r.ListAsync(Ct)).WaitAsync(budget, Ct);
+            await ReadAsync(r => r.GetAsync(SeriesId, Ct)).WaitAsync(budget, Ct);
+            await ReadAsync(r => r.MembershipsAsync(Ct)).WaitAsync(budget, Ct);
+            await ReadAsync(r => r.MembershipOfAsync(new ProjectFolderId(Sign), Ct)).WaitAsync(budget, Ct);
+            await ReadAsync(r => r.CastAsync(SeriesId, Ct)).WaitAsync(budget, Ct);
+            await ReadAsync(r => r.LinksOfAsync(new ProjectFolderId(Sign), Ct)).WaitAsync(budget, Ct);
+            await ReadAsync(r => r.CharacterAsync(SeriesId, Watson, Ct)).WaitAsync(budget, Ct);
+            await ReadAsync(r => r.PreviewLinkAsync(SeriesId, Watson, Sign, Guid.NewGuid(), Ct)).WaitAsync(budget, Ct);
+            await ReadAsync(r => r.PreviewResolveAsync(SeriesId, Watson, Sign, push: true, Ct)).WaitAsync(budget, Ct);
+            await ReadAsync(r => r.PreviewShareAndLinkAsync(SeriesId,
                 [new(Study, HolmesInStudy), new(Sign, Guid.NewGuid())], Ct)).WaitAsync(budget, Ct);
         }
 
@@ -181,6 +181,13 @@ namespace Read2Me.Tests.Services.Series
         {
             await using var scope = _root.CreateAsyncScope();
             return await call(scope.ServiceProvider.GetRequiredService<SeriesRegistry>());
+        }
+
+        /// <summary>A read, which the API answers from the snapshot loader (#247).</summary>
+        private async Task<T> ReadAsync<T>(Func<SeriesSnapshotLoader, Task<T>> call)
+        {
+            await using var scope = _root.CreateAsyncScope();
+            return await call(scope.ServiceProvider.GetRequiredService<SeriesSnapshotLoader>());
         }
     }
 }

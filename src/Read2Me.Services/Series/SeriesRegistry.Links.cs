@@ -8,56 +8,14 @@ using Read2Me.Services.Mutations;
 namespace Read2Me.Services.Series
 {
     /// <summary>
-    /// Series characters and their links (ADR 0018, Character linking #208): the series cast board's
-    /// read, Share as new, Link with its Voice merge, and Unlink. The registry records only which
-    /// book's Character is linked to which Series character; every Voice lives in the books, so a
-    /// link copies Voices into each book that lacks them, each copy a Book mutation and History step
-    /// there, and an unlink copies nothing.
+    /// Series characters and their links (ADR 0018, Character linking #208): Share as new, Link with
+    /// its Voice merge, and Unlink. The registry records only which book's Character is linked to
+    /// which Series character; every Voice lives in the books, so a link copies Voices into each book
+    /// that lacks them, each copy a Book mutation and History step there, and an unlink copies nothing.
+    /// The board and the previews are read from <see cref="SeriesSnapshotLoader"/>.
     /// </summary>
     public sealed partial class SeriesRegistry
     {
-        // ---- reads -------------------------------------------------------------------------------
-
-        /// <summary>
-        /// The series cast board: one row per Series character, one cell per book in position order,
-        /// and each book's unlinked Characters for the pickers. A link whose Character has gone from
-        /// its book is left out, and a Series character left with no link with it.
-        /// </summary>
-        public async Task<SeriesResult<SeriesCastView>> CastAsync(Guid seriesId, CancellationToken ct = default)
-        {
-            var loaded = await loader.LoadSeriesAsync(seriesId, withCasts: true, ct);
-            if (loaded.Value is not { } series) return loaded.Refusal!;
-            return (await loader.WithVoicesAsync(series, series.Links.Select(l => l.SeriesCharacterId), ct)).Cast();
-        }
-
-        /// <summary>
-        /// What linking <paramref name="characterId"/> of <paramref name="folder"/> would copy: the
-        /// names of the Voices this book gains, and of those the other linked books gain. Refused as
-        /// the link itself would be.
-        /// </summary>
-        public async Task<SeriesResult<SeriesLinkPreview>> PreviewLinkAsync(
-            Guid seriesId, Guid seriesCharacterId, string folder, Guid characterId, CancellationToken ct = default)
-        {
-            var loaded = await loader.LoadSeriesAsync(seriesId, withCasts: true, ct);
-            if (loaded.Value is not { } series) return loaded.Refusal!;
-            var (plan, refusal) = await PlanLinkAsync(series, seriesCharacterId, folder, characterId);
-            if (plan is null) return refusal!;
-            return SeriesSnapshot.LinkPreview(plan.Merge);
-        }
-
-        /// <summary>
-        /// The series link of each of a book's linked Characters, for the Cast page's roster: empty
-        /// when the book is in no series or links nothing.
-        /// </summary>
-        public async Task<IReadOnlyDictionary<Guid, CharacterSeriesLink>> LinksOfAsync(ProjectFolderId folder, CancellationToken ct = default)
-        {
-            if (await loader.LoadSeriesOfAsync(folder, withCasts: true, ct) is not { } found)
-                return new Dictionary<Guid, CharacterSeriesLink>();
-            var (series, projectId) = found;
-            var mine = series.Links.Where(l => l.ProjectId == projectId).Select(l => l.SeriesCharacterId);
-            return (await loader.WithVoicesAsync(series, mine, ct)).LinksOf(projectId);
-        }
-
         // ---- writes ------------------------------------------------------------------------------
 
         /// <summary>
@@ -89,8 +47,8 @@ namespace Read2Me.Services.Series
             using var hold = await gate.EnterAsync(ct);
             var loaded = await LoadHealedAsync(seriesId, ct);
             if (loaded.Value is not { } series) return loaded.Refusal!;
-            var (plan, refusal) = await PlanLinkAsync(series, seriesCharacterId, folder, characterId);
-            if (plan is null) return refusal!;
+            var planned = await loader.PlanLinkAsync(series, seriesCharacterId, folder, characterId);
+            if (planned.Value is not { } plan) return planned.Refusal!;
             if (await RunLinkAsync(seriesId, seriesCharacterId, characterId, plan, hold, ct) is { } failed) return failed;
             Signal(seriesId, SeriesChangeKind.Changed);
             return true;
@@ -110,7 +68,7 @@ namespace Read2Me.Services.Series
 
         /// <summary>Runs a planned link; a refusal when the joining book's half didn't commit and nothing was linked.</summary>
         private async Task<SeriesRefusal?> RunLinkAsync(
-            Guid seriesId, Guid seriesCharacterId, Guid characterId, LinkPlan plan, SeriesRegistryLock.Hold hold, CancellationToken ct)
+            Guid seriesId, Guid seriesCharacterId, Guid characterId, SeriesLinkPlan plan, SeriesRegistryLock.Hold hold, CancellationToken ct)
         {
             var book = plan.Book;
             if (plan.Merge.JoiningGains.Count > 0)
@@ -162,28 +120,6 @@ namespace Read2Me.Services.Series
         }
 
         // ---- internals ---------------------------------------------------------------------------
-
-        private sealed record LinkPlan(SeriesSnapshot Series, SeriesMemberBook Book, SeriesVoiceMerge.Plan<SeriesVoiceSource> Merge);
-
-        private async Task<(LinkPlan? Plan, SeriesRefusal? Refusal)> PlanLinkAsync(
-            SeriesSnapshot series, Guid seriesCharacterId, string folder, Guid characterId)
-        {
-            var checkedBook = series.CheckLink(seriesCharacterId, folder, characterId);
-            if (checkedBook.Value is not { } book) return (null, checkedBook.Refusal);
-
-            var joining = await VoicesAsync(book.FolderId, characterId);
-            var linkedBooks = new List<SeriesVoiceMerge.BookVoices<SeriesVoiceSource>>();
-            foreach (var other in series.Books)
-                if (series.LinkOf(seriesCharacterId, other.ProjectId) is { } link)
-                    linkedBooks.Add(new(other.Folder, await VoicesAsync(other.FolderId, link.CharacterId)));
-
-            var merge = SeriesVoiceMerge.Make(joining, linkedBooks, v => v.Voice.Id);
-            return (new LinkPlan(series, book, merge), null);
-        }
-
-        /// <summary>A book's Voices of one Character, each with where its files are.</summary>
-        private async Task<IReadOnlyList<SeriesVoiceSource>> VoicesAsync(ProjectFolderId folder, Guid characterId) =>
-            (await characters.GetCharacterVoicesAsync(folder, characterId)).Select(v => SeriesVoiceSource.Of(folder, v)).ToList();
 
         /// <summary>Removes the links <paramref name="removed"/> picks, and every Series character left with none.</summary>
         private static async Task RemoveLinksAsync(
