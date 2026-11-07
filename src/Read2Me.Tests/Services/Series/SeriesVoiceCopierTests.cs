@@ -107,7 +107,7 @@ namespace Read2Me.Tests.Services.Series
         }
 
         [Fact]
-        public async Task Merging_a_linked_Character_away_is_refused()
+        public async Task Merging_a_linked_Character_away_is_refused_but_merging_another_into_it_is_not()
         {
             await SeedAsync();
 
@@ -116,6 +116,8 @@ namespace Read2Me.Tests.Services.Series
             var rejected = Assert.IsType<BookMutationOutcome.Rejected>(outcome);
             Assert.Equal(BookMutationRejection.Blocked, rejected.Reason);
             Assert.Contains("Dr. Watson", rejected.Message);
+            Assert.IsType<BookMutationOutcome.Committed>(
+                await CommitAsync(new MergeCharactersMutation(new ProjectFolderId(Study), WatsonInStudy, HolmesInStudy, false)));
         }
 
         // ---- deleting a linked Character -------------------------------------------------------------

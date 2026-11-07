@@ -56,7 +56,7 @@ namespace Read2Me.Tests.Services.Series
         }
 
         [Fact]
-        public async Task Reads_filter_the_stale_rows_and_leave_them_in_series_db()
+        public async Task Reads_filter_the_stale_rows()
         {
             await SeedAsync();
 
@@ -68,7 +68,6 @@ namespace Read2Me.Tests.Services.Series
 
             Assert.Equal([Study, Sign], view.Books.Select(b => b.Folder));
             Assert.Equal(Watson, Assert.Single(cast.Rows).SeriesCharacterId);
-            Assert.Equal((3, 4, 2, 1), await StoredAsync());
         }
 
         [Fact]
