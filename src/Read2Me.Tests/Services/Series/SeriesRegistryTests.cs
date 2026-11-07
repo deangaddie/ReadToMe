@@ -93,7 +93,7 @@ namespace Read2Me.Tests.Services.Series
             await RegistryAsync(r => r.RenameAsync(SeriesId, "The Adventures of Sherlock Holmes", Ct));
 
             await using var db = await SeriesDbContext.OpenAsync(SeriesFolder, Ct);
-            Assert.Equal([_study, _sign], (await db.Books.Select(b => b.ProjectId).ToListAsync(Ct)).OrderBy(id => id == _sign));
+            Assert.Equal(new HashSet<Guid> { _study, _sign }, (await db.Books.Select(b => b.ProjectId).ToListAsync(Ct)).ToHashSet());
         }
 
         [Fact]

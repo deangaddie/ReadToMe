@@ -126,7 +126,7 @@ namespace Read2Me.Services.Series
             if (!Directory.Exists(FolderOf(seriesId))) return SeriesRefusal.UnknownSeries;
 
             SqliteConnection.ClearAllPools();
-            Directory.Delete(FolderOf(seriesId), recursive: true);
+            await DeleteFolderAsync(FolderOf(seriesId), ct);
             Signal(seriesId, SeriesChangeKind.Deleted);
             return true;
         }
@@ -330,6 +330,26 @@ namespace Read2Me.Services.Series
             await using var db = await SeriesDbContext.OpenAsync(FolderOf(seriesId), ct);
             await db.Books.Where(b => b.ProjectId == projectId).ExecuteDeleteAsync(ct);
             await RemoveLinksAsync(db, l => l.ProjectId == projectId, ct);
+        }
+
+        /// <summary>
+        /// Deletes a series folder. A read takes no lock, so one may still have series.db open for a
+        /// moment (Windows then refuses the delete): it is tried again a few times before failing.
+        /// </summary>
+        private static async Task DeleteFolderAsync(string folder, CancellationToken ct)
+        {
+            for (var attempt = 1; Directory.Exists(folder); attempt++)
+            {
+                try
+                {
+                    Directory.Delete(folder, recursive: true);
+                    return;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && attempt < 5)
+                {
+                    await Task.Delay(50 * attempt, ct);
+                }
+            }
         }
 
         private static string? Clean(string? name) => string.IsNullOrWhiteSpace(name) ? null : name.Trim();
