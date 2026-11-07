@@ -66,8 +66,9 @@ namespace Read2Me.Services.Series
 
     /// <summary>
     /// One series as every read sees it (#234): the registry layer (members, Series positions, links,
-    /// <i>Not the same</i> and the project index) and, when loaded, each member book's Characters.
-    /// Every view is a pure function of it.
+    /// <i>Not the same</i> and the project index), when loaded each member book's Characters, and,
+    /// for the Series characters a call names, the Voices layer (<see cref="WithVoices"/>). Every view
+    /// is a pure function of it.
     /// <para>
     /// Stale rows are filtered out and never deleted here: a member whose project is gone, a link
     /// whose book is no longer a member or whose Character is gone, and a <i>Not the same</i> whose
@@ -79,15 +80,22 @@ namespace Read2Me.Services.Series
     /// gone only when the index is <see cref="SeriesProjectIndex.Complete"/>.
     /// </para>
     /// </summary>
-    public sealed class SeriesSnapshot
+    public sealed partial class SeriesSnapshot
     {
         private readonly SeriesRecord _record;
+        private readonly bool _castsRead;
 
-        public SeriesSnapshot(SeriesRecord record, SeriesProjectIndex index, IReadOnlyDictionary<Guid, SeriesBookCast>? casts = null)
+        public SeriesSnapshot(
+            SeriesRecord record,
+            SeriesProjectIndex index,
+            IReadOnlyDictionary<Guid, SeriesBookCast>? casts = null,
+            IReadOnlyDictionary<Guid, IReadOnlyList<SeriesHeldVoices>>? voices = null)
         {
             _record = record;
             Index = index;
+            _castsRead = casts is not null;
             casts ??= new Dictionary<Guid, SeriesBookCast>();
+            Voices = voices ?? new Dictionary<Guid, IReadOnlyList<SeriesHeldVoices>>();
 
             StaleMembers = index.Complete
                 ? record.Members.Keys.Where(id => index.ById(id) is null).ToList()
@@ -222,11 +230,10 @@ namespace Read2Me.Services.Series
         }
 
         /// <summary>
-        /// The series link of each of a book's linked Characters, for the Cast page's roster.
-        /// <paramref name="choices"/>: the series copy of each Series character, where known.
+        /// The series link of each of a book's linked Characters, for the Cast page's roster. It
+        /// differs from series only where the Voices layer of its Series character is loaded.
         /// </summary>
-        public IReadOnlyDictionary<Guid, CharacterSeriesLink> LinksOf(
-            Guid projectId, IReadOnlyDictionary<Guid, SeriesCopyChoice.Choice> choices)
+        public IReadOnlyDictionary<Guid, CharacterSeriesLink> LinksOf(Guid projectId)
         {
             var self = Index.ById(projectId)?.Folder;
             return Links
@@ -235,7 +242,7 @@ namespace Read2Me.Services.Series
                     l => l.CharacterId,
                     l => new CharacterSeriesLink(Id, l.SeriesCharacterId, Name,
                         Links.Count(o => o.SeriesCharacterId == l.SeriesCharacterId),
-                        self is not null && choices.GetValueOrDefault(l.SeriesCharacterId)?.DiffersFrom(self) == true));
+                        self is not null && Differs(l.SeriesCharacterId, self)));
         }
 
         // ---- the cast board ------------------------------------------------------------------------
@@ -265,16 +272,16 @@ namespace Read2Me.Services.Series
 
         /// <summary>
         /// The series cast board: one row per Series character, one cell per book in position order,
-        /// and each book's unlinked Characters for the pickers. <paramref name="choices"/>: the series
-        /// copy of each Series character, where known, for the cells that differ from series.
+        /// and each book's unlinked Characters for the pickers. A cell differs from series only where
+        /// the Voices layer of its Series character is loaded.
         /// </summary>
-        public SeriesCastView Cast(IReadOnlyDictionary<Guid, SeriesCopyChoice.Choice> choices)
+        public SeriesCastView Cast()
         {
             var suggestions = Suggestions();
             var rows = Links.Select(l => l.SeriesCharacterId).Distinct()
                 .Select(seriesCharacterId =>
                 {
-                    var choice = choices.GetValueOrDefault(seriesCharacterId);
+                    var choice = SeriesCopy(seriesCharacterId);
                     var cells = Books.Select(b =>
                     {
                         var link = LinkOf(seriesCharacterId, b.ProjectId);
@@ -368,10 +375,10 @@ namespace Read2Me.Services.Series
         }
 
         /// <summary>
-        /// A push from, or take into, <paramref name="folder"/>, or why not. <paramref name="choice"/>:
-        /// the series copy over <see cref="LinkedPeers"/> of the Series character, if any.
+        /// A push from, or take into, <paramref name="folder"/>, or why not. It is judged by the
+        /// Series copy, so it needs the Voices layer of the Series character.
         /// </summary>
-        public SeriesResult<SeriesResolvePlan> PlanResolve(Guid seriesCharacterId, string folder, bool push, SeriesCopyChoice.Choice? choice)
+        public SeriesResult<SeriesResolvePlan> PlanResolve(Guid seriesCharacterId, string folder, bool push)
         {
             if (MemberOf(folder) is not { } book) return NotAMember(folder);
             if (!IsSeriesCharacter(seriesCharacterId)) return SeriesRefusal.UnknownSeriesCharacter;
@@ -379,6 +386,7 @@ namespace Read2Me.Services.Series
             if (LinkOf(seriesCharacterId, book.ProjectId) is null) return SeriesRefusal.NotLinked(book.Title, label);
 
             var linked = LinkedPeers(seriesCharacterId);
+            var choice = SeriesCopy(seriesCharacterId);
             if (choice is null || !choice.DiffersFrom(book.Folder)) return SeriesRefusal.DoesNotDiffer(book.Title, label);
 
             var self = linked.First(p => p.Folder == book.Folder);

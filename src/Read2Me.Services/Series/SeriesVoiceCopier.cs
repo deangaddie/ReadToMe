@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Read2Me.Core.Models;
 using Read2Me.Services.Events;
 using Read2Me.Services.History;
 using Read2Me.Services.Mutations;
@@ -11,7 +12,7 @@ namespace Read2Me.Services.Series
     /// <list type="bullet">
     /// <item>A Voice edit of a series-linked Character (<see cref="SeriesVoiceEdits"/>) is copied,
     /// once it commits, into every other linked book, in the same request. Made in the book holding
-    /// the series copy, it brings each book that differs back in line: that book takes the whole set.</item>
+    /// the Series copy, it brings each book that differs back in line: that book takes the whole set.</item>
     /// <item>Deleting a shared Voice is refused while another book's positional rules use it, or
     /// while it is the last Voice of another linked book that holds it.</item>
     /// <item><c>MergeCharacters</c> with a linked merged Character is refused; <c>DeleteCharacter</c>
@@ -19,16 +20,20 @@ namespace Read2Me.Services.Series
     /// <item>A member book's commit to Characters, the narrator, Voices or Voice Rules sends the
     /// series' <c>series</c> signal.</item>
     /// </list>
-    /// The copies are themselves Book commits, written by <see cref="SeriesVoiceReplicator"/>; while
-    /// it writes, this hook stands aside for them.
+    /// It plans from a <see cref="SeriesSnapshot"/> before the commit: the peers from the registry
+    /// layer alone, and only for a Voice edit of a linked Character the Voices layer of its Series
+    /// character. The copies are themselves Book commits, written by <see cref="SeriesVoiceReplicator"/>;
+    /// while it writes, this hook stands aside for them.
     /// </summary>
     public sealed class SeriesVoiceCopier(
         IServiceProvider services, ICharacterReader characters, EventBroadcaster<SeriesChanged> changes,
         ILogger<SeriesVoiceCopier> logger) : IBookCommitHook
     {
-        // Resolved when needed: both write through BookMutations, which resolves this hook (#237).
+        // Resolved when needed: the registry and the replicator write through BookMutations, which resolves this hook (#237).
         private SeriesRegistry Registry => services.GetRequiredService<SeriesRegistry>();
         private SeriesVoiceReplicator Replicator => services.GetRequiredService<SeriesVoiceReplicator>();
+        private SeriesSnapshotLoader Loader => services.GetRequiredService<SeriesSnapshotLoader>();
+        private SeriesRegistryLock Gate => services.GetRequiredService<SeriesRegistryLock>();
 
         public async Task<BookCommitPlan> PlanAsync(BookMutation mutation, CancellationToken ct)
         {
@@ -37,25 +42,26 @@ namespace Read2Me.Services.Series
 
             switch (mutation)
             {
-                case MergeCharactersMutation merge when await Registry.PeersAsync(folder, merge.MergedId, ct) is not null:
+                case MergeCharactersMutation merge when await PeersAsync(folder, merge.MergedId, ct) is not null:
                     var name = (await characters.GetCharactersAsync(folder)).FirstOrDefault(c => c.Id == merge.MergedId)?.Name ?? "the merged Character";
                     return BookCommitPlan.Refuse(new BookMutationOutcome.Rejected(BookMutationRejection.Blocked,
                         $"{name} is linked to a series character. Unlink {name} first, or merge the other way."));
 
-                case DeleteCharacterMutation delete when await Registry.PeersAsync(folder, delete.CharacterId, ct) is not null:
+                case DeleteCharacterMutation delete when await PeersAsync(folder, delete.CharacterId, ct) is not null:
                     return BookCommitPlan.After(_ => Registry.ForgetCharacterAsync(folder, delete.CharacterId));
             }
 
-            if (SeriesVoiceEdits.Of(mutation) is { } edit && await PeersOfAsync(mutation, edit, ct) is { Others.Count: > 0 } peers)
+            if (SeriesVoiceEdits.Of(mutation) is { } edit && await CharacterOfAsync(mutation, edit) is { } characterId
+                && await VoicedPeersAsync(folder, characterId, ct) is ({ } series, var peers))
             {
                 if (edit is SeriesVoiceEdits.Deleted deleted
-                    && await DeleteRefusalAsync(mutation, peers, deleted.VoiceId) is { } refusal)
+                    && await DeleteRefusalAsync(mutation, series, peers, deleted.VoiceId) is { } refusal)
                     return BookCommitPlan.Refuse(refusal);
                 // Which books differed from this one is read before the edit changes it (#222): an edit
-                // made in the series copy brings them back in line. A delete removes one Voice only.
+                // made in the Series copy brings them back in line. A delete removes one Voice only.
                 var differing = edit is SeriesVoiceEdits.Deleted
                     ? new HashSet<string>()
-                    : await Registry.DifferingPeersAsync(peers);
+                    : series.DifferingPeers(peers);
                 return BookCommitPlan.After(change => CopyAsync(mutation, edit, peers, differing, change));
             }
 
@@ -65,24 +71,44 @@ namespace Read2Me.Services.Series
                     : Task.CompletedTask);
         }
 
-        private async Task<SeriesPeers?> PeersOfAsync(BookMutation mutation, SeriesVoiceEdits.Edit edit, CancellationToken ct)
+        /// <summary>The Character's peers from the registry layer alone: no Characters or Voices are read.</summary>
+        private async Task<SeriesPeers?> PeersAsync(ProjectFolderId folder, Guid characterId, CancellationToken ct)
         {
-            var characterId = edit switch
-            {
-                SeriesVoiceEdits.Created created => created.CharacterId,
-                SeriesVoiceEdits.Changed changed => (await characters.GetVoiceAsync(mutation.FolderId, changed.VoiceId))?.CharacterId,
-                SeriesVoiceEdits.Deleted deleted => (await characters.GetVoiceAsync(mutation.FolderId, deleted.VoiceId))?.CharacterId,
-                _ => null,
-            };
-            return characterId is { } id ? await Registry.PeersAsync(mutation.FolderId, id, ct) : null;
+            using var _ = await Gate.EnterAsync(ct);
+            return await Loader.LoadSeriesOfAsync(folder, withCasts: false, ct) is ({ } series, var projectId)
+                ? series.Peers(projectId, characterId)
+                : null;
         }
 
-        private async Task<BookMutationOutcome.Rejected?> DeleteRefusalAsync(BookMutation mutation, SeriesPeers peers, Guid voiceId)
+        /// <summary>
+        /// The Character's peers when it is linked and another book is linked too, with the Voices
+        /// layer of its Series character only; null otherwise, and then no Voices are read.
+        /// </summary>
+        private async Task<(SeriesSnapshot Series, SeriesPeers Peers)?> VoicedPeersAsync(ProjectFolderId folder, Guid characterId, CancellationToken ct)
+        {
+            using var _ = await Gate.EnterAsync(ct);
+            if (await Loader.LoadSeriesOfAsync(folder, withCasts: false, ct) is not ({ } series, var projectId)) return null;
+            if (series.Peers(projectId, characterId) is not { Others.Count: > 0 } peers) return null;
+            return (await Loader.WithVoicesAsync(series, [peers.SeriesCharacterId], ct), peers);
+        }
+
+        private async Task<Guid?> CharacterOfAsync(BookMutation mutation, SeriesVoiceEdits.Edit edit) => edit switch
+        {
+            SeriesVoiceEdits.Created created => created.CharacterId,
+            SeriesVoiceEdits.Changed changed => (await characters.GetVoiceAsync(mutation.FolderId, changed.VoiceId))?.CharacterId,
+            SeriesVoiceEdits.Deleted deleted => (await characters.GetVoiceAsync(mutation.FolderId, deleted.VoiceId))?.CharacterId,
+            _ => null,
+        };
+
+        private async Task<BookMutationOutcome.Rejected?> DeleteRefusalAsync(BookMutation mutation, SeriesSnapshot series, SeriesPeers peers, Guid voiceId)
         {
             if (await characters.GetVoiceAsync(mutation.FolderId, voiceId) is not { } voice) return null;
-            var name = voice.Name;
-            if (await Registry.VoiceDeleteBlockAsync(peers, voiceId) is not { } block) return null;
-            return new BookMutationOutcome.Rejected(BookMutationRejection.Blocked, SeriesVoiceDeleteRules.Describe(name, block))
+            // A book whose Voices couldn't be read can't be checked, so the delete fails rather than
+            // risk taking that book's last Voice or the Voice its rules use.
+            if (peers.Others.FirstOrDefault(p => !series.VoicesRead(peers.SeriesCharacterId, p)) is { } unread)
+                throw new InvalidOperationException($"The Voices of '{unread.Folder}' could not be read, so deleting a shared Voice can't be checked.");
+            if (series.VoiceDeleteBlock(peers, voiceId) is not { } block) return null;
+            return new BookMutationOutcome.Rejected(BookMutationRejection.Blocked, SeriesVoiceDeleteRules.Describe(voice.Name, block))
             {
                 Extensions = new Dictionary<string, object?>
                 {

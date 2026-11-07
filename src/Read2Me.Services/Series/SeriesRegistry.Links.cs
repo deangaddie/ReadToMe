@@ -28,7 +28,7 @@ namespace Read2Me.Services.Series
             using var _ = await gate.EnterAsync(ct);
             var loaded = await LoadHealedAsync(seriesId, ct);
             if (loaded.Value is not { } series) return loaded.Refusal!;
-            return series.Cast(await ChoicesAsync(series, series.Links.Select(l => l.SeriesCharacterId)));
+            return (await loader.WithVoicesAsync(series, series.Links.Select(l => l.SeriesCharacterId), ct)).Cast();
         }
 
         /// <summary>
@@ -58,7 +58,7 @@ namespace Read2Me.Services.Series
                 return new Dictionary<Guid, CharacterSeriesLink>();
             var (series, projectId) = found;
             var mine = series.Links.Where(l => l.ProjectId == projectId).Select(l => l.SeriesCharacterId);
-            return series.LinksOf(projectId, await ChoicesAsync(series, mine));
+            return (await loader.WithVoicesAsync(series, mine, ct)).LinksOf(projectId);
         }
 
         // ---- writes ------------------------------------------------------------------------------
@@ -167,19 +167,6 @@ namespace Read2Me.Services.Series
         // ---- internals ---------------------------------------------------------------------------
 
         private sealed record LinkPlan(SeriesSnapshot Series, SeriesMemberBook Book, SeriesVoiceMerge.Plan<SeriesVoiceSource> Merge);
-
-        /// <summary>
-        /// The series copy of each named Series character, over its linked books whose Characters
-        /// could be read; a Series character none of whose Voices can be read is left out.
-        /// </summary>
-        private async Task<IReadOnlyDictionary<Guid, SeriesCopyChoice.Choice>> ChoicesAsync(SeriesSnapshot series, IEnumerable<Guid> seriesCharacterIds)
-        {
-            var choices = new Dictionary<Guid, SeriesCopyChoice.Choice>();
-            foreach (var id in seriesCharacterIds.Distinct())
-                if (await ChooseAsync(series.Id, series.LinkedPeers(id)) is { } choice)
-                    choices[id] = choice;
-            return choices;
-        }
 
         private async Task<(LinkPlan? Plan, SeriesRefusal? Refusal)> PlanLinkAsync(
             SeriesSnapshot series, Guid seriesCharacterId, string folder, Guid characterId)

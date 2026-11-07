@@ -1,7 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Data.Series;
 using Read2Me.Services.Events;
@@ -26,12 +25,10 @@ namespace Read2Me.Services.Series
     /// </para>
     /// </summary>
     public sealed partial class SeriesRegistry(
-        IFileSystem fs,
         ICharacterReader characters,
         SeriesSnapshotLoader loader,
         SeriesRegistryLock gate,
         EventBroadcaster<SeriesChanged> changes,
-        VoiceAudioHashes audioHashes,
         SeriesVoiceReplicator replicator,
         ILogger<SeriesRegistry> logger)
     {

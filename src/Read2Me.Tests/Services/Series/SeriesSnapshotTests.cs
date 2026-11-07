@@ -128,15 +128,15 @@ namespace Read2Me.Tests.Services.Series
         [Fact]
         public void LinksOf_gives_each_linked_Character_its_series_book_count_and_whether_it_differs()
         {
-            var choice = new SeriesCopyChoice.Choice(StudyFolder, "v1", new HashSet<string>(StringComparer.OrdinalIgnoreCase) { SignFolder });
-            var snapshot = Snapshot(casts: Casts());
+            // A tie goes to the lowest position, so the Study holds the Series copy and the Sign differs.
+            var snapshot = Voiced(Snapshot(casts: Casts()), Held(StudyFolder, "v1"), Held(SignFolder, "v2"));
 
-            var sign = snapshot.LinksOf(Sign, new Dictionary<Guid, SeriesCopyChoice.Choice> { [Watson] = choice });
-            var study = snapshot.LinksOf(Study, new Dictionary<Guid, SeriesCopyChoice.Choice> { [Watson] = choice });
+            var sign = snapshot.LinksOf(Sign);
+            var study = snapshot.LinksOf(Study);
 
             Assert.Equal(new CharacterSeriesLink(SeriesId, Watson, "Sherlock Holmes", 2, Differs: true), sign[WatsonInSign]);
             Assert.False(study[WatsonInStudy].Differs);
-            Assert.Empty(snapshot.LinksOf(Hound, new Dictionary<Guid, SeriesCopyChoice.Choice>()));
+            Assert.Empty(snapshot.LinksOf(Hound));
         }
 
         // ── the cast board and Link suggestions ─────────────────────────────────
@@ -144,9 +144,7 @@ namespace Read2Me.Tests.Services.Series
         [Fact]
         public void The_cast_board_has_a_row_per_Series_character_with_a_cell_per_book()
         {
-            var choice = new SeriesCopyChoice.Choice(StudyFolder, "v1", new HashSet<string> { SignFolder });
-
-            var cast = Snapshot(casts: Casts()).Cast(new Dictionary<Guid, SeriesCopyChoice.Choice> { [Watson] = choice });
+            var cast = Voiced(Snapshot(casts: Casts()), Held(StudyFolder, "v1"), Held(SignFolder, "v2")).Cast();
 
             Assert.Equal([StudyFolder, SignFolder, HoundFolder], cast.Books.Select(b => b.Folder));
             var row = Assert.Single(cast.Rows);
@@ -162,7 +160,7 @@ namespace Read2Me.Tests.Services.Series
         [Fact]
         public void Link_suggestions_offer_the_unlinked_namesake_as_a_cell_and_the_unlinked_pair_as_a_row()
         {
-            var cast = Snapshot(casts: Casts()).Cast(new Dictionary<Guid, SeriesCopyChoice.Choice>());
+            var cast = Snapshot(casts: Casts()).Cast();
 
             Assert.Equal(WatsonInHound, cast.Rows[0].Cells[2].Suggested?.CharacterId);
             var suggested = Assert.Single(cast.SuggestedRows);
@@ -180,7 +178,7 @@ namespace Read2Me.Tests.Services.Series
                 new(Guid.NewGuid(), Study, HolmesInStudy, OtherProjectId: Sign, OtherCharacterId: HolmesInSign),
             };
 
-            var cast = Snapshot(notTheSame: notTheSame, casts: Casts()).Cast(new Dictionary<Guid, SeriesCopyChoice.Choice>());
+            var cast = Snapshot(notTheSame: notTheSame, casts: Casts()).Cast();
 
             Assert.Null(cast.Rows[0].Cells[2].Suggested);
             Assert.Empty(cast.SuggestedRows);
@@ -193,7 +191,7 @@ namespace Read2Me.Tests.Services.Series
             var casts = Casts();
             casts[Hound] = casts[Hound] with { NarratorLinked = null };
 
-            var cast = Snapshot(casts: casts).Cast(new Dictionary<Guid, SeriesCopyChoice.Choice>());
+            var cast = Snapshot(casts: casts).Cast();
 
             Assert.Null(cast.Rows[0].Cells[2].Suggested);
             Assert.Equal(["Dr. Watson"], cast.Unlinked[HoundFolder].Select(c => c.Name));
@@ -241,18 +239,17 @@ namespace Read2Me.Tests.Services.Series
         [Fact]
         public void A_push_replaces_every_other_linked_book_and_a_take_copies_the_series_copy_in()
         {
-            var choice = new SeriesCopyChoice.Choice(StudyFolder, "v1", new HashSet<string> { SignFolder });
-            var snapshot = Snapshot(casts: Casts());
+            var snapshot = Voiced(Snapshot(casts: Casts()), Held(StudyFolder, "v1"), Held(SignFolder, "v2"));
 
-            var push = snapshot.PlanResolve(Watson, SignFolder, push: true, choice).Value!;
-            var take = snapshot.PlanResolve(Watson, SignFolder, push: false, choice).Value!;
+            var push = snapshot.PlanResolve(Watson, SignFolder, push: true).Value!;
+            var take = snapshot.PlanResolve(Watson, SignFolder, push: false).Value!;
 
             Assert.Equal((SignFolder, SeriesRegistry.PushLabel), (push.Source.Folder, push.Step));
             Assert.Equal([StudyFolder], push.Targets.Select(t => t.Folder));
             Assert.Equal((StudyFolder, SeriesRegistry.TakeLabel), (take.Source.Folder, take.Step));
             Assert.Equal([SignFolder], take.Targets.Select(t => t.Folder));
-            Assert.Equal(SeriesRefusal.DoesNotDiffer("A Study in Scarlet", "Dr. Watson"), snapshot.PlanResolve(Watson, StudyFolder, push: true, choice).Refusal);
-            Assert.Equal(SeriesRefusal.NotLinked("The Hound of the Baskervilles", "Dr. Watson"), snapshot.PlanResolve(Watson, HoundFolder, push: true, choice).Refusal);
+            Assert.Equal(SeriesRefusal.DoesNotDiffer("A Study in Scarlet", "Dr. Watson"), snapshot.PlanResolve(Watson, StudyFolder, push: true).Refusal);
+            Assert.Equal(SeriesRefusal.NotLinked("The Hound of the Baskervilles", "Dr. Watson"), snapshot.PlanResolve(Watson, HoundFolder, push: true).Refusal);
         }
 
         [Fact]
@@ -304,9 +301,9 @@ namespace Read2Me.Tests.Services.Series
             Assert.DoesNotContain(snapshot.Books, b => b.ProjectId == Gone);
             Assert.Equal(3, Assert.Single(workspace.List()).Books.Count);
             Assert.Null(workspace.MembershipOf(Gone));
-            Assert.Equal([StudyFolder, SignFolder, HoundFolder], snapshot.Cast(new Dictionary<Guid, SeriesCopyChoice.Choice>()).Books.Select(b => b.Folder));
+            Assert.Equal([StudyFolder, SignFolder, HoundFolder], snapshot.Cast().Books.Select(b => b.Folder));
             Assert.Equal([SignFolder], snapshot.Peers(Study, WatsonInStudy)!.Others.Select(p => p.Folder));
-            Assert.Equal(2, snapshot.LinksOf(Study, new Dictionary<Guid, SeriesCopyChoice.Choice>())[WatsonInStudy].BookCount);
+            Assert.Equal(2, snapshot.LinksOf(Study)[WatsonInStudy].BookCount);
             Assert.Single(snapshot.StaleLinks);
         }
 
@@ -333,8 +330,8 @@ namespace Read2Me.Tests.Services.Series
 
             Assert.Equal([new Link(gone, Sign, DeletedInSign)], snapshot.StaleLinks);
             Assert.False(snapshot.IsSeriesCharacter(gone));
-            Assert.Single(snapshot.Cast(new Dictionary<Guid, SeriesCopyChoice.Choice>()).Rows);
-            Assert.DoesNotContain(DeletedInSign, snapshot.LinksOf(Sign, new Dictionary<Guid, SeriesCopyChoice.Choice>()).Keys);
+            Assert.Single(snapshot.Cast().Rows);
+            Assert.DoesNotContain(DeletedInSign, snapshot.LinksOf(Sign).Keys);
             Assert.Null(snapshot.Peers(Sign, DeletedInSign));
         }
 
@@ -366,7 +363,7 @@ namespace Read2Me.Tests.Services.Series
             Assert.Equal([kept], snapshot.NotTheSame);
             Assert.Equal([linkedNow, deleted, gonePair], snapshot.StaleNotTheSame);
             // The stale pair no longer hides the Holmes row; the kept cell still hides the Hound's Watson.
-            var cast = snapshot.Cast(new Dictionary<Guid, SeriesCopyChoice.Choice>());
+            var cast = snapshot.Cast();
             Assert.Single(cast.SuggestedRows);
             Assert.Null(cast.Rows[0].Cells[2].Suggested);
         }
@@ -375,6 +372,123 @@ namespace Read2Me.Tests.Services.Series
         public void A_snapshot_with_nothing_stale_has_no_stale_rows()
         {
             Assert.False(Snapshot(casts: Casts()).HasStaleRows);
+        }
+
+        // ── the Voices layer: Series copy, Differs from series, resolving, deletes ──
+
+        // All three books link Dr. Watson here. The Study holds "Army doctor" and "Narrating"; the
+        // Sign and the Hound hold "Army doctor" alone, so theirs is the Series copy (two books to one),
+        // read from the Sign, and the Study differs from series.
+        private static readonly Guid ArmyDoctor = Guid.NewGuid();
+        private static readonly Guid Narrating = Guid.NewGuid();
+
+        private static SeriesSnapshot AllThreeLinked(IReadOnlyList<Guid>? studyRules = null, bool withHound = true)
+        {
+            var snapshot = Snapshot([.. Links, new Link(Watson, Hound, WatsonInHound)], casts: Casts());
+            var held = new List<SeriesHeldVoices>
+            {
+                Held(StudyFolder, "v1", [VoiceRow(ArmyDoctor, "Army doctor"), VoiceRow(Narrating, "Narrating")], studyRules, ArmyDoctor),
+                Held(SignFolder, "v2", [VoiceRow(ArmyDoctor, "Army doctor")], defaultVoice: ArmyDoctor),
+            };
+            if (withHound) held.Add(Held(HoundFolder, "v2", [VoiceRow(ArmyDoctor, "Army doctor")], defaultVoice: ArmyDoctor));
+            return Voiced(snapshot, [.. held]);
+        }
+
+        [Fact]
+        public void The_Series_copy_is_the_version_most_linked_books_hold_and_the_others_differ_from_series()
+        {
+            var snapshot = AllThreeLinked();
+
+            var copy = snapshot.SeriesCopy(Watson)!;
+
+            Assert.Equal(SignFolder, copy.SeriesCopyFolder);
+            Assert.True(snapshot.Differs(Watson, StudyFolder));
+            Assert.False(snapshot.Differs(Watson, SignFolder));
+            Assert.False(snapshot.Differs(Watson, HoundFolder));
+            Assert.Equal([true, false, false], snapshot.Cast().Rows[0].Cells.Select(c => c.Differs));
+            Assert.True(snapshot.LinksOf(Study)[WatsonInStudy].Differs);
+        }
+
+        [Fact]
+        public void A_Series_character_whose_Voices_layer_was_not_loaded_differs_nowhere()
+        {
+            var snapshot = Snapshot(casts: Casts());
+
+            Assert.Null(snapshot.SeriesCopy(Watson));
+            Assert.False(snapshot.Differs(Watson, SignFolder));
+            Assert.All(snapshot.Cast().Rows[0].Cells, c => Assert.False(c.Differs));
+            Assert.Equal(SeriesRefusal.DoesNotDiffer("The Sign of the Four", "Dr. Watson"), snapshot.PlanResolve(Watson, SignFolder, push: true).Refusal);
+            Assert.Equal(SeriesRefusal.UnknownSeriesCharacter, snapshot.Character(Watson).Refusal);
+        }
+
+        [Fact]
+        public void A_take_into_a_differing_book_names_the_Voices_and_positional_rules_it_loses()
+        {
+            var snapshot = AllThreeLinked(studyRules: [Narrating, Narrating, ArmyDoctor]);
+
+            var take = snapshot.PlanResolve(Watson, StudyFolder, push: false).Value!;
+
+            Assert.Equal(SignFolder, take.Source.Folder);
+            var loss = Assert.Single(snapshot.Losses(Watson, take.Source, take.Targets));
+            Assert.Equal((StudyFolder, "A Study in Scarlet", 2), (loss.Folder, loss.Title, loss.RuleCount));
+            Assert.Equal(["Narrating"], loss.Voices);
+            Assert.Equal([ArmyDoctor], snapshot.VoicesOf(Watson, take.Source).Select(v => v.Voice.Id));
+            // Pushing the Study's set takes nothing away from the others.
+            var push = snapshot.PlanResolve(Watson, StudyFolder, push: true).Value!;
+            Assert.Empty(snapshot.Losses(Watson, push.Source, push.Targets));
+        }
+
+        [Fact]
+        public void An_edit_in_the_Series_copy_brings_back_in_line_the_differing_books_that_lose_no_positional_rules()
+        {
+            var fromSign = AllThreeLinked().Peers(Sign, WatsonInSign)!;
+            var fromStudy = AllThreeLinked().Peers(Study, WatsonInStudy)!;
+
+            Assert.Equal([StudyFolder], AllThreeLinked().DifferingPeers(fromSign));
+            // The Study would lose its rule on "Narrating", and nothing asks first: it is left differing.
+            Assert.Empty(AllThreeLinked(studyRules: [Narrating]).DifferingPeers(fromSign));
+            // An edit in a differing book resolves nothing silently.
+            Assert.Empty(AllThreeLinked().DifferingPeers(fromStudy));
+        }
+
+        [Fact]
+        public void Deleting_a_shared_Voice_is_blocked_by_other_books_positional_rules_then_by_their_last_Voice()
+        {
+            var peers = AllThreeLinked().Peers(Sign, WatsonInSign)!;
+
+            var ruled = AllThreeLinked(studyRules: [ArmyDoctor, ArmyDoctor]).VoiceDeleteBlock(peers, ArmyDoctor)!;
+            var last = AllThreeLinked().VoiceDeleteBlock(peers, ArmyDoctor)!;
+
+            Assert.Equal(SeriesVoiceDeleteReason.PositionalRules, ruled.Reason);
+            Assert.Equal([new SeriesVoiceDeleteBook(StudyFolder, "A Study in Scarlet", 2)], ruled.Books);
+            Assert.Equal(SeriesVoiceDeleteReason.LastVoice, last.Reason);
+            Assert.Equal([new SeriesVoiceDeleteBook(HoundFolder, "The Hound of the Baskervilles", 0)], last.Books);
+            // Deleting "Narrating" in the Sign: no other book's rule uses it, and none holds it alone.
+            Assert.Null(AllThreeLinked().VoiceDeleteBlock(peers, Narrating));
+            // A book whose Voices weren't read doesn't count here; the commit hook fails the delete on it.
+            var houndUnread = AllThreeLinked(withHound: false);
+            Assert.Null(houndUnread.VoiceDeleteBlock(peers, ArmyDoctor));
+            Assert.False(houndUnread.VoicesRead(Watson, peers.Others.Single(p => p.Folder == HoundFolder)));
+            Assert.True(houndUnread.VoicesRead(Watson, peers.Others.Single(p => p.Folder == StudyFolder)));
+        }
+
+        [Fact]
+        public void The_series_Voice_editor_shows_the_Series_copy_each_linked_book_and_the_refused_deletes()
+        {
+            var view = AllThreeLinked().Character(Watson).Value!;
+
+            Assert.Equal((SignFolder, WatsonInSign), (view.SeriesCopyFolder, view.SeriesCopyCharacterId));
+            Assert.Equal([ArmyDoctor], view.Voices.Select(v => v.Id));
+            Assert.Equal(
+                [
+                    new SeriesCharacterBook(StudyFolder, "A Study in Scarlet", 1m, WatsonInStudy, "Dr. Watson", ArmyDoctor, Differs: true),
+                    new SeriesCharacterBook(SignFolder, "The Sign of the Four", 2m, WatsonInSign, "Dr. Watson", ArmyDoctor, Differs: false),
+                    new SeriesCharacterBook(HoundFolder, "The Hound of the Baskervilles", 3m, WatsonInHound, "Dr. Watson", ArmyDoctor, Differs: false),
+                ],
+                view.Books);
+            // Judged as a delete in the Sign: "Army doctor" is the Hound's last Voice.
+            Assert.Equal(SeriesVoiceDeleteReason.LastVoice, view.DeleteBlocks[ArmyDoctor].Reason);
+            Assert.Equal([HoundFolder], view.DeleteBlocks[ArmyDoctor].Books.Select(b => b.Folder));
         }
 
         // ── arrange ─────────────────────────────────────────────────────────────
@@ -389,6 +503,23 @@ namespace Read2Me.Tests.Services.Series
             IReadOnlyList<SeriesNotTheSame>? notTheSame = null,
             IReadOnlyDictionary<Guid, SeriesBookCast>? casts = null) =>
             new(Record(links, members, notTheSame), Index, casts);
+
+        private static SeriesSnapshot Voiced(SeriesSnapshot snapshot, params SeriesHeldVoices[] held) =>
+            snapshot.WithVoices(new Dictionary<Guid, IReadOnlyList<SeriesHeldVoices>> { [Watson] = held });
+
+        /// <summary>A book's Voices of Dr. Watson as the Voices layer holds them; <paramref name="version"/> stands in for their hashed state.</summary>
+        private static SeriesHeldVoices Held(
+            string folder, string version, IReadOnlyList<Read2Me.Data.Entities.Voice>? voices = null,
+            IReadOnlyList<Guid>? positionalRules = null, Guid? defaultVoice = null)
+        {
+            var book = Index.ByFolder(folder)!;
+            var characterId = new Dictionary<Guid, Guid> { [Study] = WatsonInStudy, [Sign] = WatsonInSign, [Hound] = WatsonInHound }[book.ProjectId];
+            var peer = new SeriesPeer(folder, book.Title, SeriesPositions.Normalize(Members[book.ProjectId]), characterId);
+            return new SeriesHeldVoices(peer, voices ?? [], version, positionalRules ?? [], defaultVoice);
+        }
+
+        private static Read2Me.Data.Entities.Voice VoiceRow(Guid id, string name) =>
+            new() { Id = id, Name = name, Source = VoiceSource.Uploaded };
 
         private static SeriesBookCast Cast(params (string Name, Guid Id)[] characters) =>
             new(characters.Select(c => new SeriesCastCharacter(c.Id, c.Name, false, [])).ToList(), NarratorLinked: false);

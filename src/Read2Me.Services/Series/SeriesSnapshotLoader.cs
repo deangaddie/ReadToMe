@@ -9,13 +9,15 @@ namespace Read2Me.Services.Series
 {
     /// <summary>
     /// Builds <see cref="SeriesSnapshot"/>s (#234): the registry layer from the <c>.series/{id}/series.db</c>
-    /// files and the project catalog, and, when asked, each member book's Characters. It only reads:
-    /// stale rows are left in place for a write to heal.
+    /// files and the project catalog, when asked each member book's Characters, and the Voices layer
+    /// for the Series characters a call names (<see cref="WithVoicesAsync"/>). It only reads: stale
+    /// rows are left in place for a write to heal.
     /// </summary>
     public sealed class SeriesSnapshotLoader(
         IFileSystem fs,
         IProjectCatalogReader projects,
         ICharacterReader characters,
+        VoiceAudioHashes audioHashes,
         ILogger<SeriesSnapshotLoader> logger)
     {
         private const string UploadSuffix = ".upload";
@@ -180,6 +182,60 @@ namespace Read2Me.Services.Series
             if (coverImage is not { Length: > 0 }) return null;
             var path = Path.Combine(projectFolder, Path.GetFileName(coverImage));
             return File.Exists(path) ? SeriesPoster.Of(SeriesPosterSource.Cover, path, coverPosition: null) : null;
+        }
+
+        // ---- the Voices layer --------------------------------------------------------------------
+
+        /// <summary>
+        /// <paramref name="series"/> with the Voices layer of these Series characters only: each of
+        /// their linked books' Voices (<see cref="SeriesSnapshot.VoicedPeers"/>), reference audio
+        /// hashed, positional rules and default Voice. A book whose Voices can't be read is logged and
+        /// left out. Every other Series character gets none.
+        /// </summary>
+        public async Task<SeriesSnapshot> WithVoicesAsync(SeriesSnapshot series, IEnumerable<Guid> seriesCharacterIds, CancellationToken ct = default)
+        {
+            var voices = new Dictionary<Guid, IReadOnlyList<SeriesHeldVoices>>();
+            foreach (var id in seriesCharacterIds.Distinct())
+            {
+                var held = new List<SeriesHeldVoices>();
+                foreach (var book in series.VoicedPeers(id))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    if (await HeldAsync(series.Id, book) is { } h) held.Add(h);
+                }
+                voices[id] = held;
+            }
+            return series.WithVoices(voices);
+        }
+
+        private async Task<SeriesHeldVoices?> HeldAsync(Guid seriesId, SeriesPeer book)
+        {
+            try
+            {
+                var voices = await characters.GetCharacterVoicesAsync(book.FolderId, book.CharacterId);
+                var folder = fs.GetProjectFolderPath(book.FolderId);
+                var states = new List<SeriesVoiceState>(voices.Count);
+                foreach (var v in voices)
+                    states.Add(new SeriesVoiceState(v.Id, v.Name, v.Description, v.Source, v.DesignPrompt, v.Transcript,
+                        v.VoiceDesignSettingsOverrideJson, v.TtsSettingsOverrideJson, await AudioHashAsync(folder, v.AudioFileName)));
+                var rules = (await characters.GetCharacterVoiceRulesAsync(book.FolderId, book.CharacterId))
+                    .Where(r => !r.IsDefault).Select(r => r.VoiceId).ToList();
+                var defaultVoice = await characters.GetDefaultVoiceIdAsync(book.FolderId, book.CharacterId);
+                return new SeriesHeldVoices(book, voices, SeriesVoiceVersion.Of(states), rules, defaultVoice);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Series {SeriesId}: the Voices of '{Folder}' could not be read", seriesId, book.Folder);
+                return null;
+            }
+        }
+
+        /// <summary>The reference audio's content hash; a named file that is missing hashes as such.</summary>
+        private async Task<string?> AudioHashAsync(string projectFolder, string? audioFileName)
+        {
+            if (audioFileName is not { Length: > 0 }) return null;
+            var path = Path.Combine(projectFolder, audioFileName);
+            return File.Exists(path) ? await audioHashes.HashAsync(path) : "missing";
         }
 
         // ---- Characters --------------------------------------------------------------------------
