@@ -76,7 +76,7 @@ namespace Read2Me.App.Api
         }
 
         private static async Task<Results<Ok<List<CharacterSummaryDto>>, NotFound>> GetSummaryAsync(
-            string folder, IFileSystem fs, ICharacterReader characters, IProjectCatalogReader catalog, SeriesSnapshotLoader series,
+            string folder, IFileSystem fs, ICharacterReader characters, IProjectCatalogReader catalog, SeriesSnapshotLoader reads,
             CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
@@ -84,7 +84,7 @@ namespace Read2Me.App.Api
 
             var rows = await characters.GetCharacterSummariesAsync(folderId);
             var narrator = await catalog.GetNarratorAsync(folderId, ct);
-            var links = await series.LinksOfAsync(folderId, ct);
+            var links = await reads.LinksOfAsync(folderId, ct);
             return TypedResults.Ok(rows.Select(r => new CharacterSummaryDto(
                 r.Id, r.Name,
                 r.Aliases.Select(a => new CharacterAliasDto(a.Id, a.Name)).ToList(),

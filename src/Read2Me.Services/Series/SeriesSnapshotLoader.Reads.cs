@@ -8,6 +8,11 @@ namespace Read2Me.Services.Series
     /// no healing. An endpoint that only reads injects this loader; one that writes injects
     /// <see cref="SeriesRegistry"/>, which plans its writes with <see cref="PlanLinkAsync"/> and
     /// <see cref="PlanResolveAsync"/> on a snapshot loaded under the lock.
+    /// <para>
+    /// Taking no lock, a read doesn't wait behind a series Voice copy; one made while a copy runs may
+    /// briefly show a book as differing, and the <c>series</c> signal that ends the copy makes the
+    /// client read again.
+    /// </para>
     /// </summary>
     public sealed partial class SeriesSnapshotLoader
     {
@@ -145,25 +150,16 @@ namespace Read2Me.Services.Series
         /// <paramref name="registryLayer"/> with the Voices layer of the Series character, and the push
         /// or take planned from it.
         /// </summary>
-        public async Task<SeriesResult<SeriesResolvePlanned>> PlanResolveAsync(
+        public async Task<SeriesResult<SeriesPlannedResolve>> PlanResolveAsync(
             SeriesSnapshot registryLayer, Guid seriesCharacterId, string folder, bool push, CancellationToken ct = default)
         {
             var series = await WithVoicesAsync(registryLayer, [seriesCharacterId], ct);
             var planned = series.PlanResolve(seriesCharacterId, folder, push);
-            return planned.Value is { } plan ? new SeriesResolvePlanned(series, plan) : planned.Refusal!;
+            return planned.Value is { } plan ? new SeriesPlannedResolve(series, plan) : planned.Refusal!;
         }
 
         /// <summary>A book's Voices of one Character, each with where its files are.</summary>
         private async Task<IReadOnlyList<SeriesVoiceSource>> VoicesOfAsync(ProjectFolderId folder, Guid characterId) =>
             (await characters.GetCharacterVoicesAsync(folder, characterId)).Select(v => SeriesVoiceSource.Of(folder, v)).ToList();
     }
-
-    /// <summary>One book's Character, named by folder, as the suggested-row routes take them.</summary>
-    public readonly record struct SeriesMemberRef(string Folder, Guid CharacterId);
-
-    /// <summary>A checked link: the series it was planned on, the joining book and the Voice merge.</summary>
-    public sealed record SeriesLinkPlan(SeriesSnapshot Series, SeriesMemberBook Book, SeriesVoiceMerge.Plan<SeriesVoiceSource> Merge);
-
-    /// <summary>A push or take: the series with its Series character's Voices layer, and the plan made from it.</summary>
-    public sealed record SeriesResolvePlanned(SeriesSnapshot Series, SeriesResolvePlan Plan);
 }

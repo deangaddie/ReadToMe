@@ -87,7 +87,7 @@ namespace Read2Me.Services.Series
         private async Task SignalMemberAsync(ProjectFolderId folder)
         {
             if (await Loader.MembershipOfAsync(folder) is { } series)
-                changes.Publish(new SeriesChanged(series.SeriesId, SeriesChangeKind.Changed));
+                Signal(series.SeriesId);
         }
 
         /// <summary>
@@ -143,7 +143,7 @@ namespace Read2Me.Services.Series
 
             var plan = await PlanCopiesAsync(edit, peers, id, differing);
             await Replicator.WriteAsync(plan, new SeriesVoiceStep(label, action), CancellationToken.None);
-            changes.Publish(new SeriesChanged(peers.SeriesId, SeriesChangeKind.Changed));
+            Signal(peers.SeriesId);
         }
 
         /// <summary>
@@ -175,5 +175,7 @@ namespace Read2Me.Services.Series
             }
             return plan;
         }
+
+        private void Signal(Guid seriesId) => changes.Publish(new SeriesChanged(seriesId, SeriesChangeKind.Changed));
     }
 }
