@@ -1,4 +1,3 @@
-using System;
 using Read2Me.Services.Audio;
 
 namespace Read2Me.App.Api
