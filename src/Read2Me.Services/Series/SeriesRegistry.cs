@@ -16,18 +16,19 @@ namespace Read2Me.Services.Series
     /// <para>
     /// Nothing here is a Book mutation: a registry write changes no project, makes no History step
     /// and carries no origin. Every write signals <see cref="SeriesChanged"/> so other clients read
-    /// again. A member whose project has gone (deleted outside the app) is dropped the next time its
-    /// series is read, as the narrator link self-heals.
+    /// again. Reads are answered from a <see cref="SeriesSnapshot"/>, which filters stale rows (a
+    /// member whose project has gone, a link to a Character that has gone) and deletes nothing; a
+    /// write that loads a series deletes that series' stale rows first.
     /// </para>
     /// <para>
     /// Every call, reads included, runs under one process-wide lock: the rules span series (a name
-    /// is unique in the Workspace, a book is in at most one series) and a read may heal.
+    /// is unique in the Workspace, a book is in at most one series).
     /// </para>
     /// </summary>
     public sealed partial class SeriesRegistry(
         IFileSystem fs,
-        IProjectCatalogReader projects,
         ICharacterReader characters,
+        SeriesSnapshotLoader loader,
         SeriesRegistryLock gate,
         EventBroadcaster<SeriesChanged> changes,
         VoiceAudioHashes audioHashes,
@@ -39,50 +40,39 @@ namespace Read2Me.Services.Series
         /// <summary>The uploaded poster's file name in the series folder, before its extension.</summary>
         public const string PosterName = "poster";
 
-        private const string UploadSuffix = ".upload";
-
         // ---- reads -------------------------------------------------------------------------------
 
         /// <summary>Every readable series, by name; each one's books in position order.</summary>
         public async Task<IReadOnlyList<SeriesView>> ListAsync(CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            var index = await IndexProjectsAsync();
-            var (all, _) = await LoadAllAsync(ct);
-            var views = new List<SeriesView>(all.Count);
-            foreach (var series in all)
-                views.Add(await ViewAsync(series, index, ct));
-            return views.OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            var workspace = await loader.LoadWorkspaceAsync(ct);
+            foreach (var series in workspace.All) await HealAsync(series, ct);
+            return workspace.List();
         }
 
         public async Task<SeriesResult<SeriesView>> GetAsync(Guid seriesId, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            var (series, refusal) = await FindAsync(seriesId, ct);
-            if (series is null) return refusal!;
-            return await ViewAsync(series, await IndexProjectsAsync(), ct);
+            var loaded = await LoadHealedAsync(seriesId, ct, withCasts: false);
+            return loaded.Value is { } series ? series.View() : loaded.Refusal!;
         }
 
         /// <summary>Each member folder's series, for the project reads.</summary>
         public async Task<IReadOnlyDictionary<string, ProjectSeries>> MembershipsAsync(CancellationToken ct = default)
         {
-            var memberships = new Dictionary<string, ProjectSeries>(StringComparer.OrdinalIgnoreCase);
-            foreach (var series in await ListAsync(ct))
-                foreach (var book in series.Books)
-                    memberships[book.Folder] = new ProjectSeries(series.Id, series.Name, book.Position);
-            return memberships;
+            using var _ = await gate.EnterAsync(ct);
+            var workspace = await loader.LoadWorkspaceAsync(ct);
+            foreach (var series in workspace.All) await HealAsync(series, ct);
+            return workspace.Memberships();
         }
 
-        /// <summary>
-        /// One project's series, or null. Reads only that project and the registries, not every
-        /// project, so it neither needs nor does any healing.
-        /// </summary>
+        /// <summary>One project's series, or null. Reads only that project and the registries, not every project.</summary>
         public async Task<ProjectSeries?> MembershipOfAsync(ProjectFolderId folder, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            if (await projects.GetProjectAsync(folder) is not { } project) return null;
-            return (await LoadAllAsync(ct)).All.FirstOrDefault(s => s.Members.ContainsKey(project.Id)) is { } series
-                ? new ProjectSeries(series.Id, series.Name, SeriesPositions.Normalize(series.Members[project.Id]))
+            return await loader.LoadForProjectAsync(folder, ct) is { } found
+                ? found.Workspace.MembershipOf(found.ProjectId)
                 : null;
         }
 
@@ -94,7 +84,7 @@ namespace Read2Me.Services.Series
             if (Clean(name) is not { } clean) return SeriesRefusal.BlankName;
 
             using var _ = await gate.EnterAsync(ct);
-            var index = await IndexProjectsAsync();
+            var index = await loader.IndexProjectsAsync();
             Guid? projectId = null;
             if (folder is not null)
             {
@@ -102,7 +92,7 @@ namespace Read2Me.Services.Series
                 projectId = book.ProjectId;
             }
 
-            var (all, unreadable) = await LoadAllAsync(ct);
+            var (all, unreadable) = await loader.LoadRecordsAsync(ct);
             if (unreadable > 0) return SeriesRefusal.RulesUnchecked;
             if (NameTaken(all, clean, except: null) is { } taken) return taken;
             if (projectId is { } joining && all.FirstOrDefault(s => s.Members.ContainsKey(joining)) is { } current)
@@ -125,9 +115,9 @@ namespace Read2Me.Services.Series
             if (Clean(name) is not { } clean) return SeriesRefusal.BlankName;
 
             using var _ = await gate.EnterAsync(ct);
-            var (series, refusal) = await FindAsync(seriesId, ct);
-            if (series is null) return refusal!;
-            var (all, unreadable) = await LoadAllAsync(ct);
+            var loaded = await LoadHealedAsync(seriesId, ct, withCasts: false);
+            if (loaded.Value is null) return loaded.Refusal!;
+            var (all, unreadable) = await loader.LoadRecordsAsync(ct);
             if (unreadable > 0) return SeriesRefusal.RulesUnchecked;
             if (NameTaken(all, clean, except: seriesId) is { } taken) return taken;
 
@@ -138,7 +128,7 @@ namespace Read2Me.Services.Series
                 await db.SaveChangesAsync(ct);
             }
             Signal(seriesId, SeriesChangeKind.Changed);
-            return await ViewAsync(series with { Name = clean }, await IndexProjectsAsync(), ct);
+            return loaded.Value.View() with { Name = clean };
         }
 
         /// <summary>Every book leaves at once and the registry folder goes; every book keeps its Voices.</summary>
@@ -162,12 +152,12 @@ namespace Read2Me.Services.Series
         public async Task<SeriesResult<SeriesView>> SetPosterAsync(Guid seriesId, string extension, Stream content, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            var (series, refusal) = await FindAsync(seriesId, ct);
-            if (series is null) return refusal!;
+            var loaded = await LoadHealedAsync(seriesId, ct, withCasts: false);
+            if (loaded.Value is null) return loaded.Refusal!;
 
             // Written aside first, so a failed upload leaves the earlier poster as it was.
             var folder = FolderOf(seriesId);
-            var incoming = Path.Combine(folder, PosterName + UploadSuffix);
+            var incoming = SeriesSnapshotLoader.UploadPath(folder);
             try
             {
                 await using var file = File.Create(incoming);
@@ -178,22 +168,23 @@ namespace Read2Me.Services.Series
                 File.Delete(incoming);
                 throw;
             }
-            foreach (var earlier in PosterFiles(folder))
+            foreach (var earlier in SeriesSnapshotLoader.PosterFiles(folder))
                 File.Delete(earlier);
             File.Move(incoming, Path.Combine(folder, PosterName + extension.ToLowerInvariant()));
 
             Signal(seriesId, SeriesChangeKind.Changed);
-            return await ViewAsync(series, await IndexProjectsAsync(), ct);
+            var after = await loader.LoadSeriesAsync(seriesId, withCasts: false, ct);
+            return after.Value is { } series ? series.View() : after.Refusal!;
         }
 
         /// <summary>Removes the uploaded poster; a series without one is fine too. The fallback shows again.</summary>
         public async Task<SeriesResult<bool>> ClearPosterAsync(Guid seriesId, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            var (series, refusal) = await FindAsync(seriesId, ct);
-            if (series is null) return refusal!;
+            var found = await loader.FindRecordAsync(seriesId, ct);
+            if (found.Value is null) return found.Refusal!;
 
-            var files = PosterFiles(FolderOf(seriesId));
+            var files = SeriesSnapshotLoader.PosterFiles(FolderOf(seriesId));
             foreach (var file in files)
                 File.Delete(file);
             if (files.Count > 0) Signal(seriesId, SeriesChangeKind.Changed);
@@ -210,15 +201,14 @@ namespace Read2Me.Services.Series
         public async Task<SeriesResult<decimal>> JoinAsync(Guid seriesId, string folder, bool move, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            var (series, refusal) = await FindAsync(seriesId, ct);
-            if (series is null) return refusal!;
-            var index = await IndexProjectsAsync();
-            if (index.ByFolder(folder) is not { } book) return SeriesRefusal.UnknownFolder(folder);
+            var loaded = await LoadHealedAsync(seriesId, ct, withCasts: false);
+            if (loaded.Value is not { } series) return loaded.Refusal!;
+            if (series.Index.ByFolder(folder) is not { } book) return SeriesRefusal.UnknownFolder(folder);
 
             if (series.Members.TryGetValue(book.ProjectId, out var held))
                 return SeriesPositions.Normalize(held);
 
-            var (all, unreadable) = await LoadAllAsync(ct);
+            var (all, unreadable) = await loader.LoadRecordsAsync(ct);
             if (unreadable > 0) return SeriesRefusal.RulesUnchecked;
             var other = all.FirstOrDefault(s => s.Id != seriesId && s.Members.ContainsKey(book.ProjectId));
             if (other is not null)
@@ -242,10 +232,9 @@ namespace Read2Me.Services.Series
         public async Task<SeriesResult<bool>> LeaveAsync(Guid seriesId, string folder, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            var (series, refusal) = await FindAsync(seriesId, ct);
-            if (series is null) return refusal!;
-            var index = await IndexProjectsAsync();
-            if (index.ByFolder(folder) is not { } book) return SeriesRefusal.UnknownFolder(folder);
+            var loaded = await LoadHealedAsync(seriesId, ct, withCasts: false);
+            if (loaded.Value is not { } series) return loaded.Refusal!;
+            if (series.Index.ByFolder(folder) is not { } book) return SeriesRefusal.UnknownFolder(folder);
             if (!series.Members.ContainsKey(book.ProjectId)) return SeriesRefusal.NotAMember(book.Title, series.Name);
 
             await RemoveMemberAsync(seriesId, book.ProjectId, ct);
@@ -258,15 +247,14 @@ namespace Read2Me.Services.Series
             Guid seriesId, IReadOnlyDictionary<string, decimal> positions, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            var (series, refusal) = await FindAsync(seriesId, ct);
-            if (series is null) return refusal!;
-            var index = await IndexProjectsAsync();
+            var loaded = await LoadHealedAsync(seriesId, ct, withCasts: false);
+            if (loaded.Value is not { } series) return loaded.Refusal!;
+            var index = series.Index;
             // A member whose project.db is there but unreadable can't be named in the set, nor left out of it.
             if (!index.Complete && series.Members.Keys.Any(id => index.ById(id) is null))
                 return SeriesRefusal.MemberUnreadable;
-            var current = await ViewAsync(series, index, ct);
 
-            switch (SeriesPositions.CheckSet(current.Books.Select(b => b.Folder).ToList(), positions))
+            switch (SeriesPositions.CheckSet(series.Books.Select(b => b.Folder).ToList(), positions))
             {
                 case SeriesPositionCheck.Malformed m:
                     return SeriesRefusal.MalformedPosition(m.Book, m.Position);
@@ -284,17 +272,18 @@ namespace Read2Me.Services.Series
                 await db.SaveChangesAsync(ct);
             }
             Signal(seriesId, SeriesChangeKind.Changed);
-            return await ViewAsync(series with { Members = byProject }, index, ct);
+            var after = await loader.LoadSeriesAsync(seriesId, withCasts: false, ct);
+            return after.Value is { } saved ? saved.View() : after.Refusal!;
         }
 
         /// <summary>
         /// A project was deleted: its registry entry goes at once, by the Id read before its folder
-        /// went. Not in a series: nothing to do. A registry that can't be read heals on a later read.
+        /// went. Not in a series: nothing to do. A registry that can't be read heals on a later write.
         /// </summary>
         public async Task ForgetProjectAsync(Guid projectId, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            foreach (var series in (await LoadAllAsync(ct)).All)
+            foreach (var series in (await loader.LoadRecordsAsync(ct)).All)
             {
                 if (!series.Members.ContainsKey(projectId)) continue;
                 await RemoveMemberAsync(series.Id, projectId, ct);
@@ -304,155 +293,48 @@ namespace Read2Me.Services.Series
 
         // ---- internals ---------------------------------------------------------------------------
 
-        private sealed record Loaded(Guid Id, string Name, IReadOnlyDictionary<Guid, decimal> Members);
-
-        private sealed record IndexedProject(string Folder, Guid ProjectId, string Title, string? CoverImage);
+        private string FolderOf(Guid seriesId) => loader.FolderOf(seriesId);
 
         /// <summary>
-        /// Every project folder with its Id and title. <see cref="Complete"/> is false when a folder's
-        /// project.db is there but could not be read: a member missing from the index may then only be unreadable,
-        /// not gone, so nothing is healed away.
+        /// A write's series, with its member books' Characters, after deleting the stale rows its
+        /// snapshot filters out: members whose project is gone, links whose book left or whose
+        /// Character is gone (and a Series character left with none), and <i>Not the same</i> whose
+        /// Character is gone or now linked. Healing is not a change anyone else needs to hear about:
+        /// whoever reads next gets the same answer either way.
         /// </summary>
-        private sealed class ProjectIndex(IReadOnlyList<IndexedProject> entries, bool complete)
+        private async Task<SeriesResult<SeriesSnapshot>> LoadHealedAsync(Guid seriesId, CancellationToken ct, bool withCasts = true)
         {
-            private readonly Dictionary<Guid, IndexedProject> _byId = entries
-                .GroupBy(e => e.ProjectId).ToDictionary(g => g.Key, g => g.First());
-
-            public bool Complete => complete;
-            public IndexedProject? ById(Guid id) => _byId.GetValueOrDefault(id);
-            public IndexedProject? ByFolder(string folder) =>
-                entries.FirstOrDefault(e => string.Equals(e.Folder, folder, StringComparison.OrdinalIgnoreCase));
-            public string Title(Guid id) => ById(id)?.Title ?? id.ToString();
-            public string TitleOf(string folder) => ByFolder(folder)?.Title ?? folder;
-        }
-
-        private async Task<ProjectIndex> IndexProjectsAsync()
-        {
-            var entries = new List<IndexedProject>();
-            var complete = true;
-            foreach (var folder in fs.ListProjectFolders())
-            {
-                if (!ProjectFolderId.TryParse(folder, out var id)) continue;
-                // A folder without a project.db is not a project, so it can't be a member that only looks gone.
-                if (!fs.FileExists(Path.Combine(fs.GetProjectFolderPath(id), ProjectDbContextProvider.DbFileName))) continue;
-                try
-                {
-                    if (await projects.GetProjectAsync(id) is { } project)
-                        entries.Add(new IndexedProject(folder, project.Id, project.Title, project.CoverImage));
-                    else
-                        complete = false;
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Series: project '{Folder}' could not be read", folder);
-                    complete = false;
-                }
-            }
-            return new ProjectIndex(entries, complete);
-        }
-
-        private string Root => Path.Combine(fs.WorkspacePath, FolderName);
-        private string FolderOf(Guid seriesId) => Path.Combine(Root, seriesId.ToString("D"));
-
-        /// <summary>
-        /// Every series whose registry can be read, and how many could not (each logged and left out).
-        /// A read shows the rest; a write whose rules span series refuses while any is unreadable.
-        /// </summary>
-        private async Task<(IReadOnlyList<Loaded> All, int Unreadable)> LoadAllAsync(CancellationToken ct)
-        {
-            if (!Directory.Exists(Root)) return ([], 0);
-            var all = new List<Loaded>();
-            var unreadable = 0;
-            foreach (var dir in Directory.GetDirectories(Root))
-            {
-                if (!Guid.TryParse(Path.GetFileName(dir), out var id)) continue;
-                try
-                {
-                    if (await LoadAsync(id, ct) is { } series) all.Add(series);
-                }
-                catch (Exception ex) when (ex is SqliteException or InvalidOperationException)
-                {
-                    logger.LogWarning(ex, "Series registry {SeriesId} could not be read; it is left out", id);
-                    unreadable++;
-                }
-            }
-            return (all, unreadable);
-        }
-
-        private async Task<Loaded?> LoadAsync(Guid seriesId, CancellationToken ct)
-        {
-            var folder = FolderOf(seriesId);
-            if (!File.Exists(Path.Combine(folder, SeriesDbContext.DbFileName))) return null;
-            await using var db = await SeriesDbContext.OpenAsync(folder, ct);
-            var row = await db.Series.AsNoTracking().SingleOrDefaultAsync(ct);
-            if (row is null) return null;
-            var members = await db.Books.AsNoTracking().ToDictionaryAsync(b => b.ProjectId, b => b.Position, ct);
-            return new Loaded(seriesId, row.Name, members);
-        }
-
-        private async Task<(Loaded? Series, SeriesRefusal? Refusal)> FindAsync(Guid seriesId, CancellationToken ct)
-        {
-            if (!Directory.Exists(FolderOf(seriesId))) return (null, SeriesRefusal.UnknownSeries);
-            try
-            {
-                return await LoadAsync(seriesId, ct) is { } series
-                    ? (series, null)
-                    : (null, SeriesRefusal.UnknownSeries);
-            }
-            catch (Exception ex) when (ex is SqliteException or InvalidOperationException)
-            {
-                logger.LogWarning(ex, "Series registry {SeriesId} could not be read", seriesId);
-                return (null, SeriesRefusal.Unreadable);
-            }
-        }
-
-        /// <summary>The series as the wire shows it, dropping (for good) members whose project is gone.</summary>
-        private async Task<SeriesView> ViewAsync(Loaded series, ProjectIndex index, CancellationToken ct)
-        {
-            var books = new List<SeriesBookView>();
-            foreach (var (projectId, position) in series.Members)
-            {
-                if (index.ById(projectId) is { } project)
-                    books.Add(new SeriesBookView(project.Folder, project.Title, SeriesPositions.Normalize(position)));
-                else if (index.Complete)
-                {
-                    // Healing is not a change anyone else needs to hear about: whoever reads next
-                    // gets the same answer this read does.
-                    logger.LogInformation("Series {SeriesId}: project {ProjectId} is gone; its entry is removed", series.Id, projectId);
-                    await RemoveMemberAsync(series.Id, projectId, ct);
-                }
-            }
-            var ordered = books.OrderBy(b => b.Position).ToList();
-            return new SeriesView(series.Id, series.Name, ordered, PosterOf(series.Id, ordered, index));
+            var loaded = await loader.LoadSeriesAsync(seriesId, withCasts, ct);
+            if (loaded.Value is { } series) await HealAsync(series, ct);
+            return loaded;
         }
 
         /// <summary>
-        /// The uploaded poster; else the cover of the lowest-positioned book; else none (the client
-        /// draws the placeholder). Only that one book's cover counts, not the first book with one.
+        /// Deletes the stale rows <paramref name="series"/> filters out. The reads that healed before
+        /// the snapshot (#234) still call it until healing moves to the writes alone (#246).
         /// </summary>
-        private SeriesPoster PosterOf(Guid seriesId, IReadOnlyList<SeriesBookView> books, ProjectIndex index)
+        private async Task HealAsync(SeriesSnapshot series, CancellationToken ct)
         {
-            if (PosterFiles(FolderOf(seriesId)).FirstOrDefault() is { } uploaded)
-                return SeriesPoster.Of(SeriesPosterSource.Uploaded, uploaded, coverPosition: null);
-
-            if (books.FirstOrDefault() is { } first
-                && index.ByFolder(first.Folder)?.CoverImage is { Length: > 0 } cover
-                && ProjectFolderId.TryParse(first.Folder, out var folderId))
+            if (!series.HasStaleRows) return;
+            await using var db = await SeriesDbContext.OpenAsync(FolderOf(series.Id), ct);
+            if (series.StaleMembers.Count > 0)
             {
-                var path = Path.Combine(fs.GetProjectFolderPath(folderId), Path.GetFileName(cover));
-                if (File.Exists(path))
-                    return SeriesPoster.Of(SeriesPosterSource.Cover, path, first.Position);
+                logger.LogInformation("Series {SeriesId}: {Count} members' projects are gone; their entries are removed", series.Id, series.StaleMembers.Count);
+                var gone = series.StaleMembers.ToList();
+                await db.Books.Where(b => gone.Contains(b.ProjectId)).ExecuteDeleteAsync(ct);
             }
-            return SeriesPoster.None;
+            if (series.StaleLinks.Count > 0)
+            {
+                logger.LogInformation("Series {SeriesId}: {Count} links to Characters that are gone are removed", series.Id, series.StaleLinks.Count);
+                var stale = series.StaleLinks.ToHashSet();
+                await RemoveLinksAsync(db, stale.Contains, ct);
+            }
+            if (series.StaleNotTheSame.Count > 0)
+            {
+                var ids = series.StaleNotTheSame.Select(n => n.Id).ToList();
+                await db.NotTheSame.Where(n => ids.Contains(n.Id)).ExecuteDeleteAsync(ct);
+            }
         }
-
-        private static IReadOnlyList<string> PosterFiles(string folder) =>
-            Directory.Exists(folder)
-                ? Directory.GetFiles(folder, PosterName + ".*")
-                    .Where(f => !f.EndsWith(UploadSuffix, StringComparison.OrdinalIgnoreCase))
-                    .Order(StringComparer.OrdinalIgnoreCase)
-                    .ToList()
-                : [];
 
         /// <summary>
         /// The book leaves: its links go with it, and so does a Series character left with no linked
@@ -467,7 +349,7 @@ namespace Read2Me.Services.Series
 
         private static string? Clean(string? name) => string.IsNullOrWhiteSpace(name) ? null : name.Trim();
 
-        private static SeriesRefusal? NameTaken(IEnumerable<Loaded> all, string name, Guid? except) =>
+        private static SeriesRefusal? NameTaken(IEnumerable<SeriesRecord> all, string name, Guid? except) =>
             all.FirstOrDefault(s => s.Id != except && string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase)) is { } holder
                 ? SeriesRefusal.NameTaken(holder.Name)
                 : null;

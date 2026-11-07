@@ -46,45 +46,28 @@ namespace Read2Me.Services.Series
             Guid seriesId, Guid seriesCharacterId, string folder, bool push, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            var (plan, refusal) = await PlanResolveAsync(seriesId, seriesCharacterId, folder, push, ct);
-            if (plan is null) return refusal!;
+            var loaded = await LoadHealedAsync(seriesId, ct);
+            if (loaded.Value is not { } series) return loaded.Refusal!;
+            var planned = await PlanResolveAsync(series, seriesCharacterId, folder, push);
+            if (planned.Value is not { } plan) return planned.Refusal!;
             return new SeriesResolvePreview(await LossesAsync(plan.Source, plan.Targets));
         }
 
-        /// <summary>A push or take: the book whose Voices are copied, the books they replace, and the step label.</summary>
-        private sealed record ResolvePlan(SeriesPeer Source, IReadOnlyList<SeriesPeer> Targets, string Step, IReadOnlyList<SeriesPeer> Linked);
-
-        private async Task<(ResolvePlan? Plan, SeriesRefusal? Refusal)> PlanResolveAsync(
-            Guid seriesId, Guid seriesCharacterId, string folder, bool push, CancellationToken ct)
-        {
-            var (state, refusal) = await LinkStateAsync(seriesId, ct);
-            if (state is null) return (null, refusal);
-            if (MemberOf(state, folder) is not { } book) return (null, await NotAMemberAsync(state, folder));
-            if (state.Links.All(l => l.SeriesCharacterId != seriesCharacterId)) return (null, SeriesRefusal.UnknownSeriesCharacter);
-            var label = state.LabelOf(seriesCharacterId);
-            if (state.LinkOf(seriesCharacterId, book.ProjectId) is null) return (null, SeriesRefusal.NotLinked(book.Title, label));
-
-            var linked = LinkedPeers(state, seriesCharacterId);
-            var choice = await ChooseAsync(seriesId, linked);
-            if (choice is null || !choice.DiffersFrom(book.Folder)) return (null, SeriesRefusal.DoesNotDiffer(book.Title, label));
-
-            var self = linked.First(p => p.Folder == book.Folder);
-            return push
-                ? (new ResolvePlan(self, linked.Where(p => p != self).ToList(), PushLabel, linked), null)
-                : (new ResolvePlan(linked.First(p => p.Folder == choice.SeriesCopyFolder), [self], TakeLabel, linked), null);
-        }
+        private async Task<SeriesResult<SeriesResolvePlan>> PlanResolveAsync(
+            SeriesSnapshot series, Guid seriesCharacterId, string folder, bool push) =>
+            series.PlanResolve(seriesCharacterId, folder, push, await ChooseAsync(series.Id, series.LinkedPeers(seriesCharacterId)));
 
         private async Task<SeriesResult<bool>> ResolveAsync(
             Guid seriesId, Guid seriesCharacterId, string folder, bool push, CancellationToken ct)
         {
             using var hold = await gate.EnterAsync(ct);
-            var (plan, refusal) = await PlanResolveAsync(seriesId, seriesCharacterId, folder, push, ct);
-            if (plan is null) return refusal!;
+            var loaded = await LoadHealedAsync(seriesId, ct);
+            if (loaded.Value is not { } series) return loaded.Refusal!;
+            var planned = await PlanResolveAsync(series, seriesCharacterId, folder, push);
+            if (planned.Value is not { } plan) return planned.Refusal!;
 
             // The source's whole set: each target holds exactly these afterwards.
-            var source = (await characters.GetCharacterVoicesAsync(plan.Source.FolderId, plan.Source.CharacterId))
-                .Select(v => SeriesVoiceSource.Of(plan.Source.FolderId, v))
-                .ToList();
+            var source = await VoicesAsync(plan.Source.FolderId, plan.Source.CharacterId);
             var writes = SeriesCopies.InWriteOrder(plan.Targets)
                 .Select(t => new SeriesVoiceWrite(t, new SeriesVoiceChange.Replace(source)))
                 .ToList();
@@ -118,15 +101,6 @@ namespace Read2Me.Services.Series
         }
 
         // ---- internals ---------------------------------------------------------------------------
-
-        /// <summary>Each book linked to the Series character whose Character could be read, in Series position order.</summary>
-        private static IReadOnlyList<SeriesPeer> LinkedPeers(LinkState state, Guid seriesCharacterId) =>
-            state.Books
-                .Select(b => state.LinkOf(seriesCharacterId, b.ProjectId) is { } link && state.Find(b.ProjectId, link.CharacterId) is not null
-                    ? new SeriesPeer(b.Folder, b.Title, b.Position, link.CharacterId)
-                    : null)
-                .OfType<SeriesPeer>()
-                .ToList();
 
         /// <summary>A linked book's Voices of the Series character, and their version.</summary>
         private sealed record HeldVoices(SeriesPeer Book, IReadOnlyList<VoiceEntity> Voices, string Version);

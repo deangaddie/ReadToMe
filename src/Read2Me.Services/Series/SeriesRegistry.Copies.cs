@@ -39,11 +39,11 @@ namespace Read2Me.Services.Series
             Guid seriesId, Guid seriesCharacterId, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            var (state, refusal) = await LinkStateAsync(seriesId, ct);
-            if (state is null) return refusal!;
-            if (state.Links.All(l => l.SeriesCharacterId != seriesCharacterId)) return SeriesRefusal.UnknownSeriesCharacter;
+            var loaded = await LoadHealedAsync(seriesId, ct);
+            if (loaded.Value is not { } state) return loaded.Refusal!;
+            if (!state.IsSeriesCharacter(seriesCharacterId)) return SeriesRefusal.UnknownSeriesCharacter;
 
-            var held = await HeldAsync(seriesId, LinkedPeers(state, seriesCharacterId));
+            var held = await HeldAsync(seriesId, state.LinkedPeers(seriesCharacterId));
             if (Choose(held) is not { } choice) return SeriesRefusal.UnknownSeriesCharacter;
 
             var books = new List<SeriesCharacterBook>();
@@ -78,11 +78,11 @@ namespace Read2Me.Services.Series
         public async Task ForgetCharacterAsync(ProjectFolderId folder, Guid characterId, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            if (await PeersCoreAsync(folder, characterId, ct) is not { } peers) return;
-            if (await projects.GetProjectAsync(folder) is not { } project) return;
-            await using (var db = await Data.Series.SeriesDbContext.OpenAsync(FolderOf(peers.SeriesId), ct))
-                await RemoveLinksAsync(db, l => l.ProjectId == project.Id && l.CharacterId == characterId, ct);
-            Signal(peers.SeriesId, SeriesChangeKind.Changed);
+            if (await loader.LoadSeriesOfAsync(folder, withCasts: false, ct) is not ({ } series, var projectId)) return;
+            if (series.Peers(projectId, characterId) is null) return;
+            await using (var db = await Data.Series.SeriesDbContext.OpenAsync(FolderOf(series.Id), ct))
+                await RemoveLinksAsync(db, l => l.ProjectId == projectId && l.CharacterId == characterId, ct);
+            Signal(series.Id, SeriesChangeKind.Changed);
         }
 
         /// <summary>A member book committed something the series cast board shows: its series reads again (#213, Hub).</summary>
@@ -94,27 +94,11 @@ namespace Read2Me.Services.Series
 
         // ---- internals ---------------------------------------------------------------------------
 
-        private async Task<SeriesPeers?> PeersCoreAsync(ProjectFolderId folder, Guid characterId, CancellationToken ct)
-        {
-            if (await projects.GetProjectAsync(folder) is not { } project) return null;
-            var series = (await LoadAllAsync(ct)).All.FirstOrDefault(s => s.Members.ContainsKey(project.Id));
-            if (series is null) return null;
-            var links = await LoadLinksAsync(series.Id, ct);
-            var mine = links.FirstOrDefault(l => l.ProjectId == project.Id && l.CharacterId == characterId);
-            if (mine is null) return null;
-
-            var index = await IndexProjectsAsync();
-            var self = new SeriesPeer(folder.Value, index.Title(project.Id), SeriesPositions.Normalize(series.Members[project.Id]), characterId);
-            var others = links
-                .Where(l => l.SeriesCharacterId == mine.SeriesCharacterId && l.ProjectId != project.Id && series.Members.ContainsKey(l.ProjectId))
-                .Select(l => index.ById(l.ProjectId) is { } p
-                    ? new SeriesPeer(p.Folder, p.Title, SeriesPositions.Normalize(series.Members[l.ProjectId]), l.CharacterId)
-                    : null)
-                .OfType<SeriesPeer>()
-                .OrderBy(p => p.Position)
-                .ToList();
-            return new SeriesPeers(series.Id, mine.SeriesCharacterId, self, others);
-        }
+        /// <summary>The Character's peers from the registry layer alone: no Characters or Voices are read.</summary>
+        private async Task<SeriesPeers?> PeersCoreAsync(ProjectFolderId folder, Guid characterId, CancellationToken ct) =>
+            await loader.LoadSeriesOfAsync(folder, withCasts: false, ct) is ({ } series, var projectId)
+                ? series.Peers(projectId, characterId)
+                : null;
 
         /// <summary>
         /// Each book with its positional rules that use the Voice, and what it holds:

@@ -1,8 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Read2Me.Core.Models;
 using Read2Me.Data.Series;
-using Read2Me.Services.Audio;
 using Read2Me.Services.Events;
 using Read2Me.Services.History;
 using Read2Me.Services.Mutations;
@@ -23,61 +21,14 @@ namespace Read2Me.Services.Series
         /// <summary>
         /// The series cast board: one row per Series character, one cell per book in position order,
         /// and each book's unlinked Characters for the pickers. A link whose Character has gone from
-        /// its book is dropped here, and a Series character left with no link with it.
+        /// its book is left out, and a Series character left with no link with it.
         /// </summary>
         public async Task<SeriesResult<SeriesCastView>> CastAsync(Guid seriesId, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            var (state, refusal) = await LinkStateAsync(seriesId, ct);
-            if (state is null) return refusal!;
-
-            var suggestions = await SuggestAsync(state, ct);
-            var unordered = new List<SeriesCastRow>();
-            foreach (var seriesCharacterId in state.Links.Select(l => l.SeriesCharacterId).Distinct())
-            {
-                var choice = await ChooseAsync(seriesId, LinkedPeers(state, seriesCharacterId));
-                var cells = state.Books.Select(b =>
-                {
-                    var link = state.LinkOf(seriesCharacterId, b.ProjectId);
-                    var suggested = suggestions.Cells
-                        .FirstOrDefault(s => s.SeriesCharacterId == seriesCharacterId && s.ProjectId == b.ProjectId);
-                    return new SeriesCastCell(
-                        b.Folder,
-                        link is null ? null : state.Find(link.ProjectId, link.CharacterId),
-                        link is not null && choice?.DiffersFrom(b.Folder) == true,
-                        suggested is null ? null : state.Find(b.ProjectId, suggested.CharacterId));
-                }).ToList();
-                unordered.Add(new SeriesCastRow(seriesCharacterId, state.LabelOf(seriesCharacterId), cells.Any(c => c.Linked?.IsNarrator == true), cells));
-            }
-
-            var rows = unordered
-                .OrderBy(r => r.IsNarrator ? 0 : 1)
-                .ThenBy(r => r.Label, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
-
-            var unlinked = state.Books.ToDictionary(
-                b => b.Folder,
-                b => (IReadOnlyList<SeriesCastCharacter>)(state.Characters.GetValueOrDefault(b.ProjectId) ?? [])
-                    .Where(c => state.Links.All(l => l.ProjectId != b.ProjectId || l.CharacterId != c.CharacterId))
-                    .ToList(),
-                StringComparer.OrdinalIgnoreCase);
-
-            var suggestedRows = suggestions.Rows
-                .Select(members => new SeriesSuggestedRow(members
-                    .Select(m => (Book: state.Books.First(b => b.ProjectId == m.ProjectId), Character: state.Find(m.ProjectId, m.CharacterId)!))
-                    .Select(m => new SeriesSuggestedMember(m.Book.Folder, m.Character.CharacterId, m.Character.Name, m.Character.IsNarrator))
-                    .ToList()))
-                .OrderBy(r => r.Members[0].IsNarrator ? 0 : 1)
-                .ThenBy(r => r.Label, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
-
-            return new SeriesCastView(
-                state.Books.Select(b => new SeriesBookView(b.Folder, b.Title, b.Position)).ToList(),
-                rows,
-                suggestedRows,
-                unlinked,
-                suggestions.NameMatches,
-                suggestions.Count);
+            var loaded = await LoadHealedAsync(seriesId, ct);
+            if (loaded.Value is not { } series) return loaded.Refusal!;
+            return series.Cast(await ChoicesAsync(series, series.Links.Select(l => l.SeriesCharacterId)));
         }
 
         /// <summary>
@@ -89,11 +40,11 @@ namespace Read2Me.Services.Series
             Guid seriesId, Guid seriesCharacterId, string folder, Guid characterId, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            var (plan, refusal) = await PlanLinkAsync(seriesId, seriesCharacterId, folder, characterId, ct);
+            var loaded = await LoadHealedAsync(seriesId, ct);
+            if (loaded.Value is not { } series) return loaded.Refusal!;
+            var (plan, refusal) = await PlanLinkAsync(series, seriesCharacterId, folder, characterId);
             if (plan is null) return refusal!;
-
-            var seriesGains = plan.Merge.LinkedGains.SelectMany(b => b.Voices).DistinctBy(v => v.Voice.Id).Select(v => v.Voice.Name);
-            return new SeriesLinkPreview(plan.Merge.JoiningGains.Select(g => g.Voice.Voice.Name).ToList(), seriesGains.ToList());
+            return SeriesSnapshot.LinkPreview(plan.Merge);
         }
 
         /// <summary>
@@ -103,31 +54,11 @@ namespace Read2Me.Services.Series
         public async Task<IReadOnlyDictionary<Guid, CharacterSeriesLink>> LinksOfAsync(ProjectFolderId folder, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            if (await projects.GetProjectAsync(folder) is not { } project) return new Dictionary<Guid, CharacterSeriesLink>();
-            var series = (await LoadAllAsync(ct)).All.FirstOrDefault(s => s.Members.ContainsKey(project.Id));
-            if (series is null) return new Dictionary<Guid, CharacterSeriesLink>();
-
-            var links = await LoadLinksAsync(series.Id, ct);
-            var mine = links.Where(l => l.ProjectId == project.Id).ToList();
-            if (mine.Count == 0) return new Dictionary<Guid, CharacterSeriesLink>();
-
-            var index = await IndexProjectsAsync();
-            var result = new Dictionary<Guid, CharacterSeriesLink>();
-            foreach (var link in mine)
-            {
-                var peers = links
-                    .Where(o => o.SeriesCharacterId == link.SeriesCharacterId && series.Members.ContainsKey(o.ProjectId))
-                    .Select(o => index.ById(o.ProjectId) is { } p
-                        ? new SeriesPeer(p.Folder, p.Title, SeriesPositions.Normalize(series.Members[o.ProjectId]), o.CharacterId)
-                        : null)
-                    .OfType<SeriesPeer>()
-                    .ToList();
-                var choice = await ChooseAsync(series.Id, peers);
-                var differs = choice is not null && index.ById(project.Id) is { } self && choice.DiffersFrom(self.Folder);
-                result[link.CharacterId] = new CharacterSeriesLink(series.Id, link.SeriesCharacterId, series.Name,
-                    links.Count(o => o.SeriesCharacterId == link.SeriesCharacterId && series.Members.ContainsKey(o.ProjectId)), differs);
-            }
-            return result;
+            if (await loader.LoadSeriesOfAsync(folder, withCasts: true, ct) is not { } found)
+                return new Dictionary<Guid, CharacterSeriesLink>();
+            var (series, projectId) = found;
+            var mine = series.Links.Where(l => l.ProjectId == projectId).Select(l => l.SeriesCharacterId);
+            return series.LinksOf(projectId, await ChoicesAsync(series, mine));
         }
 
         // ---- writes ------------------------------------------------------------------------------
@@ -139,12 +70,10 @@ namespace Read2Me.Services.Series
         public async Task<SeriesResult<Guid>> ShareAsync(Guid seriesId, string folder, Guid characterId, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            var (state, refusal) = await LinkStateAsync(seriesId, ct);
-            if (state is null) return refusal!;
-            if (MemberOf(state, folder) is not { } book) return await NotAMemberAsync(state, folder);
-            if (state.Find(book.ProjectId, characterId) is not { } character) return SeriesRefusal.UnknownCharacter(book.Title);
-            if (SeriesLinkRules.CheckShare(state.Links, book.ProjectId, characterId) is { } linked)
-                return SeriesRefusal.CharacterAlreadyLinked(character.Name, book.Title, state.LabelOf(linked.SeriesCharacterId));
+            var loaded = await LoadHealedAsync(seriesId, ct);
+            if (loaded.Value is not { } series) return loaded.Refusal!;
+            var checkedBook = series.CheckUnlinked(folder, characterId);
+            if (checkedBook.Value is not { } book) return checkedBook.Refusal!;
 
             var id = await ShareUncheckedAsync(seriesId, book, characterId, ct);
             Signal(seriesId, SeriesChangeKind.Changed);
@@ -161,7 +90,9 @@ namespace Read2Me.Services.Series
             Guid seriesId, Guid seriesCharacterId, string folder, Guid characterId, CancellationToken ct = default)
         {
             using var hold = await gate.EnterAsync(ct);
-            var (plan, refusal) = await PlanLinkAsync(seriesId, seriesCharacterId, folder, characterId, ct);
+            var loaded = await LoadHealedAsync(seriesId, ct);
+            if (loaded.Value is not { } series) return loaded.Refusal!;
+            var (plan, refusal) = await PlanLinkAsync(series, seriesCharacterId, folder, characterId);
             if (plan is null) return refusal!;
             if (await RunLinkAsync(seriesId, seriesCharacterId, characterId, plan, hold, ct) is { } failed) return failed;
             Signal(seriesId, SeriesChangeKind.Changed);
@@ -169,7 +100,7 @@ namespace Read2Me.Services.Series
         }
 
         /// <summary>A new Series character owning this Character (already checked), whose <i>Not the same</i> go.</summary>
-        private async Task<Guid> ShareUncheckedAsync(Guid seriesId, LinkBook book, Guid characterId, CancellationToken ct)
+        private async Task<Guid> ShareUncheckedAsync(Guid seriesId, SeriesMemberBook book, Guid characterId, CancellationToken ct)
         {
             var id = Guid.NewGuid();
             await using var db = await SeriesDbContext.OpenAsync(FolderOf(seriesId), ct);
@@ -188,8 +119,8 @@ namespace Read2Me.Services.Series
             if (plan.Merge.JoiningGains.Count > 0)
             {
                 var joining = new SeriesVoiceWrite(
-                    new SeriesPeer(book.Folder, book.Title, book.Position, characterId),
-                    new SeriesVoiceChange.Gain(plan.Merge.JoiningGains.Select(g => g.Voice.Source).ToList()));
+                    book.AsPeer(characterId),
+                    new SeriesVoiceChange.Gain(plan.Merge.JoiningGains.Select(g => g.Voice).ToList()));
                 var result = (await replicator.WriteAsync([joining], LinkStep, hold, ct))[0];
                 if (result.Failure is { } reason)
                     return SeriesRefusal.VoicesNotWritten(book.Title, reason, result.Rejection == BookMutationRejection.Conflict);
@@ -206,11 +137,9 @@ namespace Read2Me.Services.Series
             // (it then differs from series, #222).
             var writes = plan.Merge.LinkedGains.Select(gains =>
             {
-                var other = plan.State.Books.First(b => b.Folder == gains.Folder);
-                var otherCharacter = plan.State.LinkOf(seriesCharacterId, other.ProjectId)!.CharacterId;
-                return new SeriesVoiceWrite(
-                    new SeriesPeer(other.Folder, other.Title, other.Position, otherCharacter),
-                    new SeriesVoiceChange.Gain(gains.Voices.Select(v => v.Source).ToList()));
+                var other = plan.Series.Books.First(b => b.Folder == gains.Folder);
+                var otherCharacter = plan.Series.LinkOf(seriesCharacterId, other.ProjectId)!.CharacterId;
+                return new SeriesVoiceWrite(other.AsPeer(otherCharacter), new SeriesVoiceChange.Gain(gains.Voices));
             }).ToList();
             if (writes.Count > 0) await replicator.WriteAsync(writes, LinkStep, hold, ct);
             return null;
@@ -222,12 +151,12 @@ namespace Read2Me.Services.Series
         public async Task<SeriesResult<bool>> UnlinkAsync(Guid seriesId, Guid seriesCharacterId, string folder, CancellationToken ct = default)
         {
             using var _ = await gate.EnterAsync(ct);
-            var (state, refusal) = await LinkStateAsync(seriesId, ct);
-            if (state is null) return refusal!;
-            if (MemberOf(state, folder) is not { } book) return await NotAMemberAsync(state, folder);
-            if (state.Links.All(l => l.SeriesCharacterId != seriesCharacterId)) return SeriesRefusal.UnknownSeriesCharacter;
-            if (state.LinkOf(seriesCharacterId, book.ProjectId) is null)
-                return SeriesRefusal.NotLinked(book.Title, state.LabelOf(seriesCharacterId));
+            var loaded = await LoadHealedAsync(seriesId, ct);
+            if (loaded.Value is not { } series) return loaded.Refusal!;
+            if (series.MemberOf(folder) is not { } book) return series.NotAMember(folder);
+            if (!series.IsSeriesCharacter(seriesCharacterId)) return SeriesRefusal.UnknownSeriesCharacter;
+            if (series.LinkOf(seriesCharacterId, book.ProjectId) is null)
+                return SeriesRefusal.NotLinked(book.Title, series.LabelOf(seriesCharacterId));
 
             await using (var db = await SeriesDbContext.OpenAsync(FolderOf(seriesId), ct))
                 await RemoveLinksAsync(db, l => l.SeriesCharacterId == seriesCharacterId && l.ProjectId == book.ProjectId, ct);
@@ -237,150 +166,40 @@ namespace Read2Me.Services.Series
 
         // ---- internals ---------------------------------------------------------------------------
 
-        private sealed record LinkBook(string Folder, Guid ProjectId, string Title, decimal Position)
+        private sealed record LinkPlan(SeriesSnapshot Series, SeriesMemberBook Book, SeriesVoiceMerge.Plan<SeriesVoiceSource> Merge);
+
+        /// <summary>
+        /// The series copy of each named Series character, over its linked books whose Characters
+        /// could be read; a Series character none of whose Voices can be read is left out.
+        /// </summary>
+        private async Task<IReadOnlyDictionary<Guid, SeriesCopyChoice.Choice>> ChoicesAsync(SeriesSnapshot series, IEnumerable<Guid> seriesCharacterIds)
         {
-            public ProjectFolderId FolderId => new(Folder);
-        }
-
-        /// <summary>A series' member books in position order, their Characters, and its links (healed).</summary>
-        private sealed record LinkState(
-            Loaded Series,
-            IReadOnlyList<LinkBook> Books,
-            IReadOnlyDictionary<Guid, IReadOnlyList<SeriesCastCharacter>> Characters,
-            IReadOnlyList<SeriesLinkRules.Link> Links)
-        {
-            public SeriesCastCharacter? Find(Guid projectId, Guid characterId) =>
-                Characters.GetValueOrDefault(projectId)?.FirstOrDefault(c => c.CharacterId == characterId);
-
-            /// <summary>The book's link to a Series character, if it has one.</summary>
-            public SeriesLinkRules.Link? LinkOf(Guid seriesCharacterId, Guid projectId) =>
-                Links.FirstOrDefault(l => l.SeriesCharacterId == seriesCharacterId && l.ProjectId == projectId);
-
-            /// <summary>A row's label: its linked Character's name in the lowest-positioned book (whose Characters could be read).</summary>
-            public string LabelOf(Guid seriesCharacterId) =>
-                Books.Select(b => LinkOf(seriesCharacterId, b.ProjectId))
-                    .Select(l => l is null ? null : Find(l.ProjectId, l.CharacterId))
-                    .FirstOrDefault(c => c is not null)?.Name
-                    ?? "the series character";
-        }
-
-        private sealed record LinkPlan(LinkState State, LinkBook Book, SeriesVoiceMerge.Plan<SourcedVoice> Merge);
-
-        /// <summary>A Voice as one book holds it: where its files are, and the row to copy.</summary>
-        private sealed record SourcedVoice(LinkBook Book, Guid CharacterId, SeriesVoiceCopy Voice)
-        {
-            public SeriesVoiceSource Source => new(Book.FolderId, CharacterId, Voice);
-        }
-
-        private static LinkBook? MemberOf(LinkState state, string folder) =>
-            state.Books.FirstOrDefault(b => string.Equals(b.Folder, folder, StringComparison.OrdinalIgnoreCase));
-
-        private async Task<SeriesRefusal> NotAMemberAsync(LinkState state, string folder) =>
-            (await IndexProjectsAsync()).ByFolder(folder) is { } project
-                ? SeriesRefusal.NotAMember(project.Title, state.Series.Name)
-                : SeriesRefusal.UnknownFolder(folder);
-
-        private async Task<(LinkState? State, SeriesRefusal? Refusal)> LinkStateAsync(Guid seriesId, CancellationToken ct)
-        {
-            var (series, refusal) = await FindAsync(seriesId, ct);
-            if (series is null) return (null, refusal);
-            var index = await IndexProjectsAsync();
-            var view = await ViewAsync(series, index, ct);
-            var books = view.Books
-                .Select(b => new LinkBook(b.Folder, index.ByFolder(b.Folder)!.ProjectId, b.Title, b.Position))
-                .ToList();
-
-            var roster = new Dictionary<Guid, IReadOnlyList<SeriesCastCharacter>>();
-            foreach (var book in books)
-            {
-                try
-                {
-                    roster[book.ProjectId] = (await characters.GetCharactersWithAliasesAsync(book.FolderId))
-                        .Select(c => new SeriesCastCharacter(c.Id, c.Name, c.IsNarrator, c.Aliases.Select(a => a.Name).ToList()))
-                        .ToList();
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Series {SeriesId}: the Characters of '{Folder}' could not be read", seriesId, book.Folder);
-                }
-            }
-
-            // A link is dropped only when its book is no longer a member, or was read and no longer has
-            // its Character. A member that couldn't be read is still a member (ViewAsync heals only a
-            // project that is gone, and its links with it), so its links are kept for a later read.
-            var links = await LoadLinksAsync(seriesId, ct);
-            bool Gone(SeriesLinkRules.Link l) =>
-                !series.Members.ContainsKey(l.ProjectId)
-                || (roster.TryGetValue(l.ProjectId, out var cast) && cast.All(c => c.CharacterId != l.CharacterId));
-            var gone = links.Where(Gone).ToHashSet();
-            if (gone.Count > 0)
-            {
-                logger.LogInformation("Series {SeriesId}: {Count} links to Characters that are gone are removed", seriesId, gone.Count);
-                await using var db = await SeriesDbContext.OpenAsync(FolderOf(seriesId), ct);
-                await RemoveLinksAsync(db, gone.Contains, ct);
-            }
-
-            // Not the same lasts until its Character is deleted: by the same rule as a link.
-            bool Present(Guid projectId, Guid characterId) =>
-                series.Members.ContainsKey(projectId)
-                && (!roster.TryGetValue(projectId, out var cast) || cast.Any(c => c.CharacterId == characterId));
-            await using (var db = await SeriesDbContext.OpenAsync(FolderOf(seriesId), ct))
-            {
-                var stale = (await db.NotTheSame.ToListAsync(ct))
-                    .Where(n => !Present(n.ProjectId, n.CharacterId)
-                                || (n.OtherProjectId is { } p && n.OtherCharacterId is { } c && !Present(p, c)))
-                    .ToList();
-                if (stale.Count > 0)
-                {
-                    db.NotTheSame.RemoveRange(stale);
-                    await db.SaveChangesAsync(ct);
-                }
-            }
-            return (new LinkState(series, books, roster, links.Where(l => !gone.Contains(l)).ToList()), null);
+            var choices = new Dictionary<Guid, SeriesCopyChoice.Choice>();
+            foreach (var id in seriesCharacterIds.Distinct())
+                if (await ChooseAsync(series.Id, series.LinkedPeers(id)) is { } choice)
+                    choices[id] = choice;
+            return choices;
         }
 
         private async Task<(LinkPlan? Plan, SeriesRefusal? Refusal)> PlanLinkAsync(
-            Guid seriesId, Guid seriesCharacterId, string folder, Guid characterId, CancellationToken ct)
+            SeriesSnapshot series, Guid seriesCharacterId, string folder, Guid characterId)
         {
-            var (state, refusal) = await LinkStateAsync(seriesId, ct);
-            if (state is null) return (null, refusal);
-            if (MemberOf(state, folder) is not { } book) return (null, await NotAMemberAsync(state, folder));
-            if (state.Links.All(l => l.SeriesCharacterId != seriesCharacterId)) return (null, SeriesRefusal.UnknownSeriesCharacter);
-            if (state.Find(book.ProjectId, characterId) is not { } character) return (null, SeriesRefusal.UnknownCharacter(book.Title));
+            var checkedBook = series.CheckLink(seriesCharacterId, folder, characterId);
+            if (checkedBook.Value is not { } book) return (null, checkedBook.Refusal);
 
-            switch (SeriesLinkRules.Check(state.Links, seriesCharacterId, book.ProjectId, characterId))
-            {
-                case SeriesLinkRules.CharacterAlreadyLinked linked:
-                    return (null, SeriesRefusal.CharacterAlreadyLinked(character.Name, book.Title, state.LabelOf(linked.SeriesCharacterId)));
-                case SeriesLinkRules.BookAlreadyLinked held:
-                    return (null, SeriesRefusal.BookAlreadyLinked(
-                        book.Title, state.Find(book.ProjectId, held.CharacterId)!.Name, state.LabelOf(seriesCharacterId)));
-            }
-
-            var joining = await VoicesAsync(book, characterId);
-            var linkedBooks = new List<SeriesVoiceMerge.BookVoices<SourcedVoice>>();
-            foreach (var other in state.Books)
-                if (state.LinkOf(seriesCharacterId, other.ProjectId) is { } link)
-                    linkedBooks.Add(new(other.Folder, await VoicesAsync(other, link.CharacterId)));
+            var joining = await VoicesAsync(book.FolderId, characterId);
+            var linkedBooks = new List<SeriesVoiceMerge.BookVoices<SeriesVoiceSource>>();
+            foreach (var other in series.Books)
+                if (series.LinkOf(seriesCharacterId, other.ProjectId) is { } link)
+                    linkedBooks.Add(new(other.Folder, await VoicesAsync(other.FolderId, link.CharacterId)));
 
             var merge = SeriesVoiceMerge.Make(joining, linkedBooks, v => v.Voice.Id);
-            return (new LinkPlan(state, book, merge), null);
+            return (new LinkPlan(series, book, merge), null);
         }
 
-        private async Task<IReadOnlyList<SourcedVoice>> VoicesAsync(LinkBook book, Guid characterId) =>
-            (await characters.GetCharacterVoicesAsync(book.FolderId, characterId))
-                .Select(v => new SourcedVoice(book, characterId, new SeriesVoiceCopy(
-                    v.Id, v.Name, v.Description, v.Source, v.DesignPrompt, v.Transcript, v.AudioFileName,
-                    v.VoiceDesignSettingsOverrideJson, v.TtsSettingsOverrideJson, v.CreatedUtc)))
-                .ToList();
-
-        private async Task<IReadOnlyList<SeriesLinkRules.Link>> LoadLinksAsync(Guid seriesId, CancellationToken ct)
-        {
-            await using var db = await SeriesDbContext.OpenAsync(FolderOf(seriesId), ct);
-            return await db.Links.AsNoTracking()
-                .Select(l => new SeriesLinkRules.Link(l.SeriesCharacterId, l.ProjectId, l.CharacterId))
-                .ToListAsync(ct);
-        }
+        /// <summary>A book's Voices of one Character, each with where its files are.</summary>
+        private async Task<IReadOnlyList<SeriesVoiceSource>> VoicesAsync(ProjectFolderId folder, Guid characterId) =>
+            (await characters.GetCharacterVoicesAsync(folder, characterId)).Select(v => SeriesVoiceSource.Of(folder, v)).ToList();
 
         /// <summary>Removes the links <paramref name="removed"/> picks, and every Series character left with none.</summary>
         private static async Task RemoveLinksAsync(
