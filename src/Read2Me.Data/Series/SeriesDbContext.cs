@@ -21,12 +21,25 @@ namespace Read2Me.Data.Series
         public DbSet<NotTheSameRow> NotTheSame => Set<NotTheSameRow>();
 
         /// <summary>Opens (creating and migrating as needed) the registry in <paramref name="folderPath"/>.</summary>
-        public static async Task<SeriesDbContext> OpenAsync(string folderPath, CancellationToken ct = default)
+        public static Task<SeriesDbContext> OpenAsync(string folderPath, CancellationToken ct = default)
         {
             Directory.CreateDirectory(folderPath);
+            return OpenAsync(folderPath, create: true, ct);
+        }
+
+        /// <summary>
+        /// Opens (migrating as needed) a registry that is already there, for a read that takes no lock:
+        /// a series deleted meanwhile is never created again, and a missing file throws <c>SqliteException</c>.
+        /// </summary>
+        public static Task<SeriesDbContext> OpenExistingAsync(string folderPath, CancellationToken ct = default) =>
+            OpenAsync(folderPath, create: false, ct);
+
+        private static async Task<SeriesDbContext> OpenAsync(string folderPath, bool create, CancellationToken ct)
+        {
+            var mode = create ? "ReadWriteCreate" : "ReadWrite";
             var options = new DbContextOptionsBuilder<SeriesDbContext>()
                 // No pooling: a deleted series' folder must not be held open by an idle connection.
-                .UseSqlite($"Data Source={Path.Combine(folderPath, DbFileName)};Pooling=false")
+                .UseSqlite($"Data Source={Path.Combine(folderPath, DbFileName)};Mode={mode};Pooling=false")
                 .Options;
             var db = new SeriesDbContext(options);
             await db.Database.MigrateAsync(ct);

@@ -150,7 +150,8 @@ namespace Read2Me.Services.Series
         {
             var folder = FolderOf(seriesId);
             if (!File.Exists(Path.Combine(folder, SeriesDbContext.DbFileName))) return null;
-            await using var db = await SeriesDbContext.OpenAsync(folder, ct);
+            // Reads take no lock (#246): a series deleted since the check above must not be recreated.
+            await using var db = await SeriesDbContext.OpenExistingAsync(folder, ct);
             var row = await db.Series.AsNoTracking().SingleOrDefaultAsync(ct);
             if (row is null) return null;
             var members = await db.Books.AsNoTracking().ToDictionaryAsync(b => b.ProjectId, b => b.Position, ct);
