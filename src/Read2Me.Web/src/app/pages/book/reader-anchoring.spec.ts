@@ -179,7 +179,8 @@ describe('a deep link over prepends', () => {
 
     expect(headerOffset(list, 'c6')).toBeGreaterThan(1);
     expect(book.rows()[list.topIndex]?.chapterId).not.toBe('c6');
-    expect(book.current.filter((id) => id !== 'c6')).toEqual([]);
+    // c6 was current from the first top row; the top rows the prepends brought never replace it.
+    expect(book.current).toEqual(['c6']);
   });
 
   it('lets the reader take over: a scroll they make moves the current chapter', async () => {

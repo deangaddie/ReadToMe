@@ -381,7 +381,8 @@ describe('r2m-book-page', () => {
       'Actions for Chapter 2',
     );
 
-    // And it still belongs to its node: Escape closes it and focus goes back there.
+    // And it still belongs to its node: focus is in the menu, Escape closes it and focus goes back there.
+    expect(document.activeElement?.closest('[role="menu"]')).not.toBeNull();
     document.activeElement!.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
     );
