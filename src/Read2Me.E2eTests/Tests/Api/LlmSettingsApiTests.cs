@@ -148,8 +148,11 @@ public class LlmSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
 
     // ── attribution chain ────────────────────────────────────────────────────
 
+    /// <summary>
+    /// PUT 200 and the GET's wire shape. Dedupe, order and pruning on delete are LlmSettingsServiceTests.
+    /// </summary>
     [Fact]
-    public async Task Attribution_chain_put_then_get_round_trips_order_flags_and_self_consistency()
+    public async Task Attribution_chain_put_then_get_carries_steps_resolved_and_available()
     {
         var a = await CreateConfigAsync($"chain-a-{Guid.NewGuid():N}");
         var b = await CreateConfigAsync($"chain-b-{Guid.NewGuid():N}");
@@ -161,7 +164,6 @@ public class LlmSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
                 {
                     new { configId = b, thinking = true, promptStyle = "Simple" },
                     new { configId = a, thinking = false, promptStyle = "Full" },
-                    new { configId = b, thinking = true, promptStyle = "Simple" }, // exact duplicate collapses
                 },
                 selfConsistency = true,
             });
@@ -169,25 +171,17 @@ public class LlmSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
 
             var chain = await GetJsonAsync(Url("/attribution-chain"));
             Assert.True(chain.GetProperty("selfConsistency").GetBoolean());
-            var steps = chain.GetProperty("steps").EnumerateArray().ToList();
-            Assert.Equal(2, steps.Count);
-            Assert.Equal(b, steps[0].GetProperty("configId").GetInt32());
-            Assert.True(steps[0].GetProperty("thinking").GetBoolean());
-            Assert.Equal("Simple", steps[0].GetProperty("promptStyle").GetString());
-            Assert.Equal(a, steps[1].GetProperty("configId").GetInt32());
+            var first = chain.GetProperty("steps")[0];
+            Assert.Equal(b, first.GetProperty("configId").GetInt32());
+            Assert.True(first.GetProperty("thinking").GetBoolean());
+            Assert.Equal("Simple", first.GetProperty("promptStyle").GetString());
 
-            var resolved = chain.GetProperty("resolved").EnumerateArray().ToList();
-            Assert.Equal(2, resolved.Count);
-            Assert.Equal(b, resolved[0].GetProperty("config").GetProperty("id").GetInt32());
-            Assert.Equal("Simple", resolved[0].GetProperty("promptStyle").GetString());
+            var resolved = chain.GetProperty("resolved")[0];
+            Assert.Equal(b, resolved.GetProperty("config").GetProperty("id").GetInt32());
+            Assert.Equal("Simple", resolved.GetProperty("promptStyle").GetString());
 
             var available = chain.GetProperty("available").EnumerateArray().Select(c => c.GetProperty("id").GetInt32());
             Assert.Contains(a, available);
-
-            // Deleting a config prunes its rungs.
-            await Http.DeleteAsync(Url($"/{b}"));
-            var pruned = (await GetJsonAsync(Url("/attribution-chain"))).GetProperty("steps");
-            Assert.Equal(a, Assert.Single(pruned.EnumerateArray()).GetProperty("configId").GetInt32());
         }
         finally
         {

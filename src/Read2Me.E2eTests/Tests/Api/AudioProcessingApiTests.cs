@@ -6,7 +6,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Read2Me.Core.Models;
 using Read2Me.E2eTests.Infrastructure;
 using Read2Me.E2eTests.Infrastructure.FakeAi;
-using Read2Me.Services;
 using Read2Me.Services.Audio;
 
 namespace Read2Me.E2eTests.Tests.Api;
@@ -14,7 +13,8 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// <summary>
 /// The audio-processing settings surface behind Angular ticket 24: the full snapshot (scalars,
 /// pauses, step configs), the per-card writes, the ffmpeg probe, the recent-sample picker and the
-/// one-step A/B preview render.
+/// one-step A/B preview render. Thin contract cases: what the settings service stores and
+/// how the preview renders are AudioProcessingSettingsServiceTests and AudioPostProcessPreviewRendererTests.
 /// </summary>
 public class AudioProcessingApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
@@ -45,7 +45,7 @@ public class AudioProcessingApiTests(E2eAppFixture app) : IClassFixture<E2eAppFi
     }
 
     [Fact]
-    public async Task Pauses_put_roundtrips()
+    public async Task Pauses_put_binds_the_body_and_is_200()
     {
         var before = (await FullAsync()).GetProperty("pauses");
         var original = new
@@ -64,12 +64,6 @@ public class AudioProcessingApiTests(E2eAppFixture app) : IClassFixture<E2eAppFi
 
             var after = (await FullAsync()).GetProperty("pauses");
             Assert.Equal(4100, after.GetProperty("volumeMs").GetInt32());
-            Assert.Equal(510, after.GetProperty("pauseMs").GetInt32());
-
-            // The settings service every reader goes through sees the same row.
-            using var scope = app.Services.CreateScope();
-            var settings = await scope.ServiceProvider.GetRequiredService<AudioProcessingSettingsService>().GetAsync();
-            Assert.Equal(2600, settings.ChapterPauseMs);
         }
         finally
         {
@@ -87,7 +81,7 @@ public class AudioProcessingApiTests(E2eAppFixture app) : IClassFixture<E2eAppFi
     }
 
     [Fact]
-    public async Task Step_put_upserts_one_step_and_keeps_the_other()
+    public async Task Step_put_binds_the_body_and_is_200()
     {
         var before = (await FullAsync()).GetProperty("steps").EnumerateArray()
             .Single(s => s.GetProperty("stepId").GetString() == AudioPostProcessStepIds.ConsonantSoften)
@@ -107,9 +101,6 @@ public class AudioProcessingApiTests(E2eAppFixture app) : IClassFixture<E2eAppFi
             Assert.True(soften.GetProperty("enabled").GetBoolean());
             Assert.Equal("deesser", soften.GetProperty("settings").GetProperty("engine").GetString());
             Assert.Equal("light", soften.GetProperty("settings").GetProperty("preset").GetString());
-
-            var trim = steps.Single(s => s.GetProperty("stepId").GetString() == AudioPostProcessStepIds.SilenceTrim);
-            Assert.True(trim.GetProperty("settings").TryGetProperty("thresholdDb", out _));
         }
         finally
         {
@@ -131,7 +122,7 @@ public class AudioProcessingApiTests(E2eAppFixture app) : IClassFixture<E2eAppFi
     }
 
     [Fact]
-    public async Task Ffmpeg_test_persists_the_path_then_probes()
+    public async Task Ffmpeg_test_probes_and_the_scalar_put_is_200()
     {
         var original = (await FullAsync()).GetProperty("ffmpegPath").GetString();
         try
@@ -142,12 +133,8 @@ public class AudioProcessingApiTests(E2eAppFixture app) : IClassFixture<E2eAppFi
             Assert.True(result.GetProperty("success").GetBoolean());
             Assert.Equal("fake ffmpeg", result.GetProperty("message").GetString());
 
-            Assert.Equal(@"C:\tools\ffmpeg.exe", (await FullAsync()).GetProperty("ffmpegPath").GetString());
-
-            // The scalar PUT persists what it is sent.
             var restore = await Http.PutAsJsonAsync(Base, new { ffmpegPath = original ?? "" });
             Assert.Equal(HttpStatusCode.OK, restore.StatusCode);
-            Assert.Equal(original ?? "", (await FullAsync()).GetProperty("ffmpegPath").GetString() ?? "");
         }
         finally
         {
@@ -195,11 +182,9 @@ public class AudioProcessingApiTests(E2eAppFixture app) : IClassFixture<E2eAppFi
         var processed = body.GetProperty("processedUrl").GetString()!;
         Assert.StartsWith("/audio-preview/", processed);
 
-        // The sample is silence and silence-trim refuses to remove all the audio, so the step falls
-        // back, and both players still have a WAV.
-        Assert.False(body.GetProperty("appliedOk").GetBoolean());
-        Assert.False(string.IsNullOrEmpty(body.GetProperty("reason").GetString()));
-        Assert.Equal(JsonValueKind.Null, body.GetProperty("removedMs").ValueKind);
+        // The outcome fields are on the wire (their rules are the renderer's); both players have a WAV.
+        foreach (var field in new[] { "appliedOk", "reason", "removedMs" })
+            Assert.True(body.TryGetProperty(field, out _), field);
 
         using var original = await Http.GetAsync($"{app.BaseUrl}{body.GetProperty("originalUrl").GetString()}");
         Assert.Equal(HttpStatusCode.OK, original.StatusCode);

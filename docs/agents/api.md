@@ -1131,3 +1131,12 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/history/{stepId}/res
   it was, so their apply can't write over the restored text blind. Their dialogs hear it on the hub
   (`bookEdit` `dropped`).
 - The receipt is whole-project, so every open view rebuilds.
+
+## Testing the API
+
+Each behaviour is pinned once, at the lowest layer that can prove it. The host tests (`src/Read2Me.E2eTests/Tests/Api`) prove only what a host proves: routing, binding, DI wiring, status mapping, the wire shape and hub delivery.
+
+- **A thin contract case per endpoint.** One success case, one case per distinct status mapping (404, 409, 422…), and the wire fields, shapes and `problem+json` bodies that matter. Counts, orderings, message texts and stored values belong to the unit test of the service that owns them. A refusal that many routes share (an unknown id, an unknown provider type) is asserted once, on one or two routes, not on every route.
+- **The outer test loses an overlapping case.** When a host test and a unit test pin the same case, the host test goes, after you read the unit test's assertions and confirm they cover it. The exception is a unit test that only mirrors the code (NSubstitute fakes wired to match the implementation, a list of a schema's field keys, a test of a fake): that one goes, and the host test stays. If no unit test pins the case, the host case stays; write the unit test first when the case is a body of rules.
+- **Migration tests only where a migration changes data.** A test that a table or column exists after `MigrateAsync` pins the model, not the migration. Keep a migration test when it seeds a row, migrates, and asserts the transform.
+- **No wall-clock budgets in unit tests.** Never assert a duration or a percentile. To prove that something waits its turn, hold the lock it waits on and assert the order of events.

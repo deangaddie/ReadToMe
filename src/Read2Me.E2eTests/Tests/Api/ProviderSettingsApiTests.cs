@@ -48,9 +48,20 @@ public class ProviderSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppF
         var keys = schema.GetProperty("fields").EnumerateArray().Select(f => f.GetProperty("key").GetString()).ToList();
         if (expectedKey is null) Assert.Empty(keys);
         else Assert.Equal([expectedKey], keys);
+    }
 
-        var unknown = await Http.GetAsync(Url($"{area}/schema?type=Nope"));
-        Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
+    /// <summary>
+    /// The one place the schema routes' 400 is asserted (they share a handler): the type is a member
+    /// name and nothing else (#166) — a number, another casing, an unknown name or none names no type.
+    /// </summary>
+    [Fact]
+    public async Task A_schema_takes_only_a_member_name_as_its_type()
+    {
+        foreach (var query in new[] { "?type=Nope", "?type=1", "?type=chatterbox", "" })
+        {
+            var response = await Http.GetAsync(Url($"paragraph-tts/schema{query}"));
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
     }
 
     // ── canonical settingsJson ───────────────────────────────────────────────
@@ -87,27 +98,6 @@ public class ProviderSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppF
         finally
         {
             await Http.DeleteAsync(Url($"semantic-similarity/{id}"));
-        }
-    }
-
-    [Fact]
-    public async Task Tts_settingsJson_is_canonical_with_every_field_of_its_provider_record()
-    {
-        var created = await CreateAsync("paragraph-tts", new
-        {
-            name = $"canon-{Guid.NewGuid():N}",
-            type = "Qwen3Base",
-            settingsJson = """{"top_k":40,"baseUrl":"http://example-tts"}""",
-        });
-        try
-        {
-            Assert.Equal(
-                """{"baseUrl":"http://example-tts","modelId":"qwen3-base","language":"auto","temperature":null,"top_p":null,"top_k":40,"repetition_penalty":null,"max_new_tokens":null,"seed":null,"maxChunkChars":500,"carrierPrefixEnabled":false,"carrierMaxTargetChars":30}""",
-                created.GetProperty("settingsJson").GetString());
-        }
-        finally
-        {
-            await Http.DeleteAsync(Url($"paragraph-tts/{created.GetProperty("id").GetInt32()}"));
         }
     }
 
@@ -162,7 +152,7 @@ public class ProviderSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppF
     [Fact]
     public async Task A_paragraph_tts_config_of_the_removed_Chatterbox_Turbo_type_is_400()
     {
-        // Removed by ADR 0010: its name is no member, and its reserved value 2 is an integer.
+        // Removed by ADR 0010: its name is no member (asserted here once; its reserved value 2 is an integer).
         var response = await Http.PostAsJsonAsync(Url("paragraph-tts"),
             new { name = "turbo", type = "ChatterboxTurbo", settingsJson = """{"BaseUrl":"http://localhost:8001"}""" });
 
@@ -173,6 +163,8 @@ public class ProviderSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppF
 
     // ── text-processing steps ────────────────────────────────────────────────
 
+    // The wire shape, PUT 200 and 404. What the text-processing block stores is pinned by
+    // ParagraphTtsSettingsServiceTests and TextSubstitutionStepRoundTripTests.
     [Fact]
     public async Task Text_steps_lists_the_built_ins_then_the_configs_substitutions()
     {
@@ -211,14 +203,6 @@ public class ProviderSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppF
             var substitution = steps.Last();
             Assert.Equal(stepId, substitution.GetProperty("stepId").GetString());
             Assert.False(substitution.GetProperty("builtIn").GetBoolean());
-
-            // The whole text-processing block reloads as saved.
-            var stored = (await GetJsonAsync("paragraph-tts")).EnumerateArray()
-                .First(c => c.GetProperty("id").GetInt32() == id);
-            Assert.Equal(["to-sentence-case", stepId],
-                stored.GetProperty("enabledStepIds").EnumerateArray().Select(s => s.GetString()));
-            Assert.Equal("Doctor", stored.GetProperty("substitutionSteps")[0].GetProperty("toText").GetString());
-            Assert.Equal(7, stored.GetProperty("toSentenceCaseConfig").GetProperty("wordMinLength").GetInt32());
         }
         finally
         {
@@ -254,15 +238,13 @@ public class ProviderSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppF
     }
 
     [Fact]
-    public async Task Sample_text_over_300_characters_is_refused_and_the_stored_text_kept()
+    public async Task Sample_text_over_300_characters_is_400_with_the_reason_in_detail()
     {
-        var before = (await GetJsonAsync("voice-design/sample-text")).GetProperty("text").GetRawText();
-
+        // The cap, its message and "the stored text is kept" are pinned by VoiceDesignSettingsServiceTests.
         var put = await Http.PutAsJsonAsync(Url("voice-design/sample-text"), new { text = new string('a', 301) });
 
         Assert.Equal(HttpStatusCode.BadRequest, put.StatusCode);
-        Assert.Contains("301 characters", (await JsonAsync(put)).GetProperty("detail").GetString());
-        Assert.Equal(before, (await GetJsonAsync("voice-design/sample-text")).GetProperty("text").GetRawText());
+        Assert.False(string.IsNullOrWhiteSpace((await JsonAsync(put)).GetProperty("detail").GetString()));
     }
 
     // ── test actions ─────────────────────────────────────────────────────────
