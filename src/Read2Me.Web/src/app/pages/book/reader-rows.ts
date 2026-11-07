@@ -7,12 +7,7 @@ import type {
   ParagraphItemDto,
   ApiItemType,
 } from '@app/api';
-import type {
-  AudioReviewInfo,
-  ItemStatusEntry,
-  OutcomeEntry,
-  ParagraphStatusEntry,
-} from '@app/live/live-messages';
+import type { ItemStatusEntry, ParagraphStatusEntry } from '@app/live/live-messages';
 import type { IconName } from '@app/ui/icons';
 import type { StatusKind } from '@app/ui/partials';
 import type { SpeakerChipState } from '@app/ui/speaker-chip';
@@ -126,9 +121,7 @@ export function queueChip(
     : { status: 'warn', label: unfinishedLabel, tooltip };
 }
 
-export function reviewChip(
-  review: AudioReviewInfo | AudioReviewDto | null | undefined,
-): ChipView | null {
+export function reviewChip(review: AudioReviewDto | null | undefined): ChipView | null {
   if (!review) return null;
   if (review.state === 'Dismissed') {
     return { status: 'neutral', label: 'Review dismissed', icon: 'rate_review' };
@@ -142,10 +135,7 @@ export function reviewChip(
     };
   }
   if (!review.verifyOk) {
-    const wer =
-      review.wer === null || review.wer === undefined
-        ? null
-        : `WER ${Math.round(review.wer * 100)}%`;
+    const wer = review.wer === null ? null : `WER ${Math.round(review.wer * 100)}%`;
     const tooltip = [wer, review.verifyReason].filter(Boolean).join(' — ');
     return {
       status: 'warn',
@@ -193,6 +183,9 @@ export interface RowContext {
   litMarks: ReadonlySet<string>;
 }
 
+/** A settled outcome, the same shape on a paragraph and an item. */
+export type Outcome = NonNullable<(ParagraphStatusEntry | ItemStatusEntry)['outcome']>;
+
 /** Queued or processing: the server rejects edits, so the row shows a lock (design §8). */
 export function isBusy(entry: ParagraphStatusEntry | ItemStatusEntry | null | undefined): boolean {
   return entry?.status === 'Queued' || entry?.status === 'Processing';
@@ -204,15 +197,17 @@ export function isBusy(entry: ParagraphStatusEntry | ItemStatusEntry | null | un
  */
 export function clearableOutcome(
   entry: ParagraphStatusEntry | ItemStatusEntry | null | undefined,
-): OutcomeEntry | null {
+): Outcome | null {
   if (!entry || isBusy(entry)) return null;
   return entry.outcome ?? null;
 }
 
-/** The hub's per-item review wins once it has reported one; the REST map covers the rest. */
-export function reviewOf(ctx: RowContext, itemId: string): AudioReviewInfo | AudioReviewDto | null {
-  const live = ctx.itemStatus[itemId]?.review;
-  return live !== undefined ? live : (ctx.reviews[itemId] ?? null);
+/**
+ * The hub's per-item review wins once it has reported one; the REST map covers the rest. A null hub
+ * review is no answer: the hub's mirror holds only reviews set since the host started.
+ */
+export function reviewOf(ctx: RowContext, itemId: string): AudioReviewDto | null {
+  return ctx.itemStatus[itemId]?.review ?? ctx.reviews[itemId] ?? null;
 }
 
 // ---- rows ---------------------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { ProjectStatusDto, StepCheckpointDto } from '@app/api';
-import type { NodeStatusSummary } from '@app/live/live-messages';
+import type { NodeStatusSummaryDto } from '@app/api';
 import {
   type PipelineInput,
   type PipelineStep,
@@ -13,7 +13,7 @@ import {
 
 const VOL = 'v1';
 
-function node(overrides: Partial<NodeStatusSummary> = {}): NodeStatusSummary {
+function node(overrides: Partial<NodeStatusSummaryDto> = {}): NodeStatusSummaryDto {
   const n = {
     attributionRemaining: 0,
     audioRemaining: 0,

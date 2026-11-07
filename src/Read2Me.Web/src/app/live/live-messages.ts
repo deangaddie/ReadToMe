@@ -1,22 +1,26 @@
 /**
- * Wire shapes of `/hubs/live` (spec D5 "Live hub contract"), mirrored by hand from
- * `Read2Me.App/Live/LiveMessages.cs` + `LiveMessageMapper.cs` + `ILiveClient.cs`. JSON conventions
- * (LiveServiceCollectionExtensions.cs): camelCase properties, enums as member names, nulls omitted
- * — so a nullable C# field is `?: T | null` here. `live-messages.spec.ts` reads the C# sources and
- * fails when a family name or a `kind` string drifts.
+ * Wire shapes of `/hubs/live`. The host puts every hub message into the same OpenAPI document as its
+ * HTTP contract (ADR 0017, #238), so each type here is an alias, `Schema['X']`, under its C# name, and
+ * `bun run typecheck` catches a field the host renames or retypes once `pwsh scripts/api-types.ps1`
+ * regenerates the contract. The wire form is the HTTP one: camelCase properties, enums as PascalCase
+ * member names, nulls sent — so a nullable field is `T | null`, never missing.
+ *
+ * What stays hand-written is what has no wire counterpart: the client's own-write flag on a
+ * {@link Receipt}, the stream names, {@link hasFacet}, and the two lists the connection walks,
+ * each checked against the document.
  */
 
-import {
-  AiServiceStatus,
-  BookEditRowDto,
-  Guid,
-  HistoryStep,
-  NodeStatusSummaryDto,
-  QueueItemStatus,
-  SetupCheckReport,
-} from '@app/api';
+import type { Schema } from '@app/api';
 
-// ---- families (ILiveClient.cs [HubMethodName]) --------------------------------------------------
+// ---- families and hub methods -------------------------------------------------------------------
+
+/** Each family (`connection.on` name) and the payload it carries: `ILiveClient`'s `[HubMethodName]`s. */
+export type LiveMessageMap = Schema['LiveMessageMap'];
+
+export type LiveFamily = keyof LiveMessageMap;
+
+/** True only when `A` and `B` are the same union, so a list below can't miss a member. */
+type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 
 export const LIVE_FAMILIES = [
   'queue',
@@ -37,542 +41,91 @@ export const LIVE_FAMILIES = [
   'llmTest',
   'history',
   'setupCheck',
-] as const;
+] as const satisfies readonly LiveFamily[];
 
-export type LiveFamily = (typeof LIVE_FAMILIES)[number];
-
-/** Client → server hub methods (LiveHub.cs). */
+/** Client → server hub methods (`LiveHub`'s public methods). */
 export const LIVE_HUB_METHODS = {
   joinProject: 'JoinProject',
   leaveProject: 'LeaveProject',
   joinStream: 'JoinStream',
   leaveStream: 'LeaveStream',
   getSnapshot: 'GetSnapshot',
-} as const;
+} as const satisfies Record<string, Schema['LiveHubMethod']>;
 
+const everyFamilyListed: Same<(typeof LIVE_FAMILIES)[number], LiveFamily> = true;
+const everyHubMethodListed: Same<
+  (typeof LIVE_HUB_METHODS)[keyof typeof LIVE_HUB_METHODS],
+  Schema['LiveHubMethod']
+> = true;
+void everyFamilyListed;
+void everyHubMethodListed;
+
+/** What `JoinStream` / `LeaveStream` take; the hub refuses anything else. */
 export type StreamKind = 'llm' | 'audio';
-
-// ---- kind discriminators (LiveMessageMapper.cs) -------------------------------------------------
-
-export const LIVE_KINDS = {
-  assembly: ['phaseStarted', 'progress', 'completed', 'failed', 'cancelled'],
-  voiceBatch: ['started', 'progress', 'voiceUpdated', 'completed', 'cancelled'],
-  watchdog: ['recoveryStarted', 'containerRestarted', 'serviceHealthy', 'serviceDown'],
-  llm: [
-    'runStarted',
-    'runEnded',
-    'requestStarted',
-    'delta',
-    'streamCompleted',
-    'streamFailed',
-    'streamAborted',
-    'escalationStarted',
-  ],
-  audioGen: [
-    'itemStarted',
-    'audioGenerated',
-    'normalized',
-    'postProcessed',
-    'transcribed',
-    'verified',
-    'failed',
-    'modelLoading',
-  ],
-  bookEdit: ['progress', 'done', 'failed', 'dropped'],
-  llmTest: ['done', 'failed', 'cancelled'],
-  history: ['stepLanded', 'stepChanged', 'stepClosed', 'busyChanged', 'restoring'],
-  preflight: ['stage', 'done'],
-  setupCheck: ['progress', 'done'],
-} as const;
-
-export type AssemblyKind = (typeof LIVE_KINDS.assembly)[number];
-export type VoiceBatchKind = (typeof LIVE_KINDS.voiceBatch)[number];
-export type WatchdogKind = (typeof LIVE_KINDS.watchdog)[number];
-export type LlmKind = (typeof LIVE_KINDS.llm)[number];
-export type AudioGenKind = (typeof LIVE_KINDS.audioGen)[number];
-export type BookEditKind = (typeof LIVE_KINDS.bookEdit)[number];
-export type LlmTestKind = (typeof LIVE_KINDS.llmTest)[number];
-export type HistoryKind = (typeof LIVE_KINDS.history)[number];
-export type PreflightKind = (typeof LIVE_KINDS.preflight)[number];
-export type SetupCheckKind = (typeof LIVE_KINDS.setupCheck)[number];
 
 // ---- queue (group global, debounced) ------------------------------------------------------------
 
-/** `AttributionQueueSnapshot` (`CharacterQueueService.cs`). */
-export interface AttributionQueueState {
-  queuedCount: number;
-  processingCount: number;
-  averageSecondsPerParagraph: number;
-  estimatedSecondsRemaining: number;
-  completedCount: number;
-  currentItemElapsedSeconds: number;
-  isBusy: boolean;
-}
-
-/** `AudioQueueService.AudioQueueSnapshot`. */
-export interface AudioQueueState {
-  queuedCount: number;
-  processingCount: number;
-  averageSecondsPerItem: number;
-  estimatedSecondsRemaining: number;
-  completedCount: number;
-  currentItemElapsedSeconds: number;
-}
-
-/** The latched "escalating N items → config (step S)" banner; absent when nothing is escalating. */
-export interface EscalationState {
-  step: number;
-  configName?: string | null;
-  itemCount: number;
-}
-
-export interface QueueMessage {
-  attribution: AttributionQueueState;
-  audio: AudioQueueState;
-  escalation?: EscalationState | null;
-}
+export type QueueMessage = Schema['QueueMessage'];
+export type AttributionQueueSnapshot = Schema['AttributionQueueSnapshot'];
+export type AudioQueueSnapshot = Schema['AudioQueueSnapshot'];
+/** The latched "escalating N items → config (step S)" banner; null when nothing is escalating. */
+export type EscalationState = Schema['EscalationState'];
 
 // ---- nodeStatus / itemStatus (group project:{folder}, debounced deltas) -------------------------
 
-/** `NodeStatusService.NodeStatusSummary`: the same shape as `NodeStatusSummaryDto`, which `GET /api/projects/{folder}/status` returns. */
-export type NodeStatusSummary = NodeStatusSummaryDto;
-
-/** A `null` entry means the node no longer rolls up. */
-export interface NodeStatusMessage {
-  folder: string;
-  nodes: Record<string, NodeStatusSummary | null>;
-  folderAudioRemaining: number;
-}
-
-export type OutcomeKindName = 'Failed' | 'Unfinished';
-
-export interface OutcomeEntry {
-  kind: OutcomeKindName;
-  reason?: string | null;
-}
-
-export interface ParagraphStatusEntry {
-  status?: QueueItemStatus | null;
-  outcome?: OutcomeEntry | null;
-}
-
-export type AudioReviewState = 'NeedsReview' | 'Dismissed';
-
-/** `AudioReviewService.AudioReviewInfo`. */
-export interface AudioReviewInfo {
-  state: AudioReviewState;
-  normalizeOk: boolean;
-  normalizeReason?: string | null;
-  verifyOk: boolean;
-  wer?: number | null;
-  verifyReason?: string | null;
-  transcript?: string | null;
-  originalTextSnapshot?: string | null;
-}
-
-export interface ItemStatusEntry {
-  status?: QueueItemStatus | null;
-  outcome?: OutcomeEntry | null;
-  audioVersion?: number | null;
-  review?: AudioReviewInfo | null;
-}
-
-/** A `null` entry means the queue forgot the paragraph/item. */
-export interface ItemStatusMessage {
-  folder: string;
-  paragraphs: Record<string, ParagraphStatusEntry | null>;
-  items: Record<string, ItemStatusEntry | null>;
-}
+/** A `null` node means it no longer rolls up. */
+export type NodeStatusMessage = Schema['NodeStatusMessage'];
+/** A `null` entry means the queue forgot the paragraph or item. */
+export type ItemStatusMessage = Schema['ItemStatusMessage'];
+export type ParagraphStatusEntry = Schema['ParagraphStatusEntry'];
+export type ItemStatusEntry = Schema['ItemStatusEntry'];
 
 // ---- receipt (group project:{folder}) -----------------------------------------------------------
 
-export type BookMutationScope = 'Exact' | 'WholeProject';
-
-/** `BookFacets` flag names; the wire value is the comma-joined `[Flags]` string (`"Structure, Audio"`). */
-export const BOOK_FACETS = [
-  'Structure',
-  'ItemText',
-  'Attribution',
-  'Audio',
-  'Reviews',
-  'Characters',
-  'Narrator',
-  'Voices',
-  'VoiceRules',
-  'ProjectPolicy',
-  'NodeTitle',
-  'Checkpoints',
-  'Pronunciations',
-] as const;
-
-export type BookFacet = (typeof BOOK_FACETS)[number];
-
-/** `"None"`, `"All"`, one facet name, or a comma-separated combination. */
-export type BookFacetsValue = string;
-
-export function hasFacet(facets: BookFacetsValue, facet: BookFacet): boolean {
-  if (facets === 'All') return true;
-  return facets
-    .split(',')
-    .map((f) => f.trim())
-    .includes(facet);
-}
-
-export interface BookStructuralRelation {
-  kind: 'Split' | 'Merge';
-  sourceId: Guid;
-  resultId: Guid;
-}
-
-export interface BookMutationEffects {
-  scope: BookMutationScope;
-  facets: BookFacetsValue;
-  createdId?: Guid | null;
-  /** The node holding `createdId` (a new paragraph's chapter); null for a Volume or when unreported. */
-  createdParentId?: Guid | null;
-  nodeIds: Guid[];
-  paragraphIds: Guid[];
-  paragraphItemIds: Guid[];
-  structural: BookStructuralRelation[];
-  changedNothing: boolean;
-}
-
-export interface ReceiptMessage {
-  folder: string;
-  /** Verbatim mutation class name, e.g. `CreateCharacterMutation`. */
-  mutationName: string;
-  mutationId: Guid;
-  revision: number;
-  effects: BookMutationEffects;
-  originId: Guid;
-}
+export type ReceiptMessage = Schema['ReceiptMessage'];
+export type ReceiptEffects = Schema['ReceiptEffects'];
+/** One facet of a write; a receipt lists each one it touched. */
+export type BookFacets = Schema['BookFacets'];
 
 /** {@link ReceiptMessage} with the client's own-write flag (from `X-Origin-Id`). */
 export interface Receipt extends ReceiptMessage {
   isOwn: boolean;
 }
 
-// ---- assembly (group global) --------------------------------------------------------------------
-
-export interface AssemblyMessage {
-  kind: AssemblyKind;
-  /** `AssemblyPhase` member name; on `phaseStarted`. */
-  phase?: string | null;
-  /** 0..1; on `progress`. */
-  fraction?: number | null;
-  /** On `failed`. */
-  reason?: string | null;
-  /** Project the (single, global) run belongs to; on every kind. */
-  folder?: string | null;
-  /** The m4b's name under the project's outputs; on `completed`. */
-  outputFileName?: string | null;
+export function hasFacet(facets: readonly BookFacets[], facet: BookFacets): boolean {
+  return facets.includes(facet);
 }
 
-export interface AssemblyState {
-  isRunning: boolean;
-  currentPhase?: string | null;
-  /** 0..100. */
-  encodePercent: number;
-  lastError?: string | null;
-  audioRemainingCount: number;
-  /** Project of the running (or most recent) job. */
-  folder?: string | null;
-  /** What the most recent job produced; null while running and after a failure or cancel. */
-  outputFileName?: string | null;
-}
+// ---- the other families -------------------------------------------------------------------------
 
-// ---- voiceBatch (group global) ------------------------------------------------------------------
-
-export interface VoiceBatchMessage {
-  kind: VoiceBatchKind;
-  operation?: string | null;
-  processed?: number | null;
-  total?: number | null;
-  failed?: number | null;
-  currentVoiceName?: string | null;
-  characterId?: Guid | null;
-  voiceId?: Guid | null;
-  designPrompt?: string | null;
-  audioFileName?: string | null;
-  transcript?: string | null;
-  /** With fresh audio: the take's length and soft-limit warning, as the voice list reports them. */
-  referenceSeconds?: number | null;
-  referenceWarning?: string | null;
-}
-
-export interface VoiceBatchState {
-  isRunning: boolean;
-  processed: number;
-  total: number;
-  failed: number;
-  currentVoiceName?: string | null;
-  currentOperation?: string | null;
-  lastError?: string | null;
-}
-
-// ---- watchdog (group global) --------------------------------------------------------------------
-
-export interface WatchdogMessage {
-  kind: WatchdogKind;
-  service: string;
-  reason?: string | null;
-}
-
-/** Last known watchdog kind per service name. */
-export type WatchdogState = Record<string, WatchdogKind | string>;
-
-// ---- serviceStatus (group global) ---------------------------------------------------------------
-
-export type ServiceOp = 'start' | 'restart' | 'shutdown';
-
-/**
- * A managed service's status as last observed (`AiServiceStatus` member name), after every probe,
- * lifecycle op and watchdog transition. `op` with `ok` / `error` is present only when a lifecycle
- * op produced the observation — that is what a client toasts.
- */
-export interface ServiceStatusMessage {
-  name: string;
-  status: AiServiceStatus;
-  op?: ServiceOp | null;
-  ok?: boolean | null;
-  error?: string | null;
-}
-
-/** Last observed `AiServiceStatus` per service name. */
-export type ServiceStatusState = Record<string, AiServiceStatus>;
-
-// ---- preflight (one connection) -----------------------------------------------------------------
-
-export type PreflightStage =
-  | 'waitingToStop'
-  | 'stopping'
-  | 'stopped'
-  | 'waitingToStart'
-  | 'starting'
-  | 'ready'
-  | 'failed';
-
-/**
- * One pre-flight run (`POST /api/preflight/{taskKind}/run`), sent only to the connection that
- * started it. `stage` names a service and where it is; `done` carries `ok` and, on failure, the
- * summary `reason`. `run` is the id the 202 answered with.
- */
-export interface PreflightMessage {
-  kind: PreflightKind;
-  run: string;
-  name?: string | null;
-  stage?: PreflightStage | null;
-  error?: string | null;
-  ok?: boolean | null;
-  reason?: string | null;
-}
-
-// ---- llm (group stream:llm) ---------------------------------------------------------------------
-
-export interface LlmMessage {
-  kind: LlmKind;
-  /** `delta`: a 100 ms batch of thinking text. */
-  thinking?: string | null;
-  /** `delta`: a 100 ms batch of content text. */
-  content?: string | null;
-  paragraphPreview?: string | null;
-  prompt?: string | null;
-  configId?: number | null;
-  configName?: string | null;
-  tokensIn?: number | null;
-  tokensOut?: number | null;
-  generationMs?: number | null;
-  tokensPerSecond?: number | null;
-  reason?: string | null;
-  step?: number | null;
-  itemCount?: number | null;
-}
-
-// ---- audioGen (group stream:audio) --------------------------------------------------------------
-
-export interface AudioGenMessage {
-  kind: AudioGenKind;
-  id: Guid;
-  attempt: number;
-  character?: string | null;
-  text?: string | null;
-  ok?: boolean | null;
-  reason?: string | null;
-  stepId?: string | null;
-  applied?: boolean | null;
-  transcript?: string | null;
-  wer?: number | null;
-  rescued?: boolean | null;
-  /** `modelLoading` only: the TTS model being loaded. That kind has an empty `id`. */
-  model?: string | null;
-}
-
-// ---- throughput (group global, 1 s while a run is active) ---------------------------------------
-
-export interface ConfigThroughput {
-  configId: number;
-  configName: string;
-  requests: number;
-  tokensOut?: number | null;
-  generationMs?: number | null;
-  tokensPerSecond?: number | null;
-}
-
-/** `ThroughputAggregator.ThroughputSnapshot`. */
-export interface ThroughputSnapshot {
-  hasRun: boolean;
-  isRunActive: boolean;
-  runThroughput?: number | null;
-  perConfig: ConfigThroughput[];
-  generationRate?: number | null;
-  /** 20 × 500 ms buckets, oldest first; `null` = nothing measured in that bucket. */
-  generationRateHistory: (number | null)[];
-}
-
-// ---- settingsChanged (group global) -------------------------------------------------------------
-
-export interface SettingsChangedMessage {
-  area: string;
-}
-
-// ---- series (group global) ---------------------------------------------------------------------
-
-/** A series registry changed or the series was deleted: read `/api/series` again. Debounced 250 ms per series. */
-export interface SeriesMessage {
-  seriesId: string;
-  kind: 'Changed' | 'Deleted';
-}
-
-// ---- bookEdit (one connection) ------------------------------------------------------------------
-
-/**
- * One proposal run, sent only to the connection that started it. `done` carries every row the run
- * landed — all of them, or the partial set a cancel kept, with `cancelled` saying which.
- * `dropped` goes to the project group instead: a Restore dropped the session, and `reason` says so
- * ("The project was restored — run it again").
- */
-export interface BookEditMessage {
-  kind: BookEditKind;
-  program: string;
-  done?: number | null;
-  total?: number | null;
-  cancelled?: boolean | null;
-  rows?: BookEditRowDto[] | null;
-  reason?: string | null;
-}
-
-// ---- llmTest (one connection) -------------------------------------------------------------------
-
-/** How the LLM settings test send ended (ticket 21); the tokens travel on `stream:llm`. */
-export interface LlmTestMessage {
-  kind: LlmTestKind;
-  configId: number;
-  reason?: string | null;
-}
-
-// ---- history (group project) --------------------------------------------------------------------
-
-/**
- * A step that appeared in a project's History, an open one a later commit extended (its label,
- * summary and `endedAt` move on), or one that closed, with its row as
- * `GET /api/projects/{folder}/history` lists it. A one-mutation step lands and closes together.
- */
-export interface HistoryStepMessage {
-  kind: Exclude<HistoryKind, 'busyChanged' | 'restoring'>;
-  folder: string;
-  step: LiveHistoryStep;
-}
-
-/**
- * The project's busy reason moved ("Attribution: 128 paragraphs left"). Idle arrives with no
- * `reason` key at all: the hub omits nulls.
- */
-export interface HistoryBusyMessage {
-  kind: 'busyChanged';
-  folder: string;
-  reason?: string | null;
-}
-
-/**
- * A Restore of the project started or finished; every write is refused in between. `finished`
- * carries the Restore step it added, which also lands and closes like any step; no `step` when it
- * added none or failed.
- */
-export interface HistoryRestoringMessage {
-  kind: 'restoring';
-  folder: string;
-  phase: 'started' | 'finished';
-  step?: LiveHistoryStep;
-}
-
-export type HistoryMessage = HistoryStepMessage | HistoryBusyMessage | HistoryRestoringMessage;
-
-type NullableHistoryField =
-  | 'parentStepId'
-  | 'summary'
-  | 'endedAt'
-  | 'note'
-  | 'action'
-  | 'restoredFromStepId';
-
-/** `HistoryStep` as the hub sends it: its null fields omitted. */
-export type LiveHistoryStep = Omit<HistoryStep, NullableHistoryField> &
-  Partial<Pick<HistoryStep, NullableHistoryField>>;
-
-// ---- setupCheck (group global) -----------------------------------------------------------------
-
-/**
- * The Setup check's Full check, sent to every client so the page, the app-bar shield and every tab
- * read one source. Each carries the whole report (the current step's rows read `checking`, and
- * `fullRun` says where the run is); `done` carries the final one, with `fullRun` null.
- */
-export interface SetupCheckMessage {
-  kind: SetupCheckKind;
-  report: SetupCheckReport;
-}
+export type AssemblyMessage = Schema['AssemblyMessage'];
+export type AssemblyState = Schema['AssemblyState'];
+export type VoiceBatchMessage = Schema['VoiceBatchMessage'];
+export type VoiceBatchState = Schema['VoiceBatchState'];
+export type WatchdogMessage = Schema['WatchdogMessage'];
+export type WatchdogKind = Schema['WatchdogKind'];
+export type ServiceStatusMessage = Schema['ServiceStatusMessage'];
+export type AiServiceOp = Schema['AiServiceOp'];
+export type PreflightMessage = Schema['PreflightMessage'];
+export type PreflightStage = Schema['PreflightStage'];
+export type LlmMessage = Schema['LlmMessage'];
+export type AudioGenMessage = Schema['AudioGenMessage'];
+export type ThroughputSnapshot = Schema['ThroughputSnapshot'];
+export type SettingsChangedMessage = Schema['SettingsChangedMessage'];
+/** A series registry changed or the series was deleted: read `/api/series` again. */
+export type SeriesMessage = Schema['SeriesMessage'];
+export type BookEditMessage = Schema['BookEditMessage'];
+export type LlmTestMessage = Schema['LlmTestMessage'];
+export type HistoryMessage = Schema['HistoryMessage'];
+export type SetupCheckMessage = Schema['SetupCheckMessage'];
 
 // ---- snapshots ----------------------------------------------------------------------------------
 
 /** Answer to `JoinProject` and one entry of {@link LiveSnapshot.projects}. */
-export interface ProjectSnapshot {
-  folder: string;
-  revision: number;
-  nodes: Record<string, NodeStatusSummary | null>;
-  folderAudioRemaining: number;
-  paragraphs: Record<string, ParagraphStatusEntry | null>;
-  items: Record<string, ItemStatusEntry | null>;
-}
-
+export type ProjectSnapshot = Schema['ProjectSnapshot'];
 /** Answer to `GetSnapshot`. */
-export interface LiveSnapshot {
-  queue: QueueMessage;
-  assembly: AssemblyState;
-  voiceBatch: VoiceBatchState;
-  watchdog: WatchdogState;
-  serviceStatus: ServiceStatusState;
-  throughput: ThroughputSnapshot;
-  projects: Record<string, ProjectSnapshot>;
-}
-
-// ---- family → payload ---------------------------------------------------------------------------
-
-export interface LiveMessageMap {
-  queue: QueueMessage;
-  nodeStatus: NodeStatusMessage;
-  itemStatus: ItemStatusMessage;
-  receipt: ReceiptMessage;
-  assembly: AssemblyMessage;
-  voiceBatch: VoiceBatchMessage;
-  watchdog: WatchdogMessage;
-  serviceStatus: ServiceStatusMessage;
-  preflight: PreflightMessage;
-  llm: LlmMessage;
-  audioGen: AudioGenMessage;
-  throughput: ThroughputSnapshot;
-  settingsChanged: SettingsChangedMessage;
-  series: SeriesMessage;
-  bookEdit: BookEditMessage;
-  llmTest: LlmTestMessage;
-  history: HistoryMessage;
-  setupCheck: SetupCheckMessage;
-}
+export type LiveSnapshot = Schema['LiveSnapshot'];
+/** Last watchdog transition per service name. */
+export type WatchdogState = LiveSnapshot['watchdog'];
+/** Last observed `AiServiceStatus` per service name. */
+export type ServiceStatusState = LiveSnapshot['serviceStatus'];

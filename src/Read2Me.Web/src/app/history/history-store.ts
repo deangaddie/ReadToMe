@@ -2,7 +2,7 @@ import { type Guid, HistoryApi, type HistoryStep, StepView, toApiError } from '@
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
-import type { HistoryMessage, LiveHistoryStep } from '@app/live/live-messages';
+import type { HistoryMessage } from '@app/live/live-messages';
 import { LiveService, type Unsubscribe } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast';
 import { plural } from '@app/ui/wording';
@@ -252,7 +252,7 @@ export class HistoryStore {
   private receive(message: HistoryMessage): void {
     if (this.held) this.held.push(message);
     // The busy and restoring answers matter whether or not the list was ever read.
-    else if (this._loaded() || message.kind === 'busyChanged' || message.kind === 'restoring')
+    else if (this._loaded() || message.kind === 'BusyChanged' || message.kind === 'Restoring')
       this.apply(message, { overList: false });
   }
 
@@ -262,16 +262,17 @@ export class HistoryStore {
    * never reopens a row the list has closed.
    */
   private apply(message: HistoryMessage, { overList }: { overList: boolean }): void {
-    if (message.kind === 'busyChanged') {
+    if (message.kind === 'BusyChanged') {
       this.setBusy(message.reason ?? null);
       return;
     }
     // The Restore step itself lands and closes like any other; the restoring phase is not a row.
-    if (message.kind === 'restoring') {
-      this.setRestoring(message.phase === 'started', message.step);
+    if (message.kind === 'Restoring') {
+      this.setRestoring(message.phase === 'Started', message.step);
       return;
     }
-    const incoming = fromHub(message.step);
+    const incoming = message.step;
+    if (incoming === null) return;
     const steps = this._steps();
     const at = steps.findIndex((s) => s.stepId === incoming.stepId);
     if (at < 0) {
@@ -290,7 +291,7 @@ export class HistoryStore {
    * audio count. A tab viewing a step when a Restore starts goes back to current: the step it
    * shows is about to stop being the past of the current project.
    */
-  private setRestoring(restoring: boolean, step: LiveHistoryStep | undefined): void {
+  private setRestoring(restoring: boolean, step: HistoryStep | null): void {
     this._restoring.set(restoring);
     if (restoring) {
       if (!this.restoringHere) this.backToCurrent();
@@ -314,17 +315,4 @@ export class HistoryStore {
 /** "#8 Split chapter": how toasts name a step. */
 function stepName(step: Pick<HistoryStep, 'sequence' | 'label'>): string {
   return `#${step.sequence} ${step.label}`;
-}
-
-/** The hub omits null fields; the list and the sheet read them as null. */
-function fromHub(step: LiveHistoryStep): HistoryStep {
-  return {
-    ...step,
-    parentStepId: step.parentStepId ?? null,
-    summary: step.summary ?? null,
-    endedAt: step.endedAt ?? null,
-    note: step.note ?? null,
-    action: step.action ?? null,
-    restoredFromStepId: step.restoredFromStepId ?? null,
-  };
 }

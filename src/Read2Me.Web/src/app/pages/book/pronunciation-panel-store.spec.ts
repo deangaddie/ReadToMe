@@ -125,7 +125,7 @@ describe('the panel editor', () => {
     list = [];
     live.emit('receipt', {
       folder: 'the-adventures-of-sherlock-holmes',
-      effects: { facets: 'Pronunciations' },
+      effects: { facets: ['Pronunciations'] },
     } as unknown as Receipt);
     await sleep(REFETCH_DEBOUNCE_MS + 30);
 

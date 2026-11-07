@@ -22,6 +22,7 @@ import { NODE_MENU_OPEN, type NodeMenuRequest } from './node-menu';
 import type { RowContext } from './reader-rows';
 import { AudioSelectionStore } from './selection-store';
 import { SpeakerAssigner } from './speaker-assigner';
+import { itemEntry } from '../../../testing/live-messages';
 
 const NARRATOR_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -353,7 +354,9 @@ describe('itemRow (audio)', () => {
   describe('retry flow (ticket 13)', () => {
     it('a settled failure shows its reason and a Retry that re-queues just this item', async () => {
       const el = await mount(
-        ctx({ itemStatus: { n: { outcome: { kind: 'Failed', reason: 'No default voice' } } } }),
+        ctx({
+          itemStatus: { n: itemEntry({ outcome: { kind: 'Failed', reason: 'No default voice' } }) },
+        }),
         NARRATION,
       );
       expect(text(el.querySelector('.r2m-status-chip'))).toContain('Failed');
@@ -365,14 +368,20 @@ describe('itemRow (audio)', () => {
 
     it('an unfinished take can be retried too; a queued or clean item offers no Retry', async () => {
       const unfinished = await mount(
-        ctx({ itemStatus: { n: { outcome: { kind: 'Unfinished', reason: 'cancelled' } } } }),
+        ctx({
+          itemStatus: { n: itemEntry({ outcome: { kind: 'Unfinished', reason: 'cancelled' } }) },
+        }),
         NARRATION,
       );
       expect(text(unfinished.querySelector('.r2m-status-chip'))).toContain('Unfinished');
       expect(unfinished.querySelector('[data-action=retry-audio]')).not.toBeNull();
 
       const queued = await mount(
-        ctx({ itemStatus: { n: { status: 'Queued', outcome: { kind: 'Failed' } } } }),
+        ctx({
+          itemStatus: {
+            n: itemEntry({ status: 'Queued', outcome: { kind: 'Failed', reason: null } }),
+          },
+        }),
         NARRATION,
       );
       expect(queued.querySelector('[data-action=retry-audio]')).toBeNull();
@@ -380,7 +389,7 @@ describe('itemRow (audio)', () => {
     });
 
     it('a line nobody can read yet has no Retry; a generating page disables it', async () => {
-      const failed = { outcome: { kind: 'Failed' as const } };
+      const failed = itemEntry({ outcome: { kind: 'Failed', reason: null } });
       const unvoiced = await mount(ctx({ itemStatus: { u: failed } }), UNATTRIBUTED);
       expect(text(unvoiced.querySelector('.r2m-status-chip'))).toContain('Failed');
       expect(unvoiced.querySelector('[data-action=retry-audio]')).toBeNull();
@@ -392,7 +401,7 @@ describe('itemRow (audio)', () => {
   });
 
   it('offers a player only for items with audio, busting the cache with audioVersion', async () => {
-    const el = await mount(ctx({ itemStatus: { d: { audioVersion: 3 } } }), DIALOG);
+    const el = await mount(ctx({ itemStatus: { d: itemEntry({ audioVersion: 3 }) } }), DIALOG);
     const player = el.querySelector('r2m-audio-player')!;
     await player.rendered();
     expect(player.querySelector('audio')?.getAttribute('src')).toBe(
@@ -415,7 +424,7 @@ describe('itemRow (audio)', () => {
 
     it('while viewing a step, item play is off and says item audio is not kept', async () => {
       const el = await mount(
-        blocked({ viewing: true, itemStatus: { d: { audioVersion: 3 } } }),
+        blocked({ viewing: true, itemStatus: { d: itemEntry({ audioVersion: 3 }) } }),
         DIALOG,
       );
       const player = el.querySelector('r2m-audio-player')!;
@@ -428,7 +437,7 @@ describe('itemRow (audio)', () => {
     it('the node menu, delivery cue, Retry and Dismiss are off with the reason', async () => {
       const el = await mount(
         blocked({
-          itemStatus: { d: { outcome: { kind: 'Failed' } } },
+          itemStatus: { d: itemEntry({ outcome: { kind: 'Failed', reason: null } }) },
           reviews: {
             d: {
               state: 'NeedsReview',
@@ -476,7 +485,9 @@ describe('itemRow (audio)', () => {
 
   it('a settled failure shows its reason as a tooltip; a queued item shows Queued and a lock', async () => {
     const el = await mount(
-      ctx({ itemStatus: { n: { outcome: { kind: 'Failed', reason: 'No default voice' } } } }),
+      ctx({
+        itemStatus: { n: itemEntry({ outcome: { kind: 'Failed', reason: 'No default voice' } }) },
+      }),
       NARRATION,
     );
     const chip = el.querySelector('.r2m-status-chip')!;
@@ -485,7 +496,11 @@ describe('itemRow (audio)', () => {
     expect(el.querySelector('.r2m-item__lock')).toBeNull();
 
     const queued = await mount(
-      ctx({ itemStatus: { n: { status: 'Queued', outcome: { kind: 'Failed' } } } }),
+      ctx({
+        itemStatus: {
+          n: itemEntry({ status: 'Queued', outcome: { kind: 'Failed', reason: null } }),
+        },
+      }),
       NARRATION,
     );
     expect(text(queued.querySelector('.r2m-status-chip'))).toContain('Queued');
@@ -494,7 +509,11 @@ describe('itemRow (audio)', () => {
 
   it('outside Audio mode the item queue state is not shown', async () => {
     const el = await mount(
-      ctx({ mode: 'speakers', itemSelectable: false, itemStatus: { n: { status: 'Queued' } } }),
+      ctx({
+        mode: 'speakers',
+        itemSelectable: false,
+        itemStatus: { n: itemEntry({ status: 'Queued' }) },
+      }),
       NARRATION,
     );
     expect(el.querySelector('.r2m-status-chip')).toBeNull();
@@ -550,12 +569,28 @@ describe('itemRow (audio)', () => {
       expect(dismissed.querySelector('[data-action=dismiss-review]')).toBeNull();
     });
 
-    it('the hub review wins over the REST map: a null hub review clears the chip', async () => {
+    it('the hub review wins over the REST map once it has reported one', async () => {
       const el = await mount(
-        ctx({ reviews: { d: review }, itemStatus: { d: { audioVersion: 2, review: null } } }),
+        ctx({
+          reviews: { d: review },
+          itemStatus: {
+            d: itemEntry({ audioVersion: 2, review: { ...review, state: 'Dismissed' } }),
+          },
+        }),
         DIALOG,
       );
       expect(el.querySelector('.r2m-status-chip')).toBeNull();
+    });
+
+    it('a null hub review leaves the REST one: the hub only knows reviews set since the host started', async () => {
+      const el = await mount(
+        ctx({
+          reviews: { d: review },
+          itemStatus: { d: itemEntry({ audioVersion: 2, review: null }) },
+        }),
+        DIALOG,
+      );
+      expect(text(el.querySelector('.r2m-status-chip')!)).toContain('Verify failed');
     });
   });
 });

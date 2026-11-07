@@ -190,7 +190,7 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         while (messages.IsEmpty && deadline.Elapsed < TimeSpan.FromSeconds(10))
             await Task.Delay(50);
         var changed = Assert.Single(messages);
-        Assert.Equal("stepChanged", changed.GetProperty("kind").GetString());
+        Assert.Equal("StepChanged", changed.GetProperty("kind").GetString());
         Assert.Equal(ganondorf, changed.GetProperty("step").GetProperty("stepId").GetGuid());
         Assert.True(changed.GetProperty("step").GetProperty("cantOpen").GetBoolean());
     }

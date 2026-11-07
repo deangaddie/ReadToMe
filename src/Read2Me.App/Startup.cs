@@ -44,7 +44,9 @@ namespace Read2Me.App
             services.AddOpenApi(o => o
                 .AddSchemaTransformer<EnumSchemaTransformer>()
                 .AddSchemaTransformer<AlwaysWrittenPropertySchemaTransformer>()
-                .AddDocumentTransformer<ProblemResponseTransformer>());
+                .AddSchemaTransformer<LiveRecordSchemaTransformer>()
+                .AddDocumentTransformer<ProblemResponseTransformer>()
+                .AddDocumentTransformer<LiveContractTransformer>());
             services.AddLiveHub();
 
             services.AddHttpClient();

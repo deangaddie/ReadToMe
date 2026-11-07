@@ -156,18 +156,21 @@ export class ExportPage extends R2mElement {
       this.live.on('assembly', (m) => {
         if ((m.folder ?? this.store.folder()) !== this.store.folder()) return;
         switch (m.kind) {
-          case 'phaseStarted':
+          case 'PhaseStarted':
             this.watchedOutcome.set(null);
             this.reachedPhase.set(m.phase ?? null);
             break;
-          case 'progress':
+          case 'Progress':
             break;
-          case 'completed':
-            this.watchedOutcome.set(m.kind);
+          case 'Completed':
+            this.watchedOutcome.set('completed');
             void this.loadOutputs();
             break;
-          default:
-            this.watchedOutcome.set(m.kind);
+          case 'Failed':
+            this.watchedOutcome.set('failed');
+            break;
+          case 'Cancelled':
+            this.watchedOutcome.set('cancelled');
         }
       }),
     );

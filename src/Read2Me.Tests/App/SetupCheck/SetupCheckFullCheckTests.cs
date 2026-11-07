@@ -236,12 +236,12 @@ namespace Read2Me.Tests.App.SetupCheck
 
             var sent = Sent();
             Assert.All(_hub.Method("setupCheck"), m => Assert.Equal(LiveGroups.Global, m.Target));
-            var progress = sent.Last(m => m.Kind == "progress");
+            var progress = sent.Last(m => m.Kind == SetupCheckMessageKind.Progress);
             Assert.Equal(new SetupFullRun(1, 1, SetupCheckLane.Local, "Encoding a 1 s tone to .m4b", Cancelling: false), progress.Report.FullRun);
             Assert.Equal(SetupCheckResult.Checking, Row(progress.Report, SetupCheckIds.Ffmpeg).Result);
 
             var done = sent[^1];
-            Assert.Equal("done", done.Kind);
+            Assert.Equal(SetupCheckMessageKind.Done, done.Kind);
             Assert.Null(done.Report.FullRun);
             Assert.NotNull(done.Report.FullCheckedAt);
             var ffmpeg = Row(done.Report, SetupCheckIds.Ffmpeg);
@@ -285,7 +285,7 @@ namespace Read2Me.Tests.App.SetupCheck
             var cancelling = runner.CancelFullCheck();
 
             Assert.True(cancelling?.FullRun?.Cancelling);
-            Assert.Contains(Sent(), m => m.Kind == "progress" && m.Report.FullRun?.Cancelling == true);
+            Assert.Contains(Sent(), m => m.Kind == SetupCheckMessageKind.Progress && m.Report.FullRun?.Cancelling == true);
             _encode.Release.SetResult(new FfmpegProbeResult(true, "Encoded a 1 s tone"));
             var final = await start.Finished.WaitAsync(Wait);
             Assert.Equal(SetupCheckResult.Passed, Row(final, SetupCheckIds.Ffmpeg).Result);
@@ -307,7 +307,7 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.Equal("Full check cancelled", ffmpeg.Found);
             Assert.Equal(0, _encode.Calls);
             Assert.Null(final.FullRun);
-            Assert.Equal("done", Sent()[^1].Kind);
+            Assert.Equal(SetupCheckMessageKind.Done, Sent()[^1].Kind);
         }
 
         [Fact]
@@ -493,7 +493,7 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.Null(final.FullCheckedAt);
             Assert.True(_audioGate.IsOpen);
             Assert.False(_busy.Running);
-            Assert.Equal("done", Sent()[^1].Kind);
+            Assert.Equal(SetupCheckMessageKind.Done, Sent()[^1].Kind);
         }
 
         [Fact]

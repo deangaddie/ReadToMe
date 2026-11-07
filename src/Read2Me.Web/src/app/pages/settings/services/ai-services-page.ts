@@ -14,10 +14,10 @@ import css from './ai-services-page.css' with { type: 'text' };
 adoptStyles(css);
 
 const LOG_KIND: Record<WatchdogKind, StatusKind> = {
-  recoveryStarted: 'warn',
-  containerRestarted: 'busy',
-  serviceHealthy: 'ok',
-  serviceDown: 'error',
+  RecoveryStarted: 'warn',
+  ContainerRestarted: 'busy',
+  ServiceHealthy: 'ok',
+  ServiceDown: 'error',
 };
 
 /** One service card's inputs, derived in the render effect (see {@link AiServicesPage.cards}). */

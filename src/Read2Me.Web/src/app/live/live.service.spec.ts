@@ -12,8 +12,22 @@ import {
   RECONNECT_DELAYS_MS,
   reconnectDelayMs,
 } from './live-connection';
-import type { LiveSnapshot, ProjectSnapshot, Receipt, ReceiptMessage } from './live-messages';
+import type {
+  LiveFamily,
+  LiveMessageMap,
+  LiveSnapshot,
+  ProjectSnapshot,
+  Receipt,
+  ReceiptMessage,
+} from './live-messages';
 import { DISCONNECT_TOAST_AFTER_MS, LiveService } from './live.service';
+import {
+  assemblyMessage,
+  itemEntry,
+  paragraphEntry,
+  serviceStatusMessage,
+  voiceBatchMessage,
+} from '../../testing/live-messages';
 
 // ---- fake HubConnection --------------------------------------------------------------------------
 
@@ -73,7 +87,8 @@ class FakeConnection implements LiveConnection {
 
   // ---- test controls ----
 
-  emit(family: string, payload: unknown): void {
+  /** One frame as the hub sends it: typed by family, so a spec's frame is the wire shape. */
+  emit<K extends LiveFamily>(family: K, payload: LiveMessageMap[K]): void {
     const handler = this.handlers.get(family);
     if (!handler) throw new Error(`no handler for ${family}`);
     handler(payload);
@@ -133,6 +148,8 @@ function snapshot(projects: Record<string, ProjectSnapshot> = {}): LiveSnapshot 
       encodePercent: 0,
       lastError: null,
       audioRemainingCount: 4,
+      folder: null,
+      outputFileName: null,
     },
     voiceBatch: {
       isRunning: false,
@@ -143,7 +160,7 @@ function snapshot(projects: Record<string, ProjectSnapshot> = {}): LiveSnapshot 
       currentOperation: null,
       lastError: null,
     },
-    watchdog: { llama: 'serviceHealthy' },
+    watchdog: { llama: 'ServiceHealthy' },
     serviceStatus: { llama: 'Ready' },
     throughput: {
       hasRun: false,
@@ -169,7 +186,9 @@ function receipt(folder: string, originId: string): ReceiptMessage {
     revision: 7,
     effects: {
       scope: 'Exact',
-      facets: 'Characters',
+      createdId: null,
+      createdParentId: null,
+      facets: ['Characters'],
       nodeIds: [],
       paragraphIds: [],
       paragraphItemIds: [],
@@ -239,7 +258,7 @@ describe('LiveService', () => {
       configName: 'Qwen 28B',
       itemCount: 3,
     });
-    expect(service.watchdog()).toEqual({ llama: 'serviceHealthy' });
+    expect(service.watchdog()).toEqual({ llama: 'ServiceHealthy' });
     expect(service.serviceStatus()).toEqual({ llama: 'Ready' });
     expect(service.assembly().audioRemainingCount).toBe(4);
   });
@@ -410,25 +429,31 @@ describe('LiveService', () => {
     const assemblies: string[] = [];
     service.on('assembly', (m) => assemblies.push(m.kind));
 
-    current().emit('assembly', { kind: 'phaseStarted', phase: 'Encode' });
-    current().emit('assembly', { kind: 'progress', fraction: 0.42 });
+    current().emit('assembly', assemblyMessage({ kind: 'PhaseStarted', phase: 'Encode' }));
+    current().emit('assembly', assemblyMessage({ kind: 'Progress', fraction: 0.42 }));
     expect(service.assembly()).toMatchObject({
       isRunning: true,
       currentPhase: 'Encode',
       encodePercent: 42,
     });
-    current().emit('assembly', { kind: 'failed', reason: 'ffmpeg exited 1' });
+    current().emit('assembly', assemblyMessage({ kind: 'Failed', reason: 'ffmpeg exited 1' }));
     expect(service.assembly()).toMatchObject({ isRunning: false, lastError: 'ffmpeg exited 1' });
-    expect(assemblies).toEqual(['phaseStarted', 'progress', 'failed']);
+    expect(assemblies).toEqual(['PhaseStarted', 'Progress', 'Failed']);
 
-    current().emit('voiceBatch', { kind: 'started', operation: 'prompts', total: 5 });
-    current().emit('voiceBatch', {
-      kind: 'progress',
-      processed: 2,
-      total: 5,
-      failed: 1,
-      currentVoiceName: 'Elizabeth',
-    });
+    current().emit(
+      'voiceBatch',
+      voiceBatchMessage({ kind: 'Started', operation: 'prompts', total: 5 }),
+    );
+    current().emit(
+      'voiceBatch',
+      voiceBatchMessage({
+        kind: 'Progress',
+        processed: 2,
+        total: 5,
+        failed: 1,
+        currentVoiceName: 'Elizabeth',
+      }),
+    );
     expect(service.voiceBatch()).toMatchObject({
       isRunning: true,
       processed: 2,
@@ -437,14 +462,17 @@ describe('LiveService', () => {
       currentOperation: 'prompts',
     });
 
-    current().emit('watchdog', { kind: 'serviceDown', service: 'llama', reason: 'timeout' });
-    expect(service.watchdog()['llama']).toBe('serviceDown');
-    current().emit('serviceStatus', {
-      name: 'whisper',
-      status: 'Stopped',
-      op: 'shutdown',
-      ok: true,
-    });
+    current().emit('watchdog', { kind: 'ServiceDown', service: 'llama', reason: 'timeout' });
+    expect(service.watchdog()['llama']).toBe('ServiceDown');
+    current().emit(
+      'serviceStatus',
+      serviceStatusMessage({
+        name: 'whisper',
+        status: 'Stopped',
+        op: 'Shutdown',
+        ok: true,
+      }),
+    );
     expect(service.serviceStatus()).toEqual({ llama: 'Ready', whisper: 'Stopped' });
 
     current().emit('nodeStatus', {
@@ -473,12 +501,12 @@ describe('LiveService', () => {
 
     current().emit('itemStatus', {
       folder: 'pride-and-prejudice',
-      paragraphs: { p1: { status: 'Queued' } },
-      items: { i1: { status: 'Processing', audioVersion: 3 } },
+      paragraphs: { p1: paragraphEntry({ status: 'Queued' }) },
+      items: { i1: itemEntry({ status: 'Processing', audioVersion: 3 }) },
     });
-    expect(service.projects()['pride-and-prejudice']?.paragraphs['p1']).toEqual({
-      status: 'Queued',
-    });
+    expect(service.projects()['pride-and-prejudice']?.paragraphs['p1']).toEqual(
+      paragraphEntry({ status: 'Queued' }),
+    );
     expect(service.projects()['pride-and-prejudice']?.items['i1']?.audioVersion).toBe(3);
 
     current().emit('receipt', receipt('pride-and-prejudice', 'x'));

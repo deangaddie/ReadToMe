@@ -9,6 +9,7 @@ import type {
 } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { AudioStreamFeed, LlmStreamFeed } from './stream-feed';
+import { audioGenMessage, llmMessage } from '../../testing/live-messages';
 
 class FakeLive {
   readonly llm = new Emitter<LlmMessage>();
@@ -42,13 +43,13 @@ beforeEach(() => {
   override(LiveService, live as unknown as LiveService);
 });
 
-const started: LlmMessage = {
-  kind: 'requestStarted',
+const started: LlmMessage = llmMessage({
+  kind: 'RequestStarted',
   paragraphPreview: 'p',
   prompt: 'q',
   configId: 1,
   configName: 'c',
-};
+});
 
 describe('LlmStreamFeed', () => {
   it('joins stream:llm on the first acquire and leaves on the last release', () => {
@@ -75,7 +76,7 @@ describe('LlmStreamFeed', () => {
 
     llm.acquire();
     live.llm.emit(started);
-    live.llm.emit({ kind: 'delta', thinking: 't', content: 'c' });
+    live.llm.emit(llmMessage({ kind: 'Delta', thinking: 't', content: 'c' }));
     expect(llm.events().map((e) => e.kind)).toEqual([
       'requestStarted',
       'thinkingDelta',
@@ -83,7 +84,7 @@ describe('LlmStreamFeed', () => {
     ]);
 
     llm.release();
-    live.llm.emit({ kind: 'delta', content: 'ignored' });
+    live.llm.emit(llmMessage({ kind: 'Delta', content: 'ignored' }));
     expect(llm.events()).toHaveLength(3);
 
     llm.acquire();
@@ -114,8 +115,10 @@ describe('AudioStreamFeed', () => {
     const audio = use(AudioStreamFeed);
     audio.acquire();
     expect(live.joined).toEqual(['audio']);
-    live.audioGen.emit({ kind: 'itemStarted', id: 'i1', attempt: 1, character: 'Alice' });
-    live.audioGen.emit({ kind: 'audioGenerated', id: 'i1', attempt: 1 });
+    live.audioGen.emit(
+      audioGenMessage({ kind: 'ItemStarted', id: 'i1', attempt: 1, character: 'Alice' }),
+    );
+    live.audioGen.emit(audioGenMessage({ kind: 'AudioGenerated', id: 'i1', attempt: 1 }));
     expect(audio.events().map((e) => e.kind)).toEqual(['itemStarted', 'audioGenerated']);
     audio.release();
     expect(live.left).toEqual(['audio']);

@@ -1,10 +1,11 @@
 import {
   AssemblyState,
-  AttributionQueueState,
-  AudioQueueState,
+  AttributionQueueSnapshot,
+  AudioQueueSnapshot,
   EscalationState,
   QueueMessage,
   VoiceBatchState,
+  WatchdogKind,
   WatchdogState,
 } from '@app/live/live-messages';
 import { JobState, JobView } from '@app/ui/job';
@@ -53,19 +54,19 @@ export interface WatchdogKindView {
 }
 
 /** One reading of each watchdog kind for the Services tab chip and the recovery/down job. */
-export const WATCHDOG_KIND_VIEW: Record<string, WatchdogKindView> = {
-  recoveryStarted: {
+export const WATCHDOG_KIND_VIEW: Record<WatchdogKind, WatchdogKindView> = {
+  RecoveryStarted: {
     status: 'busy',
     label: 'Recovering',
     job: { state: 'running', detail: 'Waiting for the service' },
   },
-  containerRestarted: {
+  ContainerRestarted: {
     status: 'busy',
     label: 'Restarted',
     job: { state: 'running', detail: 'Container restarted' },
   },
-  serviceHealthy: { status: 'ok', label: 'Healthy', job: null },
-  serviceDown: { status: 'error', label: 'Down', job: { state: 'failed', detail: null } },
+  ServiceHealthy: { status: 'ok', label: 'Healthy', job: null },
+  ServiceDown: { status: 'error', label: 'Down', job: { state: 'failed', detail: null } },
 };
 
 export const UNKNOWN_WATCHDOG_VIEW: WatchdogKindView = {
@@ -74,7 +75,7 @@ export const UNKNOWN_WATCHDOG_VIEW: WatchdogKindView = {
   job: null,
 };
 
-export function watchdogView(kind: string | undefined): WatchdogKindView {
+export function watchdogView(kind: WatchdogKind | undefined): WatchdogKindView {
   return (kind && WATCHDOG_KIND_VIEW[kind]) || UNKNOWN_WATCHDOG_VIEW;
 }
 
@@ -82,11 +83,11 @@ export function isActiveJob(job: JobView): boolean {
   return job.state === 'running' || job.state === 'queued';
 }
 
-export function isAttributionActive(q: AttributionQueueState): boolean {
+export function isAttributionActive(q: AttributionQueueSnapshot): boolean {
   return q.isBusy || q.queuedCount > 0 || q.processingCount > 0;
 }
 
-export function isAudioActive(q: AudioQueueState): boolean {
+export function isAudioActive(q: AudioQueueSnapshot): boolean {
   return q.queuedCount > 0 || q.processingCount > 0;
 }
 
@@ -118,7 +119,7 @@ export function deriveJobs(inputs: ActivityInputs): JobView[] {
 }
 
 function attributionJob(
-  q: AttributionQueueState,
+  q: AttributionQueueSnapshot,
   escalation: EscalationState | null | undefined,
   since: number,
 ): JobView | null {
@@ -141,7 +142,7 @@ function attributionJob(
   };
 }
 
-function audioJob(q: AudioQueueState, since: number): JobView | null {
+function audioJob(q: AudioQueueSnapshot, since: number): JobView | null {
   if (!isAudioActive(q)) return null;
   return {
     id: AUDIO_JOB_ID,

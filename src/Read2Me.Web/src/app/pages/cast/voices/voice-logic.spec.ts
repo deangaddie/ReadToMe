@@ -12,6 +12,7 @@ import {
   sourceSwitchWarning,
   voiceAudioUrl,
 } from './voice-logic';
+import { voiceBatchMessage } from '../../../../testing/live-messages';
 
 function voice(overrides: Partial<VoiceDto> = {}): VoiceDto {
   return {
@@ -129,13 +130,16 @@ describe('batch hub events', () => {
       defaultVoiceId: 'v1',
       voices: [voice({ transcript: 'old', isEdited: true }), voice({ id: 'v2', name: 'Other' })],
     };
-    const patched = applyVoiceUpdated(list, {
-      kind: 'voiceUpdated',
-      characterId: 'alice',
-      voiceId: 'v1',
-      designPrompt: 'a warm alto',
-      audioFileName: 'voices/alice/v1.wav',
-    });
+    const patched = applyVoiceUpdated(
+      list,
+      voiceBatchMessage({
+        kind: 'VoiceUpdated',
+        characterId: 'alice',
+        voiceId: 'v1',
+        designPrompt: 'a warm alto',
+        audioFileName: 'voices/alice/v1.wav',
+      }),
+    );
     expect(patched).not.toBe(list);
     expect(patched.voices[0]).toEqual(
       voice({
@@ -154,40 +158,52 @@ describe('batch hub events', () => {
       defaultVoiceId: 'v1',
       voices: [voice({ referenceSeconds: 18.2, referenceWarning: 'over 15 s' })],
     };
-    const fresh = applyVoiceUpdated(list, {
-      kind: 'voiceUpdated',
-      voiceId: 'v1',
-      audioFileName: 'voices/alice/v1.wav',
-      referenceSeconds: 9.4,
-      referenceWarning: null,
-    });
+    const fresh = applyVoiceUpdated(
+      list,
+      voiceBatchMessage({
+        kind: 'VoiceUpdated',
+        voiceId: 'v1',
+        audioFileName: 'voices/alice/v1.wav',
+        referenceSeconds: 9.4,
+        referenceWarning: null,
+      }),
+    );
     expect(fresh.voices[0]).toMatchObject({ referenceSeconds: 9.4, referenceWarning: null });
 
-    const long = applyVoiceUpdated(list, {
-      kind: 'voiceUpdated',
-      voiceId: 'v1',
-      audioFileName: 'voices/alice/v1.wav',
-      referenceSeconds: 16.4,
-      referenceWarning: 'over 15 s again',
-    });
+    const long = applyVoiceUpdated(
+      list,
+      voiceBatchMessage({
+        kind: 'VoiceUpdated',
+        voiceId: 'v1',
+        audioFileName: 'voices/alice/v1.wav',
+        referenceSeconds: 16.4,
+        referenceWarning: 'over 15 s again',
+      }),
+    );
     expect(long.voices[0]).toMatchObject({
       referenceSeconds: 16.4,
       referenceWarning: 'over 15 s again',
     });
 
     // A message without the figures (unreadable header) leaves nothing stale behind.
-    const unmeasured = applyVoiceUpdated(list, {
-      kind: 'voiceUpdated',
-      voiceId: 'v1',
-      audioFileName: 'voices/alice/v1.wav',
-    });
+    const unmeasured = applyVoiceUpdated(
+      list,
+      voiceBatchMessage({
+        kind: 'VoiceUpdated',
+        voiceId: 'v1',
+        audioFileName: 'voices/alice/v1.wav',
+      }),
+    );
     expect(unmeasured.voices[0]).toMatchObject({ referenceSeconds: null, referenceWarning: null });
 
-    const promptOnly = applyVoiceUpdated(list, {
-      kind: 'voiceUpdated',
-      voiceId: 'v1',
-      designPrompt: 'a warm alto',
-    });
+    const promptOnly = applyVoiceUpdated(
+      list,
+      voiceBatchMessage({
+        kind: 'VoiceUpdated',
+        voiceId: 'v1',
+        designPrompt: 'a warm alto',
+      }),
+    );
     expect(promptOnly.voices[0]).toMatchObject({
       referenceSeconds: 18.2,
       referenceWarning: 'over 15 s',
@@ -196,7 +212,9 @@ describe('batch hub events', () => {
 
   it('voiceUpdated for an unknown voice answers the same list (reload instead)', () => {
     const list: CharacterVoicesDto = { defaultVoiceId: null, voices: [voice()] };
-    expect(applyVoiceUpdated(list, { kind: 'voiceUpdated', voiceId: 'new' })).toBe(list);
+    expect(
+      applyVoiceUpdated(list, voiceBatchMessage({ kind: 'VoiceUpdated', voiceId: 'new' })),
+    ).toBe(list);
   });
 });
 

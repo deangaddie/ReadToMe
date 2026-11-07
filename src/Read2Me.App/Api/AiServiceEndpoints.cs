@@ -34,19 +34,19 @@ namespace Read2Me.App.Api
                 .WithSummary("Live status of one AI service (single health probe): NotFound, Stopped, Starting, Ready, Recovering, Down or Unknown.");
 
             endpoints.MapPost("/api/ai-services/{name}/start", (string name, DockerAiServiceRegistry r, AiServiceOpCoordinator ops) =>
-                    StartOp(name, AiServiceOpCoordinator.Start, r, ops))
+                    StartOp(name, AiServiceOp.Start, r, ops))
                 .RefusedWhileSetupCheckRuns()
-                .WithSummary("docker start → health poll → warm-up, in the background (202). The outcome arrives as serviceStatus { name, status, op: start, ok, error? } on /hubs/live. 404 unknown service, 409 while it already has an op in flight.");
+                .WithSummary("docker start → health poll → warm-up, in the background (202). The outcome arrives as serviceStatus { name, status, op: Start, ok, error? } on /hubs/live. 404 unknown service, 409 while it already has an op in flight.");
 
             endpoints.MapPost("/api/ai-services/{name}/restart", (string name, DockerAiServiceRegistry r, AiServiceOpCoordinator ops) =>
-                    StartOp(name, AiServiceOpCoordinator.Restart, r, ops))
+                    StartOp(name, AiServiceOp.Restart, r, ops))
                 .RefusedWhileSetupCheckRuns()
-                .WithSummary("docker restart → health poll → warm-up, in the background (202); outcome as serviceStatus { op: restart }. 404 / 409 as start.");
+                .WithSummary("docker restart → health poll → warm-up, in the background (202); outcome as serviceStatus { op: Restart }. 404 / 409 as start.");
 
             endpoints.MapPost("/api/ai-services/{name}/shutdown", (string name, DockerAiServiceRegistry r, AiServiceOpCoordinator ops) =>
-                    StartOp(name, AiServiceOpCoordinator.Shutdown, r, ops))
+                    StartOp(name, AiServiceOp.Shutdown, r, ops))
                 .RefusedWhileSetupCheckRuns()
-                .WithSummary("docker stop in the background (202), pausing a queue that still has work for it; outcome as serviceStatus { op: shutdown }. 404 / 409 as start.");
+                .WithSummary("docker stop in the background (202), pausing a queue that still has work for it; outcome as serviceStatus { op: Shutdown }. 404 / 409 as start.");
         }
 
         private static AiServiceDto ToDto(DockerAiService s) => new(s.Name, s.ContainerName, s.BaseUrl, s.UsesGpu);
@@ -78,7 +78,7 @@ namespace Read2Me.App.Api
         }
 
         private static Results<Accepted, NotFound, ProblemHttpResult> StartOp(
-            string name, string op, DockerAiServiceRegistry registry, AiServiceOpCoordinator ops)
+            string name, AiServiceOp op, DockerAiServiceRegistry registry, AiServiceOpCoordinator ops)
         {
             var service = Find(registry, name);
             if (service is null)
@@ -86,7 +86,7 @@ namespace Read2Me.App.Api
 
             return ops.TryStart(service, op)
                 ? TypedResults.Accepted((string?)null)
-                : TypedResults.Problem($"{service.Name} already has a {ops.InFlight.GetValueOrDefault(service.Name, "lifecycle")} in progress.",
+                : TypedResults.Problem($"{service.Name} already has a {(ops.InFlight.TryGetValue(service.Name, out var running) ? running.ToString().ToLowerInvariant() : "lifecycle op")} in progress.",
                     statusCode: StatusCodes.Status409Conflict);
         }
     }

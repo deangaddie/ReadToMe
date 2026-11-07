@@ -15,26 +15,26 @@ public static class LiveMessageMapper
     /// <summary>Control events only; deltas are batched by <see cref="DeltaBatcher"/> and return null here.</summary>
     public static LlmMessage? Control(LlmStreamEvent e) => e switch
     {
-        RunStarted => new LlmMessage("runStarted"),
-        RunEnded => new LlmMessage("runEnded"),
-        RequestStarted r => new LlmMessage("requestStarted",
+        RunStarted => new LlmMessage(LlmMessageKind.RunStarted),
+        RunEnded => new LlmMessage(LlmMessageKind.RunEnded),
+        RequestStarted r => new LlmMessage(LlmMessageKind.RequestStarted,
             ParagraphPreview: r.ParagraphPreview, Prompt: r.Prompt, ConfigId: r.ConfigId, ConfigName: r.ConfigName),
-        StreamCompleted c => new LlmMessage("streamCompleted",
+        StreamCompleted c => new LlmMessage(LlmMessageKind.StreamCompleted,
             TokensIn: c.TokensIn, TokensOut: c.TokensOut, GenerationMs: c.GenerationMs, TokensPerSecond: c.TokensPerSecond),
-        StreamFailed f => new LlmMessage("streamFailed", Reason: f.Reason),
-        StreamAborted a => new LlmMessage("streamAborted",
+        StreamFailed f => new LlmMessage(LlmMessageKind.StreamFailed, Reason: f.Reason),
+        StreamAborted a => new LlmMessage(LlmMessageKind.StreamAborted,
             TokensOut: a.TokensOut, GenerationMs: a.GenerationMs, TokensPerSecond: a.TokensPerSecond),
-        EscalationStarted es => new LlmMessage("escalationStarted",
+        EscalationStarted es => new LlmMessage(LlmMessageKind.EscalationStarted,
             Step: es.Step, ConfigName: es.ConfigName, ItemCount: es.ItemCount),
         _ => null,
     };
 
     public static LlmMessage Delta(string thinking, string content) =>
-        new("delta", Thinking: thinking, Content: content);
+        new(LlmMessageKind.Delta, Thinking: thinking, Content: content);
 
     /// <summary>
     /// A journal replay as messages: each run of consecutive deltas collapses into one
-    /// <c>delta</c>, control events pass through in order.
+    /// <c>Delta</c>, control events pass through in order.
     /// </summary>
     public static IEnumerable<LlmMessage> Replay(IEnumerable<LlmStreamEvent> events)
     {
@@ -65,62 +65,62 @@ public static class LiveMessageMapper
 
     public static AudioGenMessage Map(AudioGenEvent e) => e switch
     {
-        ItemStarted s => new AudioGenMessage("itemStarted", s.Id, s.Attempt, Character: s.Character, Text: s.Text),
-        AudioGenerated g => new AudioGenMessage("audioGenerated", g.Id, g.Attempt),
-        Normalized n => new AudioGenMessage("normalized", n.Id, n.Attempt, Ok: n.Ok, Reason: n.Reason),
-        PostProcessed p => new AudioGenMessage("postProcessed", p.Id, p.Attempt, Reason: p.Reason, StepId: p.StepId, Applied: p.Applied),
-        Transcribed t => new AudioGenMessage("transcribed", t.Id, t.Attempt, Transcript: t.Transcript),
-        Verified v => new AudioGenMessage("verified", v.Id, v.Attempt, Ok: v.Ok, Reason: v.Reason, Wer: v.Wer, Rescued: v.Rescued),
-        Failed f => new AudioGenMessage("failed", f.Id, f.Attempt, Reason: f.Reason),
+        ItemStarted s => new AudioGenMessage(AudioGenMessageKind.ItemStarted, s.Id, s.Attempt, Character: s.Character, Text: s.Text),
+        AudioGenerated g => new AudioGenMessage(AudioGenMessageKind.AudioGenerated, g.Id, g.Attempt),
+        Normalized n => new AudioGenMessage(AudioGenMessageKind.Normalized, n.Id, n.Attempt, Ok: n.Ok, Reason: n.Reason),
+        PostProcessed p => new AudioGenMessage(AudioGenMessageKind.PostProcessed, p.Id, p.Attempt, Reason: p.Reason, StepId: p.StepId, Applied: p.Applied),
+        Transcribed t => new AudioGenMessage(AudioGenMessageKind.Transcribed, t.Id, t.Attempt, Transcript: t.Transcript),
+        Verified v => new AudioGenMessage(AudioGenMessageKind.Verified, v.Id, v.Attempt, Ok: v.Ok, Reason: v.Reason, Wer: v.Wer, Rescued: v.Rescued),
+        Failed f => new AudioGenMessage(AudioGenMessageKind.Failed, f.Id, f.Attempt, Reason: f.Reason),
         // Not tied to an item: the TTS gate sits below the item pipeline. Id stays empty.
-        TtsModelLoading m => new AudioGenMessage("modelLoading", Guid.Empty, 0, Model: m.ModelId),
+        TtsModelLoading m => new AudioGenMessage(AudioGenMessageKind.ModelLoading, Guid.Empty, 0, Model: m.ModelId),
         _ => throw new ArgumentOutOfRangeException(nameof(e), e.GetType().Name, "Unmapped AudioGenEvent"),
     };
 
     public static AssemblyMessage Map(AssemblyEvent e) => e switch
     {
-        AssemblyPhaseStarted p => new AssemblyMessage("phaseStarted", Phase: p.Phase, Folder: e.Folder),
-        AssemblyEncodeProgress p => new AssemblyMessage("progress", Fraction: p.Fraction, Folder: e.Folder),
-        AssemblyCompleted c => new AssemblyMessage("completed", Folder: e.Folder, OutputFileName: c.OutputFileName),
-        AssemblyFailed f => new AssemblyMessage("failed", Reason: f.Reason, Folder: e.Folder),
-        AssemblyCancelled => new AssemblyMessage("cancelled", Folder: e.Folder),
+        AssemblyPhaseStarted p => new AssemblyMessage(AssemblyMessageKind.PhaseStarted, Phase: p.Phase, Folder: e.Folder),
+        AssemblyEncodeProgress p => new AssemblyMessage(AssemblyMessageKind.Progress, Fraction: p.Fraction, Folder: e.Folder),
+        AssemblyCompleted c => new AssemblyMessage(AssemblyMessageKind.Completed, Folder: e.Folder, OutputFileName: c.OutputFileName),
+        AssemblyFailed f => new AssemblyMessage(AssemblyMessageKind.Failed, Reason: f.Reason, Folder: e.Folder),
+        AssemblyCancelled => new AssemblyMessage(AssemblyMessageKind.Cancelled, Folder: e.Folder),
         _ => throw new ArgumentOutOfRangeException(nameof(e), e.GetType().Name, "Unmapped AssemblyEvent"),
     };
 
     public static VoiceBatchMessage Map(VoiceBatchEvent e) => e switch
     {
-        BatchStarted s => new VoiceBatchMessage("started", Operation: s.Operation, Total: s.Total),
-        BatchProgress p => new VoiceBatchMessage("progress",
+        BatchStarted s => new VoiceBatchMessage(VoiceBatchMessageKind.Started, Operation: s.Operation, Total: s.Total),
+        BatchProgress p => new VoiceBatchMessage(VoiceBatchMessageKind.Progress,
             Processed: p.Processed, Total: p.Total, Failed: p.Failed, CurrentVoiceName: p.CurrentVoiceName),
-        VoiceUpdated v => new VoiceBatchMessage("voiceUpdated",
+        VoiceUpdated v => new VoiceBatchMessage(VoiceBatchMessageKind.VoiceUpdated,
             CharacterId: v.CharacterId, VoiceId: v.VoiceId, DesignPrompt: v.DesignPrompt,
             AudioFileName: v.AudioFileName, Transcript: v.Transcript,
             ReferenceSeconds: v.ReferenceSeconds, ReferenceWarning: v.ReferenceWarning),
-        BatchCompleted c => new VoiceBatchMessage("completed", Processed: c.Processed, Failed: c.Failed),
-        BatchCancelled => new VoiceBatchMessage("cancelled"),
+        BatchCompleted c => new VoiceBatchMessage(VoiceBatchMessageKind.Completed, Processed: c.Processed, Failed: c.Failed),
+        BatchCancelled => new VoiceBatchMessage(VoiceBatchMessageKind.Cancelled),
         _ => throw new ArgumentOutOfRangeException(nameof(e), e.GetType().Name, "Unmapped VoiceBatchEvent"),
     };
 
     public static WatchdogMessage Map(WatchdogEvent e) => e switch
     {
-        RecoveryStarted r => new WatchdogMessage("recoveryStarted", r.Service, r.Reason),
-        ContainerRestarted c => new WatchdogMessage("containerRestarted", c.Service),
-        ServiceHealthy h => new WatchdogMessage("serviceHealthy", h.Service),
-        ServiceDown d => new WatchdogMessage("serviceDown", d.Service, d.LastError),
+        RecoveryStarted r => new WatchdogMessage(WatchdogKind.RecoveryStarted, r.Service, r.Reason),
+        ContainerRestarted c => new WatchdogMessage(WatchdogKind.ContainerRestarted, c.Service),
+        ServiceHealthy h => new WatchdogMessage(WatchdogKind.ServiceHealthy, h.Service),
+        ServiceDown d => new WatchdogMessage(WatchdogKind.ServiceDown, d.Service, d.LastError),
         _ => throw new ArgumentOutOfRangeException(nameof(e), e.GetType().Name, "Unmapped WatchdogEvent"),
     };
 
     // The bookEdit family has no in-process event record: the run coordinator builds each message
-    // as it goes. They are minted here all the same so the TS mirror's contract test sees the kinds.
+    // as it goes. They are minted here all the same, beside every other family.
     public static BookEditMessage BookEditProgress(string program, int done, int total) =>
-        new BookEditMessage("progress", program, Done: done, Total: total);
+        new BookEditMessage(BookEditMessageKind.Progress, program, Done: done, Total: total);
 
     public static BookEditMessage BookEditDone(string program, IReadOnlyList<ProposedEdit> rows, int total, bool cancelled) =>
-        new BookEditMessage("done", program, Done: rows.Count, Total: total, Cancelled: cancelled,
+        new BookEditMessage(BookEditMessageKind.Done, program, Done: rows.Count, Total: total, Cancelled: cancelled,
             Rows: [.. rows.Select(BookEditRowDto.From)]);
 
     public static BookEditMessage BookEditFailed(string program, string reason) =>
-        new BookEditMessage("failed", program, Reason: reason);
+        new BookEditMessage(BookEditMessageKind.Failed, program, Reason: reason);
 
     public static ServiceStatusMessage Map(ServiceStatusChanged c) =>
         new ServiceStatusMessage(c.Service, c.Status, c.Op, c.Ok, c.Error);
@@ -138,41 +138,41 @@ public static class LiveMessageMapper
         _ => throw new ArgumentOutOfRangeException(nameof(e), e.GetType().Name, "Unmapped WatchdogEvent"),
     };
 
-    public static PreflightMessage PreflightStage(string run, string name, string stage, string? error = null) =>
-        new PreflightMessage("stage", run, Name: name, Stage: stage, Error: error);
+    public static PreflightMessage PreflightStage(string run, string name, PreflightStage stage, string? error = null) =>
+        new PreflightMessage(PreflightMessageKind.Stage, run, Name: name, Stage: stage, Error: error);
 
     public static PreflightMessage PreflightDone(string run, bool ok, string? reason = null) =>
-        new PreflightMessage("done", run, Ok: ok, Reason: reason);
+        new PreflightMessage(PreflightMessageKind.Done, run, Ok: ok, Reason: reason);
 
-    public static SetupCheckMessage SetupCheckProgress(SetupCheckReport report) => new SetupCheckMessage("progress", report);
+    public static SetupCheckMessage SetupCheckProgress(SetupCheckReport report) => new SetupCheckMessage(SetupCheckMessageKind.Progress, report);
 
-    public static SetupCheckMessage SetupCheckDone(SetupCheckReport report) => new SetupCheckMessage("done", report);
+    public static SetupCheckMessage SetupCheckDone(SetupCheckReport report) => new SetupCheckMessage(SetupCheckMessageKind.Done, report);
 
-    public static LlmTestMessage LlmTestDone(int configId) => new LlmTestMessage("done", configId);
+    public static LlmTestMessage LlmTestDone(int configId) => new LlmTestMessage(LlmTestMessageKind.Done, configId);
 
     public static LlmTestMessage LlmTestFailed(int configId, string reason) =>
-        new LlmTestMessage("failed", configId, reason);
+        new LlmTestMessage(LlmTestMessageKind.Failed, configId, reason);
 
-    public static LlmTestMessage LlmTestCancelled(int configId) => new LlmTestMessage("cancelled", configId);
+    public static LlmTestMessage LlmTestCancelled(int configId) => new LlmTestMessage(LlmTestMessageKind.Cancelled, configId);
 
     public static HistoryMessage Map(HistoryStepEvent e) => e.Kind switch
     {
-        HistoryStepEventKind.Landed => new HistoryMessage("stepLanded", e.FolderId.Value, e.Step),
-        HistoryStepEventKind.Changed => new HistoryMessage("stepChanged", e.FolderId.Value, e.Step),
-        HistoryStepEventKind.Closed => new HistoryMessage("stepClosed", e.FolderId.Value, e.Step),
+        HistoryStepEventKind.Landed => new HistoryMessage(HistoryMessageKind.StepLanded, e.FolderId.Value, e.Step),
+        HistoryStepEventKind.Changed => new HistoryMessage(HistoryMessageKind.StepChanged, e.FolderId.Value, e.Step),
+        HistoryStepEventKind.Closed => new HistoryMessage(HistoryMessageKind.StepClosed, e.FolderId.Value, e.Step),
         _ => throw new NotSupportedException($"Unhandled History step event {e.Kind}."),
     };
 
     /// <summary>The project's busy reason moved; null when it went idle.</summary>
     public static HistoryMessage BusyChanged(string folder, string? reason) =>
-        new HistoryMessage("busyChanged", folder, Reason: reason);
+        new HistoryMessage(HistoryMessageKind.BusyChanged, folder, Reason: reason);
 
     /// <summary>A Restore started, or finished with the step it added.</summary>
     public static HistoryMessage Restoring(RestoreEvent e) =>
-        new HistoryMessage("restoring", e.FolderId.Value, e.Step, Phase: e.Kind == RestoreEventKind.Started ? "started" : "finished");
+        new HistoryMessage(HistoryMessageKind.Restoring, e.FolderId.Value, e.Step, Phase: e.Kind);
 
     /// <summary>Why a dropped Edit with AI session is gone: what its open dialog says.</summary>
     public const string RestoredReason = "The project was restored — run it again";
 
-    public static BookEditMessage BookEditDropped(string program) => new BookEditMessage("dropped", program, Reason: RestoredReason);
+    public static BookEditMessage BookEditDropped(string program) => new BookEditMessage(BookEditMessageKind.Dropped, program, Reason: RestoredReason);
 }

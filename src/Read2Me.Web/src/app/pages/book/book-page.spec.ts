@@ -186,7 +186,9 @@ function echoOwnReceipts(respond: (body: unknown) => unknown) {
         isOwn: true,
         effects: {
           scope: 'Exact',
-          facets: 'Structure',
+          createdId: null,
+          createdParentId: null,
+          facets: ['Structure'],
           nodeIds: [],
           paragraphIds: [],
           paragraphItemIds: [],

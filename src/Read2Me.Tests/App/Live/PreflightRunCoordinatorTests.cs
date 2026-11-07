@@ -39,13 +39,13 @@ public class PreflightRunCoordinatorTests
         Assert.All(messages, m => Assert.Equal(run, m.Run));
         Assert.Equal(
         [
-            "audiocpp:waitingToStop", "llama:waitingToStart",
-            "audiocpp:stopping", "audiocpp:stopped",
-            "llama:starting", "llama:ready",
-        ], messages.Where(m => m.Kind == "stage").Select(m => $"{m.Name}:{m.Stage}"));
+            "audiocpp:WaitingToStop", "llama:WaitingToStart",
+            "audiocpp:Stopping", "audiocpp:Stopped",
+            "llama:Starting", "llama:Ready",
+        ], messages.Where(m => m.Kind == PreflightMessageKind.Stage).Select(m => $"{m.Name}:{m.Stage}"));
         Assert.Equal(["shutdown:audiocpp", "start:llama"], _control.OpLog);
         var done = messages[^1];
-        Assert.Equal("done", done.Kind);
+        Assert.Equal(PreflightMessageKind.Done, done.Kind);
         Assert.True(done.Ok);
         Assert.Null(done.Reason);
         Assert.All(_hub.Messages, m => Assert.Equal("client:conn-1", m.Target));
@@ -59,11 +59,11 @@ public class PreflightRunCoordinatorTests
         Coordinator().Start(Plan([Llama], []), "conn-1");
 
         var messages = await RunMessagesAsync();
-        var failed = Assert.Single(messages, m => m.Stage == "failed");
+        var failed = Assert.Single(messages, m => m.Stage == PreflightStage.Failed);
         Assert.Equal("llama", failed.Name);
         Assert.Equal("health check timed out", failed.Error);
         var done = messages[^1];
-        Assert.Equal("done", done.Kind);
+        Assert.Equal(PreflightMessageKind.Done, done.Kind);
         Assert.False(done.Ok);
         Assert.Contains("health check timed out", done.Reason);
     }
@@ -72,7 +72,7 @@ public class PreflightRunCoordinatorTests
     private async Task<List<PreflightMessage>> RunMessagesAsync()
     {
         var sw = Stopwatch.StartNew();
-        while (!_hub.Method("preflight").Any(m => ((PreflightMessage)m.Payload).Kind == "done"))
+        while (!_hub.Method("preflight").Any(m => ((PreflightMessage)m.Payload).Kind == PreflightMessageKind.Done))
         {
             Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10), "timed out waiting for the run's done");
             await Task.Delay(10, TestContext.Current.CancellationToken);

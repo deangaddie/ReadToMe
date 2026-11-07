@@ -1,4 +1,4 @@
-import { type BookFacet, type Receipt, hasFacet } from '@app/live/live-messages';
+import { type BookFacets, type Receipt, hasFacet } from '@app/live/live-messages';
 
 /** What the reader holds for one loaded chapter, as far as matching a receipt goes. */
 export interface LoadedChapter {
@@ -38,7 +38,7 @@ export interface ReceiptPlan {
 }
 
 /** Facets that change what a paragraph row shows. */
-const CONTENT_FACETS: readonly BookFacet[] = [
+const CONTENT_FACETS: readonly BookFacets[] = [
   'Structure',
   'ItemText',
   'Attribution',
@@ -48,10 +48,10 @@ const CONTENT_FACETS: readonly BookFacet[] = [
 ];
 
 /** Facets that change the tree or the chapter headers. */
-const OVERVIEW_FACETS: readonly BookFacet[] = ['Structure', 'NodeTitle', 'Characters', 'Narrator'];
+const OVERVIEW_FACETS: readonly BookFacets[] = ['Structure', 'NodeTitle', 'Characters', 'Narrator'];
 
 /** Facets that change which voice an item resolves to, anywhere in the book. */
-const VOICE_FACETS: readonly BookFacet[] = ['Voices', 'VoiceRules', 'Characters', 'Narrator'];
+const VOICE_FACETS: readonly BookFacets[] = ['Voices', 'VoiceRules', 'Characters', 'Narrator'];
 
 /**
  * The reader's receipt → refresh decision (ticket 10, spec D6). Pure: the store feeds it what is
@@ -61,7 +61,7 @@ export function planReceipt(receipt: Receipt, context: ReceiptContext): ReceiptP
   const { effects } = receipt;
   const last = context.lastRevision;
   const gap = last !== null && receipt.revision > last + 1;
-  const any = (facets: readonly BookFacet[]) => facets.some((f) => hasFacet(effects.facets, f));
+  const any = (facets: readonly BookFacets[]) => facets.some((f) => hasFacet(effects.facets, f));
 
   const plan: ReceiptPlan = {
     reloadChapters: [],

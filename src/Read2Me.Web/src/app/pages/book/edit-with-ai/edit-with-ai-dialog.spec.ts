@@ -17,6 +17,7 @@ import { FakeApi, problem } from '../../../../testing/fake-api';
 import type { BookEditor } from '../book-editor';
 import { type EditWithAiDialog, openEditWithAiDialog } from './edit-with-ai-dialog';
 import './edit-with-ai-dialog';
+import { bookEditMessage } from '../../../../testing/live-messages';
 
 /** Ported from the Angular TestBed spec, case for case. */
 const BASE = '/api/projects/dracula/book-edits';
@@ -167,14 +168,16 @@ describe('r2m-edit-with-ai-dialog', () => {
     await instruct();
     await analyze();
     await generate();
-    await push({
-      kind: 'done',
-      program: 'prog-1',
-      done: 2,
-      total: 2,
-      cancelled: false,
-      rows: ROWS,
-    });
+    await push(
+      bookEditMessage({
+        kind: 'Done',
+        program: 'prog-1',
+        done: 2,
+        total: 2,
+        cancelled: false,
+        rows: ROWS,
+      }),
+    );
   }
 
   async function openRow(index: number): Promise<void> {
@@ -231,11 +234,13 @@ describe('r2m-edit-with-ai-dialog', () => {
   it('stays on Instruct when a Restore drops the plan before its answer arrives', async () => {
     // The host granted the session, then a Restore dropped it while the answer was on its way.
     api.on('POST', `${BASE}/plan`, () => {
-      messages.emit({
-        kind: 'dropped',
-        program: 'prog-1',
-        reason: 'The project was restored — run it again',
-      });
+      messages.emit(
+        bookEditMessage({
+          kind: 'Dropped',
+          program: 'prog-1',
+          reason: 'The project was restored — run it again',
+        }),
+      );
       return PLAN;
     });
     await instruct();
@@ -258,11 +263,13 @@ describe('r2m-edit-with-ai-dialog', () => {
     api
       .on('POST', `${BASE}/plan`, () => ({ ...PLAN, program: 'prog-2' }))
       .on('DELETE', `${BASE}/prog-1`, () => {
-        messages.emit({
-          kind: 'dropped',
-          program: 'prog-2',
-          reason: 'The project was restored — run it again',
-        });
+        messages.emit(
+          bookEditMessage({
+            kind: 'Dropped',
+            program: 'prog-2',
+            reason: 'The project was restored — run it again',
+          }),
+        );
         return undefined;
       });
 
@@ -316,17 +323,19 @@ describe('r2m-edit-with-ai-dialog', () => {
     await generate();
     expect(phase()).toBe('proposing');
 
-    await push({ kind: 'progress', program: 'prog-1', done: 1, total: 2 });
+    await push(bookEditMessage({ kind: 'Progress', program: 'prog-1', done: 1, total: 2 }));
     expect(text('progress')).toContain('1 of 2');
 
-    await push({
-      kind: 'done',
-      program: 'prog-1',
-      done: 2,
-      total: 2,
-      cancelled: false,
-      rows: ROWS,
-    });
+    await push(
+      bookEditMessage({
+        kind: 'Done',
+        program: 'prog-1',
+        done: 2,
+        total: 2,
+        cancelled: false,
+        rows: ROWS,
+      }),
+    );
 
     expect(phase()).toBe('review');
     expect(rows()).toHaveLength(2);
@@ -338,7 +347,16 @@ describe('r2m-edit-with-ai-dialog', () => {
     await analyze();
     await generate();
 
-    await push({ kind: 'done', program: 'other', done: 1, total: 1, cancelled: false, rows: ROWS });
+    await push(
+      bookEditMessage({
+        kind: 'Done',
+        program: 'other',
+        done: 1,
+        total: 1,
+        cancelled: false,
+        rows: ROWS,
+      }),
+    );
 
     expect(phase()).toBe('proposing');
   });
@@ -351,14 +369,16 @@ describe('r2m-edit-with-ai-dialog', () => {
     button('cancel-proposing').click();
     await settle();
     expect(api.calls('POST', `${BASE}/prog-1/cancel`)).toHaveLength(1);
-    await push({
-      kind: 'done',
-      program: 'prog-1',
-      done: 1,
-      total: 2,
-      cancelled: true,
-      rows: [ROWS[0]!],
-    });
+    await push(
+      bookEditMessage({
+        kind: 'Done',
+        program: 'prog-1',
+        done: 1,
+        total: 2,
+        cancelled: true,
+        rows: [ROWS[0]!],
+      }),
+    );
 
     expect(phase()).toBe('review');
     expect(rows()).toHaveLength(1);
@@ -370,7 +390,9 @@ describe('r2m-edit-with-ai-dialog', () => {
     await analyze();
     await generate();
 
-    await push({ kind: 'failed', program: 'prog-1', reason: 'the model went away' });
+    await push(
+      bookEditMessage({ kind: 'Failed', program: 'prog-1', reason: 'the model went away' }),
+    );
 
     expect(phase()).toBe('plan');
     expect(text('edit-error')).toContain('the model went away');
@@ -379,11 +401,13 @@ describe('r2m-edit-with-ai-dialog', () => {
   it('drops an open proposal when a Restore dropped its session, and says to run it again', async () => {
     await reachReview();
 
-    await push({
-      kind: 'dropped',
-      program: 'prog-1',
-      reason: 'The project was restored — run it again',
-    });
+    await push(
+      bookEditMessage({
+        kind: 'Dropped',
+        program: 'prog-1',
+        reason: 'The project was restored — run it again',
+      }),
+    );
 
     expect(phase()).toBe('instruct');
     expect(text('edit-error')).toContain('The project was restored — run it again');

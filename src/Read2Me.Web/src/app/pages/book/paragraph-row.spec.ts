@@ -8,6 +8,7 @@ import { paragraphRow } from './paragraph-row';
 import type { RowContext } from './reader-rows';
 import { SelectionStore } from './selection-store';
 import { SpeakerAssigner } from './speaker-assigner';
+import { itemEntry, paragraphEntry } from '../../../testing/live-messages';
 
 const NARRATOR_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -178,14 +179,18 @@ describe('paragraphRow', () => {
     });
 
     it('shows the attribution queue chip and a lock while queued', async () => {
-      const el = await mount(ctx({ paragraphStatus: { p1: { status: 'Queued' } } }));
+      const el = await mount(
+        ctx({ paragraphStatus: { p1: paragraphEntry({ status: 'Queued' }) } }),
+      );
       expect(text(el.querySelector('.r2m-status-chip'))).toContain('Queued');
       expect(el.querySelector('.r2m-paragraph__lock')).not.toBeNull();
     });
 
     it('an unfinished attribution outcome reads Unknown', async () => {
       const el = await mount(
-        ctx({ paragraphStatus: { p1: { outcome: { kind: 'Unfinished', reason: 'x' } } } }),
+        ctx({
+          paragraphStatus: { p1: paragraphEntry({ outcome: { kind: 'Unfinished', reason: 'x' } }) },
+        }),
       );
       expect(text(el.querySelector('.r2m-status-chip'))).toContain('Unknown');
       expect(el.querySelector('.r2m-paragraph__lock')).toBeNull();
@@ -193,7 +198,9 @@ describe('paragraphRow', () => {
 
     it('a queued paragraph with a stale outcome shows Queued', async () => {
       const el = await mount(
-        ctx({ paragraphStatus: { p1: { status: 'Queued', outcome: { kind: 'Failed' } } } }),
+        ctx({
+          paragraphStatus: { p1: { status: 'Queued', outcome: { kind: 'Failed', reason: null } } },
+        }),
       );
       expect(text(el.querySelector('.r2m-status-chip'))).toContain('Queued');
     });
@@ -279,10 +286,15 @@ describe('paragraphRow', () => {
 
     it('a queued paragraph keeps its chips inert', async () => {
       const el = await mount(
-        ctx({ mode: 'speakers', paragraphStatus: { p1: { status: 'Processing' } } }),
+        ctx({
+          mode: 'speakers',
+          paragraphStatus: { p1: paragraphEntry({ status: 'Processing' }) },
+        }),
       );
       expect(el.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
-      const read = await mount(ctx({ paragraphStatus: { p1: { status: 'Queued' } } }));
+      const read = await mount(
+        ctx({ paragraphStatus: { p1: paragraphEntry({ status: 'Queued' }) } }),
+      );
       expect(read.querySelectorAll('r2m-speaker-chip button').length).toBe(0);
     });
 
@@ -298,7 +310,10 @@ describe('paragraphRow', () => {
   describe('outcomes (ticket 12)', () => {
     it('a blocked book disables the outcome, with the reason', async () => {
       const el = await mount(
-        ctx({ blocked: BLOCKED, paragraphStatus: { p1: { outcome: { kind: 'Failed' } } } }),
+        ctx({
+          blocked: BLOCKED,
+          paragraphStatus: { p1: paragraphEntry({ outcome: { kind: 'Failed', reason: null } }) },
+        }),
       );
       const button = el.querySelector<HTMLButtonElement>('.r2m-paragraph__outcome')!;
       expect(text(button)).toContain('Failed');
@@ -310,7 +325,11 @@ describe('paragraphRow', () => {
 
     it('a Failed chip carries the reason and clears the outcome on click', async () => {
       const el = await mount(
-        ctx({ paragraphStatus: { p1: { outcome: { kind: 'Failed', reason: 'LLM timed out' } } } }),
+        ctx({
+          paragraphStatus: {
+            p1: paragraphEntry({ outcome: { kind: 'Failed', reason: 'LLM timed out' } }),
+          },
+        }),
       );
       const button = el.querySelector<HTMLButtonElement>('.r2m-paragraph__outcome')!;
       expect(text(button)).toContain('Failed');
@@ -321,7 +340,9 @@ describe('paragraphRow', () => {
 
     it('a queued paragraph with a stale outcome shows Queued and nothing to clear', async () => {
       const el = await mount(
-        ctx({ paragraphStatus: { p1: { status: 'Queued', outcome: { kind: 'Failed' } } } }),
+        ctx({
+          paragraphStatus: { p1: { status: 'Queued', outcome: { kind: 'Failed', reason: null } } },
+        }),
       );
       expect(el.querySelector('.r2m-paragraph__outcome')).toBeNull();
       expect(text(el.querySelector('.r2m-status-chip'))).toContain('Queued');
@@ -365,7 +386,7 @@ describe('paragraphRow', () => {
         d: { voiceName: 'Elizabeth Voice', narratedBy: null },
         u: { voiceName: null, narratedBy: null },
       },
-      itemStatus: { d: { audioVersion: 3 }, u: { status: 'Processing' } },
+      itemStatus: { d: itemEntry({ audioVersion: 3 }), u: itemEntry({ status: 'Processing' }) },
       reviews: {
         d: {
           state: 'NeedsReview',
@@ -405,15 +426,19 @@ describe('paragraphRow', () => {
     });
 
     it('the hub review replaces the REST one once reported', async () => {
+      const dismissed = { ...audio.reviews['d']!, state: 'Dismissed' as const };
       const el = await mount({
         ...audio,
-        itemStatus: { ...audio.itemStatus, d: { audioVersion: 4, review: null } },
+        itemStatus: { ...audio.itemStatus, d: itemEntry({ audioVersion: 4, review: dismissed }) },
       });
       expect(el.querySelectorAll('.r2m-item')[1]!.querySelector('.r2m-status-chip')).toBeNull();
     });
 
     it('does not show the paragraph attribution chip or lock, but keeps the paragraph menu (disabled while queued)', async () => {
-      const el = await mount({ ...audio, paragraphStatus: { p1: { status: 'Queued' } } });
+      const el = await mount({
+        ...audio,
+        paragraphStatus: { p1: paragraphEntry({ status: 'Queued' }) },
+      });
       expect(el.querySelector('.r2m-paragraph__status .r2m-status-chip')).toBeNull();
       expect(el.querySelector('.r2m-paragraph__status .r2m-paragraph__lock')).toBeNull();
       const menu = el.querySelector<HTMLButtonElement>('.r2m-paragraph__menu button');
@@ -444,7 +469,10 @@ describe('paragraphRow', () => {
 
     it('a queued paragraph disables the paragraph menu and every item menu', async () => {
       const el = await mount(
-        ctx({ mode: 'speakers', paragraphStatus: { p1: { status: 'Processing' } } }),
+        ctx({
+          mode: 'speakers',
+          paragraphStatus: { p1: paragraphEntry({ status: 'Processing' }) },
+        }),
       );
       expect(triggers(el).length).toBe(4);
       expect(triggers(el).every((b) => b.disabled)).toBe(true);
@@ -452,7 +480,11 @@ describe('paragraphRow', () => {
 
     it('an audio-queued item disables only its own menu', async () => {
       const el = await mount(
-        ctx({ mode: 'audio', selectable: false, itemStatus: { d: { status: 'Queued' } } }),
+        ctx({
+          mode: 'audio',
+          selectable: false,
+          itemStatus: { d: itemEntry({ status: 'Queued' }) },
+        }),
       );
       const items = Array.from(el.querySelectorAll('.r2m-item'));
       expect(

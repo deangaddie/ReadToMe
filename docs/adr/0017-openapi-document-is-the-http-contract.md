@@ -6,7 +6,8 @@ accepted (2026-10-31). Decided on [Map: typed host responses make the OpenAPI sc
 with the implement-or-close decision in [#170](https://github.com/deangaddie/ReadToMe/issues/170). The library facts
 are in [#165](https://github.com/deangaddie/ReadToMe/issues/165) (`docs/research/openapi-responses.md` on branch
 `research/openapi-responses`). The work is the spec [#171](https://github.com/deangaddie/ReadToMe/issues/171), ten
-slices with `main` green after each.
+slices with `main` green after each. Amended for the live hub by
+[#238](https://github.com/deangaddie/ReadToMe/issues/238) (2026-11-07).
 
 ## Context
 
@@ -22,7 +23,7 @@ pairing of a path with its type was checked.
 ## Decision
 
 **The host's OpenAPI document is the one HTTP contract. The compiler checks it at both ends, and the gate regenerates
-it.** Four decisions make it up; each issue's resolution comment holds the detail.
+it.** Five decisions make it up; each issue's resolution comment holds the detail.
 
 - **[Enums take one wire form](https://github.com/deangaddie/ReadToMe/issues/166).** C# member names, PascalCase, in
   JSON values, route and query segments and dictionary keys, in both directions. One shared global
@@ -49,6 +50,13 @@ it.** Four decisions make it up; each issue's resolution comment holds the detai
   a host counterpart is `export type X = Schema['X']` under its C# name; bad generated names are fixed on the host.
   `schema-pins.ts` is deleted. `ApiClient` is typed by path, openapi-fetch style, with the response inferred from the
   document; the untyped methods go once every call is converted.
+- **[The live hub's messages are in the same document](https://github.com/deangaddie/ReadToMe/issues/238).** A
+  document transformer (`LiveContractTransformer`) adds every `ILiveClient` payload and `LiveHub` answer as a component,
+  found by reflection, plus `LiveMessageMap` (each `[HubMethodName]` family → its payload) and `LiveHubMethod`. The
+  hub uses the HTTP wire form, with nulls sent, so a generated `T | null` is always there: each closed string set
+  (a family's `kind`, a pre-flight stage, a service op, a Restore phase) is a C# enum, a `[Flags]` facet set travels as
+  a list of single members, and a hub record with exactly an HTTP record's fields sends that record. `live-messages.ts`
+  becomes aliases like `dtos.ts`, and its C#-parsing spec is deleted.
 
 ## Considered options
 
@@ -74,5 +82,7 @@ it.** Four decisions make it up; each issue's resolution comment holds the detai
 - Agents lose the per-status problem list (409/422/503) some endpoints declared; the document says "any non-2xx is a
   ProblemDetails" once, which is what the web client already assumes.
 - An enum sent as a `.ToString()` string can't be caught by a test; review guards it.
-- Out of scope: live hub payloads (`/hubs/live`), request bodies beyond their enum and number form, stored JSON, and
+- A hub record is required in full in `schema.d.ts`, defaults or not, since every field is sent; a spec builds one with
+  `src/Read2Me.Web/src/testing/live-messages.ts`, which fills the unset fields with null.
+- Out of scope: request bodies beyond their enum and number form, stored JSON, and
   files served outside mapped endpoints (`StepFileReads`, `/workspace`).

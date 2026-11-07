@@ -24,15 +24,15 @@ public sealed class ObservedAiServiceControl(
     }
 
     public Task<AiServiceOpResult> StartAsync(DockerAiService service, CancellationToken ct) =>
-        ObserveAsync("start", service, inner.StartAsync(service, ct));
+        ObserveAsync(AiServiceOp.Start, service, inner.StartAsync(service, ct));
 
     public Task<AiServiceOpResult> RestartAsync(DockerAiService service, CancellationToken ct) =>
-        ObserveAsync("restart", service, inner.RestartAsync(service, ct));
+        ObserveAsync(AiServiceOp.Restart, service, inner.RestartAsync(service, ct));
 
     public Task<AiServiceOpResult> ShutdownAsync(DockerAiService service, CancellationToken ct) =>
-        ObserveAsync("shutdown", service, inner.ShutdownAsync(service, ct));
+        ObserveAsync(AiServiceOp.Shutdown, service, inner.ShutdownAsync(service, ct));
 
-    private async Task<AiServiceOpResult> ObserveAsync(string op, DockerAiService service, Task<AiServiceOpResult> pending)
+    private async Task<AiServiceOpResult> ObserveAsync(AiServiceOp op, DockerAiService service, Task<AiServiceOpResult> pending)
     {
         var result = await pending;
         events.Publish(new ServiceStatusChanged(service.Name, result.Status, op, result.Succeeded, result.Error));

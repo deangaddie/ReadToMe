@@ -62,7 +62,7 @@ public class LiveHubTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         var receipt = inA[0];
         Assert.Equal(folderA, receipt.GetProperty("folder").GetString());
         Assert.True(receipt.GetProperty("revision").GetInt64() >= 1);
-        Assert.Contains("Characters", receipt.GetProperty("effects").GetProperty("facets").GetString());
+        Assert.Contains("Characters", receipt.GetProperty("effects").GetProperty("facets").EnumerateArray().Select(f => f.GetString()));
         // B saw only its own sentinel, never A's receipt.
         Assert.Equal(folderB, Assert.Single(receiptsB).GetProperty("folder").GetString());
 
@@ -147,16 +147,16 @@ public class LiveHubTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         await WaitForAsync(() => received.Count >= 2);
 
         var messages = received.ToList();
-        Assert.Equal("requestStarted", messages[0].GetProperty("kind").GetString());
+        Assert.Equal("RequestStarted", messages[0].GetProperty("kind").GetString());
         Assert.Equal(marker, messages[0].GetProperty("paragraphPreview").GetString());
-        Assert.Equal("delta", messages[1].GetProperty("kind").GetString());
+        Assert.Equal("Delta", messages[1].GetProperty("kind").GetString());
         Assert.Equal("think ", messages[1].GetProperty("thinking").GetString());
         Assert.Equal("hello world", messages[1].GetProperty("content").GetString());
 
         // Live traffic after joining arrives batched; the bystander never joined the stream group.
         llm.Publish(new ContentDelta("!"));
         llm.Publish(new StreamCompleted(1, 2, 3, 4));
-        await WaitForAsync(() => received.Any(m => m.GetProperty("kind").GetString() == "streamCompleted"));
+        await WaitForAsync(() => received.Any(m => m.GetProperty("kind").GetString() == "StreamCompleted"));
         Assert.Empty(strayed);
 
         await member.InvokeAsync("LeaveStream", "llm");

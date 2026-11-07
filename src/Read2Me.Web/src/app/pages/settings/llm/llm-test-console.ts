@@ -51,13 +51,13 @@ export class LlmTestConsole extends R2mElement {
       this.live.on('llmTest', (m) => {
         this.stateSeq++;
         this.streaming.set(false);
-        if (m.kind === 'failed') this.error.set(`Request failed: ${m.reason ?? 'unknown error'}`);
+        if (m.kind === 'Failed') this.error.set(`Request failed: ${m.reason ?? 'unknown error'}`);
       }),
     );
     // A send this connection did not start (another tab) ends without an llmTest message here.
     this.onDisconnect(
       this.live.on('llm', (m) => {
-        if (m.kind === 'runEnded' && this.streaming()) void this.readBack();
+        if (m.kind === 'RunEnded' && this.streaming()) void this.readBack();
       }),
     );
     this.hubLost = false;

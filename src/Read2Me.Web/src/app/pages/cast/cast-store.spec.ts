@@ -2,12 +2,18 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { CharacterSummaryDto, CharacterVoicesDto, VoiceDto } from '@app/api';
 import { Emitter } from '@app/core/emitter';
 import { override, resetServices } from '@app/core/services';
-import type { Receipt, ReceiptMessage, VoiceBatchMessage } from '@app/live/live-messages';
+import type {
+  BookFacets,
+  Receipt,
+  ReceiptMessage,
+  VoiceBatchMessage,
+} from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { REFETCH_DEBOUNCE_MS } from '@app/shared/debounced';
 import { ToastService } from '@app/ui/toast';
 import { FakeApi, problem } from '../../../testing/fake-api';
 import { CastStore } from './cast-store';
+import { voiceBatchMessage } from '../../../testing/live-messages';
 
 /** The slice of LiveService the store uses: project receipts and voice-batch messages over Emitters. */
 class FakeLive {
@@ -64,7 +70,7 @@ function row(name: string, lineCount = 0): CharacterSummaryDto {
   };
 }
 
-function receipt(facets: string): Receipt {
+function receipt(facets: BookFacets[]): Receipt {
   const message: ReceiptMessage = {
     folder: 'dracula',
     mutationName: 'X',
@@ -72,6 +78,8 @@ function receipt(facets: string): Receipt {
     revision: 1,
     effects: {
       scope: 'Exact',
+      createdId: null,
+      createdParentId: null,
       facets,
       nodeIds: [],
       paragraphIds: [],
@@ -161,8 +169,8 @@ describe('CastStore', () => {
     api.on('GET', SUMMARY, [row('Narrator'), row('Alice', 3)]);
     api.on('GET', LINES, [{ itemId: 'i1', paragraphId: 'p1', chapterId: 'c1', text: 'New' }]);
     api.on('GET', VOICES, voiceList([{ name: 'New' }]));
-    live.receiptsEmitter.emit(receipt('Characters'));
-    live.receiptsEmitter.emit(receipt('Attribution, Audio'));
+    live.receiptsEmitter.emit(receipt(['Characters']));
+    live.receiptsEmitter.emit(receipt(['Attribution', 'Audio']));
     expect(api.calls('GET', SUMMARY)).toHaveLength(1);
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', SUMMARY)).toHaveLength(2);
@@ -179,13 +187,15 @@ describe('CastStore', () => {
     api.on('GET', VOICES, voiceList([{ id: 'v1' }, { id: 'v2', name: 'Other' }]));
     await store.select('alice');
 
-    live.voiceBatchEmitter.emit({
-      kind: 'voiceUpdated',
-      characterId: 'alice',
-      voiceId: 'v1',
-      designPrompt: 'warm alto',
-      audioFileName: 'voices/alice/v1.wav',
-    });
+    live.voiceBatchEmitter.emit(
+      voiceBatchMessage({
+        kind: 'VoiceUpdated',
+        characterId: 'alice',
+        voiceId: 'v1',
+        designPrompt: 'warm alto',
+        audioFileName: 'voices/alice/v1.wav',
+      }),
+    );
     expect(store.voices().voices[0]?.designPrompt).toBe('warm alto');
     expect(store.voices().voices[0]?.audioFileName).toBe('voices/alice/v1.wav');
     expect(store.audioVersions()['v1']).toBe(1);
@@ -193,12 +203,14 @@ describe('CastStore', () => {
     expect(api.calls('GET', VOICES)).toHaveLength(1);
 
     // Another character's voice is not this panel's business.
-    live.voiceBatchEmitter.emit({
-      kind: 'voiceUpdated',
-      characterId: 'bob',
-      voiceId: 'v9',
-      designPrompt: 'x',
-    });
+    live.voiceBatchEmitter.emit(
+      voiceBatchMessage({
+        kind: 'VoiceUpdated',
+        characterId: 'bob',
+        voiceId: 'v9',
+        designPrompt: 'x',
+      }),
+    );
     expect(store.voices().voices.map((v) => v.designPrompt)).toEqual(['warm alto', null]);
   });
 
@@ -208,13 +220,15 @@ describe('CastStore', () => {
     await store.select('alice');
 
     api.on('GET', VOICES, voiceList([{ id: 'v-new', designPrompt: 'x' }]));
-    live.voiceBatchEmitter.emit({
-      kind: 'voiceUpdated',
-      characterId: 'alice',
-      voiceId: 'v-new',
-      designPrompt: 'x',
-    });
-    live.voiceBatchEmitter.emit({ kind: 'completed', processed: 1, failed: 0 });
+    live.voiceBatchEmitter.emit(
+      voiceBatchMessage({
+        kind: 'VoiceUpdated',
+        characterId: 'alice',
+        voiceId: 'v-new',
+        designPrompt: 'x',
+      }),
+    );
+    live.voiceBatchEmitter.emit(voiceBatchMessage({ kind: 'Completed', processed: 1, failed: 0 }));
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', SUMMARY)).toHaveLength(2);
     expect(api.calls('GET', VOICES)).toHaveLength(2);
@@ -223,7 +237,7 @@ describe('CastStore', () => {
 
   it('a VoiceRules or Structure receipt reloads the selected rules and preview, but only with a selection', async () => {
     await open();
-    live.receiptsEmitter.emit(receipt('Structure'));
+    live.receiptsEmitter.emit(receipt(['Structure']));
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', SUMMARY)).toHaveLength(1);
 
@@ -249,7 +263,7 @@ describe('CastStore', () => {
       },
     ]);
     api.on('GET', PREVIEW, [{ chapterId: 'c1', chapterTitle: 'One', voiceName: 'Main' }]);
-    live.receiptsEmitter.emit(receipt('VoiceRules'));
+    live.receiptsEmitter.emit(receipt(['VoiceRules']));
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', SUMMARY)).toHaveLength(2);
     expect(api.calls('GET', RULES)).toHaveLength(2);
@@ -276,7 +290,7 @@ describe('CastStore', () => {
 
   it('ignores receipts that touch nothing the roster shows', async () => {
     await open();
-    live.receiptsEmitter.emit(receipt('ItemText, NodeTitle'));
+    live.receiptsEmitter.emit(receipt(['ItemText', 'NodeTitle']));
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', SUMMARY)).toHaveLength(1);
   });
@@ -319,7 +333,7 @@ describe('CastStore', () => {
     await open();
     store.close();
     expect(store.folder()).toBeNull();
-    live.receiptsEmitter.emit(receipt('Characters'));
+    live.receiptsEmitter.emit(receipt(['Characters']));
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', SUMMARY)).toHaveLength(1);
   });

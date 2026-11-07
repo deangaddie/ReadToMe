@@ -4,7 +4,7 @@ import type { Block } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { computed, signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
-import type { NodeStatusSummary } from '@app/live/live-messages';
+import type { NodeStatusSummaryDto } from '@app/api';
 import { countBadge, icon, statusChip } from '@app/ui/partials';
 import { TypeAhead, typeAheadTarget } from '@app/ui/roving';
 import { type TreeNode, placeholderTitleClass } from './book-tree';
@@ -69,11 +69,11 @@ export class StructureTree extends R2mElement {
     this.#nodes.set(value);
   }
 
-  #statuses = signal<Readonly<Record<string, NodeStatusSummary | null | undefined>>>({});
+  #statuses = signal<Readonly<Record<string, NodeStatusSummaryDto | null | undefined>>>({});
   get statuses() {
     return this.#statuses();
   }
-  set statuses(value: Readonly<Record<string, NodeStatusSummary | null | undefined>>) {
+  set statuses(value: Readonly<Record<string, NodeStatusSummaryDto | null | undefined>>) {
     this.#statuses.set(value);
   }
 
@@ -364,7 +364,7 @@ export class StructureTree extends R2mElement {
   };
 }
 
-function badges(s: NodeStatusSummary) {
+function badges(s: NodeStatusSummaryDto) {
   return html`<span class="tree__badges">
     ${
       s.attributionProcessing

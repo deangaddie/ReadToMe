@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Read2Me.App.Api;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
@@ -10,9 +9,9 @@ namespace Read2Me.App.Live;
 public static class LiveServiceCollectionExtensions
 {
     /// <summary>
-    /// SignalR with the same JSON conventions as the agent API (camelCase, enums as names, nulls
-    /// omitted) plus the hub's singletons. <c>/hubs/live</c> is the only hub, so these are the
-    /// options every hub message is written with.
+    /// SignalR with the agent API's JSON conventions (camelCase, enums as names, nulls sent) plus the
+    /// hub's singletons. <c>/hubs/live</c> is the only hub, so these are the options every hub message
+    /// is written with.
     /// </summary>
     public static IServiceCollection AddLiveHub(this IServiceCollection services)
     {
@@ -24,12 +23,14 @@ public static class LiveServiceCollectionExtensions
         return services;
     }
 
-    /// <summary>The hub's payload options: the agent API's wire form (<see cref="ApiJson"/>), nulls omitted.</summary>
+    /// <summary>
+    /// The hub's payload options: the agent API's wire form (<see cref="ApiJson"/>), nulls sent, so a
+    /// nullable field generated as <c>T | null</c> (<see cref="LiveContractTransformer"/>) is always there.
+    /// </summary>
     public static void ConfigurePayloadJson(JsonSerializerOptions options)
     {
         options.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
         options.DictionaryKeyPolicy = null;
-        options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
         ApiJson.Configure(options);
     }
 

@@ -29,19 +29,19 @@ export interface PreflightSheetData {
 }
 
 const STAGE_VIEW: Record<PreflightStage, { label: string; kind: StatusKind; active: boolean }> = {
-  waitingToStop: { label: 'Waiting to stop', kind: 'neutral', active: false },
-  stopping: { label: 'Stopping', kind: 'busy', active: true },
-  stopped: { label: 'Stopped', kind: 'neutral', active: false },
-  waitingToStart: { label: 'Waiting to start', kind: 'neutral', active: false },
-  starting: { label: 'Starting', kind: 'busy', active: true },
-  ready: { label: 'Ready', kind: 'ok', active: false },
-  failed: { label: 'Failed', kind: 'error', active: false },
+  WaitingToStop: { label: 'Waiting to stop', kind: 'neutral', active: false },
+  Stopping: { label: 'Stopping', kind: 'busy', active: true },
+  Stopped: { label: 'Stopped', kind: 'neutral', active: false },
+  WaitingToStart: { label: 'Waiting to start', kind: 'neutral', active: false },
+  Starting: { label: 'Starting', kind: 'busy', active: true },
+  Ready: { label: 'Ready', kind: 'ok', active: false },
+  Failed: { label: 'Failed', kind: 'error', active: false },
 };
 
 const STAGE_ICON: Partial<Record<PreflightStage, IconName>> = {
-  ready: 'check_circle',
-  failed: 'error',
-  stopped: 'stop_circle',
+  Ready: 'check_circle',
+  Failed: 'error',
+  Stopped: 'stop_circle',
 };
 
 const HEAD_ICON: Record<PreflightPhase, IconName> = {
@@ -54,8 +54,8 @@ const HEAD_ICON: Record<PreflightPhase, IconName> = {
 /** The rows the run will walk, in the order the host walks them: conflicts stopped first. */
 export function initialProgress(plan: PreflightPlanDto): PreflightServiceProgress[] {
   return [
-    ...plan.conflicts.map((c) => ({ name: c.name, stage: 'waitingToStop' as const })),
-    ...plan.toStart.map((s) => ({ name: s.name, stage: 'waitingToStart' as const })),
+    ...plan.conflicts.map((c) => ({ name: c.name, stage: 'WaitingToStop' as const })),
+    ...plan.toStart.map((s) => ({ name: s.name, stage: 'WaitingToStart' as const })),
   ];
 }
 
@@ -87,7 +87,7 @@ export class PreflightSheet extends R2mElement {
   readonly error = signal<string | null>(null);
 
   private readonly failedServices = computed(() =>
-    this.progress().filter((p) => p.stage === 'failed'),
+    this.progress().filter((p) => p.stage === 'Failed'),
   );
 
   /** The run this sheet follows; messages that arrive before the 202 answers wait here. */
@@ -272,7 +272,7 @@ export class PreflightSheet extends R2mElement {
   };
 
   private apply(m: PreflightMessage): void {
-    if (m.kind === 'stage' && m.name && m.stage) {
+    if (m.kind === 'Stage' && m.name && m.stage) {
       const name = m.name;
       const stage = m.stage;
       const error = m.error ?? null;
@@ -283,7 +283,7 @@ export class PreflightSheet extends R2mElement {
       );
       return;
     }
-    if (m.kind === 'done') {
+    if (m.kind === 'Done') {
       if (m.ok) {
         this.phase.set('done');
         this.emit('r2m-close', true);

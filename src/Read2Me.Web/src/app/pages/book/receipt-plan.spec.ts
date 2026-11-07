@@ -15,7 +15,9 @@ function receipt(
     isOwn,
     effects: {
       scope: 'Exact',
-      facets: 'None',
+      createdId: null,
+      createdParentId: null,
+      facets: [],
       nodeIds: [],
       paragraphIds: [],
       paragraphItemIds: [],
@@ -42,83 +44,87 @@ function ctx(overrides: Partial<ReceiptContext> = {}): ReceiptContext {
 }
 
 describe('planReceipt', () => {
-  it.each([
-    ['ItemText on a paragraph', { facets: 'ItemText', paragraphIds: ['p3'] }, ['c2']],
-    ['Attribution on an item', { facets: 'Attribution', paragraphItemIds: ['i1'] }, ['c1']],
-    ['Audio on an item', { facets: 'Audio', paragraphItemIds: ['i3'] }, ['c2']],
-    ['Reviews on an item', { facets: 'Reviews', paragraphItemIds: ['i2'] }, ['c1']],
-    ['NodeTitle on a loaded chapter', { facets: 'NodeTitle', nodeIds: ['c2'] }, ['c2']],
-    ['Structure across both', { facets: 'Structure', paragraphIds: ['p1', 'p3'] }, ['c1', 'c2']],
-    ['a combined facet string', { facets: 'Attribution, Audio', paragraphItemIds: ['i1'] }, ['c1']],
-    ['an unloaded paragraph', { facets: 'ItemText', paragraphIds: ['p9'] }, []],
-    ['a facet the reader does not render', { facets: 'ProjectPolicy', paragraphIds: ['p1'] }, []],
+  it.each<[string, Partial<Receipt['effects']>, string[]]>([
+    ['ItemText on a paragraph', { facets: ['ItemText'], paragraphIds: ['p3'] }, ['c2']],
+    ['Attribution on an item', { facets: ['Attribution'], paragraphItemIds: ['i1'] }, ['c1']],
+    ['Audio on an item', { facets: ['Audio'], paragraphItemIds: ['i3'] }, ['c2']],
+    ['Reviews on an item', { facets: ['Reviews'], paragraphItemIds: ['i2'] }, ['c1']],
+    ['NodeTitle on a loaded chapter', { facets: ['NodeTitle'], nodeIds: ['c2'] }, ['c2']],
+    ['Structure across both', { facets: ['Structure'], paragraphIds: ['p1', 'p3'] }, ['c1', 'c2']],
+    [
+      'a combined facet string',
+      { facets: ['Attribution', 'Audio'], paragraphItemIds: ['i1'] },
+      ['c1'],
+    ],
+    ['an unloaded paragraph', { facets: ['ItemText'], paragraphIds: ['p9'] }, []],
+    ['a facet the reader does not render', { facets: ['ProjectPolicy'], paragraphIds: ['p1'] }, []],
   ])('%s reloads %j', (_label, effects, chapters) => {
     expect(planReceipt(receipt(effects), ctx()).reloadChapters).toEqual(chapters);
   });
 
   it('an exact Structure receipt naming only a node that is not loaded (an inserted pause) reloads the visible chapter', () => {
-    const plan = planReceipt(receipt({ facets: 'Structure', paragraphIds: ['p-new'] }), ctx());
+    const plan = planReceipt(receipt({ facets: ['Structure'], paragraphIds: ['p-new'] }), ctx());
     expect(plan.reloadChapters).toEqual(['c1']);
     expect(plan.dropOtherChapters).toBe(false);
     // A non-structural facet with unknown ids still reloads nothing.
     expect(
-      planReceipt(receipt({ facets: 'ItemText', paragraphIds: ['p-new'] }), ctx()).reloadChapters,
+      planReceipt(receipt({ facets: ['ItemText'], paragraphIds: ['p-new'] }), ctx()).reloadChapters,
     ).toEqual([]);
     expect(
       planReceipt(
-        receipt({ facets: 'Structure', paragraphIds: ['p-new'] }),
+        receipt({ facets: ['Structure'], paragraphIds: ['p-new'] }),
         ctx({ visibleChapterId: null }),
       ).reloadChapters,
     ).toEqual([]);
   });
 
   it('a WholeProject receipt with a content facet reloads the visible chapter only', () => {
-    const plan = planReceipt(receipt({ scope: 'WholeProject', facets: 'Audio' }), ctx());
+    const plan = planReceipt(receipt({ scope: 'WholeProject', facets: ['Audio'] }), ctx());
     expect(plan.reloadChapters).toEqual(['c1']);
     expect(plan.dropOtherChapters).toBe(true);
   });
 
   it('a WholeProject receipt with nothing visible reloads nothing', () => {
     const plan = planReceipt(
-      receipt({ scope: 'WholeProject', facets: 'Audio' }),
+      receipt({ scope: 'WholeProject', facets: ['Audio'] }),
       ctx({ visibleChapterId: null }),
     );
     expect(plan.reloadChapters).toEqual([]);
   });
 
   it('Structure and NodeTitle reload the overview so the tree follows', () => {
-    expect(planReceipt(receipt({ facets: 'Structure' }), ctx()).reloadOverview).toBe(true);
-    expect(planReceipt(receipt({ facets: 'NodeTitle' }), ctx()).reloadOverview).toBe(true);
-    expect(planReceipt(receipt({ facets: 'Attribution' }), ctx()).reloadOverview).toBe(false);
+    expect(planReceipt(receipt({ facets: ['Structure'] }), ctx()).reloadOverview).toBe(true);
+    expect(planReceipt(receipt({ facets: ['NodeTitle'] }), ctx()).reloadOverview).toBe(true);
+    expect(planReceipt(receipt({ facets: ['Attribution'] }), ctx()).reloadOverview).toBe(false);
   });
 
   it('Characters and Narrator reload the overview (roster names) and every loaded voice map', () => {
-    for (const facets of ['Characters', 'Narrator']) {
-      const plan = planReceipt(receipt({ facets }), ctx());
+    for (const facet of ['Characters', 'Narrator'] as const) {
+      const plan = planReceipt(receipt({ facets: [facet] }), ctx());
       expect(plan.reloadOverview).toBe(true);
       expect(plan.reloadVoices).toEqual(['c1', 'c2']);
     }
   });
 
   it('Voices and VoiceRules reload loaded voice maps but not chapters', () => {
-    const plan = planReceipt(receipt({ facets: 'Voices, VoiceRules' }), ctx());
+    const plan = planReceipt(receipt({ facets: ['Voices', 'VoiceRules'] }), ctx());
     expect(plan.reloadVoices).toEqual(['c1', 'c2']);
     expect(plan.reloadChapters).toEqual([]);
     expect(plan.reloadOverview).toBe(false);
   });
 
   it('Reviews reloads the review map', () => {
-    expect(planReceipt(receipt({ facets: 'Reviews' }), ctx()).reloadReviews).toBe(true);
-    expect(planReceipt(receipt({ facets: 'Audio' }), ctx()).reloadReviews).toBe(false);
+    expect(planReceipt(receipt({ facets: ['Reviews'] }), ctx()).reloadReviews).toBe(true);
+    expect(planReceipt(receipt({ facets: ['Audio'] }), ctx()).reloadReviews).toBe(false);
   });
 
   it.each<[string, Parameters<typeof receipt>[0], boolean]>([
-    ['foreign Structure', { facets: 'Structure', isOwn: false }, true],
-    ['own Structure', { facets: 'Structure', isOwn: true }, false],
-    ['foreign speaker change', { facets: 'Attribution', isOwn: false }, false],
+    ['foreign Structure', { facets: ['Structure'], isOwn: false }, true],
+    ['own Structure', { facets: ['Structure'], isOwn: true }, false],
+    ['foreign speaker change', { facets: ['Attribution'], isOwn: false }, false],
     [
       'foreign split relation',
-      { facets: 'ItemText', structural: [{ kind: 'Split', sourceId: 'p1', resultId: 'p9' }] },
+      { facets: ['ItemText'], structural: [{ kind: 'Split', sourceId: 'p1', resultId: 'p9' }] },
       true,
     ],
   ])('toast for %s: %s', (_label, effects, toast) => {
@@ -127,7 +133,7 @@ describe('planReceipt', () => {
 
   it('a receipt that changed nothing plans nothing', () => {
     const plan = planReceipt(
-      receipt({ facets: 'Structure', paragraphIds: ['p1'], changedNothing: true }),
+      receipt({ facets: ['Structure'], paragraphIds: ['p1'], changedNothing: true }),
       ctx(),
     );
     expect(plan).toMatchObject({
@@ -141,7 +147,7 @@ describe('planReceipt', () => {
   describe('a paragraph this view created', () => {
     const created = (parent: string, isOwn = true) =>
       receipt({
-        facets: 'Structure',
+        facets: ['Structure'],
         createdId: 'p-new',
         createdParentId: parent,
         paragraphIds: ['p-new'],
@@ -167,7 +173,7 @@ describe('planReceipt', () => {
     it('a created item is not revealed: its paragraph is reread in place', () => {
       const plan = planReceipt(
         receipt({
-          facets: 'Structure',
+          facets: ['Structure'],
           createdId: 'i-new',
           createdParentId: 'p3',
           paragraphIds: ['p3'],
@@ -183,7 +189,7 @@ describe('planReceipt', () => {
 
   describe('revision gap', () => {
     it('a skipped revision reloads the overview, reviews and the visible chapter', () => {
-      const plan = planReceipt(receipt({ revision: 8, facets: 'None' }), ctx());
+      const plan = planReceipt(receipt({ revision: 8, facets: [] }), ctx());
       expect(plan).toMatchObject({
         gap: true,
         reloadOverview: true,
@@ -208,7 +214,7 @@ describe('planReceipt', () => {
 
     it('a gap still honours the receipt own facets', () => {
       const plan = planReceipt(
-        receipt({ revision: 9, facets: 'ItemText', paragraphIds: ['p3'] }),
+        receipt({ revision: 9, facets: ['ItemText'], paragraphIds: ['p3'] }),
         ctx(),
       );
       expect(plan.reloadChapters).toEqual(['c1', 'c2']);

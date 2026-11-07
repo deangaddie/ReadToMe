@@ -157,7 +157,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** docker restart → health poll → warm-up, in the background (202); outcome as serviceStatus { op: restart }. 404 / 409 as start. */
+        /** docker restart → health poll → warm-up, in the background (202); outcome as serviceStatus { op: Restart }. 404 / 409 as start. */
         post: {
             parameters: {
                 query?: never;
@@ -209,7 +209,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** docker stop in the background (202), pausing a queue that still has work for it; outcome as serviceStatus { op: shutdown }. 404 / 409 as start. */
+        /** docker stop in the background (202), pausing a queue that still has work for it; outcome as serviceStatus { op: Shutdown }. 404 / 409 as start. */
         post: {
             parameters: {
                 query?: never;
@@ -261,7 +261,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** docker start → health poll → warm-up, in the background (202). The outcome arrives as serviceStatus { name, status, op: start, ok, error? } on /hubs/live. 404 unknown service, 409 while it already has an op in flight. */
+        /** docker start → health poll → warm-up, in the background (202). The outcome arrives as serviceStatus { name, status, op: Start, ok, error? } on /hubs/live. 404 unknown service, 409 while it already has an op in flight. */
         post: {
             parameters: {
                 query?: never;
@@ -8944,6 +8944,8 @@ export interface components {
             usesGpu: boolean;
         };
         /** @enum {unknown} */
+        AiServiceOp: "Start" | "Restart" | "Shutdown";
+        /** @enum {unknown} */
         AiServiceStatus: "NotFound" | "Stopped" | "Starting" | "Ready" | "Recovering" | "Down" | "Unknown";
         AiServiceStatusDto: {
             name: string;
@@ -8977,6 +8979,17 @@ export interface components {
         ApplyPreviewRequest: {
             previewId: null | string;
         };
+        AssemblyMessage: {
+            folder: null | string;
+            /** Format: double */
+            fraction: null | number;
+            kind: components["schemas"]["AssemblyMessageKind"];
+            outputFileName: null | string;
+            phase: null | components["schemas"]["AssemblyPhase"];
+            reason: null | string;
+        };
+        /** @enum {unknown} */
+        AssemblyMessageKind: "PhaseStarted" | "Progress" | "Completed" | "Failed" | "Cancelled";
         AssemblyOutputDto: {
             /** Format: date-time */
             createdAt: string;
@@ -8990,6 +9003,17 @@ export interface components {
         AssemblyStartRequest: {
             /** @default false */
             allowPartial: boolean;
+        };
+        AssemblyState: {
+            /** Format: int32 */
+            audioRemainingCount: number;
+            currentPhase: null | components["schemas"]["AssemblyPhase"];
+            /** Format: double */
+            encodePercent: number;
+            folder: null | string;
+            isRunning: boolean;
+            lastError: null | string;
+            outputFileName: null | string;
         };
         AssemblyStatusDto: {
             /** Format: int32 */
@@ -9056,6 +9080,26 @@ export interface components {
             /** Format: uuid */
             nodeId: string;
         };
+        AudioGenMessage: {
+            applied: null | boolean;
+            /** Format: int32 */
+            attempt: number;
+            character: null | string;
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["AudioGenMessageKind"];
+            model: null | string;
+            ok: null | boolean;
+            reason: null | string;
+            rescued: null | boolean;
+            stepId: null | string;
+            text: null | string;
+            transcript: null | string;
+            /** Format: double */
+            wer: null | number;
+        };
+        /** @enum {unknown} */
+        AudioGenMessageKind: "ItemStarted" | "AudioGenerated" | "Normalized" | "PostProcessed" | "Transcribed" | "Verified" | "Failed" | "ModelLoading";
         AudioItemOutcome: {
             kind: components["schemas"]["AudioItemOutcomeKind"];
             reason: null | string;
@@ -9158,6 +9202,19 @@ export interface components {
         };
         /** @enum {unknown} */
         AudioReviewState: "NeedsReview" | "Dismissed";
+        BookEditMessage: {
+            cancelled: null | boolean;
+            /** Format: int32 */
+            done: null | number;
+            kind: components["schemas"]["BookEditMessageKind"];
+            program: string;
+            reason: null | string;
+            rows: null | components["schemas"]["BookEditRowDto"][];
+            /** Format: int32 */
+            total: null | number;
+        };
+        /** @enum {unknown} */
+        BookEditMessageKind: "Progress" | "Done" | "Failed" | "Dropped";
         BookEditRowDto: {
             displayPath: string;
             failureReason: null | string;
@@ -9181,8 +9238,12 @@ export interface components {
         BookEditRunStatus: "Idle" | "Running" | "Completed" | "Cancelled" | "Failed";
         /** @enum {unknown} */
         BookEditTargetKind: "VolumeTitle" | "PartTitle" | "ChapterTitle" | "ParagraphItemText";
+        /** @enum {string} */
+        BookFacets: "Structure" | "ItemText" | "Attribution" | "Audio" | "Reviews" | "Characters" | "Narrator" | "Voices" | "VoiceRules" | "ProjectPolicy" | "NodeTitle" | "Checkpoints" | "Pronunciations";
         /** @enum {unknown} */
         BookFileType: "Text" | "Epub";
+        /** @enum {unknown} */
+        BookMutationScope: "Exact" | "WholeProject";
         /** @enum {unknown} */
         BookNodeLevel: "Volume" | "Part" | "Chapter";
         BookOverviewDto: {
@@ -9197,6 +9258,15 @@ export interface components {
             totalParts: number;
             volumes: components["schemas"]["NodeDto"][];
         };
+        BookStructuralRelation: {
+            kind: components["schemas"]["BookStructuralRelationKind"];
+            /** Format: uuid */
+            resultId: string;
+            /** Format: uuid */
+            sourceId: string;
+        };
+        /** @enum {unknown} */
+        BookStructuralRelationKind: "Split" | "Merge";
         BulkAssignPreviewDto: {
             /** Format: int32 */
             characterItems: number;
@@ -9270,6 +9340,19 @@ export interface components {
             /** Format: uuid */
             newEntityId: null | string;
         };
+        ConfigThroughput: {
+            /** Format: int32 */
+            configId: number;
+            configName: string;
+            /** Format: double */
+            generationMs: null | number;
+            /** Format: int32 */
+            requests: number;
+            /** Format: int32 */
+            tokensOut: null | number;
+            /** Format: double */
+            tokensPerSecond: null | number;
+        };
         ContextItemDto: {
             isDialog: boolean;
             /** Format: uuid */
@@ -9315,6 +9398,13 @@ export interface components {
             /** Format: int32 */
             enqueued: number;
         };
+        EscalationState: {
+            configName: null | string;
+            /** Format: int32 */
+            itemCount: number;
+            /** Format: int32 */
+            step: number;
+        };
         FfmpegProbeResult: {
             message: string;
             success: boolean;
@@ -9345,6 +9435,15 @@ export interface components {
             restoring: boolean;
             steps: components["schemas"]["HistoryStep"][];
         };
+        HistoryMessage: {
+            folder: string;
+            kind: components["schemas"]["HistoryMessageKind"];
+            phase: null | components["schemas"]["RestoreEventKind"];
+            reason: null | string;
+            step: null | components["schemas"]["HistoryStep"];
+        };
+        /** @enum {unknown} */
+        HistoryMessageKind: "StepLanded" | "StepChanged" | "StepClosed" | "BusyChanged" | "Restoring";
         HistoryStep: {
             action: null | components["schemas"]["StepAction"];
             author: string;
@@ -9405,6 +9504,22 @@ export interface components {
             /** Format: int32 */
             withAudio: number;
         };
+        ItemStatusEntry: {
+            /** Format: int64 */
+            audioVersion: null | number;
+            outcome: null | components["schemas"]["AudioItemOutcome"];
+            review: null | components["schemas"]["AudioReviewDto"];
+            status: null | components["schemas"]["AudioItemQueueStatus"];
+        };
+        ItemStatusMessage: {
+            folder: string;
+            items: {
+                [key: string]: null | components["schemas"]["ItemStatusEntry"];
+            };
+            paragraphs: {
+                [key: string]: null | components["schemas"]["ParagraphStatusEntry"];
+            };
+        };
         ItemVoiceDto: {
             narratedBy: null | string;
             voiceName: null | string;
@@ -9426,8 +9541,74 @@ export interface components {
             /** Format: uuid */
             characterId?: null | string;
         };
+        /**
+         * @description The /hubs/live methods a client invokes.
+         * @enum {string}
+         */
+        LiveHubMethod: "JoinProject" | "LeaveProject" | "JoinStream" | "LeaveStream" | "GetSnapshot";
+        /** @description Each /hubs/live family (connection.on name) and the payload it carries. */
+        LiveMessageMap: {
+            assembly: components["schemas"]["AssemblyMessage"];
+            audioGen: components["schemas"]["AudioGenMessage"];
+            bookEdit: components["schemas"]["BookEditMessage"];
+            history: components["schemas"]["HistoryMessage"];
+            itemStatus: components["schemas"]["ItemStatusMessage"];
+            llm: components["schemas"]["LlmMessage"];
+            llmTest: components["schemas"]["LlmTestMessage"];
+            nodeStatus: components["schemas"]["NodeStatusMessage"];
+            preflight: components["schemas"]["PreflightMessage"];
+            queue: components["schemas"]["QueueMessage"];
+            receipt: components["schemas"]["ReceiptMessage"];
+            series: components["schemas"]["SeriesMessage"];
+            serviceStatus: components["schemas"]["ServiceStatusMessage"];
+            settingsChanged: components["schemas"]["SettingsChangedMessage"];
+            setupCheck: components["schemas"]["SetupCheckMessage"];
+            throughput: components["schemas"]["ThroughputSnapshot"];
+            voiceBatch: components["schemas"]["VoiceBatchMessage"];
+            watchdog: components["schemas"]["WatchdogMessage"];
+        };
+        LiveSnapshot: {
+            assembly: components["schemas"]["AssemblyState"];
+            projects: {
+                [key: string]: components["schemas"]["ProjectSnapshot"];
+            };
+            queue: components["schemas"]["QueueMessage"];
+            serviceStatus: {
+                [key: string]: components["schemas"]["AiServiceStatus"];
+            };
+            throughput: components["schemas"]["ThroughputSnapshot"];
+            voiceBatch: components["schemas"]["VoiceBatchState"];
+            watchdog: {
+                [key: string]: components["schemas"]["WatchdogKind"];
+            };
+        };
         /** @enum {unknown} */
         LlmApiType: "OpenAiCompatible";
+        LlmMessage: {
+            /** Format: int32 */
+            configId: null | number;
+            configName: null | string;
+            content: null | string;
+            /** Format: double */
+            generationMs: null | number;
+            /** Format: int32 */
+            itemCount: null | number;
+            kind: components["schemas"]["LlmMessageKind"];
+            paragraphPreview: null | string;
+            prompt: null | string;
+            reason: null | string;
+            /** Format: int32 */
+            step: null | number;
+            thinking: null | string;
+            /** Format: int32 */
+            tokensIn: null | number;
+            /** Format: int32 */
+            tokensOut: null | number;
+            /** Format: double */
+            tokensPerSecond: null | number;
+        };
+        /** @enum {unknown} */
+        LlmMessageKind: "RunStarted" | "RunEnded" | "RequestStarted" | "Delta" | "StreamCompleted" | "StreamFailed" | "StreamAborted" | "EscalationStarted";
         LlmModelsResponse: {
             models: string[];
         };
@@ -9454,6 +9635,14 @@ export interface components {
             /** Format: double */
             topP: null | number;
         };
+        LlmTestMessage: {
+            /** Format: int32 */
+            configId: number;
+            kind: components["schemas"]["LlmTestMessageKind"];
+            reason: null | string;
+        };
+        /** @enum {unknown} */
+        LlmTestMessageKind: "Done" | "Failed" | "Cancelled";
         LlmTestRequest: {
             connectionId?: null | string;
             prompt?: null | string;
@@ -9512,6 +9701,14 @@ export interface components {
         };
         /** @enum {unknown} */
         NodeKind: "Volume" | "Part" | "Chapter" | "Paragraph" | "ParagraphItem";
+        NodeStatusMessage: {
+            folder: string;
+            /** Format: int32 */
+            folderAudioRemaining: number;
+            nodes: {
+                [key: string]: null | components["schemas"]["NodeStatusSummaryDto"];
+            };
+        };
         NodeStatusSummaryDto: {
             attributionProcessing: boolean;
             /** Format: int32 */
@@ -9577,6 +9774,10 @@ export interface components {
             /** Format: uuid */
             volumeId: string;
         };
+        ParagraphStatusEntry: {
+            outcome: null | components["schemas"]["ParagraphOutcome"];
+            status: null | components["schemas"]["ParagraphQueueStatus"];
+        };
         ParagraphTtsServiceConfig: {
             enabledStepIds: string[];
             /** Format: int32 */
@@ -9631,6 +9832,17 @@ export interface components {
             name: string;
             reason: string;
         };
+        PreflightMessage: {
+            error: null | string;
+            kind: components["schemas"]["PreflightMessageKind"];
+            name: null | string;
+            ok: null | boolean;
+            reason: null | string;
+            run: string;
+            stage: null | components["schemas"]["PreflightStage"];
+        };
+        /** @enum {unknown} */
+        PreflightMessageKind: "Stage" | "Done";
         PreflightPlanDto: {
             conflicts: components["schemas"]["PreflightConflictDto"][];
             ready: boolean;
@@ -9646,6 +9858,8 @@ export interface components {
             name: string;
             status: components["schemas"]["AiServiceStatus"];
         };
+        /** @enum {unknown} */
+        PreflightStage: "WaitingToStop" | "Stopping" | "Stopped" | "WaitingToStart" | "Starting" | "Ready" | "Failed";
         PreviewRequest: {
             steps: null | components["schemas"]["PreviewStepRequest"][];
         };
@@ -9694,6 +9908,22 @@ export interface components {
             position: number;
             /** Format: uuid */
             seriesId: string;
+        };
+        ProjectSnapshot: {
+            folder: string;
+            /** Format: int32 */
+            folderAudioRemaining: number;
+            items: {
+                [key: string]: null | components["schemas"]["ItemStatusEntry"];
+            };
+            nodes: {
+                [key: string]: null | components["schemas"]["NodeStatusSummaryDto"];
+            };
+            paragraphs: {
+                [key: string]: null | components["schemas"]["ParagraphStatusEntry"];
+            };
+            /** Format: int64 */
+            revision: number;
         };
         ProjectStatusDto: {
             attribution: components["schemas"]["AttributionCountsDto"];
@@ -9873,6 +10103,35 @@ export interface components {
             /** @default false */
             thinking: boolean;
         };
+        QueueMessage: {
+            attribution: components["schemas"]["AttributionQueueSnapshot"];
+            audio: components["schemas"]["AudioQueueSnapshot"];
+            escalation: null | components["schemas"]["EscalationState"];
+        };
+        ReceiptEffects: {
+            changedNothing: boolean;
+            /** Format: uuid */
+            createdId: null | string;
+            /** Format: uuid */
+            createdParentId: null | string;
+            facets: components["schemas"]["BookFacets"][];
+            nodeIds: string[];
+            paragraphIds: string[];
+            paragraphItemIds: string[];
+            scope: components["schemas"]["BookMutationScope"];
+            structural: components["schemas"]["BookStructuralRelation"][];
+        };
+        ReceiptMessage: {
+            effects: components["schemas"]["ReceiptEffects"];
+            folder: string;
+            /** Format: uuid */
+            mutationId: string;
+            mutationName: string;
+            /** Format: uuid */
+            originId: string;
+            /** Format: int64 */
+            revision: number;
+        };
         RecentAudioSampleDto: {
             characterName: null | string;
             folder: string;
@@ -9893,6 +10152,8 @@ export interface components {
             promptStyle: components["schemas"]["AttributionPromptStyle"];
             thinking: boolean;
         };
+        /** @enum {unknown} */
+        RestoreEventKind: "Started" | "Finished";
         RestorePreviewDto: {
             /** Format: int32 */
             audioDiscardCount: number;
@@ -9955,6 +10216,8 @@ export interface components {
             /** Format: uuid */
             seriesCharacterId: string;
         };
+        /** @enum {unknown} */
+        SeriesChangeKind: "Changed" | "Deleted";
         SeriesCharacterBookDto: {
             /** Format: uuid */
             characterId: string;
@@ -10004,6 +10267,11 @@ export interface components {
         };
         SeriesMembersRequest: {
             members?: null | components["schemas"]["SeriesMemberDto"][];
+        };
+        SeriesMessage: {
+            kind: components["schemas"]["SeriesChangeKind"];
+            /** Format: uuid */
+            seriesId: string;
         };
         SeriesPositionsRequest: {
             positions?: null | {
@@ -10063,6 +10331,13 @@ export interface components {
             title: string;
             voices: string[];
         };
+        ServiceStatusMessage: {
+            error: null | string;
+            name: string;
+            ok: null | boolean;
+            op: null | components["schemas"]["AiServiceOp"];
+            status: components["schemas"]["AiServiceStatus"];
+        };
         SetActiveRequest: {
             /** Format: int32 */
             id: number;
@@ -10073,6 +10348,9 @@ export interface components {
         SetPronunciationRequest: {
             spokenForm: null | string;
             writtenForm: null | string;
+        };
+        SettingsChangedMessage: {
+            area: string;
         };
         SettingsFieldDto: {
             default: unknown;
@@ -10097,6 +10375,12 @@ export interface components {
         SetupCheckGroup: "WorkspaceAndTools" | "AiConfigs" | "DockerServices";
         /** @enum {unknown} */
         SetupCheckLane: "Local" | "Cpu" | "Gpu";
+        SetupCheckMessage: {
+            kind: components["schemas"]["SetupCheckMessageKind"];
+            report: components["schemas"]["SetupCheckReport"];
+        };
+        /** @enum {unknown} */
+        SetupCheckMessageKind: "Progress" | "Done";
         SetupCheckReport: {
             firstRun: boolean;
             /** Format: int32 */
@@ -10252,6 +10536,16 @@ export interface components {
             /** Format: int32 */
             selectedThemeId?: null | number;
         };
+        ThroughputSnapshot: {
+            /** Format: double */
+            generationRate: null | number;
+            generationRateHistory: (null | number)[];
+            hasRun: boolean;
+            isRunActive: boolean;
+            perConfig: components["schemas"]["ConfigThroughput"][];
+            /** Format: double */
+            runThroughput: null | number;
+        };
         ToSentenceCaseConfig: {
             /** Format: int32 */
             id: number;
@@ -10299,9 +10593,44 @@ export interface components {
         };
         /** @enum {unknown} */
         VoiceAnchorLevel: "Volume" | "Part" | "Chapter" | "Paragraph" | "ParagraphItem";
+        VoiceBatchMessage: {
+            audioFileName: null | string;
+            /** Format: uuid */
+            characterId: null | string;
+            currentVoiceName: null | string;
+            designPrompt: null | string;
+            /** Format: int32 */
+            failed: null | number;
+            kind: components["schemas"]["VoiceBatchMessageKind"];
+            operation: null | string;
+            /** Format: int32 */
+            processed: null | number;
+            /** Format: double */
+            referenceSeconds: null | number;
+            referenceWarning: null | string;
+            /** Format: int32 */
+            total: null | number;
+            transcript: null | string;
+            /** Format: uuid */
+            voiceId: null | string;
+        };
+        /** @enum {unknown} */
+        VoiceBatchMessageKind: "Started" | "Progress" | "VoiceUpdated" | "Completed" | "Cancelled";
         VoiceBatchStartRequest: {
             /** @default false */
             regenerateAll: boolean;
+        };
+        VoiceBatchState: {
+            currentOperation: null | string;
+            currentVoiceName: null | string;
+            /** Format: int32 */
+            failed: number;
+            isRunning: boolean;
+            lastError: null | string;
+            /** Format: int32 */
+            processed: number;
+            /** Format: int32 */
+            total: number;
         };
         VoiceBatchStatusDto: {
             currentOperation: null | string;
@@ -10383,6 +10712,13 @@ export interface components {
         };
         /** @enum {unknown} */
         VoiceSource: "Uploaded" | "Generated";
+        /** @enum {unknown} */
+        WatchdogKind: "RecoveryStarted" | "ContainerRestarted" | "ServiceHealthy" | "ServiceDown";
+        WatchdogMessage: {
+            kind: components["schemas"]["WatchdogKind"];
+            reason: null | string;
+            service: string;
+        };
     };
     responses: never;
     parameters: never;

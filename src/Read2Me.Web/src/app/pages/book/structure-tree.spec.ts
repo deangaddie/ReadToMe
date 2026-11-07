@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { VIEWING_READ_ONLY } from '@app/api';
-import type { NodeStatusSummary } from '@app/live/live-messages';
+import type { NodeStatusSummaryDto } from '@app/api';
 import { FakeTimers } from '../../../testing/fake-timers';
 import type { TreeNode } from './book-tree';
 import { NODE_MENU_OPEN, type NodeMenuRequest } from './node-menu';
@@ -462,7 +462,7 @@ describe('r2m-structure-tree', () => {
   });
 });
 
-function status(overrides: Partial<NodeStatusSummary>): NodeStatusSummary {
+function status(overrides: Partial<NodeStatusSummaryDto>): NodeStatusSummaryDto {
   return {
     attributionRemaining: 0,
     audioRemaining: 0,

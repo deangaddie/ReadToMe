@@ -17,6 +17,7 @@ import { FakeLive } from '../../../testing/fake-live';
 import { installNavigation, settle } from '../../../testing/fake-navigation';
 import { type ExportPage, formatOutputDate } from './export-page';
 import '../project/project-shell';
+import { assemblyMessage } from '../../../testing/live-messages';
 
 const BASE = '/api/projects/dracula';
 const START_URL = `${BASE}/assembly`;
@@ -276,7 +277,7 @@ describe('r2m-export-page', () => {
     await pushAssembly(
       page,
       { ...running, currentPhase: 'Gather' },
-      { kind: 'phaseStarted', phase: 'Gather', folder: 'dracula' },
+      assemblyMessage({ kind: 'PhaseStarted', phase: 'Gather', folder: 'dracula' }),
     );
     expect(states(page)).toEqual(['active', 'pending', 'pending', 'pending', 'pending']);
     expect(page.querySelector('[data-phase="Gather"]')!.getAttribute('aria-current')).toBe('step');
@@ -286,12 +287,12 @@ describe('r2m-export-page', () => {
     await pushAssembly(
       page,
       { ...running, currentPhase: 'Encode' },
-      { kind: 'phaseStarted', phase: 'Encode', folder: 'dracula' },
+      assemblyMessage({ kind: 'PhaseStarted', phase: 'Encode', folder: 'dracula' }),
     );
     await pushAssembly(
       page,
       { ...running, currentPhase: 'Encode', encodePercent: 50 },
-      { kind: 'progress', fraction: 0.5, folder: 'dracula' },
+      assemblyMessage({ kind: 'Progress', fraction: 0.5, folder: 'dracula' }),
     );
     expect(states(page)).toEqual(['done', 'done', 'done', 'active', 'pending']);
     expect(text(page.querySelector('[data-role="encode-percent"]'))).toBe('50%');
@@ -303,7 +304,7 @@ describe('r2m-export-page', () => {
     await pushAssembly(
       page,
       { folder: 'dracula', currentPhase: 'Encode' },
-      { kind: 'cancelled', folder: 'dracula' },
+      assemblyMessage({ kind: 'Cancelled', folder: 'dracula' }),
     );
     expect(states(page)).toEqual(['done', 'done', 'done', 'cancelled', 'pending']);
     expect(text(page.querySelector('[data-role="outcome"]'))).toBe('Cancelled');
@@ -316,14 +317,14 @@ describe('r2m-export-page', () => {
     await pushAssembly(
       page,
       { isRunning: true, folder: 'dracula', currentPhase: 'Finalize' },
-      { kind: 'phaseStarted', phase: 'Finalize', folder: 'dracula' },
+      assemblyMessage({ kind: 'PhaseStarted', phase: 'Finalize', folder: 'dracula' }),
     );
     api.on('GET', OUTPUTS_URL, [OUTPUTS[1]]);
 
     await pushAssembly(
       page,
       { folder: 'dracula', outputFileName: 'Dracula.m4b' },
-      { kind: 'completed', folder: 'dracula', outputFileName: 'Dracula.m4b' },
+      assemblyMessage({ kind: 'Completed', folder: 'dracula', outputFileName: 'Dracula.m4b' }),
     );
 
     expect(states(page)).toEqual(Array(5).fill('done'));
@@ -337,12 +338,12 @@ describe('r2m-export-page', () => {
     await pushAssembly(
       page,
       { isRunning: true, folder: 'dracula', currentPhase: 'Encode' },
-      { kind: 'phaseStarted', phase: 'Encode', folder: 'dracula' },
+      assemblyMessage({ kind: 'PhaseStarted', phase: 'Encode', folder: 'dracula' }),
     );
     await pushAssembly(
       page,
       { folder: 'dracula', currentPhase: 'Encode', lastError: stderr },
-      { kind: 'failed', reason: stderr, folder: 'dracula' },
+      assemblyMessage({ kind: 'Failed', reason: stderr, folder: 'dracula' }),
     );
 
     expect(states(page)).toEqual(['done', 'done', 'done', 'failed', 'pending']);
@@ -376,11 +377,11 @@ describe('r2m-export-page', () => {
     await pushAssembly(
       page,
       { folder: 'pride-and-prejudice', outputFileName: 'Pride and Prejudice.m4b' },
-      {
-        kind: 'completed',
+      assemblyMessage({
+        kind: 'Completed',
         folder: 'pride-and-prejudice',
         outputFileName: 'Pride and Prejudice.m4b',
-      },
+      }),
     );
     expect(page.querySelector('[data-card="progress"]')).toBeNull();
     expect(button(page, 'assemble').disabled).toBe(false);

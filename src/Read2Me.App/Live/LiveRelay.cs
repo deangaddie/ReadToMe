@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.SignalR;
+using Read2Me.App.Api;
 using Read2Me.App.Characters;
 using Read2Me.App.Queueing;
 using Read2Me.Core.Models;
@@ -51,7 +52,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private sealed record StatusPulse : Item;
 
     private sealed record LastSent(
-        IReadOnlyDictionary<string, NodeStatusSummary?> Nodes,
+        IReadOnlyDictionary<string, NodeStatusSummaryDto?> Nodes,
         int FolderAudioRemaining,
         IReadOnlyDictionary<string, ParagraphStatusEntry?> Paragraphs,
         IReadOnlyDictionary<string, ItemStatusEntry?> Items,
@@ -101,7 +102,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private readonly Dictionary<Guid, (Debouncer Window, SeriesChangeKind Kind)> _pendingSeries = new();
     private VoiceBatchMessage? _pendingBatchProgress;
     private readonly Dictionary<string, LastSent> _lastSent = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, string> _watchdogLast = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, WatchdogKind> _watchdogLast = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, AiServiceStatus> _serviceStatusLast = new(StringComparer.OrdinalIgnoreCase);
 
     private CancellationTokenSource? _cts;
@@ -468,7 +469,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     /// <summary>
     /// Recomputes the status maps and the busy answer for every folder somebody has joined, sends
     /// only what moved since the last send, and forgets folders nobody watches any more. A folder
-    /// first seen idle sends no <c>busyChanged</c>: the History list it reads says so already.
+    /// first seen idle sends no <c>BusyChanged</c>: the History list it reads says so already.
     /// </summary>
     private async Task SendStatusDeltasAsync()
     {
@@ -484,7 +485,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
             var paragraphs = _status.Paragraphs(id);
             var items = _status.Items(id);
             var last = _lastSent.GetValueOrDefault(folder)
-                       ?? new LastSent(new Dictionary<string, NodeStatusSummary?>(), -1,
+                       ?? new LastSent(new Dictionary<string, NodeStatusSummaryDto?>(), -1,
                            new Dictionary<string, ParagraphStatusEntry?>(), new Dictionary<string, ItemStatusEntry?>(), null);
 
             var nodeDelta = ProjectStatusSource.Diff(last.Nodes, nodes);
@@ -529,7 +530,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
             _assemblyService.Folder, _assemblyService.OutputFileName),
         new VoiceBatchState(_batchRunner.IsRunning, _batchRunner.Processed, _batchRunner.Total, _batchRunner.Failed,
             _batchRunner.CurrentVoiceName, _batchRunner.CurrentOperation, _batchRunner.LastError),
-        new Dictionary<string, string>(_watchdogLast, StringComparer.OrdinalIgnoreCase),
+        new Dictionary<string, WatchdogKind>(_watchdogLast, StringComparer.OrdinalIgnoreCase),
         new Dictionary<string, AiServiceStatus>(_serviceStatusLast, StringComparer.OrdinalIgnoreCase),
         _throughput.Snapshot,
         folders.Distinct(StringComparer.OrdinalIgnoreCase)

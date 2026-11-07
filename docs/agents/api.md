@@ -946,28 +946,31 @@ Output lands at `<workspace>/{folder}/output/<book title>.m4b`
 
 Push channel for anything that changes without a request: queue roll-ups, per-node and per-item
 status, mutation receipts, assembly / voice-batch / watchdog progress, LLM and audio-gen streams,
-throughput, and settings changes. Payloads are camelCase JSON, enums as names, nulls omitted;
-multi-kind families carry a `kind` discriminator. Records live in `src/Read2Me.App/Live/LiveMessages.cs`.
+throughput, and settings changes. Payloads take the agent API's wire form (ADR 0017): camelCase JSON,
+enums as PascalCase member names, nulls sent. Multi-kind families carry a `kind` enum. Records live
+in `src/Read2Me.App/Live/LiveMessages.cs`, and each is a component of the OpenAPI document beside
+the HTTP shapes: `LiveMessageMap` names every family's payload, `LiveHubMethod` the methods a client
+invokes.
 
 | Direction | Name | Notes |
 |---|---|---|
 | client → server | `JoinProject(folder)` / `LeaveProject(folder)` | joins `project:{folder}`; `JoinProject` returns a `ProjectSnapshot` (`folder`, `revision`, `nodes`, `paragraphs`, `items`, `folderAudioRemaining`) |
 | client → server | `JoinStream("llm" \| "audio")` / `LeaveStream(kind)` | joins `stream:llm` / `stream:audio`; the current in-progress turn is replayed to the caller first |
 | client → server | `GetSnapshot()` | `{ queue, assembly, voiceBatch, watchdog, serviceStatus, throughput, projects }` for the projects this connection joined |
-| server → client | `queue` | `{ attribution, audio, escalation? }`, debounced 250 ms, everyone |
+| server → client | `queue` | `{ attribution, audio, escalation }` (`escalation` null unless one is active), debounced 250 ms, everyone |
 | server → client | `nodeStatus`, `itemStatus` | per-project deltas (null value = entry gone), debounced 250 ms, project group only |
-| server → client | `receipt` | `BookMutationReceipt` with `folder` flattened and `originId` untouched, project group only |
-| server → client | `history` | a History step (`stepLanded` when it appears, `stepChanged` when a later commit extends it while open, `stepClosed` when it closes or its note changes once closed) with `folder` and the `step` row as `GET /history` lists it, project group only. A step recorded with no request or run open lands and closes together; a request's or Background run's step lands open and closes when it ends. `busyChanged` carries no step: the project's busy `reason` moved ("Attribution: 128 paragraphs left"), or went idle, when `reason` is omitted. Only folders someone has joined get it, and only on a change; the `GET /history` list carries the busy answer for a fresh reader. `restoring` brackets a Restore: `phase` `started`, then `finished` with the Restore `step` it added (none when it added none or failed) |
-| server → client | `bookEdit` (`dropped`) | a Restore dropped an Edit with AI session: `program` is its id, `reason` "The project was restored — run it again"; project group, unlike the run's other `bookEdit` messages, which go to the connection that started it |
-| server → client | `assembly`, `voiceBatch`, `watchdog`, `settingsChanged` | pass-through (encode progress stepped at 1 %, batch progress debounced), everyone. Every `assembly` message names the run's `folder`; `completed` carries `outputFileName`. The snapshot's `assembly.encodePercent` is 0–100 (the REST status keeps the 0–1 fraction) |
-| server → client | `llm`, `audioGen` | stream groups only; LLM `delta` messages are 100 ms batches of `thinking` + `content` |
+| server → client | `receipt` | `BookMutationReceipt` with `folder` flattened, `originId` untouched and `effects.facets` a list of single facets (`["Structure", "Audio"]`), project group only |
+| server → client | `history` | a History step (`StepLanded` when it appears, `StepChanged` when a later commit extends it while open, `StepClosed` when it closes or its note changes once closed) with `folder` and the `step` row as `GET /history` lists it, project group only. A step recorded with no request or run open lands and closes together; a request's or Background run's step lands open and closes when it ends. `BusyChanged` carries no step: the project's busy `reason` moved ("Attribution: 128 paragraphs left"), or went idle, when `reason` is null. Only folders someone has joined get it, and only on a change; the `GET /history` list carries the busy answer for a fresh reader. `Restoring` brackets a Restore: `phase` `Started`, then `Finished` with the Restore `step` it added (null when it added none or failed) |
+| server → client | `bookEdit` (`Dropped`) | a Restore dropped an Edit with AI session: `program` is its id, `reason` "The project was restored — run it again"; project group, unlike the run's other `bookEdit` messages, which go to the connection that started it |
+| server → client | `assembly`, `voiceBatch`, `watchdog`, `settingsChanged` | pass-through (encode progress stepped at 1 %, batch progress debounced), everyone. Every `assembly` message names the run's `folder`; `Completed` carries `outputFileName`. The snapshot's `assembly.encodePercent` is 0–100 (the REST status keeps the 0–1 fraction) |
+| server → client | `llm`, `audioGen` | stream groups only; LLM `Delta` messages are 100 ms batches of `thinking` + `content` |
 | server → client | `throughput` | `ThroughputSnapshot`, once a second while a run is active plus once when it ends |
-| server → client | `llmTest` | how an LLM settings test send ended (`done`, `failed` with `reason`, `cancelled`), sent only to the `connectionId` that started it; the tokens are on `stream:llm` |
-| server → client | `bookEdit` | one AI book-edit proposal run (`progress`, `done`, `failed`), sent only to the `connectionId` that started it; `done` carries every row it landed, and `cancelled` says whether a cancel cut it short |
-| server → client | `serviceStatus` | `{ name, status, op?, ok?, error? }` — a managed service's last observed `AiServiceStatus`, after every probe, lifecycle op (then `op` names it with its outcome) and watchdog transition; everyone |
-| server → client | `preflight` | one pre-flight run (`stage` with `name` + `stage` + `error?`, then `done` with `ok` + `reason?`), sent only to the `connectionId` that started it; every message carries the `run` id the 202 answered |
+| server → client | `llmTest` | how an LLM settings test send ended (`Done`, `Failed` with `reason`, `Cancelled`), sent only to the `connectionId` that started it; the tokens are on `stream:llm` |
+| server → client | `bookEdit` | one AI book-edit proposal run (`Progress`, `Done`, `Failed`), sent only to the `connectionId` that started it; `Done` carries every row it landed, and `cancelled` says whether a cancel cut it short |
+| server → client | `serviceStatus` | `{ name, status, op, ok, error }` — a managed service's last observed `AiServiceStatus`, after every probe, lifecycle op (then `op` names it, `Start` | `Restart` | `Shutdown`, with its outcome; null otherwise) and watchdog transition; everyone |
+| server → client | `preflight` | one pre-flight run (`Stage` with `name` + `stage` + `error`, then `Done` with `ok` + `reason`), sent only to the `connectionId` that started it; every message carries the `run` id the 202 answered |
 | server → client | `series` | `{ seriesId, kind: Changed \| Deleted }`, a "read again" signal with no payload, debounced 250 ms per series, sent on every registry write and on a member book's commit to its Characters, aliases, Voices or Voice Rules; everyone |
-| server → client | `setupCheck` | the Setup check's Full check: `progress` then `done`, each carrying the whole `report` (the current step's rows `checking`, `fullRun` where the run is; null on `done`); sent to every client |
+| server → client | `setupCheck` | the Setup check's Full check: `Progress` then `Done`, each carrying the whole `report` (the current step's rows `Checking`, `fullRun` where the run is; null on `Done`); sent to every client |
 
 Invalid folders and unknown stream kinds fail the invocation with a `HubException`. Node status is
 only computed for folders `NodeStatusService` has seeded — call `GET /api/projects/{folder}/status`
@@ -1038,8 +1041,8 @@ curl -s http://localhost:5000/api/projects/{folder}/history
   `title`, `pause`, `character`, `voice` (a voice batch alone, too), `pronunciation` or `attribution` (a Background
   run with attribution in it); null on the other kinds. A write committed outside any request or Background run is
   a `request` step whose action is `edit`. Tell steps apart by these, never by `label`:
-  labels are wording and may change. The hub's `stepLanded`, `stepChanged` and `stepClosed` carry
-  them too (with null fields omitted).
+  labels are wording and may change. The hub's `StepLanded`, `StepChanged` and `StepClosed` carry
+  them too.
 - `busy` names what is queued or running for the project ("Attribution: 128 paragraphs left"), or
   is null when it is idle. `restoring` is true while a Restore of the project runs.
 - History starts the first time a project is opened (`GET /api/projects/{folder}` or this call) or

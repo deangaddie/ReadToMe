@@ -8,13 +8,13 @@ import { AudioGenMessage, LlmMessage } from '@app/live/live-messages';
  */
 export function mapLlmMessage(m: LlmMessage): LlmStreamEvent[] {
   switch (m.kind) {
-    case 'delta': {
+    case 'Delta': {
       const events: LlmStreamEvent[] = [];
       if (m.thinking) events.push({ kind: 'thinkingDelta', text: m.thinking });
       if (m.content) events.push({ kind: 'contentDelta', text: m.content });
       return events;
     }
-    case 'requestStarted':
+    case 'RequestStarted':
       return [
         {
           kind: 'requestStarted',
@@ -24,7 +24,7 @@ export function mapLlmMessage(m: LlmMessage): LlmStreamEvent[] {
           configName: m.configName ?? '',
         },
       ];
-    case 'streamCompleted':
+    case 'StreamCompleted':
       return [
         {
           kind: 'streamCompleted',
@@ -34,9 +34,9 @@ export function mapLlmMessage(m: LlmMessage): LlmStreamEvent[] {
           tokensPerSecond: m.tokensPerSecond ?? null,
         },
       ];
-    case 'streamFailed':
+    case 'StreamFailed':
       return [{ kind: 'streamFailed', reason: m.reason ?? '' }];
-    case 'streamAborted':
+    case 'StreamAborted':
       return [
         {
           kind: 'streamAborted',
@@ -45,7 +45,7 @@ export function mapLlmMessage(m: LlmMessage): LlmStreamEvent[] {
           tokensPerSecond: m.tokensPerSecond ?? null,
         },
       ];
-    case 'escalationStarted':
+    case 'EscalationStarted':
       return [
         {
           kind: 'escalationStarted',
@@ -54,9 +54,9 @@ export function mapLlmMessage(m: LlmMessage): LlmStreamEvent[] {
           itemCount: m.itemCount ?? 0,
         },
       ];
-    case 'runStarted':
+    case 'RunStarted':
       return [{ kind: 'runStarted' }];
-    case 'runEnded':
+    case 'RunEnded':
       return [{ kind: 'runEnded' }];
   }
 }
@@ -64,13 +64,13 @@ export function mapLlmMessage(m: LlmMessage): LlmStreamEvent[] {
 export function mapAudioGenMessage(m: AudioGenMessage): AudioGenEvent {
   const base = { id: m.id, attempt: m.attempt };
   switch (m.kind) {
-    case 'itemStarted':
+    case 'ItemStarted':
       return { kind: 'itemStarted', ...base, character: m.character ?? null, text: m.text ?? null };
-    case 'audioGenerated':
+    case 'AudioGenerated':
       return { kind: 'audioGenerated', ...base };
-    case 'normalized':
+    case 'Normalized':
       return { kind: 'normalized', ...base, ok: m.ok ?? false, reason: m.reason ?? null };
-    case 'postProcessed':
+    case 'PostProcessed':
       return {
         kind: 'postProcessed',
         ...base,
@@ -78,9 +78,9 @@ export function mapAudioGenMessage(m: AudioGenMessage): AudioGenEvent {
         applied: m.applied ?? false,
         reason: m.reason ?? null,
       };
-    case 'transcribed':
+    case 'Transcribed':
       return { kind: 'transcribed', ...base, transcript: m.transcript ?? '' };
-    case 'verified':
+    case 'Verified':
       return {
         kind: 'verified',
         ...base,
@@ -89,9 +89,9 @@ export function mapAudioGenMessage(m: AudioGenMessage): AudioGenEvent {
         reason: m.reason ?? null,
         rescued: m.rescued ?? false,
       };
-    case 'failed':
+    case 'Failed':
       return { kind: 'failed', ...base, reason: m.reason ?? '' };
-    case 'modelLoading':
+    case 'ModelLoading':
       return { kind: 'modelLoading', model: m.model ?? '' };
   }
 }

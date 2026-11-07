@@ -94,23 +94,23 @@ export class ActivityStore {
     this.live.on('queue', (m) => this.stampQueue(m));
     this.live.resynced(() => this.stampQueue(this.live.queue()));
     this.live.on('assembly', (m) => {
-      if (m.kind === 'phaseStarted') this.undismiss(ASSEMBLY_JOB_ID);
-      if (m.kind === 'completed') this.toast.success('Assembly finished');
-      if (m.kind === 'failed') this.toast.error(`Assembly failed: ${firstLine(m.reason)}`);
-      if (m.kind === 'cancelled') this.toast.info('Assembly cancelled');
+      if (m.kind === 'PhaseStarted') this.undismiss(ASSEMBLY_JOB_ID);
+      if (m.kind === 'Completed') this.toast.success('Assembly finished');
+      if (m.kind === 'Failed') this.toast.error(`Assembly failed: ${firstLine(m.reason)}`);
+      if (m.kind === 'Cancelled') this.toast.info('Assembly cancelled');
     });
     this.live.on('voiceBatch', (m) => {
-      if (m.kind === 'started') this.undismiss(VOICE_BATCH_JOB_ID);
-      if (m.kind === 'completed') {
+      if (m.kind === 'Started') this.undismiss(VOICE_BATCH_JOB_ID);
+      if (m.kind === 'Completed') {
         this.toast.success(
           `Voice batch complete: ${m.processed ?? 0} done, ${m.failed ?? 0} failed`,
         );
       }
-      if (m.kind === 'cancelled') this.toast.info('Voice batch cancelled');
+      if (m.kind === 'Cancelled') this.toast.info('Voice batch cancelled');
     });
     this.live.on('watchdog', (m) => {
-      if (m.kind === 'recoveryStarted') this.undismiss(`${WATCHDOG_JOB_PREFIX}${m.service}`);
-      if (m.kind === 'serviceDown') this.toast.error(`${m.service} is down`);
+      if (m.kind === 'RecoveryStarted') this.undismiss(`${WATCHDOG_JOB_PREFIX}${m.service}`);
+      if (m.kind === 'ServiceDown') this.toast.error(`${m.service} is down`);
     });
     this.live.on('throughput', (t) => {
       if (t.isRunActive) this._throughputDismissed.set(false);

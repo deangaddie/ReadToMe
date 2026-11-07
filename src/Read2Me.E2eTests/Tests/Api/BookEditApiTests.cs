@@ -105,11 +105,11 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
                 new { thinking = false, connectionId = hub.ConnectionId });
             Assert.Equal(HttpStatusCode.Accepted, propose.StatusCode);
 
-            await WaitForAsync(() => messages.Any(m => m.GetProperty("kind").GetString() == "done"));
+            await WaitForAsync(() => messages.Any(m => m.GetProperty("kind").GetString() == "Done"));
             var list = messages.ToList();
             Assert.All(list, m => Assert.Equal(program, m.GetProperty("program").GetString()));
-            Assert.Contains(list, m => m.GetProperty("kind").GetString() == "progress");
-            var done = list.Single(m => m.GetProperty("kind").GetString() == "done");
+            Assert.Contains(list, m => m.GetProperty("kind").GetString() == "Progress");
+            var done = list.Single(m => m.GetProperty("kind").GetString() == "Done");
             Assert.Equal(10, done.GetProperty("done").GetInt32());
             Assert.Equal(10, done.GetProperty("total").GetInt32());
             Assert.False(done.GetProperty("cancelled").GetBoolean());
@@ -194,12 +194,12 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             var again = await Http.PostAsJsonAsync(Url(folder, $"/{program}/propose"), new { thinking = false });
             Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
 
-            await WaitForAsync(() => messages.Any(m => m.GetProperty("kind").GetString() == "progress"));
+            await WaitForAsync(() => messages.Any(m => m.GetProperty("kind").GetString() == "Progress"));
             var cancel = await Http.PostAsync(Url(folder, $"/{program}/cancel"), null);
             Assert.Equal(HttpStatusCode.NoContent, cancel.StatusCode);
 
-            await WaitForAsync(() => messages.Any(m => m.GetProperty("kind").GetString() == "done"));
-            var done = messages.Single(m => m.GetProperty("kind").GetString() == "done");
+            await WaitForAsync(() => messages.Any(m => m.GetProperty("kind").GetString() == "Done"));
+            var done = messages.Single(m => m.GetProperty("kind").GetString() == "Done");
             Assert.True(done.GetProperty("cancelled").GetBoolean());
             var landed = done.GetProperty("rows").GetArrayLength();
             Assert.Equal(8, landed);

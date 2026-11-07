@@ -3,7 +3,7 @@ import type { BookOverviewDto, ParagraphDto, ProjectDetailDto } from '@app/api';
 import { Emitter } from '@app/core/emitter';
 import { override, resetServices } from '@app/core/services';
 import { signal } from '@app/core/signals';
-import type { LiveSnapshot, Receipt } from '@app/live/live-messages';
+import type { BookFacets, LiveSnapshot, Receipt } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast';
 import { STRUCTURE_RULES } from '../../../testing/structure-rules';
@@ -51,7 +51,7 @@ function paragraphs(...ids: string[]): { paragraphs: ParagraphDto[] } {
 
 function receipt(
   revision: number,
-  facets: string,
+  facets: BookFacets[],
   effects: Partial<Receipt['effects']> = {},
   isOwn = false,
 ): Receipt {
@@ -64,6 +64,8 @@ function receipt(
     isOwn,
     effects: {
       scope: 'Exact',
+      createdId: null,
+      createdParentId: null,
       facets,
       nodeIds: [],
       paragraphIds: [],
@@ -315,8 +317,8 @@ describe('BookStore', () => {
 
       const own = store.expectOwnReceipt(1000);
       const foreign = store.expectOwnReceipt(1000);
-      live.receiptStream.emit(receipt(6, 'NodeTitle', {}, false));
-      live.receiptStream.emit(receipt(7, 'NodeTitle', {}, true));
+      live.receiptStream.emit(receipt(6, ['NodeTitle'], {}, false));
+      live.receiptStream.emit(receipt(7, ['NodeTitle'], {}, true));
       expect(await own.settled).toBe(true);
       expect(await foreign.settled).toBe(true);
 
@@ -337,8 +339,8 @@ describe('BookStore', () => {
       await store.openFirstChapter();
       api.on('GET', `${BASE}/nodes/Chapter/c1/children`, paragraphs('a', 'b', 'z'));
 
-      live.receiptStream.emit(receipt(6, 'Attribution', { paragraphIds: ['a'] }));
-      live.receiptStream.emit(receipt(7, 'Attribution', { paragraphItemIds: ['b-i'] }));
+      live.receiptStream.emit(receipt(6, ['Attribution'], { paragraphIds: ['a'] }));
+      live.receiptStream.emit(receipt(7, ['Attribution'], { paragraphItemIds: ['b-i'] }));
       expect(calls('/nodes/Chapter/c1/children')).toBe(1);
       await settle(RECEIPT_BATCH_MS + 20);
 
@@ -353,8 +355,8 @@ describe('BookStore', () => {
       await store.openFirstChapter();
       api.on('GET', `${BASE}/nodes/Chapter/c1/children`, paragraphs('a', 'a2'));
 
-      live.receiptStream.emit(receipt(6, 'Structure', { paragraphIds: ['a'] }));
-      live.receiptStream.emit(receipt(7, 'Structure', { paragraphIds: ['a'] }));
+      live.receiptStream.emit(receipt(6, ['Structure'], { paragraphIds: ['a'] }));
+      live.receiptStream.emit(receipt(7, ['Structure'], { paragraphIds: ['a'] }));
       expect(toasts).toEqual(['Book updated elsewhere']);
       await settle(RECEIPT_BATCH_MS + 20);
 
@@ -370,7 +372,7 @@ describe('BookStore', () => {
       await store.openFirstChapter();
       readOnly.set('Viewing a past step');
 
-      live.receiptStream.emit(receipt(6, 'Structure', { paragraphIds: ['a'] }));
+      live.receiptStream.emit(receipt(6, ['Structure'], { paragraphIds: ['a'] }));
       await settle(RECEIPT_BATCH_MS + 20);
 
       expect(toasts).toEqual([]);
@@ -381,7 +383,7 @@ describe('BookStore', () => {
       await store.open('dracula');
       await expand('p1');
       await store.openFirstChapter();
-      live.receiptStream.emit(receipt(6, 'Structure', { paragraphIds: ['a'] }, true));
+      live.receiptStream.emit(receipt(6, ['Structure'], { paragraphIds: ['a'] }, true));
       expect(toasts).toEqual([]);
       await settle(RECEIPT_BATCH_MS + 20);
     });
@@ -392,7 +394,7 @@ describe('BookStore', () => {
       await store.openFirstChapter();
       api.on('GET', `${BASE}/audio/reviews`, { 'a-i': { state: 'NeedsReview' } });
 
-      live.receiptStream.emit(receipt(9, 'VoiceRules'));
+      live.receiptStream.emit(receipt(9, ['VoiceRules']));
       await settle(RECEIPT_BATCH_MS + 20);
 
       expect(calls('/book')).toBe(2);
@@ -454,7 +456,7 @@ describe('BookStore', () => {
 
       it('reloads when the snapshot is ahead of the book, even if a later receipt came meanwhile', async () => {
         // Commit 6 landed before the hub joined (no receipt); the receipt for 7 is not a gap yet.
-        live.receiptStream.emit(receipt(7, 'VoiceRules'));
+        live.receiptStream.emit(receipt(7, ['VoiceRules']));
         await snapshotThenBook(6, 5);
         expect(calls('/book')).toBe(2);
         expect(calls('/audio/reviews')).toBe(2);
@@ -467,7 +469,7 @@ describe('BookStore', () => {
         expect(store.window()).toEqual(['c1']);
         expect(store.currentChapterId()).toBe('c1');
         // The snapshot's revision is the baseline from now on: the next one is not a gap.
-        live.receiptStream.emit(receipt(7, 'Attribution', { paragraphIds: ['a'] }));
+        live.receiptStream.emit(receipt(7, ['Attribution'], { paragraphIds: ['a'] }));
         await settle(RECEIPT_BATCH_MS + 20);
         expect(calls('/book')).toBe(2);
       });
@@ -510,7 +512,7 @@ describe('BookStore', () => {
       await store.openFirstChapter();
       api.on('GET', `${BASE}/nodes/Chapter/c1/children`, () => problem(500, 'db locked'));
 
-      live.receiptStream.emit(receipt(6, 'ItemText', { paragraphIds: ['a'] }));
+      live.receiptStream.emit(receipt(6, ['ItemText'], { paragraphIds: ['a'] }));
       await settle(RECEIPT_BATCH_MS + 20);
       expect(store.stale()).toBeTruthy();
 
@@ -542,7 +544,7 @@ describe('BookStore', () => {
       await expand('p1');
       await store.openFirstChapter();
 
-      live.receiptStream.emit(receipt(2, 'VoiceRules'));
+      live.receiptStream.emit(receipt(2, ['VoiceRules']));
       await settle(RECEIPT_BATCH_MS + 20);
       expect(calls('/book')).toBe(2);
     });
@@ -552,7 +554,7 @@ describe('BookStore', () => {
       api.on('GET', `${BASE}/book`, () => new Promise((r) => (answer = r)));
       const opened = store.open('dracula');
       await settle();
-      live.receiptStream.emit(receipt(40, 'VoiceRules'));
+      live.receiptStream.emit(receipt(40, ['VoiceRules']));
       answer(OVERVIEW);
       await opened;
       await settle(RECEIPT_BATCH_MS + 20);
@@ -570,7 +572,7 @@ describe('BookStore', () => {
       api.on('GET', `${BASE}/nodes/Part/p1/children`, {
         chapters: chapters.map((id) => ({ id, title: id })),
       });
-      live.receiptStream.emit(receipt(6, 'Structure', { nodeIds: [nodeId] }));
+      live.receiptStream.emit(receipt(6, ['Structure'], { nodeIds: [nodeId] }));
       await settle(RECEIPT_BATCH_MS + 20);
     }
 
@@ -593,7 +595,7 @@ describe('BookStore', () => {
       await store.openChapter('c3');
       const before = calls('/nodes/Part/p1/children');
 
-      live.receiptStream.emit(receipt(6, 'Structure', { nodeIds: ['c3'] }));
+      live.receiptStream.emit(receipt(6, ['Structure'], { nodeIds: ['c3'] }));
       await settle(RECEIPT_BATCH_MS + 20);
 
       // p1 was never read, so c3 is not in the chapter sequence yet: read on rather than drop it.
@@ -608,7 +610,7 @@ describe('BookStore', () => {
     const created = (id: string, chapter: string, isOwn = true) =>
       receipt(
         6,
-        'Structure',
+        ['Structure'],
         {
           createdId: id,
           createdParentId: chapter,
@@ -667,7 +669,7 @@ describe('BookStore', () => {
       live.receiptStream.emit(
         receipt(
           6,
-          'Structure',
+          ['Structure'],
           {
             createdId: 'a-new',
             createdParentId: 'a',

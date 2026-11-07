@@ -11,6 +11,7 @@ import { initialProgress } from '@app/ui/preflight-sheet';
 import type { PreflightSheet } from '@app/ui/preflight-sheet';
 import { settleMicrotasks } from '../../testing/fake-timers';
 import { PREFLIGHT_TASKS, Preflight, type PreflightTask } from './preflight';
+import { preflightMessage } from '../../testing/live-messages';
 
 /** Ported from the Angular preflight spec: the service, then the sheet (host + presentational). */
 const COLD: PreflightPlanDto = {
@@ -107,8 +108,8 @@ describe('r2m-preflight-sheet', () => {
 
   it('orders the rows conflicts first', () => {
     expect(initialProgress(COLD)).toEqual([
-      { name: 'chatterbox', stage: 'waitingToStop' },
-      { name: 'llama', stage: 'waitingToStart' },
+      { name: 'chatterbox', stage: 'WaitingToStop' },
+      { name: 'llama', stage: 'WaitingToStart' },
     ]);
   });
 
@@ -137,23 +138,31 @@ describe('r2m-preflight-sheet', () => {
     expect(sheet.querySelector('h2')?.textContent).toBe('Starting services');
     expect(sheet.classList.contains('r2m-preflight-sheet--running')).toBe(true);
 
-    preflight$.emit({ kind: 'stage', run: 'r1', name: 'chatterbox', stage: 'stopping' });
-    preflight$.emit({ kind: 'stage', run: 'other', name: 'llama', stage: 'failed', error: 'x' });
+    preflight$.emit(
+      preflightMessage({ kind: 'Stage', run: 'r1', name: 'chatterbox', stage: 'Stopping' }),
+    );
+    preflight$.emit(
+      preflightMessage({ kind: 'Stage', run: 'other', name: 'llama', stage: 'Failed', error: 'x' }),
+    );
     await sheet.rendered();
     const rows = Array.from(sheet.querySelectorAll('.r2m-preflight-sheet__row'));
-    expect(rows[0]?.getAttribute('data-stage')).toBe('stopping');
+    expect(rows[0]?.getAttribute('data-stage')).toBe('Stopping');
     expect(rows[0]?.querySelector('.r2m-spinner')).not.toBeNull();
-    expect(rows[1]?.getAttribute('data-stage')).toBe('waitingToStart');
+    expect(rows[1]?.getAttribute('data-stage')).toBe('WaitingToStart');
     expect(rows[1]?.querySelector('.r2m-icon')?.textContent).toBe('schedule');
 
-    preflight$.emit({ kind: 'stage', run: 'r1', name: 'chatterbox', stage: 'stopped' });
-    preflight$.emit({ kind: 'stage', run: 'r1', name: 'llama', stage: 'starting' });
+    preflight$.emit(
+      preflightMessage({ kind: 'Stage', run: 'r1', name: 'chatterbox', stage: 'Stopped' }),
+    );
+    preflight$.emit(
+      preflightMessage({ kind: 'Stage', run: 'r1', name: 'llama', stage: 'Starting' }),
+    );
     await sheet.rendered();
     expect(rows[0]?.querySelector('.r2m-icon')?.textContent).toBe('stop_circle');
     expect(rows[1]?.querySelector('.r2m-status-chip')?.textContent).toContain('Starting');
 
-    preflight$.emit({ kind: 'stage', run: 'r1', name: 'llama', stage: 'ready' });
-    preflight$.emit({ kind: 'done', run: 'r1', ok: true });
+    preflight$.emit(preflightMessage({ kind: 'Stage', run: 'r1', name: 'llama', stage: 'Ready' }));
+    preflight$.emit(preflightMessage({ kind: 'Done', run: 'r1', ok: true }));
     expect(closed).toEqual([true]);
     await sheet.rendered();
     expect(sheet.textContent).toContain('All required services are ready');
@@ -164,31 +173,37 @@ describe('r2m-preflight-sheet', () => {
     api.run.mockReturnValue(new Promise<{ run: string }>((resolve) => (answer = resolve)));
     const { sheet, buttons } = await mount();
     buttons()[1]!.click();
-    preflight$.emit({ kind: 'stage', run: 'r2', name: 'chatterbox', stage: 'stopping' });
+    preflight$.emit(
+      preflightMessage({ kind: 'Stage', run: 'r2', name: 'chatterbox', stage: 'Stopping' }),
+    );
     answer({ run: 'r2' });
     await settleMicrotasks();
     await sheet.rendered();
     expect(sheet.querySelector('.r2m-preflight-sheet__row')?.getAttribute('data-stage')).toBe(
-      'stopping',
+      'Stopping',
     );
   });
 
   it('done not ok shows the failure summary and Close closes false', async () => {
     const { sheet, closed, buttons, texts, start } = await mount();
     await start();
-    preflight$.emit({
-      kind: 'stage',
-      run: 'r1',
-      name: 'llama',
-      stage: 'failed',
-      error: 'health check timed out',
-    });
-    preflight$.emit({
-      kind: 'done',
-      run: 'r1',
-      ok: false,
-      reason: 'Failed to start llama: health check timed out',
-    });
+    preflight$.emit(
+      preflightMessage({
+        kind: 'Stage',
+        run: 'r1',
+        name: 'llama',
+        stage: 'Failed',
+        error: 'health check timed out',
+      }),
+    );
+    preflight$.emit(
+      preflightMessage({
+        kind: 'Done',
+        run: 'r1',
+        ok: false,
+        reason: 'Failed to start llama: health check timed out',
+      }),
+    );
     await sheet.rendered();
     expect(sheet.querySelector('.r2m-preflight-sheet__error')?.textContent).toContain(
       'Failed to start llama',
@@ -219,7 +234,7 @@ describe('r2m-preflight-sheet', () => {
     const { sheet, start } = await mount();
     await start();
     sheet.remove();
-    preflight$.emit({ kind: 'done', run: 'r1', ok: true });
+    preflight$.emit(preflightMessage({ kind: 'Done', run: 'r1', ok: true }));
     expect(sheet.phase()).toBe('running');
   });
 });

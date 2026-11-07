@@ -4,7 +4,7 @@ import type {
   ProjectStatusDto,
   StepCheckpointDto,
 } from '@app/api';
-import type { NodeStatusSummary } from '@app/live/live-messages';
+import type { NodeStatusSummaryDto } from '@app/api';
 import type { StatusKind } from '@app/ui/partials';
 import type { PipelineAction, PipelineCheckpointPill, PipelineStepView } from '@app/ui/pipeline';
 
@@ -70,7 +70,7 @@ export interface PipelineStep extends PipelineStepView {
 export interface PipelineInput {
   status: ProjectStatusDto;
   /** Node roll-ups as currently known: the bootstrap map with hub deltas applied. */
-  nodes: Record<string, NodeStatusSummary | null>;
+  nodes: Record<string, NodeStatusSummaryDto | null>;
   /** Paragraphs missing audio, from the hub when it has spoken, else the bootstrap. */
   folderAudioRemaining: number;
   /** This project's audio items the queue reports queued or processing. */

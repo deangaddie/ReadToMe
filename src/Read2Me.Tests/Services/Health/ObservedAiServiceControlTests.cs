@@ -49,9 +49,9 @@ namespace Read2Me.Tests.Services.Health
             Assert.Equal(["shutdown", "start", "restart"], _inner.Ops);
             Assert.Equal(
             [
-                new ServiceStatusChanged("llama", AiServiceStatus.Stopped, "shutdown", true, null),
-                new ServiceStatusChanged("llama", AiServiceStatus.Down, "start", false, "boom"),
-                new ServiceStatusChanged("llama", AiServiceStatus.Ready, "restart", true, null),
+                new ServiceStatusChanged("llama", AiServiceStatus.Stopped, AiServiceOp.Shutdown, true, null),
+                new ServiceStatusChanged("llama", AiServiceStatus.Down, AiServiceOp.Start, false, "boom"),
+                new ServiceStatusChanged("llama", AiServiceStatus.Ready, AiServiceOp.Restart, true, null),
             ], _published);
         }
 

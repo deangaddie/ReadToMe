@@ -52,8 +52,8 @@ bundler does not see it until then.
   `icons.manifest.json` with it.
 - `src/app/api/` — `ApiClient` (the only place that calls `fetch`), the wire shapes in `dtos.ts`,
   the `BookCommand` union and the generated `schema.d.ts` (checked in).
-- `src/app/live/` — the `/hubs/live` client. `live-messages.spec.ts` reads the C# hub sources and
-  fails when a family or `kind` string drifts.
+- `src/app/live/` — the `/hubs/live` client. Its message types (`live-messages.ts`) are aliases over
+  the generated `schema.d.ts`, like the HTTP shapes.
 - `src/app/app.routes.ts`, `src/app/route-meta.ts` — the route table and per-route metadata.
 - `src/app/shell/`, `src/app/pages/` — the shell frame and the screens; an unknown path renders
   `pages/not-found-page.ts`.

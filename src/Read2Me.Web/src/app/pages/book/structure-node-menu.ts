@@ -1,5 +1,5 @@
 import { type Block, type NodeLevel, withLocal } from '@app/api';
-import type { NodeStatusSummary } from '@app/live/live-messages';
+import type { NodeStatusSummaryDto } from '@app/api';
 import { MENU_KIND_OF_LEVEL, type NodeMenuTarget, type SelectionKind } from './node-menu-entries';
 
 /**
@@ -18,7 +18,7 @@ export interface StructureNodeMenuInput {
   /** Which selection the reader is in (the current Reader mode's shortcuts); null for none. */
   selection: SelectionKind | null;
   /** The node's roll-up; null when it has none. */
-  status: NodeStatusSummary | null;
+  status: NodeStatusSummaryDto | null;
   /** The edit gate's answer for the page (`BookEditor.blocked()`); null while edits are open. */
   blocked: Block | null;
 }
