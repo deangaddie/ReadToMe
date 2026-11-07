@@ -77,14 +77,18 @@ namespace Read2Me.Services.Series
         private async Task<SeriesResult<bool>> ResolveAsync(
             Guid seriesId, Guid seriesCharacterId, string folder, bool push, CancellationToken ct)
         {
-            using var _ = await gate.EnterAsync(ct);
+            using var hold = await gate.EnterAsync(ct);
             var (plan, refusal) = await PlanResolveAsync(seriesId, seriesCharacterId, folder, push, ct);
             if (plan is null) return refusal!;
 
-            var results = await SeriesCopies.RunAsync(plan.Targets, target => ReplaceVoicesInAsync(target, plan.Source, plan.Step, StepAction.Voice));
-            foreach (var failed in results.Where(r => r.Failure is not null))
-                logger.LogWarning("Series {SeriesId}: '{Step}' was not written into '{Folder}': {Reason}",
-                    seriesId, plan.Step, failed.Folder, failed.Failure);
+            // The source's whole set: each target holds exactly these afterwards.
+            var source = (await characters.GetCharacterVoicesAsync(plan.Source.FolderId, plan.Source.CharacterId))
+                .Select(v => SeriesVoiceSource.Of(plan.Source.FolderId, v))
+                .ToList();
+            var writes = SeriesCopies.InWriteOrder(plan.Targets)
+                .Select(t => new SeriesVoiceWrite(t, new SeriesVoiceChange.Replace(source)))
+                .ToList();
+            var results = await replicator.WriteAsync(writes, new SeriesVoiceStep(plan.Step, StepAction.Voice), hold, CancellationToken.None);
             Signal(seriesId, SeriesChangeKind.Changed);
 
             var failures = results.Where(r => r.Failure is not null)
@@ -181,66 +185,6 @@ namespace Read2Me.Services.Series
             var path = Path.Combine(projectFolder, audioFileName);
             return File.Exists(path) ? await audioHashes.HashAsync(path) : "missing";
         }
-
-        /// <summary>
-        /// Writes <paramref name="source"/>'s whole set of the Series character's Voices into
-        /// <paramref name="target"/>: each one's reference audio and kept original written over the
-        /// target's own (set aside, and put back if the commit doesn't take), then the rows, as one
-        /// step. A Voice the target no longer holds has its files removed after the commit. Answers
-        /// why it failed, or null.
-        /// </summary>
-        private async Task<string?> ReplaceVoicesInAsync(SeriesPeer target, SeriesPeer source, string label, StepAction action)
-        {
-            // Read again for each book, never held: the reader shares this scope's tracking context.
-            var voices = await characters.GetCharacterVoicesAsync(source.FolderId, source.CharacterId);
-            var copies = voices.Select(CopyOf).ToList();
-            var before = (await characters.GetCharacterVoicesAsync(target.FolderId, target.CharacterId))
-                .Select(v => (v.Id, v.AudioFileName)).ToList();
-
-            var targetFolder = fs.GetProjectFolderPath(target.FolderId);
-            var staged = new StagedFiles(logger);
-            try
-            {
-                var written = new List<SeriesVoiceCopy>(copies.Count);
-                foreach (var copy in copies)
-                {
-                    var (audio, failure) = StageVoice(staged, source.FolderId, source.CharacterId, target, copy);
-                    if (failure is not null)
-                    {
-                        staged.Rollback();
-                        return failure;
-                    }
-                    written.Add(copy with { AudioFileName = audio });
-                }
-
-                var outcome = await mutations.CommitAsync(
-                    new ReplaceSeriesVoicesMutation(target.FolderId, target.CharacterId, written, label, action), CancellationToken.None);
-                if (outcome is BookMutationOutcome.Rejected rejected)
-                {
-                    staged.Rollback();
-                    return rejected.Message;
-                }
-
-                staged.Commit();
-                // Files no longer named go after the commit (ADR 0007): a removed Voice's, and audio renamed.
-                var named = written.Select(c => c.AudioFileName).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
-                foreach (var (id, audio) in before)
-                {
-                    if (audio is { Length: > 0 } && !named.Contains(audio)) TryDelete(Path.Combine(targetFolder, audio));
-                    if (written.All(c => c.Id != id)) TryDelete(Path.Combine(targetFolder, VoiceOriginalStore.PathOf(target.CharacterId, id)));
-                }
-                return null;
-            }
-            catch
-            {
-                staged.Rollback();
-                throw;
-            }
-        }
-
-        private static SeriesVoiceCopy CopyOf(VoiceEntity v) => new(
-            v.Id, v.Name, v.Description, v.Source, v.DesignPrompt, v.Transcript, v.AudioFileName,
-            v.VoiceDesignSettingsOverrideJson, v.TtsSettingsOverrideJson, v.CreatedUtc);
     }
 
     /// <summary>A push or take's preview: each target book that would lose Voices, and the positional rules on them.</summary>

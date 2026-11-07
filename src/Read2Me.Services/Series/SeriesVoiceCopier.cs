@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Read2Me.Services.Events;
 using Read2Me.Services.History;
 using Read2Me.Services.Mutations;
 
@@ -17,19 +19,20 @@ namespace Read2Me.Services.Series
     /// <item>A member book's commit to Characters, the narrator, Voices or Voice Rules sends the
     /// series' <c>series</c> signal.</item>
     /// </list>
-    /// The copies are themselves Book commits; while they run, this hook stands aside for them.
+    /// The copies are themselves Book commits, written by <see cref="SeriesVoiceReplicator"/>; while
+    /// it writes, this hook stands aside for them.
     /// </summary>
-    public sealed class SeriesVoiceCopier(IServiceProvider services, ICharacterReader characters) : IBookCommitHook
+    public sealed class SeriesVoiceCopier(
+        IServiceProvider services, ICharacterReader characters, EventBroadcaster<SeriesChanged> changes,
+        ILogger<SeriesVoiceCopier> logger) : IBookCommitHook
     {
-        /// <summary>Set while this flow writes the copies, so their own commits aren't copied on (and don't wait for the registry lock it holds).</summary>
-        private static readonly AsyncLocal<bool> Copying = new();
-
-        // Resolved when needed: the registry writes through BookMutations, which resolves this hook.
+        // Resolved when needed: both write through BookMutations, which resolves this hook (#237).
         private SeriesRegistry Registry => services.GetRequiredService<SeriesRegistry>();
+        private SeriesVoiceReplicator Replicator => services.GetRequiredService<SeriesVoiceReplicator>();
 
         public async Task<BookCommitPlan> PlanAsync(BookMutation mutation, CancellationToken ct)
         {
-            if (Copying.Value || SeriesVoiceEdits.IsSeriesCopy(mutation)) return BookCommitPlan.None;
+            if (SeriesVoiceReplicator.IsWriting || SeriesVoiceEdits.IsSeriesCopy(mutation)) return BookCommitPlan.None;
             var folder = mutation.FolderId;
 
             switch (mutation)
@@ -94,26 +97,48 @@ namespace Read2Me.Services.Series
             // A results-only commit has no step; every Voice edit is a state one, so this is a fallback.
             var label = change.StepLabel ?? ProjectHistory.LabelOf(mutation);
             var action = change.StepAction ?? StepAction.Voice;
-            Copying.Value = true;
-            try
+            var voiceId = edit switch
             {
-                switch (edit)
-                {
-                    case SeriesVoiceEdits.Deleted deleted:
-                        await Registry.CopyDeleteAsync(peers, deleted.VoiceId, label, action);
-                        break;
-                    case SeriesVoiceEdits.Changed changed:
-                        await Registry.CopyVoiceAsync(peers, changed.VoiceId, label, action, differing);
-                        break;
-                    case SeriesVoiceEdits.Created when change.Receipt.Effects.CreatedId is { } created:
-                        await Registry.CopyVoiceAsync(peers, created, label, action, differing);
-                        break;
-                }
-            }
-            finally
+                SeriesVoiceEdits.Deleted deleted => deleted.VoiceId,
+                SeriesVoiceEdits.Changed changed => changed.VoiceId,
+                SeriesVoiceEdits.Created => change.Receipt.Effects.CreatedId,
+                _ => null,
+            };
+            if (voiceId is not { } id) return;
+
+            var plan = await PlanCopiesAsync(edit, peers, id, differing);
+            await Replicator.WriteAsync(plan, new SeriesVoiceStep(label, action), CancellationToken.None);
+            changes.Publish(new SeriesChanged(peers.SeriesId, SeriesChangeKind.Changed));
+        }
+
+        /// <summary>
+        /// Each other linked book's copy, in Series position order: a delete deletes the Voice; any
+        /// other edit copies the Voice's whole state, except into a book in <paramref name="differing"/>
+        /// (it differed from the series copy the edit was made in), which takes the whole set instead,
+        /// so the edit brings it back in line.
+        /// </summary>
+        private async Task<IReadOnlyList<SeriesVoiceWrite>> PlanCopiesAsync(
+            SeriesVoiceEdits.Edit edit, SeriesPeers peers, Guid voiceId, IReadOnlySet<string> differing)
+        {
+            var others = SeriesCopies.InWriteOrder(peers.Others);
+            if (edit is SeriesVoiceEdits.Deleted)
+                return others.Select(b => new SeriesVoiceWrite(b, new SeriesVoiceChange.Delete(voiceId))).ToList();
+
+            var source = peers.Self.FolderId;
+            var voice = await characters.GetVoiceAsync(source, voiceId) is { } v ? SeriesVoiceSource.Of(source, v) : null;
+            if (voice is null)
+                logger.LogWarning("Series {SeriesId}: Voice {VoiceId} is gone from '{Folder}', where it was edited, so it was not copied", peers.SeriesId, voiceId, peers.Self.Folder);
+            var set = differing.Count > 0
+                ? (await characters.GetCharacterVoicesAsync(source, peers.Self.CharacterId)).Select(h => SeriesVoiceSource.Of(source, h)).ToList()
+                : [];
+            var plan = new List<SeriesVoiceWrite>(others.Count);
+            foreach (var book in others)
             {
-                Copying.Value = false;
+                if (differing.Contains(book.Folder)) plan.Add(new SeriesVoiceWrite(book, new SeriesVoiceChange.Replace(set)));
+                // The Voice is gone from the book it was edited in: nothing to copy.
+                else if (voice is not null) plan.Add(new SeriesVoiceWrite(book, new SeriesVoiceChange.Copy(voice)));
             }
+            return plan;
         }
     }
 }

@@ -28,10 +28,10 @@ namespace Read2Me.Services.Series
         IFileSystem fs,
         IProjectCatalogReader projects,
         ICharacterReader characters,
-        BookMutations mutations,
         SeriesRegistryLock gate,
         EventBroadcaster<SeriesChanged> changes,
         VoiceAudioHashes audioHashes,
+        SeriesVoiceReplicator replicator,
         ILogger<SeriesRegistry> logger)
     {
         public const string FolderName = ".series";
@@ -505,24 +505,30 @@ namespace Read2Me.Services.Series
 
     /// <summary>
     /// The one lock every registry call takes (process-wide, so a singleton): a name's uniqueness and
-    /// a book's single series are facts across registries.
+    /// a book's single series are facts across registries. A <see cref="Hold"/> is the proof that a
+    /// caller holds it, for work that runs inside the caller's hold (<see cref="SeriesVoiceReplicator"/>).
     /// </summary>
     public sealed class SeriesRegistryLock
     {
         private readonly SemaphoreSlim _semaphore = new(1, 1);
 
-        public async Task<IDisposable> EnterAsync(CancellationToken ct)
+        public async Task<Hold> EnterAsync(CancellationToken ct)
         {
             await _semaphore.WaitAsync(ct);
-            return new Releaser(_semaphore);
+            return new Hold(_semaphore);
         }
 
-        private sealed class Releaser(SemaphoreSlim semaphore) : IDisposable
+        /// <summary>The lock, held until disposed.</summary>
+        public sealed class Hold : IDisposable
         {
+            private readonly SemaphoreSlim _semaphore;
             private int _released;
+
+            internal Hold(SemaphoreSlim semaphore) => _semaphore = semaphore;
+
             public void Dispose()
             {
-                if (Interlocked.Exchange(ref _released, 1) == 0) semaphore.Release();
+                if (Interlocked.Exchange(ref _released, 1) == 0) _semaphore.Release();
             }
         }
     }

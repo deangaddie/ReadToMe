@@ -60,45 +60,14 @@ namespace Read2Me.Tests.Services.Series
 
         // ---- write order -------------------------------------------------------------------------
 
-        [Fact]
-        public async Task The_other_books_are_written_in_Series_position_order()
-        {
-            var written = new List<string>();
-
-            var results = await SeriesCopies.RunAsync(
-                [Book("adventures", 3), Book("four", 2), Book("novella", 1.5m)],
-                book =>
-                {
-                    written.Add(book.Folder);
-                    return Task.FromResult<string?>(null);
-                });
-
-            Assert.Equal(["novella", "four", "adventures"], written);
-            Assert.All(results, r => Assert.Null(r.Failure));
-        }
+        // A failed copy is recorded and the rest carry on: SeriesVoiceReplicatorTests.
 
         [Fact]
-        public async Task A_failed_copy_is_recorded_and_the_rest_carry_on()
+        public void The_other_books_are_written_in_Series_position_order()
         {
-            var written = new List<string>();
+            var order = SeriesCopies.InWriteOrder([Book("adventures", 3), Book("four", 2), Book("novella", 1.5m)]);
 
-            var results = await SeriesCopies.RunAsync(
-                [Book("four", 2), Book("valley", 4), Book("adventures", 3)],
-                book =>
-                {
-                    written.Add(book.Folder);
-                    return book.Folder switch
-                    {
-                        "four" => Task.FromResult<string?>("Another write to 'four' is still in progress."),
-                        "adventures" => throw new IOException("disk full"),
-                        _ => Task.FromResult<string?>(null),
-                    };
-                });
-
-            Assert.Equal(["four", "adventures", "valley"], written);
-            Assert.Equal(
-                [("four", (string?)"Another write to 'four' is still in progress."), ("adventures", "disk full"), ("valley", null)],
-                results.Select(r => (r.Folder, r.Failure)).ToArray());
+            Assert.Equal(["novella", "four", "adventures"], order.Select(b => b.Folder));
         }
 
         // ---- delete refusals -----------------------------------------------------------------------

@@ -10,36 +10,22 @@ namespace Read2Me.Services.Series
     /// <param name="Self">The book itself, as its peers see it.</param>
     public sealed record SeriesPeers(Guid SeriesId, Guid SeriesCharacterId, SeriesPeer Self, IReadOnlyList<SeriesPeer> Others);
 
-    /// <summary>How a copy into one book went: <see cref="Failure"/> is null when it committed.</summary>
-    public sealed record SeriesCopyResult(string Folder, string? Failure);
+    /// <summary>How a copy into one book went: <see cref="Failure"/> is null when it committed; <see cref="Rejection"/> says what kind of failure it was.</summary>
+    public sealed record SeriesCopyResult(string Folder, string? Failure)
+    {
+        public Mutations.BookMutationRejection? Rejection { get; init; }
+    }
 
     /// <summary>
     /// The write order of a copy across books (#205 item 6): after the book the edit was made in,
-    /// each other linked book in Series position order. A book whose copy fails is recorded and the
-    /// rest carry on; nothing is rolled back across books.
+    /// each other linked book in Series position order. <see cref="SeriesVoiceReplicator"/> writes
+    /// them in that order; a book whose copy fails is recorded and the rest carry on, and nothing
+    /// is rolled back across books.
     /// </summary>
     public static class SeriesCopies
     {
         /// <param name="others">The other linked books, in any order.</param>
-        /// <param name="copy">Copies into one book; answers why it failed, or null. A throw is a failure too.</param>
-        public static async Task<IReadOnlyList<SeriesCopyResult>> RunAsync(
-            IEnumerable<SeriesPeer> others, Func<SeriesPeer, Task<string?>> copy)
-        {
-            var results = new List<SeriesCopyResult>();
-            foreach (var book in others.OrderBy(b => b.Position))
-            {
-                string? failure;
-                try
-                {
-                    failure = await copy(book);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    failure = ex.Message;
-                }
-                results.Add(new SeriesCopyResult(book.Folder, failure));
-            }
-            return results;
-        }
+        public static IReadOnlyList<SeriesPeer> InWriteOrder(IEnumerable<SeriesPeer> others) =>
+            others.OrderBy(b => b.Position).ToList();
     }
 }

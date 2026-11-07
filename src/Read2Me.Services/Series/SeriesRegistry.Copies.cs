@@ -1,23 +1,17 @@
-using Microsoft.Extensions.Logging;
 using Read2Me.Core.Models;
-using Read2Me.Services.Audio;
 using Read2Me.Services.Events;
-using Read2Me.Services.History;
-using Read2Me.Services.Mutations;
 
 namespace Read2Me.Services.Series
 {
     /// <summary>
     /// Shared Voice edits (ADR 0018, copy after commit; #213 "Shared Voices"): a Voice of a
     /// series-linked Character is edited through the per-book routes, and once that commits its
-    /// whole state is copied into every other linked book, in Series position order, each copy a
-    /// History step there with the edit's label. A failed copy is logged and the rest carry on; that
-    /// book then differs from series (#222), which is found live, not stored.
+    /// whole state is copied into every other linked book. The registry answers who the peers are
+    /// and which deletes are refused; <see cref="SeriesVoiceCopier"/> plans the copies and
+    /// <see cref="SeriesVoiceReplicator"/> writes them.
     /// </summary>
     public sealed partial class SeriesRegistry
     {
-        private const string BackupSuffix = ".series-backup";
-
         // ---- reads -------------------------------------------------------------------------------
 
         /// <summary>
@@ -75,60 +69,7 @@ namespace Read2Me.Services.Series
             return new SeriesCharacterView(copy.Book.Folder, copy.Book.CharacterId, copy.Voices, books, blocks);
         }
 
-        // ---- copies ------------------------------------------------------------------------------
-
-        /// <summary>
-        /// Copies the Voice's whole state from <paramref name="source"/> into every other linked book:
-        /// its row, reference audio and kept original, each book's copy a History step labelled
-        /// <paramref name="label"/>. A book in <paramref name="differing"/> (it differed from the
-        /// series copy the edit was made in) takes the whole set instead, so the edit brings it back
-        /// in line. Then signals the series.
-        /// </summary>
-        public async Task<IReadOnlyList<SeriesCopyResult>> CopyVoiceAsync(
-            SeriesPeers peers, Guid voiceId, string label, StepAction action, IReadOnlySet<string> differing)
-        {
-            using var _ = await gate.EnterAsync(CancellationToken.None);
-            var source = peers.Self.FolderId;
-            var results = await SeriesCopies.RunAsync(peers.Others, async book =>
-            {
-                if (differing.Contains(book.Folder))
-                    return await ReplaceVoicesInAsync(book, peers.Self, label, action);
-
-                // Read again for each book, never held: the reader shares this scope's tracking context.
-                if (await characters.GetVoiceAsync(source, voiceId) is not { } voice)
-                    return "the Voice is gone from the book it was edited in.";
-                return await CopyIntoAsync(book, source, voice.CharacterId, CopyOf(voice), label, action);
-            });
-            Report(peers, voiceId, results);
-            Signal(peers.SeriesId, SeriesChangeKind.Changed);
-            return results;
-        }
-
-        /// <summary>
-        /// Deletes the Voice from every other linked book, as it was deleted in the first. Each
-        /// book's default rule moves to its oldest remaining Voice. Then signals the series.
-        /// </summary>
-        public async Task<IReadOnlyList<SeriesCopyResult>> CopyDeleteAsync(SeriesPeers peers, Guid voiceId, string label, StepAction action)
-        {
-            using var _ = await gate.EnterAsync(CancellationToken.None);
-            var results = await SeriesCopies.RunAsync(peers.Others, async book =>
-            {
-                if (await characters.GetVoiceAsync(book.FolderId, voiceId) is not { } voice) return null;
-                var (characterId, audio) = (voice.CharacterId, voice.AudioFileName);
-                var outcome = await mutations.CommitAsync(
-                    new DeleteVoiceMutation(book.FolderId, voiceId) { CopiedStep = (label, action) }, CancellationToken.None);
-                if (outcome is BookMutationOutcome.Rejected rejected) return rejected.Message;
-
-                // The files go after the commit that stops naming them (ADR 0007).
-                var folder = fs.GetProjectFolderPath(book.FolderId);
-                if (audio is { Length: > 0 }) TryDelete(Path.Combine(folder, audio));
-                TryDelete(Path.Combine(folder, VoiceOriginalStore.PathOf(characterId, voiceId)));
-                return null;
-            });
-            Report(peers, voiceId, results);
-            Signal(peers.SeriesId, SeriesChangeKind.Changed);
-            return results;
-        }
+        // ---- writes ------------------------------------------------------------------------------
 
         /// <summary>
         /// A linked Character was deleted from its book: its link goes, and the Series character too
@@ -196,146 +137,6 @@ namespace Read2Me.Services.Series
 
         private async Task<IReadOnlyCollection<Guid>> VoiceIdsAsync(SeriesPeer book) =>
             (await characters.GetCharacterVoicesAsync(book.FolderId, book.CharacterId)).Select(v => v.Id).ToList();
-
-        /// <summary>
-        /// One book's copy: the reference audio and kept original written over this book's (its own
-        /// set aside, and put back if the commit doesn't take them), then the row. Answers why it
-        /// failed, or null.
-        /// </summary>
-        private async Task<string?> CopyIntoAsync(
-            SeriesPeer book, ProjectFolderId source, Guid sourceCharacterId, SeriesVoiceCopy copy, string label, StepAction action)
-        {
-            var targetFolder = fs.GetProjectFolderPath(book.FolderId);
-            var previous = (await characters.GetVoiceAsync(book.FolderId, copy.Id))?.AudioFileName;
-            var staged = new StagedFiles(logger);
-            try
-            {
-                var (audio, failure) = StageVoice(staged, source, sourceCharacterId, book, copy);
-                if (failure is not null) return failure;
-
-                var outcome = await mutations.CommitAsync(
-                    new CopySeriesVoiceMutation(book.FolderId, book.CharacterId, copy with { AudioFileName = audio }, label, action),
-                    CancellationToken.None);
-                if (outcome is BookMutationOutcome.Rejected rejected)
-                {
-                    staged.Rollback();
-                    return rejected.Message;
-                }
-
-                staged.Commit();
-                // The audio this book named before, under another name, is no longer named: it goes after the commit.
-                if (previous is { Length: > 0 } && !string.Equals(previous, audio, StringComparison.OrdinalIgnoreCase))
-                    TryDelete(Path.Combine(targetFolder, previous));
-                return null;
-            }
-            catch
-            {
-                staged.Rollback();
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// Writes one Voice's reference audio and kept original from <paramref name="source"/> over
-        /// <paramref name="target"/>'s own, under the target Character's folder; with no audio, the
-        /// target's kept original is set aside. Answers the audio path in the target, or why it failed.
-        /// </summary>
-        private (string? Audio, string? Failure) StageVoice(
-            StagedFiles staged, ProjectFolderId source, Guid sourceCharacterId, SeriesPeer target, SeriesVoiceCopy copy)
-        {
-            var sourceFolder = fs.GetProjectFolderPath(source);
-            var targetFolder = fs.GetProjectFolderPath(target.FolderId);
-            var original = Path.Combine(targetFolder, VoiceOriginalStore.PathOf(target.CharacterId, copy.Id));
-            if (copy.AudioFileName is not { Length: > 0 } from)
-            {
-                staged.Remove(original);
-                return (null, null);
-            }
-
-            var sourceAudio = Path.Combine(sourceFolder, from);
-            if (!File.Exists(sourceAudio)) return (null, $"the reference audio '{from}' is missing.");
-            var audio = $"voices/{target.CharacterId}/{Path.GetFileName(from)}";
-            staged.Write(sourceAudio, Path.Combine(targetFolder, audio));
-
-            var sourceOriginal = Path.Combine(sourceFolder, VoiceOriginalStore.PathOf(sourceCharacterId, copy.Id));
-            if (File.Exists(sourceOriginal)) staged.Write(sourceOriginal, original);
-            else staged.Remove(original);
-            return (audio, null);
-        }
-
-        private void Report(SeriesPeers peers, Guid voiceId, IReadOnlyList<SeriesCopyResult> results)
-        {
-            foreach (var failed in results.Where(r => r.Failure is not null))
-                logger.LogWarning("Series {SeriesId}: Voice {VoiceId} was not copied into '{Folder}': {Reason}",
-                    peers.SeriesId, voiceId, failed.Folder, failed.Failure);
-        }
-
-        private void TryDelete(string path)
-        {
-            try
-            {
-                if (File.Exists(path)) File.Delete(path);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Could not remove the Voice file '{File}'.", path);
-            }
-        }
-
-        /// <summary>
-        /// Files written over a book's own before the commit that names them: each one already there
-        /// is set aside, and put back on <see cref="Rollback"/> or dropped on <see cref="Commit"/>.
-        /// </summary>
-        private sealed class StagedFiles(ILogger logger)
-        {
-            private readonly List<string> _written = [];
-            private readonly List<string> _setAside = [];
-
-            public void Write(string from, string to)
-            {
-                SetAside(to);
-                Directory.CreateDirectory(Path.GetDirectoryName(to)!);
-                File.Copy(from, to);
-                _written.Add(to);
-            }
-
-            public void Remove(string path) => SetAside(path);
-
-            private void SetAside(string path)
-            {
-                if (!File.Exists(path)) return;
-                File.Move(path, path + BackupSuffix, overwrite: true);
-                _setAside.Add(path);
-            }
-
-            public void Commit()
-            {
-                foreach (var path in _setAside)
-                    Try(() => File.Delete(path + BackupSuffix), path);
-            }
-
-            public void Rollback()
-            {
-                foreach (var path in _written)
-                    Try(() => File.Delete(path), path);
-                foreach (var path in _setAside)
-                    Try(() => File.Move(path + BackupSuffix, path, overwrite: true), path);
-                _written.Clear();
-                _setAside.Clear();
-            }
-
-            private void Try(Action action, string path)
-            {
-                try
-                {
-                    action();
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Could not tidy the copied Voice file '{File}'.", path);
-                }
-            }
-        }
     }
 
     /// <summary>
