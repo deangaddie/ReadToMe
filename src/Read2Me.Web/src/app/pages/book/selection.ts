@@ -1,4 +1,4 @@
-import type { NodeLevel, ParagraphDto, ParagraphItemDto } from '@app/api';
+import type { BookNodeLevel, ParagraphDto, ParagraphItemDto } from '@app/api';
 import type { ChapterParents } from './book-tree';
 import type { LoadedChapterView } from './reader-rows';
 
@@ -71,7 +71,11 @@ export function ancestryFor(
   return { chapterId, partId: parents?.partId ?? null, volumeId: parents?.volumeId ?? null };
 }
 
-export function selectedUnder(selection: SelectionMap, level: NodeLevel, nodeId: string): number {
+export function selectedUnder(
+  selection: SelectionMap,
+  level: BookNodeLevel,
+  nodeId: string,
+): number {
   let n = 0;
   for (const a of Object.values(selection)) {
     const under = level === 'Volume' ? a.volumeId : level === 'Part' ? a.partId : a.chapterId;
@@ -87,7 +91,7 @@ export function selectedUnder(selection: SelectionMap, level: NodeLevel, nodeId:
  */
 export function nodeState(
   selection: SelectionMap,
-  level: NodeLevel,
+  level: BookNodeLevel,
   nodeId: string,
   total: number | undefined,
 ): TriState {

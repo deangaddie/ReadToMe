@@ -46,7 +46,10 @@ public sealed record NodeStatusMessage(
     IReadOnlyDictionary<string, NodeStatusSummaryDto?> Nodes,
     int FolderAudioRemaining);
 
-/// <summary>Per-paragraph attribution and per-item audio status deltas for one project (debounced).</summary>
+/// <summary>
+/// Per-paragraph attribution and per-item audio status deltas for one project (debounced). A null entry
+/// means the queue forgot the paragraph or item.
+/// </summary>
 public sealed record ItemStatusMessage(
     string Folder,
     IReadOnlyDictionary<string, ParagraphStatusEntry?> Paragraphs,
@@ -261,6 +264,7 @@ public sealed record HistoryMessage(
 /// <see cref="ProposedEdit"/> on the wire; enums as member names. Shared with the REST reads of a
 /// proposal run (<c>BookEditEndpoints</c>) on purpose: a row a client got pushed and a row it read
 /// back after missing the push have to be the same shape, or a review screen would need two.
+/// <paramref name="NewValue"/> is null on a <c>Failed</c> row.
 /// </summary>
 public sealed record BookEditRowDto(
     BookEditTargetKind Kind, Guid Id, string DisplayPath, string OldValue, string? NewValue, ProposalStatus Status, string? FailureReason)
@@ -278,7 +282,10 @@ public enum SetupCheckMessageKind { Progress, Done }
 /// </summary>
 public sealed record SetupCheckMessage(SetupCheckMessageKind Kind, SetupCheckReport Report);
 
-/// <summary>Everything a project group member needs on join: current revision plus full status maps.</summary>
+/// <summary>
+/// Everything a project group member needs on join: current revision plus full status maps. Answers
+/// <c>JoinProject</c>; also an entry of <c>LiveSnapshot.projects</c>.
+/// </summary>
 public sealed record ProjectSnapshot(
     string Folder,
     long Revision,
@@ -298,8 +305,8 @@ public sealed record LiveSnapshot(
     IReadOnlyDictionary<string, ProjectSnapshot> Projects);
 
 /// <summary>
-/// A series registry changed, or the series was deleted (#213): a "read again" signal with no
-/// payload, debounced 250 ms per series, sent to every client (group <c>global</c>). A delete inside
+/// A series registry changed, or the series was deleted (#213): a signal to read <c>/api/series</c> again,
+/// with no payload, debounced 250 ms per series, sent to every client (group <c>global</c>). A delete inside
 /// the window wins over the changes before it.
 /// </summary>
 public sealed record SeriesMessage(Guid SeriesId, SeriesChangeKind Kind);

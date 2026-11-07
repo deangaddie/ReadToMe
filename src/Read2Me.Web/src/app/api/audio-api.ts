@@ -4,10 +4,9 @@ import type {
   AudioEnqueueRequest,
   AudioItemStatusDto,
   AudioQueueSnapshot,
-  AudioReviewsDto,
   EnqueueResponse,
-  Guid,
-} from './dtos';
+} from './schema';
+import type { AudioReviewsDto, Guid } from './dtos';
 
 /** `AudioEndpoints.cs` + the audio half of `QueueStatusEndpoints.cs`. */
 export class AudioApi {

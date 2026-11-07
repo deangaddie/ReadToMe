@@ -4,10 +4,10 @@ import type {
   ChapterVoicePreviewDto,
   CharacterLineDto,
   CharacterSummaryDto,
-  Guid,
   ParagraphContextDto,
   VoiceRuleDto,
-} from './dtos';
+} from './schema';
+import type { Guid } from './dtos';
 
 /** The widest context window the host honours on either side (`CharacterEndpoints.MaxContextWindow`). */
 export const MAX_CONTEXT_WINDOW = 10;

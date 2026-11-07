@@ -1,9 +1,9 @@
+import type { QueueMessage } from '@app/api';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { render } from 'lit-html';
 import { VIEWING_READ_ONLY } from '@app/api';
 import { Router } from '@app/core/router';
 import { override, resetServices } from '@app/core/services';
-import type { QueueMessage } from '@app/live/live-messages';
 import { ToastService } from '@app/ui/toast';
 import { FakeApi } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';

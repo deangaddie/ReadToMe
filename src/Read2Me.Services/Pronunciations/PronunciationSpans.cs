@@ -9,7 +9,10 @@ namespace Read2Me.Services.Pronunciations;
 /// </summary>
 public sealed record PronunciationSpan(Guid ItemId, int Start, int Length, Guid PronunciationId, int SentenceStart);
 
-/// <summary>The spans in some chapters, and the entries they name (each once, by written form).</summary>
+/// <summary>
+/// The spans in some chapters, in book order, and the entries they name (each once, by written form):
+/// <c>GET …/pronunciations/matches?chapterIds=…</c>.
+/// </summary>
 public sealed record PronunciationSpanReport(
     IReadOnlyList<PronunciationRef> Pronunciations, IReadOnlyList<PronunciationSpan> Spans);
 

@@ -1,7 +1,7 @@
+import type { QueueMessage } from '@app/api';
 import { AssemblyApi, AttributionApi, AudioApi, VoicesApi, toApiError } from '@app/api';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
-import type { QueueMessage } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { confirmPermanent } from '@app/ui/dialogs';
 import type { JobView } from '@app/ui/job';

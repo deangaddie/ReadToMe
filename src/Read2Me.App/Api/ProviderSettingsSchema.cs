@@ -20,6 +20,7 @@ namespace Read2Me.App.Api
     /// Positional with no defaults, so the document reads every field required, as every answer writes
     /// them all (#168). <see cref="Field"/> builds one naming only the parts it sets.
     /// </remarks>
+    /// <param name="Kind">One of <c>number</c> | <c>boolean</c> | <c>enum</c> | <c>string</c> | <c>text</c> (a string on the host, not an enum).</param>
     public sealed record SettingsFieldDto(
         string Key,
         string Label,

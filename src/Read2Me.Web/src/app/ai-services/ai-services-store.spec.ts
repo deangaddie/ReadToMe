@@ -1,9 +1,10 @@
+import type { LiveMessageMap } from '@app/api';
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { type AiServiceDto, AiServicesApi, ApiError } from '@app/api';
 import { Emitter } from '@app/core/emitter';
 import { override, resetServices, use } from '@app/core/services';
 import { signal } from '@app/core/signals';
-import type { LiveFamily, LiveMessageMap } from '@app/live/live-messages';
+import type { LiveFamily } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast';
 import { AiServicesStore, WATCHDOG_LOG_LIMIT, watchdogLogEntry } from './ai-services-store';

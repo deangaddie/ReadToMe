@@ -1,19 +1,3 @@
-import type {
-  AssemblyMessage,
-  AudioGenMessage,
-  BookEditMessage,
-  HistoryMessage,
-  ItemStatusEntry,
-  LlmMessage,
-  LlmTestMessage,
-  ParagraphStatusEntry,
-  PreflightMessage,
-  ServiceStatusMessage,
-  ThroughputSnapshot,
-  VoiceBatchMessage,
-  WatchdogMessage,
-} from '@app/live/live-messages';
-
 /**
  * Hub messages for specs. The hub sends every field, null when unset (#238), so a spec names the
  * fields its case is about and these fill the rest with null, as the wire would.
@@ -140,3 +124,18 @@ type ConfigThroughput = ThroughputSnapshot['perConfig'][number];
 export const configThroughput = (
   m: Pick<ConfigThroughput, 'configId' | 'configName' | 'requests'> & Partial<ConfigThroughput>,
 ): ConfigThroughput => ({ tokensOut: null, generationMs: null, tokensPerSecond: null, ...m });
+import type {
+  AssemblyMessage,
+  AudioGenMessage,
+  BookEditMessage,
+  HistoryMessage,
+  ItemStatusEntry,
+  LlmMessage,
+  LlmTestMessage,
+  ParagraphStatusEntry,
+  PreflightMessage,
+  ServiceStatusMessage,
+  ThroughputSnapshot,
+  VoiceBatchMessage,
+  WatchdogMessage,
+} from '@app/api';

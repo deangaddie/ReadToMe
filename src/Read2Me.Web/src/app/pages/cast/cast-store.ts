@@ -1,3 +1,4 @@
+import type { BookFacets, VoiceBatchMessage } from '@app/api';
 import {
   BookApi,
   type BookCommand,
@@ -15,12 +16,7 @@ import {
 } from '@app/api';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
-import {
-  type BookFacets,
-  type Receipt,
-  type VoiceBatchMessage,
-  hasFacet,
-} from '@app/live/live-messages';
+import { type Receipt, hasFacet } from '@app/live/live-messages';
 import { LiveService, type Unsubscribe } from '@app/live/live.service';
 import { Debounced } from '@app/shared/debounced';
 import { ToastService } from '@app/ui/toast';

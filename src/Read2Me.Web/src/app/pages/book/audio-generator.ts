@@ -1,4 +1,4 @@
-import { AudioApi, type Guid, type NodeLevel } from '@app/api';
+import { AudioApi, type Guid, type BookNodeLevel } from '@app/api';
 import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { enqueueWithPreflight } from '@app/shared/enqueue';
@@ -38,7 +38,7 @@ export class AudioGenerator {
   }
 
   /** "Generate audio for this node": the node-scoped enqueue the overview also uses. */
-  enqueueNode(level: NodeLevel, nodeId: Guid, narratorOnlyMode: boolean): Promise<boolean> {
+  enqueueNode(level: BookNodeLevel, nodeId: Guid, narratorOnlyMode: boolean): Promise<boolean> {
     const folder = this.store.folder();
     if (!folder) return Promise.resolve(false);
     return enqueueWithPreflight({

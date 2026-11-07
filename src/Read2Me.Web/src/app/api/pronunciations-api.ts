@@ -1,7 +1,6 @@
 import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
 import type {
-  Guid,
   PronunciationDeleted,
   PronunciationDraftRequest,
   PronunciationEntry,
@@ -9,8 +8,8 @@ import type {
   PronunciationSaved,
   PronunciationSpanReport,
   SetPronunciationRequest,
-  TryPronunciationRequest,
-} from './dtos';
+} from './schema';
+import type { Guid, TryPronunciationRequest } from './dtos';
 
 /**
  * `PronunciationEndpoints.cs`: a book's Pronunciation list. Each write is one History step and

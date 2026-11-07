@@ -3,10 +3,10 @@ import { ApiClient } from './api-client';
 import type {
   AttributionQueueSnapshot,
   EnqueueResponse,
-  Guid,
   NodeEnqueueRequest,
   ParagraphAttributionStatusDto,
-} from './dtos';
+} from './schema';
+import type { Guid } from './dtos';
 
 /** `AttributionEndpoints.cs` + the attribution half of `QueueStatusEndpoints.cs`. */
 export class AttributionApi {

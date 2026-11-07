@@ -22,6 +22,7 @@ namespace Read2Me.Services.Characters
 
     public sealed record ParagraphOutcome(ParagraphOutcomeKind Kind, string? Reason);
 
+    /// <summary>The attribution queue's counts and timings, answered by <c>GET /api/attribution/queue</c>.</summary>
     public sealed record AttributionQueueSnapshot(
         int QueuedCount,
         int ProcessingCount,

@@ -1,3 +1,4 @@
+import type { LiveMessageMap, LiveSnapshot, ProjectSnapshot, ReceiptMessage } from '@app/api';
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { HubConnectionState } from '@microsoft/signalr';
 import { ORIGIN_ID } from '@app/api';
@@ -12,14 +13,7 @@ import {
   RECONNECT_DELAYS_MS,
   reconnectDelayMs,
 } from './live-connection';
-import type {
-  LiveFamily,
-  LiveMessageMap,
-  LiveSnapshot,
-  ProjectSnapshot,
-  Receipt,
-  ReceiptMessage,
-} from './live-messages';
+import type { LiveFamily, Receipt } from './live-messages';
 import { DISCONNECT_TOAST_AFTER_MS, LiveService } from './live.service';
 import {
   assemblyMessage,

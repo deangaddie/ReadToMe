@@ -1,3 +1,4 @@
+import type { AssemblyMessage, AssemblyState } from '@app/api';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   type AssemblyOutputDto,
@@ -8,7 +9,6 @@ import {
 } from '@app/api';
 import { Router, type RouteDef } from '@app/core/router';
 import { override, resetServices, use } from '@app/core/services';
-import type { AssemblyMessage, AssemblyState } from '@app/live/live-messages';
 import { IDLE_ASSEMBLY } from '@app/live/live-state';
 import { ConfirmService, type ConfirmOptions } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';

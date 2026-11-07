@@ -1,10 +1,10 @@
+import type { PreflightMessage, PreflightStage } from '@app/api';
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
 import { type AiTaskKind, PreflightApi, type PreflightPlanDto, toApiError } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
-import type { PreflightMessage, PreflightStage } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { SERVICE_STATUS_VIEW } from './docker-controls';
 import type { IconName } from './icons';

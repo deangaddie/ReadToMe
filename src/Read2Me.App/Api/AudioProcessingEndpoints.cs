@@ -15,10 +15,17 @@ namespace Read2Me.App.Api
         int? AudioMaxAttempts = null,
         int? ChunkPauseMs = null);
 
-    /// <summary>The assembler's per-kind silences, as one object so a card saves them together.</summary>
+    /// <summary>
+    /// The assembler's per-kind silences, as one object so a card saves them together;
+    /// <c>PUT /api/settings/audio-processing/pauses</c> takes the same shape.
+    /// </summary>
     public sealed record PauseDurationsDto(int VolumeMs, int PartMs, int ChapterMs, int ParagraphMs, int PauseMs);
 
-    /// <summary>Everything the audio-processing settings page shows, in one read.</summary>
+    /// <summary>
+    /// <c>GET /api/settings/audio-processing/full</c>: everything the audio-processing settings page shows, in
+    /// one read. <paramref name="FfmpegPath"/> is the saved value the form edits; with none saved the app runs
+    /// <paramref name="ConfiguredFfmpegPath"/> (the host's <c>Ffmpeg:Path</c>), else ffmpeg on PATH.
+    /// </summary>
     public sealed record AudioProcessingFullResponse(
         string? FfmpegPath,
         double WerThreshold,
@@ -29,9 +36,11 @@ namespace Read2Me.App.Api
         IReadOnlyList<AudioPostProcessStepConfig> Steps,
         string? ConfiguredFfmpegPath);
 
+    /// <param name="FfmpegPath">Persisted before the probe; blank means "rely on PATH".</param>
     public sealed record FfmpegTestRequest(string? FfmpegPath = null);
 
     public sealed record PreviewSampleRef(string? Folder, Guid ItemId);
+    /// <param name="Settings">The card's <em>unsaved</em> settings payload.</param>
     public sealed record StepPreviewRequest(PreviewSampleRef? Sample, JsonElement? Settings);
 
     /// <summary>
@@ -42,6 +51,7 @@ namespace Read2Me.App.Api
     public sealed record StepPreviewResponse(
         string PreviewId, string OriginalUrl, string ProcessedUrl, double? RemovedMs, string? Reason, bool AppliedOk);
 
+    /// <summary>One row of the A/B preview picker: a generated item that still holds a Preview Source.</summary>
     public sealed record RecentAudioSampleDto(
         Guid ItemId, string Folder, string Text, string? CharacterName, string? VoiceName, string ProjectTitle);
 

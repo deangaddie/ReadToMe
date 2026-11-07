@@ -1,10 +1,10 @@
+import type { LiveMessageMap } from '@app/api';
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { ApiError, PreflightApi, type PreflightPlanDto } from '@app/api';
 import { Emitter } from '@app/core/emitter';
 import { override, resetServices, use } from '@app/core/services';
-import type { LiveMessageMap } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast';
 import { initialProgress } from '@app/ui/preflight-sheet';

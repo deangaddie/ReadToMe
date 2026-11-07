@@ -13,8 +13,8 @@ namespace Read2Me.App.Api
     public sealed record HistoryBusyDto(string Reason);
 
     /// <summary>
-    /// A project's History: its steps newest first, the step the Head points at, what keeps it busy
-    /// (null when idle) and whether a Restore is in progress.
+    /// A project's History (<c>GET /api/projects/{folder}/history</c>): its steps newest first, the step the
+    /// Head points at, what keeps it busy (null when idle) and whether a Restore is in progress.
     /// </summary>
     public sealed record HistoryDto(
         IReadOnlyList<HistoryStep> Steps, Guid? HeadStepId, HistoryBusyDto? Busy, bool Restoring);
@@ -23,8 +23,9 @@ namespace Read2Me.App.Api
     public sealed record RestorePreviewDto(int AudioDiscardCount);
 
     /// <summary>
-    /// One History step as <c>GET /history</c> lists it, plus its <see cref="RestorePreview"/> —
-    /// null for a step that can't be opened, and so can't be restored.
+    /// One History step as <c>GET /history</c> lists it (<c>GET /history/{stepId}</c> answers one), plus
+    /// <paramref name="RestorePreview"/>, what a Restore to it would cost now — null for a step that can't be
+    /// opened, and so can't be restored.
     /// </summary>
     public sealed record HistoryStepDto(
         Guid StepId,
@@ -49,9 +50,10 @@ namespace Read2Me.App.Api
     }
 
     /// <summary>
-    /// A Restore's answer: the Restore step it added — null when the project already was that state,
-    /// so nothing changed — the items whose audio it discarded, and the items without audio after
-    /// it, the brought-back ones included: what needs generating.
+    /// A Restore's answer (<c>POST /api/projects/{folder}/history/{stepId}/restore</c>): the Restore step it
+    /// added — null when the project already was that state, so nothing changed — the items whose audio
+    /// it discarded, and the items without audio after it, the brought-back ones included: what needs
+    /// generating.
     /// </summary>
     public sealed record RestoreResultDto(HistoryStep? Step, int AudioDiscardCount, int NeedsAudioCount);
 

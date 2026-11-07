@@ -1,10 +1,18 @@
 /**
- * The typed HTTP layer. Feature code imports from `@app/api`: one `ApiClient`, the wire shapes in
- * `dtos.ts` and the `BookCommand` union. Nothing outside this folder calls `fetch` (lint rule).
+ * The typed HTTP layer. Feature code imports from `@app/api`: one `ApiClient`, the wire shapes and
+ * the `BookCommand` union. Nothing outside this folder calls `fetch` (lint rule).
+ *
+ * The wire shapes are the generated ones in `schema.d.ts`, each under its C# name (ADR 0017), plus
+ * the hand-written rest in `dtos.ts`. A hand-written export of a generated name is ambiguous under
+ * the two star re-exports and fails typecheck (TS2308), so nobody aliases one by hand.
  */
+export type * from './schema';
+export * from './dtos';
+// Refinements of a generated shape (a field the host types loosely, narrowed): named, so these win
+// over the star re-export of `schema.d.ts`.
+export type { PromptCatalogEntry, TryPronunciationRequest } from './dtos';
 export * from './api-client';
 export * from './api-error';
-export * from './dtos';
 export * from './book-commands';
 export * from './themes-api';
 export * from './projects-api';

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { ApiClient, ORIGIN_ID, toApiError, type FetchFn, type SuccessBody } from './api-client';
-import type { Schema } from './dtos';
+import type { AppTheme, HistoryDto, TryPronunciationRequest } from './schema';
 import { ApiError } from './api-error';
 
 /** An ApiClient over a canned response, recording the one request it made. */
@@ -22,8 +22,8 @@ const json = (body: unknown, init: ResponseInit = {}) =>
     headers: { 'Content-Type': 'application/json' },
   });
 
-const theme = { name: 'Dusk' } as Schema['AppTheme'];
-const tryOut = { itemId: 'i' } as Schema['TryPronunciationRequest'];
+const theme = { name: 'Dusk' } as AppTheme;
+const tryOut = { itemId: 'i' } as TryPronunciationRequest;
 
 describe('ApiClient', () => {
   it('sends the origin id header and returns the JSON body', async () => {
@@ -204,7 +204,7 @@ describe('ApiClient path-typed methods', () => {
     const history = await api.get('/api/projects/{folder}/history', {
       path: { folder: 'dracula' },
     });
-    typeIs<Equal<typeof history, Schema['HistoryDto']>>();
+    typeIs<Equal<typeof history, HistoryDto>>();
     expect(history.restoring).toBe(false);
   });
 

@@ -6,7 +6,8 @@ namespace Read2Me.Services.BookEdits
 {
     /// <summary>
     /// How planning an AI book edit ended. The planner answers all but <see cref="NoTargets"/>,
-    /// which the caller sets when the plan parsed but its scope matched no items.
+    /// which the caller sets when the plan parsed but its scope matched no items. <c>Ok</c> is the only
+    /// status that carries a program; the rest explain why there is nothing to do.
     /// </summary>
     public enum EditPlanStatus { Ok, NoLlmConfigured, Unsupported, Failed, ServiceUnavailable, NoTargets }
 

@@ -1,8 +1,8 @@
+import type { HistoryMessage } from '@app/api';
 import { type Guid, HistoryApi, type HistoryStep, StepView, toApiError } from '@app/api';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
-import type { HistoryMessage } from '@app/live/live-messages';
 import { LiveService, type Unsubscribe } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast';
 import { plural } from '@app/ui/wording';

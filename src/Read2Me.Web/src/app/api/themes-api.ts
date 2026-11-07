@@ -1,6 +1,6 @@
 import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
-import type { AppTheme, ThemeSelectionDto, ThemeSelectionUpdateRequest } from './dtos';
+import type { AppTheme, ThemeSelectionDto, ThemeSelectionUpdateRequest } from './schema';
 
 /** Everything the host exposes under `/api/settings/themes`. */
 export class ThemesApi {

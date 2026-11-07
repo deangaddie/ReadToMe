@@ -13,10 +13,11 @@ namespace Read2Me.App.Api
     public sealed record PlanBookEditRequest(string? Instruction, bool Thinking = false);
 
     /// <summary>
-    /// <see cref="Status"/> is the planner's <see cref="EditPlanStatus"/>, or <c>NoTargets</c> when the
-    /// plan parsed but matched nothing. Only <c>Ok</c> carries a <see cref="Program"/>. <see cref="Transform"/>
-    /// is the plan's <see cref="TransformKind"/>: only <c>Llm</c> plans send requests per item, so only
-    /// they count <see cref="RequestCount"/> and offer per-row retries.
+    /// <paramref name="Status"/> is the planner's <see cref="EditPlanStatus"/>, or <c>NoTargets</c> when the
+    /// plan parsed but matched nothing. Only <c>Ok</c> carries a <paramref name="Program"/>, the opaque session
+    /// id every later call names. <paramref name="Transform"/> is the plan's <see cref="TransformKind"/>: only
+    /// <c>Llm</c> plans send requests per item, so only they have a <paramref name="RequestCount"/> above 0
+    /// (the LLM requests the proposal will send) and offer per-row retries.
     /// </summary>
     public sealed record PlanBookEditResponse(
         EditPlanStatus Status,

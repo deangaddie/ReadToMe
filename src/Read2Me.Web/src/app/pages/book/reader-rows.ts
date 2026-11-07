@@ -6,8 +6,9 @@ import type {
   ParagraphDto,
   ParagraphItemDto,
   ApiItemType,
+  ItemStatusEntry,
+  ParagraphStatusEntry,
 } from '@app/api';
-import type { ItemStatusEntry, ParagraphStatusEntry } from '@app/live/live-messages';
 import type { IconName } from '@app/ui/icons';
 import type { StatusKind } from '@app/ui/partials';
 import type { SpeakerChipState } from '@app/ui/speaker-chip';

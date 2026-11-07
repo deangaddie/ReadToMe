@@ -331,6 +331,7 @@ namespace Read2Me.App.Api
             });
     }
 
+    /// <summary>A series on <c>GET /api/series</c>: its <paramref name="Books"/> (folder, position) in position order.</summary>
     public sealed record SeriesDto(Guid Id, string Name, SeriesPosterDto Poster, IReadOnlyList<SeriesBookDto> Books)
     {
         public static SeriesDto From(SeriesView v) =>
@@ -371,7 +372,8 @@ namespace Read2Me.App.Api
     public sealed record SeriesLinkPreviewDto(IReadOnlyList<string> BookGains, IReadOnlyList<string> SeriesGains);
 
     /// <summary>
-    /// The series cast board (#213), with its Link suggestions (#212), computed live: each cell's
+    /// The series cast board (#213) from <c>GET /api/series/{id}/cast</c>: books in position order, one row per
+    /// Series character, with its Link suggestions (#212), computed live: each cell's
     /// <c>suggested</c>, the <see cref="SuggestedRows"/>, each unlinked Character's <c>nameMatches</c>
     /// (for an ambiguous cell's picker) and <see cref="SuggestionCount"/>, suggested cells and rows together.
     /// </summary>
@@ -411,6 +413,10 @@ namespace Read2Me.App.Api
 
     public sealed record SeriesCharacterRefDto(Guid CharacterId, string Name);
 
+    /// <summary>
+    /// A suggested row (#223): unlinked Characters of two or more books whose names match one-to-one;
+    /// <paramref name="Label"/> is the first one's name.
+    /// </summary>
     public sealed record SeriesSuggestedRowDto(string Label, IReadOnlyList<SeriesSuggestedMemberDto> Members);
 
     public sealed record SeriesSuggestedMemberDto(string Folder, Guid CharacterId, string Name);
@@ -418,7 +424,7 @@ namespace Read2Me.App.Api
     /// <summary>A book's unlinked Character, for the pickers; <see cref="NameMatches"/>: the Series characters its names match (#212).</summary>
     public sealed record SeriesUnlinkedCharacterDto(Guid CharacterId, string Name, bool IsNarrator, IReadOnlyList<Guid> NameMatches);
 
-    /// <summary>A book's Character in a suggested row (#212).</summary>
+    /// <summary>A book's Character in a suggested row (#212), as Share and link and Not the same take it.</summary>
     public sealed record SeriesMemberDto(string? Folder = null, Guid? CharacterId = null);
 
     /// <summary>Share and link, or its preview: a suggested row's members.</summary>
@@ -437,8 +443,10 @@ namespace Read2Me.App.Api
     public sealed record CharacterSeriesLinkDto(Guid SeriesId, Guid SeriesCharacterId, string SeriesName, int BookCount, bool Differs);
 
     /// <summary>
-    /// The inline series Voice editor (#213): <see cref="Voices"/> come from the series copy, whose
-    /// folder takes the editor's writes; <see cref="DeleteBlocks"/> is keyed by Voice Id.
+    /// The inline series Voice editor (#213), from <c>GET /api/series/{id}/characters/{scId}</c>.
+    /// <paramref name="Voices"/> come from the series copy, whose folder takes the editor's writes;
+    /// <paramref name="Books"/> are the linked books; <paramref name="DeleteBlocks"/> holds the refused
+    /// deletes, keyed by Voice Id.
     /// </summary>
     public sealed record SeriesCharacterDto(
         string SeriesCopyFolder,

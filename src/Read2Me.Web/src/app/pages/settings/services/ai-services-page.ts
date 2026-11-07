@@ -1,11 +1,10 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
 import { AiServicesStore, type WatchdogLogEntry } from '@app/ai-services/ai-services-store';
-import type { AiServiceDto, AiServiceStatus } from '@app/api';
+import type { AiServiceDto, AiServiceStatus, WatchdogKind } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { adoptStyles } from '@app/core/styles';
-import type { WatchdogKind } from '@app/live/live-messages';
 import { dockerControls } from '@app/ui/docker-controls';
 import { keyValue } from '@app/ui/key-value';
 import { type StatusKind, emptyState, icon, statusChip } from '@app/ui/partials';

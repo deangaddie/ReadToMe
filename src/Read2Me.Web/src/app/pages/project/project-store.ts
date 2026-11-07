@@ -1,3 +1,11 @@
+import type {
+  BookFacets,
+  ItemStatusEntry,
+  ItemStatusMessage,
+  LiveSnapshot,
+  NodeStatusMessage,
+  ParagraphStatusEntry,
+} from '@app/api';
 import {
   AssemblyApi,
   type AssemblyOutputDto,
@@ -9,16 +17,7 @@ import {
 } from '@app/api';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
-import {
-  type BookFacets,
-  type ItemStatusEntry,
-  type ItemStatusMessage,
-  type LiveSnapshot,
-  type NodeStatusMessage,
-  type ParagraphStatusEntry,
-  type Receipt,
-  hasFacet,
-} from '@app/live/live-messages';
+import { type Receipt, hasFacet } from '@app/live/live-messages';
 import { LiveService, type Unsubscribe } from '@app/live/live.service';
 import { ProjectTitles } from '@app/shell/project-titles';
 import { Debounced, REFETCH_DEBOUNCE_MS } from '@app/shared/debounced';

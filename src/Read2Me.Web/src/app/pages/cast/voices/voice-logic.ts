@@ -1,3 +1,4 @@
+import type { VoiceBatchMessage } from '@app/api';
 import {
   type CharacterVoicesDto,
   type Guid,
@@ -5,7 +6,6 @@ import {
   type VoiceSource,
   stateFileUrl,
 } from '@app/api';
-import type { VoiceBatchMessage } from '@app/live/live-messages';
 import type { SettingsValues } from '@app/ui/settings-form';
 
 /**

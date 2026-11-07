@@ -2,7 +2,7 @@ import type {
   InsertPosition,
   MergeDirection,
   NodeKind,
-  NodeLevel,
+  BookNodeLevel,
   PauseKind,
   Placement,
   StructureAnchor,
@@ -25,13 +25,13 @@ export const MENU_KIND_OF_LEVEL = {
   Volume: 'volume',
   Part: 'part',
   Chapter: 'chapter',
-} as const satisfies Record<NodeLevel, NodeMenuKind>;
+} as const satisfies Record<BookNodeLevel, NodeMenuKind>;
 
 export const LEVEL_OF_MENU_KIND = {
   volume: 'Volume',
   part: 'Part',
   chapter: 'Chapter',
-} as const satisfies Record<(typeof MENU_KIND_OF_LEVEL)[NodeLevel], NodeLevel>;
+} as const satisfies Record<(typeof MENU_KIND_OF_LEVEL)[BookNodeLevel], BookNodeLevel>;
 
 export interface NodeMenuTarget {
   kind: NodeMenuKind;

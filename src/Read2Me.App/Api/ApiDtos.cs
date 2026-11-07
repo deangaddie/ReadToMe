@@ -12,7 +12,7 @@ namespace Read2Me.App.Api
 
     public sealed record ImportRequest(bool Reread = false);
 
-    /// <summary>PATCH body: every field optional; an omitted or null field is left as it is.</summary>
+    /// <summary><c>PATCH /api/projects/{folder}</c> body: every field optional; an omitted or null field is left as it is.</summary>
     public sealed record UpdateProjectRequest(string? Title = null, string? BookTitle = null, string? Author = null);
 
     public sealed record NarratorOnlyModeRequest(bool Enabled);

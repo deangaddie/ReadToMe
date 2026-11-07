@@ -13,14 +13,17 @@ using Read2Me.Services.Text;
 
 namespace Read2Me.App.Api
 {
+    /// <summary>One text-processing step a TTS config may enable.</summary>
     /// <param name="BuiltIn">False for one of the config's own substitutions, which the catalog lists after the built-ins.</param>
     /// <param name="Options">The step's own switches, stored beside the config (<c>toSentenceCaseConfig</c>); null when it has none.</param>
     public sealed record TextStepDto(
         string StepId, string Label, string Description, bool BuiltIn, IReadOnlyList<SettingsFieldDto>? Options = null);
 
+    /// <summary>The voice-design sample text: the stored override, else the built-in default.</summary>
     /// <param name="Text">The stored override; null when the built-in <paramref name="Default"/> is in use.</param>
     /// <param name="MaxLength">The longest override a PUT accepts: every designed voice speaks this text, so it bounds the take's length (the Reference Limit).</param>
     public sealed record VoiceDesignSampleTextResponse(string? Text, string Default, int MaxLength);
+    /// <summary>Null, blank or the default text clears the override.</summary>
     public sealed record VoiceDesignSampleTextRequest(string? Text = null);
 
     public sealed record VoiceDesignTestRequest(string? Prompt = null);

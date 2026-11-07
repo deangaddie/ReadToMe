@@ -7,7 +7,8 @@ with the implement-or-close decision in [#170](https://github.com/deangaddie/Rea
 are in [#165](https://github.com/deangaddie/ReadToMe/issues/165) (`docs/research/openapi-responses.md` on branch
 `research/openapi-responses`). The work is the spec [#171](https://github.com/deangaddie/ReadToMe/issues/171), ten
 slices with `main` green after each. Amended for the live hub by
-[#238](https://github.com/deangaddie/ReadToMe/issues/238) (2026-11-07).
+[#238](https://github.com/deangaddie/ReadToMe/issues/238) (2026-11-07), and for generated aliases by
+[#239](https://github.com/deangaddie/ReadToMe/issues/239) (2026-11-07).
 
 ## Context
 
@@ -46,17 +47,23 @@ it.** Five decisions make it up; each issue's resolution comment holds the detai
   class such as a settings entity) is marked required, since every answer carries it. Numbers are strict
   (`NumberHandling.Strict`). Document tests fail on an undeclared 2xx body, an integer or
   nullable enum, or a duplicate short schema name.
-- **[`dtos.ts` becomes aliases over the schema](https://github.com/deangaddie/ReadToMe/issues/169).** Every type with
-  a host counterpart is `export type X = Schema['X']` under its C# name; bad generated names are fixed on the host.
-  `schema-pins.ts` is deleted. `ApiClient` is typed by path, openapi-fetch style, with the response inferred from the
-  document; the untyped methods go once every call is converted.
+- **[The generator emits the aliases](https://github.com/deangaddie/ReadToMe/issues/239).** Every type with a host
+  counterpart is a root type of `schema.d.ts` under its C# name, which openapi-typescript writes itself
+  (`--root-types --root-types-no-schema-prefix --root-types-keep-casing`), and `@app/api` re-exports them all; bad
+  generated names are fixed on the host. `dtos.ts` keeps only what the document doesn't describe, and a hand-typed
+  copy of a generated name fails typecheck (an ambiguous star re-export). Its doc comment lives on the C# type: the
+  host's projects emit XML docs, which become the document's descriptions and so the generated JSDoc. (#169 first
+  made `dtos.ts` hand-typed `Schema['X']` aliases.) `schema-pins.ts` is deleted. `ApiClient` is typed by path,
+  openapi-fetch style, with the response inferred from the document; the untyped methods go once every call is
+  converted.
 - **[The live hub's messages are in the same document](https://github.com/deangaddie/ReadToMe/issues/238).** A
   document transformer (`LiveContractTransformer`) adds every `ILiveClient` payload and `LiveHub` answer as a component,
   found by reflection, plus `LiveMessageMap` (each `[HubMethodName]` family → its payload) and `LiveHubMethod`. The
   hub uses the HTTP wire form, with nulls sent, so a generated `T | null` is always there: each closed string set
   (a family's `kind`, a pre-flight stage, a service op, a Restore phase) is a C# enum, a `[Flags]` facet set travels as
-  a list of single members, and a hub record with exactly an HTTP record's fields sends that record. `live-messages.ts`
-  becomes aliases like `dtos.ts`, and its C#-parsing spec is deleted.
+  a list of single members, and a hub record with exactly an HTTP record's fields sends that record. The hub's
+  message types are generated like the HTTP ones; `live-messages.ts` keeps only the hand-written rest, and its
+  C#-parsing spec is deleted.
 
 ## Considered options
 

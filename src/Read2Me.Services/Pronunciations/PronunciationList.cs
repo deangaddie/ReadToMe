@@ -4,8 +4,8 @@ using Read2Me.Data;
 namespace Read2Me.Services.Pronunciations;
 
 /// <summary>
-/// One Pronunciation and its reach in the book: how often its written form matches, in how
-/// many items, and how many of those items have audio.
+/// One Pronunciation and its reach in the book (<c>GET /api/projects/{folder}/pronunciations</c>): how
+/// often its written form matches, in how many items, and how many of those items have audio.
 /// </summary>
 public sealed record PronunciationEntry(
     Guid Id, string WrittenForm, string SpokenForm, int MatchCount, int ItemCount, int WithAudioCount);

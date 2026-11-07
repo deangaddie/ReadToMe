@@ -6,7 +6,7 @@ namespace Read2Me.Services.Series
     /// Which Book commits are edits of a Voice that a series copies to its other linked books
     /// (ADR 0018, #213 "Shared Voices"): creating, editing, re-recording and deleting a Voice. A
     /// Character's default (<see cref="SetVoiceDefaultMutation"/>) and its Voice Rules stay the
-    /// book's own; a Restore (<see cref="RestoreStepMutation"/>) stays local to its book; and the
+    /// book's own; a Restore (<see cref="History.RestoreStepMutation"/>) stays local to its book; and the
     /// series' own writes (<see cref="GainSeriesVoicesMutation"/>, <see cref="CopySeriesVoiceMutation"/>)
     /// are the copies themselves.
     /// </summary>

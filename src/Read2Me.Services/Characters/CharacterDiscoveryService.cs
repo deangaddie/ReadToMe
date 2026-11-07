@@ -6,6 +6,10 @@ using Read2Me.Services.Llm;
 
 namespace Read2Me.Services.Characters
 {
+    /// <summary>
+    /// How character discovery ended. An answer never carries <c>NoLlmConfigured</c>: the endpoint
+    /// turns it into a 422.
+    /// </summary>
     public enum DiscoveryStatus { Ok, NoLlmConfigured, Failed, ServiceUnavailable }
 
     public sealed record DiscoveryOutcome(

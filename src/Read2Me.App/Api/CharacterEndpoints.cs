@@ -14,7 +14,8 @@ namespace Read2Me.App.Api
     /// <summary>
     /// A cast-list row. <see cref="NarratesBook"/> is true on the character the narrator link
     /// points at; <see cref="IsNarrator"/> marks the seed Narrator row itself. <see cref="SeriesLink"/> is its
-    /// Series character when it is series-linked (ADR 0018), else null.
+    /// Series character when it is series-linked (ADR 0018), else null. Aliases carry their ids so the detail
+    /// can offer removal directly.
     /// </summary>
     public sealed record CharacterSummaryDto(
         Guid Id, string Name, IReadOnlyList<CharacterAliasDto> Aliases,
@@ -36,7 +37,8 @@ namespace Read2Me.App.Api
         IReadOnlyList<ContextParagraphDto> Before, ContextParagraphDto Paragraph, IReadOnlyList<ContextParagraphDto> After);
 
     /// <summary>
-    /// One voice rule as the cast page lists it. Levels are <see cref="VoiceAnchorLevel"/> names
+    /// One voice rule as <c>GET …/characters/{id}/voice-rules</c> lists it, in evaluation order: the default
+    /// rule first, then by <paramref name="Order"/>. Levels are <see cref="VoiceAnchorLevel"/> names
     /// (null on the default rule and on an open "from here on" end); a dangling anchor names a
     /// node that no longer exists, so its title is null. <see cref="Order"/> is the fractional rank
     /// the list is sorted by (lower first; the last passing rule wins).
@@ -47,7 +49,7 @@ namespace Read2Me.App.Api
         VoiceAnchorLevel? ToLevel, Guid? ToNodeId, string? ToTitle, bool ToDangling,
         string Order);
 
-    /// <summary>The voice a character's rules pick at the start of a chapter; null when none resolves.</summary>
+    /// <summary>A row of <c>GET …/characters/{id}/voice-rules/preview</c>: the voice a character's rules pick at the start of a chapter; null when none resolves.</summary>
     public sealed record ChapterVoicePreviewDto(Guid ChapterId, string ChapterTitle, string? VoiceName);
 
     /// <summary>The cast page's reads (Angular tickets 15, 17): roster rows, a character's lines, a line's surroundings, voice rules and their preview.</summary>

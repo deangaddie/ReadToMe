@@ -5,11 +5,12 @@ import type {
   NodeChildrenDto,
   NodeDto,
   ParagraphDto,
+  LiveSnapshot,
 } from '@app/api';
 import { AudioApi, BookApi } from '@app/api';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
-import type { LiveSnapshot, Receipt } from '@app/live/live-messages';
+import type { Receipt } from '@app/live/live-messages';
 import { LiveService, type Unsubscribe } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast';
 import type { ProjectStore } from '../project/project-store';

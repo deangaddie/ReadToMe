@@ -4,13 +4,13 @@ import type {
   CharacterVoicesDto,
   GenerateDesignPromptResponse,
   GenerateVoiceAudioResponse,
-  Guid,
   RenderedDesignPromptResponse,
   StartedResponse,
   TranscribeVoiceResponse,
   VoiceBatchStatusDto,
   VoiceDto,
-} from './dtos';
+} from './schema';
+import type { Guid } from './dtos';
 
 /** The host's upload cap for voice reference audio (`VoiceEndpoints.MaxAudioBytes`). */
 export const MAX_VOICE_AUDIO_BYTES = 200 * 1024 * 1024;

@@ -4,9 +4,9 @@ import type {
   CharacterVoicesDto,
   PronunciationMatchInBook,
   VoiceDto,
+  QueueMessage,
 } from '@app/api';
 import { IDLE_VOICE_BATCH } from '@app/live/live-state';
-import type { QueueMessage } from '@app/live/live-messages';
 import {
   originMatch,
   playView,

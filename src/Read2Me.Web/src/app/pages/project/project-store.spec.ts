@@ -9,8 +9,8 @@ import { Emitter } from '@app/core/emitter';
 import { IDLE_ASSEMBLY, IDLE_VOICE_BATCH } from '@app/live/live-state';
 import { override, resetServices, use } from '@app/core/services';
 import { signal } from '@app/core/signals';
-import type { NodeStatusSummaryDto } from '@app/api';
 import type {
+  NodeStatusSummaryDto,
   AssemblyMessage,
   AssemblyState,
   BookFacets,
@@ -18,10 +18,10 @@ import type {
   LiveSnapshot,
   NodeStatusMessage,
   ProjectSnapshot,
-  Receipt,
   ReceiptMessage,
   VoiceBatchState,
-} from '@app/live/live-messages';
+} from '@app/api';
+import type { Receipt } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { ProjectTitles } from '@app/shell/project-titles';
 import { FakeApi, problem } from '../../../testing/fake-api';

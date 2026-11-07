@@ -1,4 +1,4 @@
-import { type Block, type NodeLevel, withLocal } from '@app/api';
+import { type Block, type BookNodeLevel, withLocal } from '@app/api';
 import type { NodeStatusSummaryDto } from '@app/api';
 import { MENU_KIND_OF_LEVEL, type NodeMenuTarget, type SelectionKind } from './node-menu-entries';
 
@@ -8,7 +8,7 @@ import { MENU_KIND_OF_LEVEL, type NodeMenuTarget, type SelectionKind } from './n
  */
 export interface StructureNodeMenuInput {
   node: {
-    level: NodeLevel;
+    level: BookNodeLevel;
     id: string;
     /** The stored title, null when untitled: the menu edits it, never the placeholder. */
     rawTitle: string | null;

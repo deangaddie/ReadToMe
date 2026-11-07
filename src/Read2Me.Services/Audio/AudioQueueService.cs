@@ -22,6 +22,7 @@ namespace Read2Me.Services.Audio
 
     public sealed record AudioItemOutcome(AudioItemOutcomeKind Kind, string? Reason);
 
+    /// <summary>The audio queue's counts and timings, answered by <c>GET /api/audio/queue</c>.</summary>
     public sealed record AudioQueueSnapshot(
         int QueuedCount,
         int ProcessingCount,

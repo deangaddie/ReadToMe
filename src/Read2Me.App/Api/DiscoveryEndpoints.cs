@@ -13,8 +13,8 @@ using Read2Me.Services.Mutations;
 namespace Read2Me.App.Api
 {
     /// <summary>
-    /// <see cref="ExistingCharacterId"/> names the roster character the row resolves onto (by its name,
-    /// as apply resolves it) — the review's "Already exists" row.
+    /// <paramref name="ExistingCharacterId"/> names the roster character the row resolves onto (by its name or
+    /// alias, as apply resolves it) — the review's "Already exists" row.
     /// </summary>
     public sealed record DiscoveredCharacterDto(string Name, IReadOnlyList<string> Aliases, Guid? ExistingCharacterId);
     /// <summary>

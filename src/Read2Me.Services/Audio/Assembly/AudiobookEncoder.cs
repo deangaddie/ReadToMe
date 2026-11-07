@@ -14,7 +14,7 @@ namespace Read2Me.Services.Audio.Assembly
     /// PATH when ffmpegPath is null/blank, by <see cref="FfmpegProber.ResolveFfprobe"/>).
     /// <c>IFfmpegProber</c> only runs <c>-version</c> and returns no durations.
     ///
-    /// Silence files are cached per distinct ms in a <see cref="ConcurrentDictionary"/> for the
+    /// Silence files are cached per distinct ms in a <see cref="ConcurrentDictionary{TKey, TValue}"/> for the
     /// lifetime of one encoder instance (≈ one assembly run).
     /// </summary>
     public sealed class AudiobookEncoder : IAudiobookEncoder

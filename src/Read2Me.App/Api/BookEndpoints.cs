@@ -38,33 +38,57 @@ namespace Read2Me.App.Api
 
     /// <summary>
     /// The Voice a speech item will be spoken in. <see cref="VoiceName"/> is null when no Voice
-    /// resolves; <see cref="NarratedBy"/> is the linked narrator's name on a narration item.
+    /// resolves; <see cref="NarratedBy"/> is the linked narrator's name on a narration item. An entry of
+    /// <c>GET …/nodes/Chapter/{id}/voices</c>.
     /// </summary>
     public sealed record ItemVoiceDto(string? VoiceName, string? NarratedBy);
+    /// <summary>Exactly one of the three lists is present, chosen by the requested level.</summary>
     public sealed record NodeChildrenDto(
         IReadOnlyList<NodeDto>? Parts,
         IReadOnlyList<NodeDto>? Chapters,
         IReadOnlyList<ParagraphDto>? Paragraphs);
-    /// <summary>A Character paragraph and the nodes it rolls up into — what a selection holds per row.</summary>
+    /// <summary>
+    /// A Character paragraph and the nodes it rolls up into — what a selection holds per row. An entry of
+    /// <c>GET …/nodes/{level}/{id}/paragraph-ids</c>.
+    /// </summary>
     public sealed record ParagraphRefDto(Guid Id, Guid ChapterId, Guid PartId, Guid VolumeId);
-    /// <summary>A speech item audio can be generated for, and the nodes it rolls up into (<see cref="AudioItemRef"/> on the wire).</summary>
+    /// <summary>
+    /// A speech item audio can be generated for, and the nodes it rolls up into (<see cref="AudioItemRef"/> on
+    /// the wire). An entry of <c>GET …/nodes/{level}/{id}/item-ids</c>.
+    /// </summary>
     public sealed record AudioItemRefDto(Guid Id, Guid ParagraphId, Guid ChapterId, Guid PartId, Guid VolumeId);
+    /// <summary>The body of <c>POST …/characters/bulk-assign-preview</c>: the paragraphs to preview.</summary>
     public sealed record BulkAssignPreviewRequest(Guid[] ParagraphIds);
-    /// <summary><see cref="BulkAssignPreview"/> on the wire: what a bulk assign over the ids would write.</summary>
+    /// <summary>
+    /// <see cref="BulkAssignPreview"/> on the wire: what a bulk assign over the ids would write.
+    /// Paragraphs without Character items count in neither number.
+    /// </summary>
     public sealed record BulkAssignPreviewDto(int ParagraphsWithCharacterItems, int CharacterItems);
-    /// <summary>The scope a Release narration would cover; the same shape as the command, minus its type.</summary>
+    /// <summary>
+    /// The body of <c>POST …/narration/release-preview</c>: the scope a Release narration would cover; the same
+    /// shape as the command, minus its type.
+    /// </summary>
     public sealed record NarrationReleasePreviewRequest(
         NarrationReleaseScope Scope,
         Guid NodeId);
-    /// <summary><see cref="NarrationReleasePreview"/> on the wire: what a Release narration over the scope would write.</summary>
+    /// <summary>
+    /// <see cref="NarrationReleasePreview"/> on the wire: what a Release narration over the scope would write.
+    /// <paramref name="Paragraphs"/> are the paragraphs it releases and <paramref name="ItemsWithAudio"/> the
+    /// items whose audio it discards. For a Chapter or Part, <paramref name="SpeechMarkers"/> are the markers
+    /// that passed (count descending, then marker); empty for a Paragraph and when nothing passes.
+    /// </summary>
     public sealed record NarrationReleasePreviewDto(int Paragraphs, int ItemsWithAudio, IReadOnlyList<SpeechMarkerCountDto> SpeechMarkers);
-    /// <summary>A speech marker a Chapter or Part release detected, and how many paragraphs it would release.</summary>
+    /// <summary>
+    /// A speech marker a Chapter or Part release detected, as written (<c>Q.</c>, <c>Darcy:</c>, <c>—…—</c>),
+    /// and how many paragraphs it would release.
+    /// </summary>
     public sealed record SpeechMarkerCountDto(string Marker, int Paragraphs);
     public sealed record CharacterAliasDto(Guid Id, string Name);
     public sealed record CharacterDto(Guid Id, string Name, IReadOnlyList<CharacterAliasDto> Aliases);
     /// <summary>
-    /// <see cref="Revision"/>: the book revision the read ran against, a reader's baseline for receipts.
-    /// <see cref="StructureRules"/>: what may be inserted where — the node menu renders from it.
+    /// <paramref name="Revision"/>: the book revision the read ran against, a reader's baseline for receipts
+    /// and snapshots. <paramref name="StructureRules"/>: what may be inserted where, one entry per anchor
+    /// kind — the node menu renders from it.
     /// </summary>
     public sealed record BookOverviewDto(
         bool HasContent,
@@ -75,7 +99,11 @@ namespace Read2Me.App.Api
         long Revision,
         IReadOnlyList<StructureRuleDto> StructureRules);
 
-    /// <summary><see cref="StructureRule"/> on the wire, its enums by name.</summary>
+    /// <summary>
+    /// <see cref="StructureRule"/> on the wire, its enums by name. <paramref name="NodeKind"/> is what a command
+    /// names the anchor as; <paramref name="MinimumCount"/> is how many of this kind the book always keeps
+    /// (Volume: 1).
+    /// </summary>
     public sealed record StructureRuleDto(
         StructureAnchor Anchor,
         NodeKind NodeKind,
@@ -88,6 +116,10 @@ namespace Read2Me.App.Api
             rule.MinimumCount);
     }
 
+    /// <summary>
+    /// One placement an anchor allows: the kind it creates (<paramref name="Creates"/>), and whether that node
+    /// needs text (<paramref name="TextRequired"/>).
+    /// </summary>
     public sealed record StructurePlacementDto(
         Placement Placement,
         NodeKind Creates,

@@ -16,6 +16,10 @@ namespace Read2Me.App.Api
     public sealed record PromptPreviewRequest(string Template);
     public sealed record PromptPreviewResponse(string Rendered);
     /// <summary>One prompt kind as the settings pages show it; <c>Template</c> is the resolved text.</summary>
+    /// <param name="Tokens">Placeholder names without braces (<c>book_title</c>).</param>
+    /// <param name="ExpectedResponse">The JSON shape the LLM must answer with; null for a plain-text prompt (voice).</param>
+    /// <param name="Template">The stored override, else <paramref name="DefaultTemplate"/>.</param>
+    /// <param name="Warnings">Compatibility warnings, such as "Stored override missing …".</param>
     public sealed record PromptCatalogEntry(
         string Kind,
         string Title,

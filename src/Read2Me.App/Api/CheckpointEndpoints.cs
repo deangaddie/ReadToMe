@@ -14,9 +14,13 @@ namespace Read2Me.App.Api
     /// <summary>What a checkpoint PUT asks for: a state to hold, or <c>Open</c> to hold none.</summary>
     public enum CheckpointRequestState { Confirmed, Skipped, Open }
 
+    /// <summary><c>PUT /api/projects/{folder}/checkpoints/{step}</c> body: <c>Open</c> deletes the row.</summary>
     public sealed record SetCheckpointRequest(CheckpointRequestState? State);
 
-    /// <summary>A step's confirmed checkpoint as <c>/status</c> reports it.</summary>
+    /// <summary>
+    /// A step's confirmed or skipped checkpoint as <c>/status</c> reports it; <paramref name="At"/> is when,
+    /// kept when the row goes stale.
+    /// </summary>
     public sealed record StepCheckpointDto(
         CheckpointState State,
         bool Stale,

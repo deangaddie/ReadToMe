@@ -1,6 +1,6 @@
 import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
-import type { AssemblyOutputDto, AssemblyStatusDto, StartedResponse } from './dtos';
+import type { AssemblyOutputDto, AssemblyStatusDto, StartedResponse } from './schema';
 import { projectUrl } from './projects-api';
 
 /** `AssemblyEndpoints.cs`: m4b assembly start, progress and cancel (one global run), and outputs. */

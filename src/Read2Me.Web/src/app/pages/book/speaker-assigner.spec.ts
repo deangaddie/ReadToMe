@@ -1,10 +1,10 @@
+import type { ParagraphStatusEntry } from '@app/api';
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import { ApiError, AttributionApi, BookApi, type ParagraphItemDto } from '@app/api';
 import { override, resetServices } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { ConfirmService, PromptService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
-import type { ParagraphStatusEntry } from '@app/live/live-messages';
 import type { ProjectStore } from '../project/project-store';
 import type { BookEditor } from './book-editor';
 import type { BookStore } from './book-store';

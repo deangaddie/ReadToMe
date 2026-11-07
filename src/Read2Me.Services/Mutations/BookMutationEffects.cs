@@ -14,8 +14,8 @@ namespace Read2Me.Services.Mutations;
 public enum BookMutationScope { Exact, WholeProject }
 
 /// <summary>
-/// Which kinds of Book data a mutation changed. Facets are facts about the write, not
-/// instructions: a reader decides for itself what to reread from them.
+/// Which kinds of Book data a mutation changed; a receipt lists each facet it touched. Facets are
+/// facts about the write, not instructions: a reader decides for itself what to reread from them.
 /// </summary>
 [Flags]
 public enum BookFacets

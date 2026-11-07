@@ -5,16 +5,15 @@ import type {
   AudioItemRefDto,
   BookOverviewDto,
   BulkAssignPreviewDto,
-  ChapterVoicesDto,
   CharacterDto,
   CommandResponse,
-  Guid,
   NarrationReleasePreviewDto,
   NarrationReleaseScope,
   NodeChildrenDto,
-  NodeLevel,
+  BookNodeLevel,
   ParagraphRefDto,
-} from './dtos';
+} from './schema';
+import type { ChapterVoicesDto, Guid } from './dtos';
 
 /**
  * `BookEndpoints.cs` + `CommandEndpoints.cs`: the read model and the one mutation channel. Per spec
@@ -30,7 +29,7 @@ export class BookApi {
   }
 
   /** volume → parts, part → chapters, chapter → paragraphs with their items. */
-  children(folder: string, level: NodeLevel, id: Guid): Promise<NodeChildrenDto> {
+  children(folder: string, level: BookNodeLevel, id: Guid): Promise<NodeChildrenDto> {
     return this.api.get('/api/projects/{folder}/nodes/{level}/{id}/children', {
       path: { folder, level, id },
     });
@@ -49,7 +48,7 @@ export class BookApi {
    */
   paragraphIds(
     folder: string,
-    level: NodeLevel,
+    level: BookNodeLevel,
     id: Guid,
     unprocessedOnly = false,
   ): Promise<ParagraphRefDto[]> {
@@ -66,7 +65,7 @@ export class BookApi {
    */
   itemIds(
     folder: string,
-    level: NodeLevel,
+    level: BookNodeLevel,
     id: Guid,
     options: { needsAudioOnly?: boolean; narratorOnlyMode?: boolean } = {},
   ): Promise<AudioItemRefDto[]> {

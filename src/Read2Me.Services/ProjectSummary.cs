@@ -3,7 +3,10 @@ using Read2Me.Services.Series;
 
 namespace Read2Me.Services
 {
-    /// <summary>One row of the project list. <see cref="FileType"/> is null for a folder whose DB could not be opened.</summary>
+    /// <summary>
+    /// One row of the project list (<c>GET /api/projects</c>). <see cref="FileType"/> is null for a folder
+    /// whose DB could not be opened.
+    /// </summary>
     public record ProjectSummary(
         string FolderName,
         string Title,

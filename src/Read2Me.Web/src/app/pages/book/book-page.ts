@@ -1,5 +1,5 @@
 import { html, nothing } from 'lit-html';
-import type { NodeLevel } from '@app/api';
+import type { BookNodeLevel } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
@@ -632,7 +632,7 @@ export class BookPage extends R2mElement {
    * A Volume, Part or Chapter heading with the node's Node menu trigger at the end of the row,
    * offering what the tree offers for it (structureNodeMenu).
    */
-  private headingRow(level: NodeLevel, heading: HeadingRef) {
+  private headingRow(level: BookNodeLevel, heading: HeadingRef) {
     const { id } = heading;
     const menu = structureNodeMenu({
       node: { level, id, rawTitle: heading.rawTitle },
