@@ -13,8 +13,9 @@ using Xunit;
 namespace Read2Me.Tests.Services
 {
     /// <summary>
-    /// One persisted merge per level, plus the not-found refusals, against a real project database.
-    /// The shape matrix (direction, first or last sibling, item text) is <see cref="Books.BookHierarchyMergeTests"/>'s.
+    /// One persisted merge per level, against a real project database.
+    /// The shape matrix (direction, first or last sibling, item text) is <see cref="Books.BookHierarchyMergeTests"/>'s;
+    /// the not-found refusals are <see cref="Mutations.DestructiveStructuralMutationTests"/>'s.
     /// </summary>
     public class ProjectServiceMergeTests : IDisposable
     {
@@ -126,15 +127,6 @@ namespace Read2Me.Tests.Services
             Assert.Equal(3, parts.Count); // part1, part2 (original) + P3 (moved)
         }
 
-        [Fact]
-        public async Task MergeVolumeWithPrevious_WhenNotFound_IsRefused()
-        {
-            var folder = await CreateProjectAsync("MergeVolPrevNF");
-            // A merge naming a node the Book does not contain is refused, not silently applied.
-            Assert.Equal(BookMutationRejection.NotFound,
-                Assert.IsType<BookMutationOutcome.Rejected>(await _mutations.CommitAsync(new MergeVolumeMutation(folder, Guid.NewGuid(), MergeDirection.Previous))).Reason);
-        }
-
         // ---------------------------------------------------------------
         // MergePartWithPreviousAsync
         // ---------------------------------------------------------------
@@ -159,15 +151,6 @@ namespace Read2Me.Tests.Services
             Assert.Equal(1, await verify.Parts.CountAsync());
             Assert.Equal(ids.Part1, (await verify.Parts.SingleAsync()).Id);
             Assert.Equal(3, await verify.Chapters.Where(c => c.PartId == ids.Part1).CountAsync());
-        }
-
-        [Fact]
-        public async Task MergePartWithPrevious_WhenNotFound_IsRefused()
-        {
-            var folder = await CreateProjectAsync("MergePartPrevNF");
-            // A merge naming a node the Book does not contain is refused, not silently applied.
-            Assert.Equal(BookMutationRejection.NotFound,
-                Assert.IsType<BookMutationOutcome.Rejected>(await _mutations.CommitAsync(new MergePartMutation(folder, Guid.NewGuid(), MergeDirection.Previous))).Reason);
         }
 
         // ---------------------------------------------------------------
@@ -196,15 +179,6 @@ namespace Read2Me.Tests.Services
             Assert.Equal(3, await verify.Paragraphs.Where(p => p.ChapterId == ids.Ch1).CountAsync());
         }
 
-        [Fact]
-        public async Task MergeChapterWithPrevious_WhenNotFound_IsRefused()
-        {
-            var folder = await CreateProjectAsync("MergeChPrevNF");
-            // A merge naming a node the Book does not contain is refused, not silently applied.
-            Assert.Equal(BookMutationRejection.NotFound,
-                Assert.IsType<BookMutationOutcome.Rejected>(await _mutations.CommitAsync(new MergeChapterMutation(folder, Guid.NewGuid(), MergeDirection.Previous))).Reason);
-        }
-
         // ---------------------------------------------------------------
         // MergeParagraphWithPreviousAsync
         // ---------------------------------------------------------------
@@ -229,28 +203,6 @@ namespace Read2Me.Tests.Services
             Assert.Equal(1, await verify.Paragraphs.CountAsync());
             Assert.Equal(ids.Para1, (await verify.Paragraphs.SingleAsync()).Id);
             Assert.Equal(3, await verify.ParagraphItems.Where(i => i.ParagraphId == ids.Para1).CountAsync());
-        }
-
-        [Fact]
-        public async Task MergeParagraphWithPrevious_WhenNotFound_IsRefused()
-        {
-            var folder = await CreateProjectAsync("MergeParaPrevNF");
-            // A merge naming a node the Book does not contain is refused, not silently applied.
-            Assert.Equal(BookMutationRejection.NotFound,
-                Assert.IsType<BookMutationOutcome.Rejected>(await _mutations.CommitAsync(new MergeParagraphMutation(folder, Guid.NewGuid(), MergeDirection.Previous))).Reason);
-        }
-
-        // ---------------------------------------------------------------
-        // MergeParagraphItemWithPreviousAsync
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task MergeParagraphItemWithPrevious_WhenNotFound_IsRefused()
-        {
-            var folder = await CreateProjectAsync("MergeItemPrevNF");
-            // A merge naming a node the Book does not contain is refused, not silently applied.
-            Assert.Equal(BookMutationRejection.NotFound,
-                Assert.IsType<BookMutationOutcome.Rejected>(await _mutations.CommitAsync(new MergeParagraphItemMutation(folder, Guid.NewGuid(), MergeDirection.Previous))).Reason);
         }
     }
 }
