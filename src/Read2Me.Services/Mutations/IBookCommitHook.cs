@@ -9,8 +9,11 @@ namespace Read2Me.Services.Mutations;
 /// it takes the write lock, and runs what the hook planned once the commit stands, in the same
 /// call, so the producer's request waits for it.
 /// <para>
-/// Resolved from the scope at commit time, not injected: a hook writes through
-/// <see cref="BookMutations"/> itself, and a constructor dependency would be a cycle.
+/// <see cref="BookMutations"/> resolves its hooks from the scope at commit time instead of taking
+/// them through its constructor: a hook may write through <see cref="BookMutations"/> itself (the
+/// series copy does, through its replicator), so that is the one place the cycle is broken, and a
+/// hook takes what it needs through its own constructor. A hook that writes marks its own writes
+/// on the mutation, so it can stand aside for them when they commit.
 /// </para>
 /// </summary>
 public interface IBookCommitHook

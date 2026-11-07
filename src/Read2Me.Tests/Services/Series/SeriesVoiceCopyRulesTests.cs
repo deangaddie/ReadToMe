@@ -56,6 +56,38 @@ namespace Read2Me.Tests.Services.Series
 
             Assert.True(SeriesVoiceEdits.IsSeriesCopy(new CopySeriesVoiceMutation(Folder, Guid.NewGuid(), copy, "Edit voice", StepAction.Voice)));
             Assert.True(SeriesVoiceEdits.IsSeriesCopy(new GainSeriesVoicesMutation(Folder, Guid.NewGuid(), [copy])));
+            Assert.True(SeriesVoiceEdits.IsSeriesCopy(new ReplaceSeriesVoicesMutation(Folder, Guid.NewGuid(), [copy], "Take", StepAction.Voice)));
+        }
+
+        [Fact]
+        public void A_delete_is_a_series_copy_only_when_it_names_its_step_from_the_book_it_was_made_in()
+        {
+            Assert.False(SeriesVoiceEdits.IsSeriesCopy(new DeleteVoiceMutation(Folder, VoiceId)));
+            Assert.True(SeriesVoiceEdits.IsSeriesCopy(new DeleteVoiceMutation(Folder, VoiceId) { CopiedStep = ("Delete voice", StepAction.Delete) }));
+        }
+
+        /// <summary>The Voice mutations that stay in their own book: a default and positional rules.</summary>
+        private static readonly Type[] StayInTheirBook =
+        [
+            typeof(SetVoiceDefaultMutation), typeof(CreateVoiceRuleMutation), typeof(DeleteVoiceRuleMutation), typeof(MoveVoiceRuleMutation),
+        ];
+
+        [Fact]
+        public void Every_Voice_mutation_is_copied_or_a_series_copy_or_stays_in_its_book()
+        {
+            // A new Voice mutation fails here until it is put in SeriesVoiceEdits.Of, IsSeriesCopy or the list above.
+            var voiceMutations = typeof(BookMutation).Assembly.GetTypes()
+                .Where(t => t is { IsAbstract: false } && t.IsSubclassOf(typeof(BookMutation)) && t.Name.Contains("Voice"))
+                .ToList();
+            Assert.NotEmpty(voiceMutations);
+
+            foreach (var type in voiceMutations)
+            {
+                // Uninitialised: both answers read the mutation's type, and a delete's CopiedStep is then null.
+                var mutation = (BookMutation)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(type);
+                var places = new[] { SeriesVoiceEdits.Of(mutation) is not null, SeriesVoiceEdits.IsSeriesCopy(mutation), StayInTheirBook.Contains(type) };
+                Assert.True(places.Count(p => p) == 1, $"{type.Name} must be exactly one of: copied (SeriesVoiceEdits.Of), a series copy (IsSeriesCopy), or stays in its book.");
+            }
         }
 
         // ---- write order -------------------------------------------------------------------------
