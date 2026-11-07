@@ -34,7 +34,7 @@ public readonly record struct RestoreMark
 /// <item><term>Plan Edit with AI</term><description>allowed / allowed / refused, also when a Restore began since the mark</description></item>
 /// </list>
 /// An enqueue's restoring check must be atomic with its queue becoming busy, so a queue asks
-/// <see cref="MayEnqueue"/> under its own lock.
+/// <see cref="MayEnqueue(ProjectFolderId)"/> under its own lock.
 /// <para>
 /// The gate holds the per-project <b>restoring flag</b> itself: set for the whole of a Restore, so
 /// every other write and enqueue is refused at once rather than waiting on the write lock. At most
@@ -59,6 +59,10 @@ public sealed class ProjectActivity
     public ActivityRefusal? MayWrite(ProjectFolderId folder) => RestoringRefusal(folder);
 
     public ActivityRefusal? MayEnqueue(ProjectFolderId folder) => RestoringRefusal(folder);
+
+    /// <summary>One enqueue across several projects: refused, as a whole, when any of them is.</summary>
+    public ActivityRefusal? MayEnqueue(IEnumerable<ProjectFolderId> folders) =>
+        folders.Distinct().Select(MayEnqueue).FirstOrDefault(r => r is not null);
 
     /// <summary>The step-preview GET and every <c>?at=</c> read.</summary>
     public ActivityRefusal? MayViewStep(ProjectFolderId folder) => RestoringRefusal(folder) ?? BusyRefusal(folder);
