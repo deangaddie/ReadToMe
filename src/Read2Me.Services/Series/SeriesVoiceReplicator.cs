@@ -33,14 +33,6 @@ namespace Read2Me.Services.Series
     {
         private const string BackupSuffix = ".series-backup";
 
-        private static readonly AsyncLocal<bool> Writing = new();
-
-        /// <summary>
-        /// Set while this flow writes into peer books, so the series' commit hook stands aside for
-        /// those commits: they aren't copied on, and don't wait for the series lock held here.
-        /// </summary>
-        internal static bool IsWriting => Writing.Value;
-
         /// <summary>Writes the plan under the series lock, for a caller that doesn't hold it (copy after commit).</summary>
         public async Task<IReadOnlyList<SeriesCopyResult>> WriteAsync(
             IReadOnlyList<SeriesVoiceWrite> plan, SeriesVoiceStep step, CancellationToken ct = default)
@@ -55,30 +47,21 @@ namespace Read2Me.Services.Series
         {
             ArgumentNullException.ThrowIfNull(hold);
             var results = new List<SeriesCopyResult>(plan.Count);
-            var outer = Writing.Value;
-            Writing.Value = true;
-            try
+            foreach (var write in plan)
             {
-                foreach (var write in plan)
+                BookMutationOutcome.Rejected? rejected;
+                try
                 {
-                    BookMutationOutcome.Rejected? rejected;
-                    try
-                    {
-                        rejected = await WriteOneAsync(write, step, ct);
-                    }
-                    catch (Exception ex) when (ex is not OperationCanceledException)
-                    {
-                        logger.LogWarning(ex, "'{Step}' threw while writing into '{Folder}'", step.Label, write.Book.Folder);
-                        rejected = new BookMutationOutcome.Rejected(BookMutationRejection.Validation, ex.Message);
-                    }
-                    if (rejected is not null)
-                        logger.LogWarning("'{Step}' was not written into '{Folder}': {Reason}", step.Label, write.Book.Folder, rejected.Message);
-                    results.Add(new SeriesCopyResult(write.Book.Folder, rejected?.Message) { Rejection = rejected?.Reason });
+                    rejected = await WriteOneAsync(write, step, ct);
                 }
-            }
-            finally
-            {
-                Writing.Value = outer;
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogWarning(ex, "'{Step}' threw while writing into '{Folder}'", step.Label, write.Book.Folder);
+                    rejected = new BookMutationOutcome.Rejected(BookMutationRejection.Validation, ex.Message);
+                }
+                if (rejected is not null)
+                    logger.LogWarning("'{Step}' was not written into '{Folder}': {Reason}", step.Label, write.Book.Folder, rejected.Message);
+                results.Add(new SeriesCopyResult(write.Book.Folder, rejected?.Message) { Rejection = rejected?.Reason });
             }
             return results;
         }
@@ -89,6 +72,7 @@ namespace Read2Me.Services.Series
             if (write.Change is SeriesVoiceChange.Delete delete)
             {
                 // Wherever the book holds the Voice; a book that doesn't hold it has nothing to delete.
+                // CopiedStep marks it a series copy, so the commit hook stands aside (SeriesVoiceEdits.IsSeriesCopy).
                 if (await characters.GetVoiceAsync(book.FolderId, delete.VoiceId) is not { } voice) return null;
                 var held = new Held(voice.Id, voice.AudioFileName);
                 var owner = book with { CharacterId = voice.CharacterId };

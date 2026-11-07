@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Read2Me.Core.Models;
 using Read2Me.Services.Events;
@@ -23,20 +22,16 @@ namespace Read2Me.Services.Series
     /// It plans from a <see cref="SeriesSnapshot"/> before the commit: the peers from the registry
     /// layer alone, and only for a Voice edit of a linked Character the Voices layer of its Series
     /// character. The copies are themselves Book commits, written by <see cref="SeriesVoiceReplicator"/>;
-    /// while it writes, this hook stands aside for them.
+    /// this hook stands aside for them, known by the mutation alone (<see cref="SeriesVoiceEdits.IsSeriesCopy"/>).
     /// </summary>
     public sealed class SeriesVoiceCopier(
-        IServiceProvider services, ICharacterReader characters, EventBroadcaster<SeriesChanged> changes,
+        SeriesSnapshotLoader loader, SeriesRegistry registry, SeriesVoiceReplicator replicator,
+        ICharacterReader characters, EventBroadcaster<SeriesChanged> changes,
         ILogger<SeriesVoiceCopier> logger) : IBookCommitHook
     {
-        // Resolved when needed: the registry and the replicator write through BookMutations, which resolves this hook (#237).
-        private SeriesRegistry Registry => services.GetRequiredService<SeriesRegistry>();
-        private SeriesVoiceReplicator Replicator => services.GetRequiredService<SeriesVoiceReplicator>();
-        private SeriesSnapshotLoader Loader => services.GetRequiredService<SeriesSnapshotLoader>();
-
         public async Task<BookCommitPlan> PlanAsync(BookMutation mutation, CancellationToken ct)
         {
-            if (SeriesVoiceReplicator.IsWriting || SeriesVoiceEdits.IsSeriesCopy(mutation)) return BookCommitPlan.None;
+            if (SeriesVoiceEdits.IsSeriesCopy(mutation)) return BookCommitPlan.None;
             var folder = mutation.FolderId;
 
             switch (mutation)
@@ -47,7 +42,7 @@ namespace Read2Me.Services.Series
                         $"{name} is linked to a series character. Unlink {name} first, or merge the other way."));
 
                 case DeleteCharacterMutation delete when await RemembersAsync(folder, delete.CharacterId, ct):
-                    return BookCommitPlan.After(_ => Registry.ForgetCharacterAsync(folder, delete.CharacterId));
+                    return BookCommitPlan.After(_ => registry.ForgetCharacterAsync(folder, delete.CharacterId));
             }
 
             if (SeriesVoiceEdits.Of(mutation) is { } edit && await CharacterOfAsync(mutation, edit) is { } characterId
@@ -74,19 +69,19 @@ namespace Read2Me.Services.Series
 
         /// <summary>The Character's peers from the registry layer alone: no Characters or Voices are read.</summary>
         private async Task<SeriesPeers?> PeersAsync(ProjectFolderId folder, Guid characterId, CancellationToken ct) =>
-            await Loader.LoadSeriesOfAsync(folder, withCasts: false, ct) is ({ } series, var projectId)
+            await loader.LoadSeriesOfAsync(folder, withCasts: false, ct) is ({ } series, var projectId)
                 ? series.Peers(projectId, characterId)
                 : null;
 
         /// <summary>Whether the series names the Character in a link or a <i>Not the same</i>, from the registry layer alone.</summary>
         private async Task<bool> RemembersAsync(ProjectFolderId folder, Guid characterId, CancellationToken ct) =>
-            await Loader.LoadSeriesOfAsync(folder, withCasts: false, ct) is ({ } series, var projectId)
+            await loader.LoadSeriesOfAsync(folder, withCasts: false, ct) is ({ } series, var projectId)
             && series.Remembers(projectId, characterId);
 
         /// <summary>A member book committed something the series cast board shows: its series reads again (#213, Hub).</summary>
         private async Task SignalMemberAsync(ProjectFolderId folder)
         {
-            if (await Loader.MembershipOfAsync(folder) is { } series)
+            if (await loader.MembershipOfAsync(folder) is { } series)
                 Signal(series.SeriesId);
         }
 
@@ -96,9 +91,9 @@ namespace Read2Me.Services.Series
         /// </summary>
         private async Task<(SeriesSnapshot Series, SeriesPeers Peers)?> VoicedPeersAsync(ProjectFolderId folder, Guid characterId, CancellationToken ct)
         {
-            if (await Loader.LoadSeriesOfAsync(folder, withCasts: false, ct) is not ({ } series, var projectId)) return null;
+            if (await loader.LoadSeriesOfAsync(folder, withCasts: false, ct) is not ({ } series, var projectId)) return null;
             if (series.Peers(projectId, characterId) is not { Others.Count: > 0 } peers) return null;
-            return (await Loader.WithVoicesAsync(series, [peers.SeriesCharacterId], ct), peers);
+            return (await loader.WithVoicesAsync(series, [peers.SeriesCharacterId], ct), peers);
         }
 
         private async Task<Guid?> CharacterOfAsync(BookMutation mutation, SeriesVoiceEdits.Edit edit) => edit switch
@@ -142,7 +137,7 @@ namespace Read2Me.Services.Series
             if (voiceId is not { } id) return;
 
             var plan = await PlanCopiesAsync(edit, peers, id, differing);
-            await Replicator.WriteAsync(plan, new SeriesVoiceStep(label, action), CancellationToken.None);
+            await replicator.WriteAsync(plan, new SeriesVoiceStep(label, action), CancellationToken.None);
             Signal(peers.SeriesId);
         }
 

@@ -41,9 +41,16 @@ namespace Read2Me.Services.Series
             _ => null,
         };
 
-        /// <summary>The series' own writes into a book: never copied on, and never a reason to signal again.</summary>
+        /// <summary>
+        /// The series' own writes into a book (<see cref="SeriesVoiceReplicator"/>): never copied on,
+        /// and never a reason to signal again. A copied delete is a <see cref="DeleteVoiceMutation"/>
+        /// that names its step from the book it was made in (<see cref="DeleteVoiceMutation.CopiedStep"/>);
+        /// left to the hook, it would be checked and copied again, waiting for the series lock its
+        /// writer holds.
+        /// </summary>
         public static bool IsSeriesCopy(BookMutation mutation) =>
-            mutation is GainSeriesVoicesMutation or CopySeriesVoiceMutation or ReplaceSeriesVoicesMutation;
+            mutation is GainSeriesVoicesMutation or CopySeriesVoiceMutation or ReplaceSeriesVoicesMutation
+                or DeleteVoiceMutation { CopiedStep: not null };
 
         /// <summary>
         /// The facets of a member book's commit that the series cast board shows (#213, Hub): its
