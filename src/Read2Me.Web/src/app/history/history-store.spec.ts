@@ -6,6 +6,7 @@ import { type ProblemLike, type ToastAction, ToastService } from '@app/ui/toast'
 import { FakeApi, problem } from '../../testing/fake-api';
 import { FakeLive } from '../../testing/fake-live';
 import { HistoryStore } from './history-store';
+import { historyMessage } from '../../testing/live-messages';
 
 const PATH = '/api/projects/dracula/history';
 
@@ -69,9 +70,9 @@ describe('HistoryStore', () => {
   });
 
   const landed = (s: HistoryStep, folder = 'dracula') =>
-    live.emit('history', { kind: 'stepLanded', folder, step: s });
+    live.emit('history', historyMessage({ kind: 'StepLanded', folder, step: s }));
   const closed = (s: HistoryStep, folder = 'dracula') =>
-    live.emit('history', { kind: 'stepClosed', folder, step: s });
+    live.emit('history', historyMessage({ kind: 'StepClosed', folder, step: s }));
   const ids = () => store.steps().map((s) => s.stepId);
 
   it('loads the steps newest first with the Head, in one request however long History is', async () => {
@@ -121,15 +122,18 @@ describe('HistoryStore', () => {
     await store.load();
 
     landed(step(2, { label: 'Attribution', isOpen: true }));
-    live.emit('history', {
-      kind: 'stepChanged',
-      folder: 'dracula',
-      step: step(2, {
-        label: 'Attribution and voice batch',
-        isOpen: true,
-        endedAt: '2026-10-20T09:20:00Z',
+    live.emit(
+      'history',
+      historyMessage({
+        kind: 'StepChanged',
+        folder: 'dracula',
+        step: step(2, {
+          label: 'Attribution and voice batch',
+          isOpen: true,
+          endedAt: '2026-10-20T09:20:00Z',
+        }),
       }),
-    });
+    );
 
     expect(ids()).toEqual(['s2', 's1']);
     expect(store.steps()[0]).toMatchObject({
@@ -149,25 +153,6 @@ describe('HistoryStore', () => {
     expect(store.headStepId()).toBe('s2');
   });
 
-  it('reads a hub row with its nulls omitted as null', async () => {
-    api.on('GET', PATH, dto([step(1)]));
-    await store.load();
-
-    const {
-      note: _note,
-      summary: _summary,
-      action: _action,
-      restoredFromStepId: _from,
-      endedAt: _end,
-      ...omitted
-    } = step(2);
-    live.emit('history', { kind: 'stepLanded', folder: 'dracula', step: omitted });
-
-    expect(store.steps()[0]).toEqual(
-      step(2, { note: null, summary: null, action: null, restoredFromStepId: null, endedAt: null }),
-    );
-  });
-
   it("ignores another project's steps", async () => {
     api.on('GET', PATH, dto([step(1)]));
     await store.load();
@@ -181,14 +166,20 @@ describe('HistoryStore', () => {
     api.on('GET', PATH, dto([step(1)]));
     await store.load();
 
-    live.emit('history', { kind: 'restoring', folder: 'dracula', phase: 'started' });
+    live.emit(
+      'history',
+      historyMessage({ kind: 'Restoring', folder: 'dracula', phase: 'Started' }),
+    );
     landed(step(2));
-    live.emit('history', {
-      kind: 'restoring',
-      folder: 'dracula',
-      phase: 'finished',
-      step: step(2),
-    });
+    live.emit(
+      'history',
+      historyMessage({
+        kind: 'Restoring',
+        folder: 'dracula',
+        phase: 'Finished',
+        step: step(2),
+      }),
+    );
 
     expect(ids()).toEqual(['s2', 's1']);
   });
@@ -252,7 +243,10 @@ describe('HistoryStore', () => {
       return api.calls('GET', BOOK).at(-1)?.search;
     };
     const busyChanged = (reason?: string, folder = 'dracula') =>
-      live.emit('history', { kind: 'busyChanged', folder, ...(reason ? { reason } : {}) });
+      live.emit(
+        'history',
+        historyMessage({ kind: 'BusyChanged', folder, ...(reason ? { reason } : {}) }),
+      );
 
     beforeEach(async () => {
       api.on('GET', BOOK, {});
@@ -356,8 +350,8 @@ describe('HistoryStore', () => {
     const RESTORE2 = `${STEP2}/restore`;
     const restoreStep = (sequence: number, from: string) =>
       step(sequence, { label: `Restore to 'Edit text' (09:00)`, restoredFromStepId: from });
-    const restoring = (phase: 'started' | 'finished', s?: HistoryStep, folder = 'dracula') =>
-      live.emit('history', { kind: 'restoring', folder, phase, ...(s ? { step: s } : {}) });
+    const restoring = (phase: 'Started' | 'Finished', s?: HistoryStep, folder = 'dracula') =>
+      live.emit('history', historyMessage({ kind: 'Restoring', folder, phase, step: s ?? null }));
 
     beforeEach(async () => {
       api.on('GET', PATH, dto([step(3), step(2), step(1)]));
@@ -411,11 +405,11 @@ describe('HistoryStore', () => {
       await store.settled();
 
       const done = store.restore();
-      restoring('started');
+      restoring('Started');
       expect(store.restoring()).toBe(true);
       await done;
       landed(restoreStep(4, 's2'));
-      restoring('finished', restoreStep(4, 's2'));
+      restoring('Finished', restoreStep(4, 's2'));
 
       expect(api.calls('POST', RESTORE2)).toHaveLength(1);
       expect(store.viewing()).toBeNull();
@@ -510,10 +504,10 @@ describe('HistoryStore', () => {
 
     it('tells a tab that did not restore that another one did, once the Restore finished', () => {
       const s4 = step(4, { label: "Restore to 'Split chapter' (14:02)", restoredFromStepId: 's2' });
-      restoring('started');
+      restoring('Started');
       expect(store.restoring()).toBe(true);
       landed(s4);
-      restoring('finished', s4);
+      restoring('Finished', s4);
 
       expect(store.restoring()).toBe(false);
       expect(toasts).toEqual(['Project restored to #2 Edit text in another tab']);
@@ -526,9 +520,9 @@ describe('HistoryStore', () => {
       const done = store.restore();
       await Promise.resolve();
 
-      restoring('started');
+      restoring('Started');
       landed(restoreStep(4, 's2'));
-      restoring('finished', restoreStep(4, 's2'));
+      restoring('Finished', restoreStep(4, 's2'));
       answer({ step: restoreStep(4, 's2'), audioDiscardCount: 60, needsAudioCount: 75 });
       await done;
 
@@ -539,7 +533,7 @@ describe('HistoryStore', () => {
 
     it('sends a viewing tab back to current when a Restore starts elsewhere', async () => {
       store.view('s2');
-      restoring('started');
+      restoring('Started');
 
       expect(store.viewing()).toBeNull();
       expect(store.restoring()).toBe(true);
@@ -550,7 +544,7 @@ describe('HistoryStore', () => {
       store.open('dracula');
       const s4 = step(4, { label: "Restore to 'Split chapter' (14:02)", restoredFromStepId: 's2' });
 
-      restoring('finished', s4);
+      restoring('Finished', s4);
 
       expect(toasts).toEqual([
         "Project restored to #4 Restore to 'Split chapter' (14:02) in another tab",

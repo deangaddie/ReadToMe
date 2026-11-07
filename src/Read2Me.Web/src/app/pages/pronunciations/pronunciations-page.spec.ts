@@ -8,7 +8,7 @@ import {
 } from '@app/api';
 import { Router, type RouteDef } from '@app/core/router';
 import { override, resetServices, use } from '@app/core/services';
-import type { Receipt } from '@app/live/live-messages';
+import type { BookFacets, Receipt } from '@app/live/live-messages';
 import { REFETCH_DEBOUNCE_MS } from '@app/shared/debounced';
 import { type ConfirmOptions, ConfirmService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
@@ -20,6 +20,7 @@ import { AUDIO_RUNNING } from './pronunciation-logic';
 import type { PronunciationsPage } from './pronunciations-page';
 import '../project/project-shell';
 import './pronunciations-page';
+import { itemEntry } from '../../../testing/live-messages';
 
 const PROJECT = '/api/projects/the-adventures-of-sherlock-holmes';
 const LIST = `${PROJECT}/pronunciations`;
@@ -87,7 +88,7 @@ const ROUTES: RouteDef[] = [
   },
 ];
 
-function receipt(facets: string): Receipt {
+function receipt(facets: BookFacets[]): Receipt {
   return {
     folder: 'the-adventures-of-sherlock-holmes',
     mutationName: 'SetPronunciationMutation',
@@ -95,6 +96,8 @@ function receipt(facets: string): Receipt {
     revision: 2,
     effects: {
       scope: 'Exact',
+      createdId: null,
+      createdParentId: null,
       facets,
       nodeIds: [],
       paragraphIds: [],
@@ -241,12 +244,12 @@ describe('r2m-pronunciations-page', () => {
     const reads = () => api.calls('GET', LIST).length;
     const before = reads();
 
-    liveFake.emit('receipt', receipt('Structure'));
+    liveFake.emit('receipt', receipt(['Structure']));
     await sleep(REFETCH_DEBOUNCE_MS + 50);
     expect(reads()).toBe(before);
 
     list = [...ENTRIES, entry('Lestrade', 'les-TRAHD')];
-    liveFake.emit('receipt', receipt('Pronunciations'));
+    liveFake.emit('receipt', receipt(['Pronunciations']));
     await sleep(REFETCH_DEBOUNCE_MS + 50);
     await rerender(page);
     expect(reads()).toBe(before + 1);
@@ -258,7 +261,7 @@ describe('r2m-pronunciations-page', () => {
     page.querySelector<HTMLElement>('.pron__row[data-id=holmes]')!.click();
     await rerender(page);
     list = ENTRIES.filter((e) => e.id !== 'holmes');
-    liveFake.emit('receipt', receipt('Pronunciations'));
+    liveFake.emit('receipt', receipt(['Pronunciations']));
     await sleep(REFETCH_DEBOUNCE_MS + 50);
     await rerender(page);
     expect(editorOf(page)).toBeNull();
@@ -295,7 +298,7 @@ describe('r2m-pronunciations-page', () => {
     liveFake.emit('itemStatus', {
       folder: 'the-adventures-of-sherlock-holmes',
       paragraphs: {},
-      items: { i1: { status: 'Queued' } },
+      items: { i1: itemEntry({ status: 'Queued' }) },
     });
     page.querySelector<HTMLElement>('.pron__row[data-id=watson]')!.click();
     await rerender(page);

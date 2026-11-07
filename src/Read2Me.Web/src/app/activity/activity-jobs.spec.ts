@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import { IDLE_ASSEMBLY, IDLE_VOICE_BATCH } from '@app/live/live-state';
-import { AttributionQueueState, AudioQueueState, QueueMessage } from '@app/live/live-messages';
+import {
+  AttributionQueueSnapshot,
+  AudioQueueSnapshot,
+  QueueMessage,
+} from '@app/live/live-messages';
 import { ActivityInputs, deriveJobs, isActiveJob } from './activity-jobs';
 
-function attribution(overrides: Partial<AttributionQueueState> = {}): AttributionQueueState {
+function attribution(overrides: Partial<AttributionQueueSnapshot> = {}): AttributionQueueSnapshot {
   return {
     queuedCount: 0,
     processingCount: 0,
@@ -16,7 +20,7 @@ function attribution(overrides: Partial<AttributionQueueState> = {}): Attributio
   };
 }
 
-function audio(overrides: Partial<AudioQueueState> = {}): AudioQueueState {
+function audio(overrides: Partial<AudioQueueSnapshot> = {}): AudioQueueSnapshot {
   return {
     queuedCount: 0,
     processingCount: 0,
@@ -224,10 +228,10 @@ describe('deriveJobs', () => {
     const jobs = deriveJobs(
       inputs({
         watchdog: {
-          llama: 'recoveryStarted',
-          chatterbox: 'containerRestarted',
-          whisper: 'serviceDown',
-          minilm: 'serviceHealthy',
+          llama: 'RecoveryStarted',
+          chatterbox: 'ContainerRestarted',
+          whisper: 'ServiceDown',
+          minilm: 'ServiceHealthy',
         },
       }),
     );

@@ -38,7 +38,7 @@ export function applyAssembly(state: AssemblyState, m: AssemblyMessage): Assembl
   // Every kind names the run's project; a host that does not leaves what is known alone.
   const folder = m.folder ?? state.folder ?? null;
   switch (m.kind) {
-    case 'phaseStarted':
+    case 'PhaseStarted':
       return {
         ...state,
         folder,
@@ -48,9 +48,9 @@ export function applyAssembly(state: AssemblyState, m: AssemblyMessage): Assembl
         outputFileName: null,
         encodePercent: m.phase === 'Encode' ? 0 : state.encodePercent,
       };
-    case 'progress':
+    case 'Progress':
       return { ...state, folder, isRunning: true, encodePercent: (m.fraction ?? 0) * 100 };
-    case 'completed':
+    case 'Completed':
       return {
         ...state,
         folder,
@@ -59,7 +59,7 @@ export function applyAssembly(state: AssemblyState, m: AssemblyMessage): Assembl
         encodePercent: 100,
         outputFileName: m.outputFileName ?? null,
       };
-    case 'failed':
+    case 'Failed':
       return {
         ...state,
         folder,
@@ -68,14 +68,14 @@ export function applyAssembly(state: AssemblyState, m: AssemblyMessage): Assembl
         lastError: m.reason ?? 'failed',
         outputFileName: null,
       };
-    case 'cancelled':
+    case 'Cancelled':
       return { ...state, folder, isRunning: false, currentPhase: null, outputFileName: null };
   }
 }
 
 export function applyVoiceBatch(state: VoiceBatchState, m: VoiceBatchMessage): VoiceBatchState {
   switch (m.kind) {
-    case 'started':
+    case 'Started':
       return {
         isRunning: true,
         processed: 0,
@@ -85,7 +85,7 @@ export function applyVoiceBatch(state: VoiceBatchState, m: VoiceBatchMessage): V
         currentOperation: m.operation ?? null,
         lastError: null,
       };
-    case 'progress':
+    case 'Progress':
       return {
         ...state,
         isRunning: true,
@@ -94,9 +94,9 @@ export function applyVoiceBatch(state: VoiceBatchState, m: VoiceBatchMessage): V
         failed: m.failed ?? state.failed,
         currentVoiceName: m.currentVoiceName ?? null,
       };
-    case 'voiceUpdated':
+    case 'VoiceUpdated':
       return state;
-    case 'completed':
+    case 'Completed':
       return {
         ...state,
         isRunning: false,
@@ -104,7 +104,7 @@ export function applyVoiceBatch(state: VoiceBatchState, m: VoiceBatchMessage): V
         failed: m.failed ?? state.failed,
         currentVoiceName: null,
       };
-    case 'cancelled':
+    case 'Cancelled':
       return { ...state, isRunning: false, currentVoiceName: null };
   }
 }

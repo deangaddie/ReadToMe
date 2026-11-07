@@ -16,10 +16,14 @@ namespace Read2Me.App.Api
     public sealed record ItemsEnqueueRequest(Guid[] ItemIds);
     public sealed record AudioItemStatusDto(AudioItemQueueStatus? Status, AudioItemOutcome? Outcome, long? AudioVersion);
 
-    /// <summary><see cref="AudioReviewInfo"/> on the wire, with nulls sent explicitly.</summary>
+    /// <summary><see cref="AudioReviewInfo"/> on the wire, shared with the live hub's item status.</summary>
     public sealed record AudioReviewDto(
         AudioReviewState State, bool NormalizeOk, string? NormalizeReason, bool VerifyOk, double? Wer,
-        string? VerifyReason, string? Transcript, string? OriginalTextSnapshot);
+        string? VerifyReason, string? Transcript, string? OriginalTextSnapshot)
+    {
+        public static AudioReviewDto From(AudioReviewInfo r) =>
+            new(r.State, r.NormalizeOk, r.NormalizeReason, r.VerifyOk, r.Wer, r.VerifyReason, r.Transcript, r.OriginalTextSnapshot);
+    }
 
     public static class AudioEndpoints
     {
@@ -85,9 +89,7 @@ namespace Read2Me.App.Api
             var rows = await reader.GetAudioReviewsAsync(folderId);
             return TypedResults.Ok(rows.ToDictionary(
                 r => r.ParagraphItemId.ToString(),
-                r => new AudioReviewDto(
-                    r.Info.State, r.Info.NormalizeOk, r.Info.NormalizeReason, r.Info.VerifyOk,
-                    r.Info.Wer, r.Info.VerifyReason, r.Info.Transcript, r.Info.OriginalTextSnapshot)));
+                r => AudioReviewDto.From(r.Info)));
         }
 
         private static Results<Ok<AudioItemStatusDto>, NotFound> GetItemStatus(

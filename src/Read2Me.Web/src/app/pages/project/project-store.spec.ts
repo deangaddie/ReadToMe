@@ -9,13 +9,14 @@ import { Emitter } from '@app/core/emitter';
 import { IDLE_ASSEMBLY, IDLE_VOICE_BATCH } from '@app/live/live-state';
 import { override, resetServices, use } from '@app/core/services';
 import { signal } from '@app/core/signals';
+import type { NodeStatusSummaryDto } from '@app/api';
 import type {
   AssemblyMessage,
   AssemblyState,
+  BookFacets,
   ItemStatusMessage,
   LiveSnapshot,
   NodeStatusMessage,
-  NodeStatusSummary,
   ProjectSnapshot,
   Receipt,
   ReceiptMessage,
@@ -25,8 +26,9 @@ import { LiveService } from '@app/live/live.service';
 import { ProjectTitles } from '@app/shell/project-titles';
 import { FakeApi, problem } from '../../../testing/fake-api';
 import { ProjectStore, REFETCH_DEBOUNCE_MS, formatBuildDate } from './project-store';
+import { assemblyMessage, itemEntry, paragraphEntry } from '../../../testing/live-messages';
 
-function summary(overrides: Partial<NodeStatusSummary> = {}): NodeStatusSummary {
+function summary(overrides: Partial<NodeStatusSummaryDto> = {}): NodeStatusSummaryDto {
   return {
     attributionRemaining: 1,
     audioRemaining: 1,
@@ -103,7 +105,7 @@ class FakeLive {
   }
 }
 
-function receipt(revision: number, facets: string): Receipt {
+function receipt(revision: number, facets: BookFacets[]): Receipt {
   const message: ReceiptMessage = {
     folder: 'dracula',
     mutationName: 'X',
@@ -111,12 +113,14 @@ function receipt(revision: number, facets: string): Receipt {
     revision,
     effects: {
       scope: 'Exact',
+      createdId: null,
+      createdParentId: null,
       facets,
       nodeIds: [],
       paragraphIds: [],
       paragraphItemIds: [],
       structural: [],
-      changedNothing: facets === 'None',
+      changedNothing: facets.length === 0,
     },
     originId: 'o',
   };
@@ -204,8 +208,12 @@ describe('ProjectStore', () => {
 
     live.itemStatus.emit({
       folder: 'dracula',
-      paragraphs: { p1: { status: 'Queued' } },
-      items: { i1: { status: 'Queued' }, i2: { status: 'Processing' }, i3: { audioVersion: 2 } },
+      paragraphs: { p1: paragraphEntry({ status: 'Queued' }) },
+      items: {
+        i1: itemEntry({ status: 'Queued' }),
+        i2: itemEntry({ status: 'Processing' }),
+        i3: itemEntry({ audioVersion: 2 }),
+      },
     });
     expect(store.audioInFlight()).toBe(2);
 
@@ -218,8 +226,8 @@ describe('ProjectStore', () => {
     await open();
     api.on('GET', STATUS_URL, statusDto({ revision: 7, hasContent: false }));
 
-    live.receiptsEmitter.emit(receipt(6, 'Structure'));
-    live.receiptsEmitter.emit(receipt(7, 'Structure, Audio'));
+    live.receiptsEmitter.emit(receipt(6, ['Structure']));
+    live.receiptsEmitter.emit(receipt(7, ['Structure', 'Audio']));
     expect(store.revision()).toBe(7);
     expect(api.calls('GET', STATUS_URL)).toHaveLength(1);
 
@@ -240,7 +248,7 @@ describe('ProjectStore', () => {
       }),
     );
 
-    live.receiptsEmitter.emit(receipt(6, 'Checkpoints'));
+    live.receiptsEmitter.emit(receipt(6, ['Checkpoints']));
     await settle(REFETCH_DEBOUNCE_MS + 20);
 
     expect(api.calls('GET', STATUS_URL)).toHaveLength(2);
@@ -249,7 +257,7 @@ describe('ProjectStore', () => {
 
   it('a receipt that only touches voice rules neither refetches nor gaps', async () => {
     await open();
-    live.receiptsEmitter.emit(receipt(6, 'VoiceRules'));
+    live.receiptsEmitter.emit(receipt(6, ['VoiceRules']));
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', STATUS_URL)).toHaveLength(1);
     expect(api.calls('GET', DETAIL_URL)).toHaveLength(1);
@@ -258,7 +266,7 @@ describe('ProjectStore', () => {
   it('a revision gap refetches status even for an unrelated facet', async () => {
     await open();
     api.on('GET', STATUS_URL, statusDto({ revision: 9 }));
-    live.receiptsEmitter.emit(receipt(9, 'VoiceRules'));
+    live.receiptsEmitter.emit(receipt(9, ['VoiceRules']));
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', STATUS_URL)).toHaveLength(2);
     expect(store.revision()).toBe(9);
@@ -267,7 +275,7 @@ describe('ProjectStore', () => {
   it('Characters / Narrator / ProjectPolicy receipts refetch the detail', async () => {
     await open();
     api.on('GET', DETAIL_URL, { ...DETAIL, narratorOnlyMode: true });
-    live.receiptsEmitter.emit(receipt(6, 'ProjectPolicy'));
+    live.receiptsEmitter.emit(receipt(6, ['ProjectPolicy']));
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', DETAIL_URL)).toHaveLength(2);
     expect(store.detail()?.narratorOnlyMode).toBe(true);
@@ -324,13 +332,13 @@ describe('ProjectStore', () => {
         revision: 5,
         nodes: {},
         folderAudioRemaining: 0,
-        paragraphs: { p9: { status: 'Queued' } },
-        items: { i9: { status: 'Processing' } },
+        paragraphs: { p9: paragraphEntry({ status: 'Queued' }) },
+        items: { i9: itemEntry({ status: 'Processing' }) },
       },
     });
     await open();
     await settle();
-    expect(store.paragraphs()['p9']).toEqual({ status: 'Queued' });
+    expect(store.paragraphs()['p9']).toEqual(paragraphEntry({ status: 'Queued' }));
     expect(store.audioInFlight()).toBe(1);
   });
 
@@ -356,7 +364,7 @@ describe('ProjectStore', () => {
       live.itemStatus.emit({
         folder: 'dracula',
         paragraphs: {},
-        items: { i1: { status: 'Queued' } },
+        items: { i1: itemEntry({ status: 'Queued' }) },
       });
       expect(store.nodes()['v1']).toBeDefined();
       expect(store.folderAudioRemaining()).toBe(2);
@@ -371,7 +379,7 @@ describe('ProjectStore', () => {
       live.itemStatus.emit({
         folder: 'dracula',
         paragraphs: {},
-        items: { i1: { status: 'Queued' } },
+        items: { i1: itemEntry({ status: 'Queued' }) },
       });
       expect(store.nodes()['v1']).toBeUndefined();
       expect(store.folderAudioRemaining()).toBe(0);
@@ -388,7 +396,7 @@ describe('ProjectStore', () => {
           nodes: {},
           folderAudioRemaining: 0,
           paragraphs: {},
-          items: { i4: { status: 'Processing' } },
+          items: { i4: itemEntry({ status: 'Processing' }) },
         },
       });
 
@@ -433,11 +441,11 @@ describe('ProjectStore', () => {
       await open();
       api.on('GET', OUTPUTS_URL, [FULL_BUILD]);
 
-      live.assemblyMessages.emit({ kind: 'completed', folder: 'emma' });
+      live.assemblyMessages.emit(assemblyMessage({ kind: 'Completed', folder: 'emma' }));
       await settle();
       expect(api.calls('GET', OUTPUTS_URL)).toHaveLength(1);
 
-      live.assemblyMessages.emit({ kind: 'completed', folder: 'DRACULA' });
+      live.assemblyMessages.emit(assemblyMessage({ kind: 'Completed', folder: 'DRACULA' }));
       await settle();
       expect(api.calls('GET', OUTPUTS_URL)).toHaveLength(2);
       expect(exportStep()?.state).toBe('done');
@@ -462,7 +470,7 @@ describe('ProjectStore', () => {
         }),
       );
 
-      live.receiptsEmitter.emit(receipt(6, 'Checkpoints'));
+      live.receiptsEmitter.emit(receipt(6, ['Checkpoints']));
       await settle(REFETCH_DEBOUNCE_MS + 20);
 
       expect(store.pipeline()?.find((s) => s.id === 'Structure')?.state).toBe('confirmed');

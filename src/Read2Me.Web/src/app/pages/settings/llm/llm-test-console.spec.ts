@@ -6,6 +6,7 @@ import { FakeLive } from '../../../../testing/fake-live';
 import { settle } from '../../../../testing/fake-navigation';
 import type { LlmTestConsole } from './llm-test-console';
 import './llm-test-console';
+import { llmMessage, llmTestMessage } from '../../../../testing/live-messages';
 
 const FAKE: LlmServerConfig = {
   id: 7,
@@ -133,7 +134,7 @@ describe('r2m-llm-test-console', () => {
     expect(stop(el)).not.toBeNull();
     expect(el.querySelector<HTMLTextAreaElement>('[data-field="prompt"]')?.disabled).toBe(true);
 
-    live.emit('llmTest', { kind: 'failed', configId: 7, reason: 'boom' });
+    live.emit('llmTest', { kind: 'Failed', configId: 7, reason: 'boom' });
     await el.rendered();
     expect(stop(el)).toBeNull();
     expect(el.querySelector('.console__error')?.textContent).toContain('Request failed: boom');
@@ -148,7 +149,7 @@ describe('r2m-llm-test-console', () => {
     await flush(el);
     expect(api.calls('POST', CANCEL).length).toBe(1);
 
-    live.emit('llmTest', { kind: 'cancelled', configId: 7 });
+    live.emit('llmTest', llmTestMessage({ kind: 'Cancelled', configId: 7 }));
     await el.rendered();
     api.on('POST', START, problem(409, 'already running'));
     send(el).click();
@@ -164,7 +165,7 @@ describe('r2m-llm-test-console', () => {
     await flush(el);
     api.on('GET', STATUS, { running: false, configId: null });
 
-    live.emit('llm', { kind: 'runEnded' });
+    live.emit('llm', llmMessage({ kind: 'RunEnded' }));
     await flush(el);
     expect(api.calls('GET', STATUS).length).toBe(2);
     expect(stop(el)).toBeNull();

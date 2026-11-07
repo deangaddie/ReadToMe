@@ -4,6 +4,8 @@ import { override } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import type {
   AssemblyState,
+  LiveFamily,
+  LiveMessageMap,
   LiveSnapshot,
   ProjectSnapshot,
   QueueMessage,
@@ -45,7 +47,7 @@ export class FakeLive {
     return this.stream(family).subscribe(listener as (message: unknown) => void);
   }
   /** Delivers one message to every `on(family)` listener. */
-  emit(family: string, message: unknown): void {
+  emit<K extends LiveFamily>(family: K, message: LiveMessageMap[K]): void {
     this.stream(family).emit(message);
   }
   private stream(family: string): Emitter<unknown> {

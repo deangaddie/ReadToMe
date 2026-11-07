@@ -1,3 +1,4 @@
+using Read2Me.App.Api;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
@@ -25,11 +26,11 @@ public sealed class ProjectStatusSource(
 
     public int FolderAudioRemaining(ProjectFolderId folder) => nodes.AudioRemainingForFolder(folder);
 
-    public Dictionary<string, NodeStatusSummary?> Nodes(ProjectFolderId folder)
+    public Dictionary<string, NodeStatusSummaryDto?> Nodes(ProjectFolderId folder)
     {
-        var result = new Dictionary<string, NodeStatusSummary?>();
+        var result = new Dictionary<string, NodeStatusSummaryDto?>();
         foreach (var id in nodes.NodeIds(folder))
-            result[id.ToString()] = nodes.StatusForNode(folder, id);
+            result[id.ToString()] = NodeStatusSummaryDto.From(nodes.StatusForNode(folder, id));
         return result;
     }
 
@@ -54,7 +55,7 @@ public sealed class ProjectStatusSource(
         {
             var entry = new ItemStatusEntry(
                 audio.StatusOf(folder, id), audio.OutcomeOf(folder, id), audio.AudioVersionOf(folder, id),
-                reviews.ReviewOf(folder, id));
+                reviews.ReviewOf(folder, id) is { } review ? AudioReviewDto.From(review) : null);
             if (entry.Status is not null || entry.Outcome is not null || entry.AudioVersion is not null || entry.Review is not null)
                 result[id.ToString()] = entry;
         }

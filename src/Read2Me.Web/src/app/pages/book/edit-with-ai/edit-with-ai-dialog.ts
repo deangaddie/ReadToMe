@@ -145,7 +145,7 @@ export class EditWithAiDialog extends R2mElement {
     // were made against text the Restore replaced): back to Instruct, with the host's reason, so
     // the instruction can be run again over the restored text.
     const dropped = this.live.on('bookEdit', (message) => {
-      if (message.kind !== 'dropped') return;
+      if (message.kind !== 'Dropped') return;
       const reason = message.reason ?? 'The project was restored — run it again';
       if (message.program !== this.program) {
         this.droppedWhilePlanning?.set(message.program, reason);
@@ -658,14 +658,14 @@ export class EditWithAiDialog extends R2mElement {
     this.runSubscription = this.live.on('bookEdit', (message) => {
       if (message.program !== program) return;
       switch (message.kind) {
-        case 'progress':
+        case 'Progress':
           this.progressDone.set(message.done ?? 0);
           this.progressTotal.set(message.total ?? this.targetCount());
           break;
-        case 'done':
+        case 'Done':
           this.finishRun(message.rows ?? []);
           break;
-        case 'failed':
+        case 'Failed':
           this.failRun(message.reason);
           break;
       }

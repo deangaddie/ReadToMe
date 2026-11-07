@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { PronunciationSpanReport } from '@app/api';
 import { resetServices } from '@app/core/services';
-import type { Receipt } from '@app/live/live-messages';
+import type { BookFacets, Receipt } from '@app/live/live-messages';
 import { REFETCH_DEBOUNCE_MS } from '@app/shared/debounced';
 import { FakeApi, problem } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';
@@ -9,7 +9,7 @@ import { PronunciationMarks } from './pronunciation-marks-store';
 
 const MATCHES = '/api/projects/the-adventures-of-sherlock-holmes/pronunciations/matches';
 
-function receipt(facets: string, folder = 'the-adventures-of-sherlock-holmes'): Receipt {
+function receipt(facets: BookFacets[], folder = 'the-adventures-of-sherlock-holmes'): Receipt {
   return {
     folder,
     mutationName: 'SetPronunciationMutation',
@@ -17,6 +17,8 @@ function receipt(facets: string, folder = 'the-adventures-of-sherlock-holmes'): 
     revision: 2,
     effects: {
       scope: 'Exact',
+      createdId: null,
+      createdParentId: null,
       facets,
       nodeIds: [],
       paragraphIds: [],
@@ -76,13 +78,13 @@ describe('PronunciationMarks', () => {
     marks.follow('the-adventures-of-sherlock-holmes', ['c1']);
     await settle();
 
-    live.emit('receipt', receipt('Structure'));
-    live.emit('receipt', receipt('Pronunciations', 'other'));
+    live.emit('receipt', receipt(['Structure']));
+    live.emit('receipt', receipt(['Pronunciations'], 'other'));
     await settle();
     expect(api.calls('GET', MATCHES)).toHaveLength(1);
 
     report = { pronunciations: [], spans: [] };
-    live.emit('receipt', receipt('Characters, Pronunciations'));
+    live.emit('receipt', receipt(['Characters', 'Pronunciations']));
     await settle();
     expect(api.calls('GET', MATCHES)).toHaveLength(2);
     expect(marks.marks().byItem).toEqual({});
@@ -102,12 +104,12 @@ describe('PronunciationMarks', () => {
     marks.follow('the-adventures-of-sherlock-holmes', ['c1']);
     await settle();
     api.on('GET', MATCHES, () => problem(503, 'down'));
-    live.emit('receipt', receipt('Pronunciations'));
+    live.emit('receipt', receipt(['Pronunciations']));
     await settle();
     expect(marks.marks().byItem['i1']).toHaveLength(1);
 
     marks.close();
-    live.emit('receipt', receipt('Pronunciations'));
+    live.emit('receipt', receipt(['Pronunciations']));
     await settle();
     expect(api.calls('GET', MATCHES)).toHaveLength(2);
     expect(marks.marks().byItem).toEqual({});

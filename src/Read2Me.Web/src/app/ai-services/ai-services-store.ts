@@ -1,12 +1,12 @@
 import { type AiServiceDto, type AiServiceStatus, AiServicesApi, toApiError } from '@app/api';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
-import type { ServiceOp, WatchdogKind, WatchdogMessage } from '@app/live/live-messages';
+import type { AiServiceOp, WatchdogKind, WatchdogMessage } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast';
 
 /** What this tab is waiting on for a service: a lifecycle op it started, or a probe. */
-export type ServiceBusy = ServiceOp | 'refresh';
+export type ServiceBusy = AiServiceOp | 'refresh';
 
 /** One watchdog event as the services page logs it (newest first). */
 export interface WatchdogLogEntry {
@@ -20,16 +20,16 @@ export interface WatchdogLogEntry {
 export const WATCHDOG_LOG_LIMIT = 100;
 
 const WATCHDOG_LABEL: Record<WatchdogKind, string> = {
-  recoveryStarted: 'Recovery started',
-  containerRestarted: 'Container restarted',
-  serviceHealthy: 'Healthy again',
-  serviceDown: 'Down — recovery gave up',
+  RecoveryStarted: 'Recovery started',
+  ContainerRestarted: 'Container restarted',
+  ServiceHealthy: 'Healthy again',
+  ServiceDown: 'Down — recovery gave up',
 };
 
-const OP_PAST: Record<ServiceOp, string> = {
-  start: 'started',
-  restart: 'restarted',
-  shutdown: 'shut down',
+const OP_PAST: Record<AiServiceOp, string> = {
+  Start: 'started',
+  Restart: 'restarted',
+  Shutdown: 'shut down',
 };
 
 export function watchdogLogEntry(m: WatchdogMessage, at = new Date()): WatchdogLogEntry {
@@ -86,7 +86,10 @@ export class AiServicesStore {
       if (waiting !== m.op) return;
       this.clearBusy(m.name);
       if (m.ok) this.toast.success(`${m.name} ${OP_PAST[m.op]}`);
-      else this.toast.error(`Failed to ${m.op} ${m.name}: ${m.error ?? 'unknown error'}`);
+      else
+        this.toast.error(
+          `Failed to ${m.op.toLowerCase()} ${m.name}: ${m.error ?? 'unknown error'}`,
+        );
     });
   }
 
@@ -144,18 +147,18 @@ export class AiServicesStore {
   }
 
   start(name: string): Promise<void> {
-    return this.run(name, 'start', () => this.api.start(name));
+    return this.run(name, 'Start', () => this.api.start(name));
   }
 
   restart(name: string): Promise<void> {
-    return this.run(name, 'restart', () => this.api.restart(name));
+    return this.run(name, 'Restart', () => this.api.restart(name));
   }
 
   shutdown(name: string): Promise<void> {
-    return this.run(name, 'shutdown', () => this.api.shutdown(name));
+    return this.run(name, 'Shutdown', () => this.api.shutdown(name));
   }
 
-  private async run(name: string, op: ServiceOp, send: () => Promise<void>): Promise<void> {
+  private async run(name: string, op: AiServiceOp, send: () => Promise<void>): Promise<void> {
     if (this.isBusy(name)) return;
     this.setBusy(name, op);
     try {

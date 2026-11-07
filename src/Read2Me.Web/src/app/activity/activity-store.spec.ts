@@ -20,6 +20,7 @@ import { type ConfirmOptions, ConfirmService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
 import { FakeTimers } from '../../testing/fake-timers';
 import { ActivityStore, ELAPSED_TICK_MS } from './activity-store';
+import { assemblyMessage, configThroughput, voiceBatchMessage } from '../../testing/live-messages';
 
 /** Ported from the Angular TestBed spec, case for case: Subjects became Emitters. */
 class FakeLive {
@@ -116,7 +117,9 @@ function throughput(overrides: Partial<ThroughputSnapshot> = {}): ThroughputSnap
     hasRun: true,
     isRunActive: true,
     runThroughput: 40.5,
-    perConfig: [{ configId: 1, configName: 'Gemma', requests: 3, tokensPerSecond: 40.5 }],
+    perConfig: [
+      configThroughput({ configId: 1, configName: 'Gemma', requests: 3, tokensPerSecond: 40.5 }),
+    ],
     generationRate: 41,
     generationRateHistory: [null, 10, 20],
     ...overrides,
@@ -249,11 +252,11 @@ describe('ActivityStore', () => {
 
     live.pushAssembly(
       { ...IDLE_ASSEMBLY, isRunning: true, currentPhase: 'Gather' },
-      { kind: 'phaseStarted', phase: 'Gather' },
+      assemblyMessage({ kind: 'PhaseStarted', phase: 'Gather' }),
     );
     live.pushAssembly(
       { ...IDLE_ASSEMBLY, lastError: 'again' },
-      { kind: 'failed', reason: 'again' },
+      assemblyMessage({ kind: 'Failed', reason: 'again' }),
     );
     expect(store.jobs()[0]?.error).toBe('again');
   });
@@ -285,25 +288,28 @@ describe('ActivityStore', () => {
 
   it('toasts foreign job completions', () => {
     const { live, toast } = setup();
-    live.pushAssembly({ ...IDLE_ASSEMBLY, encodePercent: 100 }, { kind: 'completed' });
+    live.pushAssembly(
+      { ...IDLE_ASSEMBLY, encodePercent: 100 },
+      assemblyMessage({ kind: 'Completed' }),
+    );
     expect(toast.success).toHaveBeenCalledWith('Assembly finished');
 
     live.pushAssembly(
       { ...IDLE_ASSEMBLY, lastError: 'ffmpeg' },
-      { kind: 'failed', reason: 'ffmpeg' },
+      assemblyMessage({ kind: 'Failed', reason: 'ffmpeg' }),
     );
     expect(toast.error).toHaveBeenCalledWith('Assembly failed: ffmpeg');
 
     live.pushVoiceBatch(
       { ...IDLE_VOICE_BATCH, processed: 12, failed: 1 },
-      { kind: 'completed', processed: 12, failed: 1 },
+      voiceBatchMessage({ kind: 'Completed', processed: 12, failed: 1 }),
     );
     expect(toast.success).toHaveBeenCalledWith('Voice batch complete: 12 done, 1 failed');
 
-    live.pushVoiceBatch(IDLE_VOICE_BATCH, { kind: 'cancelled' });
+    live.pushVoiceBatch(IDLE_VOICE_BATCH, voiceBatchMessage({ kind: 'Cancelled' }));
     expect(toast.info).toHaveBeenCalledWith('Voice batch cancelled');
 
-    live.pushWatchdog({ kind: 'serviceDown', service: 'llama', reason: 'x' });
+    live.pushWatchdog({ kind: 'ServiceDown', service: 'llama', reason: 'x' });
     expect(toast.error).toHaveBeenCalledWith('llama is down');
   });
 

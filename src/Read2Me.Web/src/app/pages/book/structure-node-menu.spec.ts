@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { VIEWING_READ_ONLY } from '@app/api';
-import type { NodeStatusSummary } from '@app/live/live-messages';
+import type { NodeStatusSummaryDto } from '@app/api';
 import { type StructureNodeMenuInput, structureNodeMenu } from './structure-node-menu';
 
 const middle = { isFirst: false, isLast: false };
@@ -87,7 +87,7 @@ describe('structureNodeMenu', () => {
   });
 });
 
-function status(overrides: Partial<NodeStatusSummary>): NodeStatusSummary {
+function status(overrides: Partial<NodeStatusSummaryDto>): NodeStatusSummaryDto {
   return {
     attributionRemaining: 0,
     audioRemaining: 0,

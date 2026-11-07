@@ -24,6 +24,13 @@
         ],
         "type": "object"
       },
+      "AiServiceOp": {
+        "enum": [
+          "Start",
+          "Restart",
+          "Shutdown"
+        ]
+      },
       "AiServiceStatus": {
         "enum": [
           "NotFound",
@@ -182,6 +189,66 @@
         ],
         "type": "object"
       },
+      "AssemblyMessage": {
+        "properties": {
+          "folder": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fraction": {
+            "format": "double",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AssemblyMessageKind"
+          },
+          "outputFileName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "phase": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AssemblyPhase"
+              }
+            ]
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "phase",
+          "fraction",
+          "reason",
+          "folder",
+          "outputFileName"
+        ],
+        "type": "object"
+      },
+      "AssemblyMessageKind": {
+        "enum": [
+          "PhaseStarted",
+          "Progress",
+          "Completed",
+          "Failed",
+          "Cancelled"
+        ]
+      },
       "AssemblyOutputDto": {
         "properties": {
           "createdAt": {
@@ -223,6 +290,59 @@
             "type": "boolean"
           }
         },
+        "type": "object"
+      },
+      "AssemblyState": {
+        "properties": {
+          "audioRemainingCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "currentPhase": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AssemblyPhase"
+              }
+            ]
+          },
+          "encodePercent": {
+            "format": "double",
+            "type": "number"
+          },
+          "folder": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isRunning": {
+            "type": "boolean"
+          },
+          "lastError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "outputFileName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "isRunning",
+          "currentPhase",
+          "encodePercent",
+          "lastError",
+          "audioRemainingCount",
+          "folder",
+          "outputFileName"
+        ],
         "type": "object"
       },
       "AssemblyStatusDto": {
@@ -458,6 +578,110 @@
           "nodeId"
         ],
         "type": "object"
+      },
+      "AudioGenMessage": {
+        "properties": {
+          "applied": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "attempt": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "character": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AudioGenMessageKind"
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "ok": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "rescued": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "stepId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "transcript": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "wer": {
+            "format": "double",
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "attempt",
+          "character",
+          "text",
+          "ok",
+          "reason",
+          "stepId",
+          "applied",
+          "transcript",
+          "wer",
+          "rescued",
+          "model"
+        ],
+        "type": "object"
+      },
+      "AudioGenMessageKind": {
+        "enum": [
+          "ItemStarted",
+          "AudioGenerated",
+          "Normalized",
+          "PostProcessed",
+          "Transcribed",
+          "Verified",
+          "Failed",
+          "ModelLoading"
+        ]
       },
       "AudioItemOutcome": {
         "properties": {
@@ -837,6 +1061,69 @@
           "Dismissed"
         ]
       },
+      "BookEditMessage": {
+        "properties": {
+          "cancelled": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "done": {
+            "format": "int32",
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/BookEditMessageKind"
+          },
+          "program": {
+            "type": "string"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/BookEditRowDto"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "total": {
+            "format": "int32",
+            "type": [
+              "null",
+              "integer"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "program",
+          "done",
+          "total",
+          "cancelled",
+          "rows",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "BookEditMessageKind": {
+        "enum": [
+          "Progress",
+          "Done",
+          "Failed",
+          "Dropped"
+        ]
+      },
       "BookEditRowDto": {
         "properties": {
           "displayPath": {
@@ -931,10 +1218,34 @@
           "ParagraphItemText"
         ]
       },
+      "BookFacets": {
+        "enum": [
+          "Structure",
+          "ItemText",
+          "Attribution",
+          "Audio",
+          "Reviews",
+          "Characters",
+          "Narrator",
+          "Voices",
+          "VoiceRules",
+          "ProjectPolicy",
+          "NodeTitle",
+          "Checkpoints",
+          "Pronunciations"
+        ],
+        "type": "string"
+      },
       "BookFileType": {
         "enum": [
           "Text",
           "Epub"
+        ]
+      },
+      "BookMutationScope": {
+        "enum": [
+          "Exact",
+          "WholeProject"
         ]
       },
       "BookNodeLevel": {
@@ -990,6 +1301,33 @@
           "structureRules"
         ],
         "type": "object"
+      },
+      "BookStructuralRelation": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/BookStructuralRelationKind"
+          },
+          "resultId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "sourceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "sourceId",
+          "resultId"
+        ],
+        "type": "object"
+      },
+      "BookStructuralRelationKind": {
+        "enum": [
+          "Split",
+          "Merge"
+        ]
       },
       "BulkAssignPreviewDto": {
         "properties": {
@@ -1248,6 +1586,51 @@
         ],
         "type": "object"
       },
+      "ConfigThroughput": {
+        "properties": {
+          "configId": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "configName": {
+            "type": "string"
+          },
+          "generationMs": {
+            "format": "double",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "requests": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "tokensOut": {
+            "format": "int32",
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "tokensPerSecond": {
+            "format": "double",
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "required": [
+          "configId",
+          "configName",
+          "requests",
+          "tokensOut",
+          "generationMs",
+          "tokensPerSecond"
+        ],
+        "type": "object"
+      },
       "ContextItemDto": {
         "properties": {
           "isDialog": {
@@ -1432,6 +1815,30 @@
         ],
         "type": "object"
       },
+      "EscalationState": {
+        "properties": {
+          "configName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "itemCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "step": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "step",
+          "configName",
+          "itemCount"
+        ],
+        "type": "object"
+      },
       "FfmpegProbeResult": {
         "properties": {
           "message": {
@@ -1557,6 +1964,59 @@
           "restoring"
         ],
         "type": "object"
+      },
+      "HistoryMessage": {
+        "properties": {
+          "folder": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/HistoryMessageKind"
+          },
+          "phase": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RestoreEventKind"
+              }
+            ]
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "step": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/HistoryStep"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "folder",
+          "step",
+          "reason",
+          "phase"
+        ],
+        "type": "object"
+      },
+      "HistoryMessageKind": {
+        "enum": [
+          "StepLanded",
+          "StepChanged",
+          "StepClosed",
+          "BusyChanged",
+          "Restoring"
+        ]
       },
       "HistoryStep": {
         "properties": {
@@ -1790,6 +2250,93 @@
         ],
         "type": "object"
       },
+      "ItemStatusEntry": {
+        "properties": {
+          "audioVersion": {
+            "format": "int64",
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "outcome": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AudioItemOutcome"
+              }
+            ]
+          },
+          "review": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AudioReviewDto"
+              }
+            ]
+          },
+          "status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AudioItemQueueStatus"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "outcome",
+          "audioVersion",
+          "review"
+        ],
+        "type": "object"
+      },
+      "ItemStatusMessage": {
+        "properties": {
+          "folder": {
+            "type": "string"
+          },
+          "items": {
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/ItemStatusEntry"
+                }
+              ]
+            },
+            "type": "object"
+          },
+          "paragraphs": {
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/ParagraphStatusEntry"
+                }
+              ]
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "folder",
+          "paragraphs",
+          "items"
+        ],
+        "type": "object"
+      },
       "ItemVoiceDto": {
         "properties": {
           "narratedBy": {
@@ -1863,9 +2410,265 @@
         },
         "type": "object"
       },
+      "LiveHubMethod": {
+        "description": "The /hubs/live methods a client invokes.",
+        "enum": [
+          "JoinProject",
+          "LeaveProject",
+          "JoinStream",
+          "LeaveStream",
+          "GetSnapshot"
+        ],
+        "type": "string"
+      },
+      "LiveMessageMap": {
+        "description": "Each /hubs/live family (connection.on name) and the payload it carries.",
+        "properties": {
+          "assembly": {
+            "$ref": "#/components/schemas/AssemblyMessage"
+          },
+          "audioGen": {
+            "$ref": "#/components/schemas/AudioGenMessage"
+          },
+          "bookEdit": {
+            "$ref": "#/components/schemas/BookEditMessage"
+          },
+          "history": {
+            "$ref": "#/components/schemas/HistoryMessage"
+          },
+          "itemStatus": {
+            "$ref": "#/components/schemas/ItemStatusMessage"
+          },
+          "llm": {
+            "$ref": "#/components/schemas/LlmMessage"
+          },
+          "llmTest": {
+            "$ref": "#/components/schemas/LlmTestMessage"
+          },
+          "nodeStatus": {
+            "$ref": "#/components/schemas/NodeStatusMessage"
+          },
+          "preflight": {
+            "$ref": "#/components/schemas/PreflightMessage"
+          },
+          "queue": {
+            "$ref": "#/components/schemas/QueueMessage"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ReceiptMessage"
+          },
+          "series": {
+            "$ref": "#/components/schemas/SeriesMessage"
+          },
+          "serviceStatus": {
+            "$ref": "#/components/schemas/ServiceStatusMessage"
+          },
+          "settingsChanged": {
+            "$ref": "#/components/schemas/SettingsChangedMessage"
+          },
+          "setupCheck": {
+            "$ref": "#/components/schemas/SetupCheckMessage"
+          },
+          "throughput": {
+            "$ref": "#/components/schemas/ThroughputSnapshot"
+          },
+          "voiceBatch": {
+            "$ref": "#/components/schemas/VoiceBatchMessage"
+          },
+          "watchdog": {
+            "$ref": "#/components/schemas/WatchdogMessage"
+          }
+        },
+        "required": [
+          "queue",
+          "nodeStatus",
+          "itemStatus",
+          "receipt",
+          "assembly",
+          "voiceBatch",
+          "watchdog",
+          "serviceStatus",
+          "preflight",
+          "llm",
+          "audioGen",
+          "throughput",
+          "settingsChanged",
+          "series",
+          "bookEdit",
+          "llmTest",
+          "history",
+          "setupCheck"
+        ],
+        "type": "object"
+      },
+      "LiveSnapshot": {
+        "properties": {
+          "assembly": {
+            "$ref": "#/components/schemas/AssemblyState"
+          },
+          "projects": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ProjectSnapshot"
+            },
+            "type": "object"
+          },
+          "queue": {
+            "$ref": "#/components/schemas/QueueMessage"
+          },
+          "serviceStatus": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/AiServiceStatus"
+            },
+            "type": "object"
+          },
+          "throughput": {
+            "$ref": "#/components/schemas/ThroughputSnapshot"
+          },
+          "voiceBatch": {
+            "$ref": "#/components/schemas/VoiceBatchState"
+          },
+          "watchdog": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/WatchdogKind"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "queue",
+          "assembly",
+          "voiceBatch",
+          "watchdog",
+          "serviceStatus",
+          "throughput",
+          "projects"
+        ],
+        "type": "object"
+      },
       "LlmApiType": {
         "enum": [
           "OpenAiCompatible"
+        ]
+      },
+      "LlmMessage": {
+        "properties": {
+          "configId": {
+            "format": "int32",
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "configName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "content": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "generationMs": {
+            "format": "double",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "itemCount": {
+            "format": "int32",
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/LlmMessageKind"
+          },
+          "paragraphPreview": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "prompt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "step": {
+            "format": "int32",
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "thinking": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tokensIn": {
+            "format": "int32",
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "tokensOut": {
+            "format": "int32",
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "tokensPerSecond": {
+            "format": "double",
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "thinking",
+          "content",
+          "paragraphPreview",
+          "prompt",
+          "configId",
+          "configName",
+          "tokensIn",
+          "tokensOut",
+          "generationMs",
+          "tokensPerSecond",
+          "reason",
+          "step",
+          "itemCount"
+        ],
+        "type": "object"
+      },
+      "LlmMessageKind": {
+        "enum": [
+          "RunStarted",
+          "RunEnded",
+          "RequestStarted",
+          "Delta",
+          "StreamCompleted",
+          "StreamFailed",
+          "StreamAborted",
+          "EscalationStarted"
         ]
       },
       "LlmModelsResponse": {
@@ -1972,6 +2775,36 @@
           "supportsModelSwitch"
         ],
         "type": "object"
+      },
+      "LlmTestMessage": {
+        "properties": {
+          "configId": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/LlmTestMessageKind"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "configId",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "LlmTestMessageKind": {
+        "enum": [
+          "Done",
+          "Failed",
+          "Cancelled"
+        ]
       },
       "LlmTestRequest": {
         "properties": {
@@ -2219,6 +3052,36 @@
           "Paragraph",
           "ParagraphItem"
         ]
+      },
+      "NodeStatusMessage": {
+        "properties": {
+          "folder": {
+            "type": "string"
+          },
+          "folderAudioRemaining": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "nodes": {
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/NodeStatusSummaryDto"
+                }
+              ]
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "folder",
+          "nodes",
+          "folderAudioRemaining"
+        ],
+        "type": "object"
       },
       "NodeStatusSummaryDto": {
         "properties": {
@@ -2476,6 +3339,35 @@
         ],
         "type": "object"
       },
+      "ParagraphStatusEntry": {
+        "properties": {
+          "outcome": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ParagraphOutcome"
+              }
+            ]
+          },
+          "status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ParagraphQueueStatus"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "outcome"
+        ],
+        "type": "object"
+      },
       "ParagraphTtsServiceConfig": {
         "properties": {
           "enabledStepIds": {
@@ -2699,6 +3591,66 @@
         ],
         "type": "object"
       },
+      "PreflightMessage": {
+        "properties": {
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PreflightMessageKind"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "ok": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "run": {
+            "type": "string"
+          },
+          "stage": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PreflightStage"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "run",
+          "name",
+          "stage",
+          "error",
+          "ok",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "PreflightMessageKind": {
+        "enum": [
+          "Stage",
+          "Done"
+        ]
+      },
       "PreflightPlanDto": {
         "properties": {
           "conflicts": {
@@ -2760,6 +3712,17 @@
           "status"
         ],
         "type": "object"
+      },
+      "PreflightStage": {
+        "enum": [
+          "WaitingToStop",
+          "Stopping",
+          "Stopped",
+          "WaitingToStart",
+          "Starting",
+          "Ready",
+          "Failed"
+        ]
       },
       "PreviewRequest": {
         "properties": {
@@ -2977,6 +3940,69 @@
           "seriesId",
           "name",
           "position"
+        ],
+        "type": "object"
+      },
+      "ProjectSnapshot": {
+        "properties": {
+          "folder": {
+            "type": "string"
+          },
+          "folderAudioRemaining": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "items": {
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/ItemStatusEntry"
+                }
+              ]
+            },
+            "type": "object"
+          },
+          "nodes": {
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/NodeStatusSummaryDto"
+                }
+              ]
+            },
+            "type": "object"
+          },
+          "paragraphs": {
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/ParagraphStatusEntry"
+                }
+              ]
+            },
+            "type": "object"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "folder",
+          "revision",
+          "nodes",
+          "folderAudioRemaining",
+          "paragraphs",
+          "items"
         ],
         "type": "object"
       },
@@ -3597,6 +4623,135 @@
         ],
         "type": "object"
       },
+      "QueueMessage": {
+        "properties": {
+          "attribution": {
+            "$ref": "#/components/schemas/AttributionQueueSnapshot"
+          },
+          "audio": {
+            "$ref": "#/components/schemas/AudioQueueSnapshot"
+          },
+          "escalation": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EscalationState"
+              }
+            ]
+          }
+        },
+        "required": [
+          "attribution",
+          "audio",
+          "escalation"
+        ],
+        "type": "object"
+      },
+      "ReceiptEffects": {
+        "properties": {
+          "changedNothing": {
+            "type": "boolean"
+          },
+          "createdId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdParentId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "facets": {
+            "items": {
+              "$ref": "#/components/schemas/BookFacets"
+            },
+            "type": "array"
+          },
+          "nodeIds": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "paragraphIds": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "paragraphItemIds": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/BookMutationScope"
+          },
+          "structural": {
+            "items": {
+              "$ref": "#/components/schemas/BookStructuralRelation"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "scope",
+          "facets",
+          "createdId",
+          "createdParentId",
+          "nodeIds",
+          "paragraphIds",
+          "paragraphItemIds",
+          "structural",
+          "changedNothing"
+        ],
+        "type": "object"
+      },
+      "ReceiptMessage": {
+        "properties": {
+          "effects": {
+            "$ref": "#/components/schemas/ReceiptEffects"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "mutationId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "mutationName": {
+            "type": "string"
+          },
+          "originId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "folder",
+          "mutationName",
+          "mutationId",
+          "revision",
+          "effects",
+          "originId"
+        ],
+        "type": "object"
+      },
       "RecentAudioSampleDto": {
         "properties": {
           "characterName": {
@@ -3675,6 +4830,12 @@
           "promptStyle"
         ],
         "type": "object"
+      },
+      "RestoreEventKind": {
+        "enum": [
+          "Started",
+          "Finished"
+        ]
       },
       "RestorePreviewDto": {
         "properties": {
@@ -3925,6 +5086,12 @@
         ],
         "type": "object"
       },
+      "SeriesChangeKind": {
+        "enum": [
+          "Changed",
+          "Deleted"
+        ]
+      },
       "SeriesCharacterBookDto": {
         "properties": {
           "characterId": {
@@ -4112,6 +5279,22 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "SeriesMessage": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/SeriesChangeKind"
+          },
+          "seriesId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seriesId",
+          "kind"
+        ],
         "type": "object"
       },
       "SeriesPositionsRequest": {
@@ -4338,6 +5521,46 @@
         ],
         "type": "object"
       },
+      "ServiceStatusMessage": {
+        "properties": {
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "ok": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "op": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AiServiceOp"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/AiServiceStatus"
+          }
+        },
+        "required": [
+          "name",
+          "status",
+          "op",
+          "ok",
+          "error"
+        ],
+        "type": "object"
+      },
       "SetActiveRequest": {
         "properties": {
           "id": {
@@ -4386,6 +5609,17 @@
         "required": [
           "writtenForm",
           "spokenForm"
+        ],
+        "type": "object"
+      },
+      "SettingsChangedMessage": {
+        "properties": {
+          "area": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "area"
         ],
         "type": "object"
       },
@@ -4485,6 +5719,27 @@
           "Local",
           "Cpu",
           "Gpu"
+        ]
+      },
+      "SetupCheckMessage": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/SetupCheckMessageKind"
+          },
+          "report": {
+            "$ref": "#/components/schemas/SetupCheckReport"
+          }
+        },
+        "required": [
+          "kind",
+          "report"
+        ],
+        "type": "object"
+      },
+      "SetupCheckMessageKind": {
+        "enum": [
+          "Progress",
+          "Done"
         ]
       },
       "SetupCheckReport": {
@@ -5120,6 +6375,55 @@
         },
         "type": "object"
       },
+      "ThroughputSnapshot": {
+        "properties": {
+          "generationRate": {
+            "format": "double",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "generationRateHistory": {
+            "items": {
+              "format": "double",
+              "type": [
+                "null",
+                "number"
+              ]
+            },
+            "type": "array"
+          },
+          "hasRun": {
+            "type": "boolean"
+          },
+          "isRunActive": {
+            "type": "boolean"
+          },
+          "perConfig": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigThroughput"
+            },
+            "type": "array"
+          },
+          "runThroughput": {
+            "format": "double",
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "required": [
+          "hasRun",
+          "isRunActive",
+          "runThroughput",
+          "perConfig",
+          "generationRate",
+          "generationRateHistory"
+        ],
+        "type": "object"
+      },
       "ToSentenceCaseConfig": {
         "properties": {
           "id": {
@@ -5302,6 +6606,116 @@
           "ParagraphItem"
         ]
       },
+      "VoiceBatchMessage": {
+        "properties": {
+          "audioFileName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "characterId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "currentVoiceName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "designPrompt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "failed": {
+            "format": "int32",
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/VoiceBatchMessageKind"
+          },
+          "operation": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "processed": {
+            "format": "int32",
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "referenceSeconds": {
+            "format": "double",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "referenceWarning": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "total": {
+            "format": "int32",
+            "type": [
+              "null",
+              "integer"
+            ]
+          },
+          "transcript": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "voiceId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "operation",
+          "processed",
+          "total",
+          "failed",
+          "currentVoiceName",
+          "characterId",
+          "voiceId",
+          "designPrompt",
+          "audioFileName",
+          "transcript",
+          "referenceSeconds",
+          "referenceWarning"
+        ],
+        "type": "object"
+      },
+      "VoiceBatchMessageKind": {
+        "enum": [
+          "Started",
+          "Progress",
+          "VoiceUpdated",
+          "Completed",
+          "Cancelled"
+        ]
+      },
       "VoiceBatchStartRequest": {
         "properties": {
           "regenerateAll": {
@@ -5309,6 +6723,53 @@
             "type": "boolean"
           }
         },
+        "type": "object"
+      },
+      "VoiceBatchState": {
+        "properties": {
+          "currentOperation": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "currentVoiceName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "failed": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "isRunning": {
+            "type": "boolean"
+          },
+          "lastError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "processed": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "total": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "isRunning",
+          "processed",
+          "total",
+          "failed",
+          "currentVoiceName",
+          "currentOperation",
+          "lastError"
+        ],
         "type": "object"
       },
       "VoiceBatchStatusDto": {
@@ -5647,6 +7108,36 @@
           "Uploaded",
           "Generated"
         ]
+      },
+      "WatchdogKind": {
+        "enum": [
+          "RecoveryStarted",
+          "ContainerRestarted",
+          "ServiceHealthy",
+          "ServiceDown"
+        ]
+      },
+      "WatchdogMessage": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/WatchdogKind"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "service": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "service",
+          "reason"
+        ],
+        "type": "object"
       }
     }
   },
@@ -5794,7 +7285,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "docker restart → health poll → warm-up, in the background (202); outcome as serviceStatus { op: restart }. 404 / 409 as start.",
+        "summary": "docker restart → health poll → warm-up, in the background (202); outcome as serviceStatus { op: Restart }. 404 / 409 as start.",
         "tags": [
           "Read2Me.App"
         ]
@@ -5830,7 +7321,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "docker stop in the background (202), pausing a queue that still has work for it; outcome as serviceStatus { op: shutdown }. 404 / 409 as start.",
+        "summary": "docker stop in the background (202), pausing a queue that still has work for it; outcome as serviceStatus { op: Shutdown }. 404 / 409 as start.",
         "tags": [
           "Read2Me.App"
         ]
@@ -5866,7 +7357,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "docker start → health poll → warm-up, in the background (202). The outcome arrives as serviceStatus { name, status, op: start, ok, error? } on /hubs/live. 404 unknown service, 409 while it already has an op in flight.",
+        "summary": "docker start → health poll → warm-up, in the background (202). The outcome arrives as serviceStatus { name, status, op: Start, ok, error? } on /hubs/live. 404 unknown service, 409 while it already has an op in flight.",
         "tags": [
           "Read2Me.App"
         ]

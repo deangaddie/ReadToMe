@@ -236,7 +236,7 @@ describe('r2m-setup-check-page', () => {
       cancelling: false,
     };
     running.rows = running.rows.map((r) => (r.id === 'ffmpeg' ? { ...r, result: 'Checking' } : r));
-    live.emit('setupCheck', { kind: 'progress', report: running });
+    live.emit('setupCheck', { kind: 'Progress', report: running });
     await flush(page);
 
     const strip = page.querySelector('[data-role=full-run]');
@@ -253,7 +253,7 @@ describe('r2m-setup-check-page', () => {
 
     const done = report(AT_START, 'Passed');
     done.putBack = 'Put back: read2me-whisper stopped again.';
-    live.emit('setupCheck', { kind: 'done', report: done });
+    live.emit('setupCheck', { kind: 'Done', report: done });
     await flush(page);
 
     expect(page.querySelector('[data-role=put-back]')?.textContent?.trim()).toBe(
@@ -301,7 +301,7 @@ describe('r2m-setup-check-page', () => {
 
     const running = report(AT_START);
     running.fullRun = { step: 1, total: 1, lane: 'Local', label: 'Encoding', cancelling: false };
-    live.emit('setupCheck', { kind: 'progress', report: running });
+    live.emit('setupCheck', { kind: 'Progress', report: running });
     await flush(page);
 
     expect(rerunOf('ffmpeg')?.disabled).toBe(true);

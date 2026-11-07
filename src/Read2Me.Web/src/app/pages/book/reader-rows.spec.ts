@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { NarratorDto, ParagraphDto, ParagraphItemDto } from '@app/api';
+import { paragraphEntry } from '../../../testing/live-messages';
 import {
   type SpeakerContext,
   buildRows,
@@ -145,17 +146,20 @@ describe('queueChip', () => {
       { status: 'warn', label: 'Unfinished', tooltip: 'cut off' },
     ],
     [
-      { status: 'Queued', outcome: { kind: 'Failed' } },
+      { status: 'Queued', outcome: { kind: 'Failed', reason: null } },
       { status: 'info', label: 'Queued' },
     ],
   ] as const)('%j', (entry, expected) => {
-    const chip = queueChip(entry);
+    const chip = queueChip(entry && paragraphEntry(entry));
     if (expected === null) expect(chip).toBeNull();
     else expect(chip).toMatchObject(expected);
   });
 
   it('paragraph attribution calls an unfinished outcome Unknown', () => {
-    expect(queueChip({ outcome: { kind: 'Unfinished' } }, 'Unknown')?.label).toBe('Unknown');
+    expect(
+      queueChip(paragraphEntry({ outcome: { kind: 'Unfinished', reason: null } }), 'Unknown')
+        ?.label,
+    ).toBe('Unknown');
   });
 });
 

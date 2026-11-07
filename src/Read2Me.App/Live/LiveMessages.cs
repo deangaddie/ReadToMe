@@ -1,3 +1,4 @@
+using Read2Me.App.Api;
 using Read2Me.App.Services.SetupCheck;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
@@ -9,15 +10,15 @@ using Read2Me.Services.Health;
 using Read2Me.Services.History;
 using Read2Me.Services.Llm;
 using Read2Me.Services.Mutations;
-using Read2Me.Services.NodeStatus;
 
 namespace Read2Me.App.Live;
 
 /// <summary>
-/// Wire shapes for <c>/hubs/live</c> (Angular ticket 06; mirrored in TypeScript by ticket 07). One
-/// record per server→client family; a family with several event kinds carries a <c>kind</c>
-/// discriminator and nullable fields so a client can switch on one string. Enums travel as their
-/// member names, nulls are omitted (see <see cref="LiveServiceCollectionExtensions"/>).
+/// Wire shapes for <c>/hubs/live</c>: one record per server→client family. A family with several event
+/// kinds carries a <c>Kind</c> enum and nullable fields, so a client switches on one member name. The
+/// wire form is the agent API's (ADR 0017): enums as member names, nulls sent. Every record here is a
+/// component of the <c>v1</c> OpenAPI document (<see cref="LiveContractTransformer"/>), so the web client's
+/// types are generated, not copied.
 /// </summary>
 public static class LiveGroups
 {
@@ -42,7 +43,7 @@ public sealed record EscalationState(int Step, string? ConfigName, int ItemCount
 /// </summary>
 public sealed record NodeStatusMessage(
     string Folder,
-    IReadOnlyDictionary<string, NodeStatusSummary?> Nodes,
+    IReadOnlyDictionary<string, NodeStatusSummaryDto?> Nodes,
     int FolderAudioRemaining);
 
 /// <summary>Per-paragraph attribution and per-item audio status deltas for one project (debounced).</summary>
@@ -59,7 +60,7 @@ public sealed record ItemStatusEntry(
     AudioItemQueueStatus? Status,
     AudioItemOutcome? Outcome,
     long? AudioVersion,
-    AudioReviewInfo? Review);
+    AudioReviewDto? Review);
 
 /// <summary><see cref="BookMutationReceipt"/> as JSON with the folder flattened; <c>originId</c> untouched.</summary>
 public sealed record ReceiptMessage(
@@ -67,19 +68,45 @@ public sealed record ReceiptMessage(
     string MutationName,
     Guid MutationId,
     long Revision,
-    BookMutationEffects Effects,
+    ReceiptEffects Effects,
     Guid OriginId)
 {
     public static ReceiptMessage From(BookMutationReceipt r) =>
-        new(r.FolderId.Value, r.MutationName, r.MutationId, r.Revision, r.Effects, r.OriginId);
+        new(r.FolderId.Value, r.MutationName, r.MutationId, r.Revision, ReceiptEffects.From(r.Effects), r.OriginId);
 }
 
 /// <summary>
-/// <c>kind</c>: phaseStarted | progress | completed | failed | cancelled. <c>Folder</c> is the project the
-/// (single, global) run belongs to; <c>OutputFileName</c> rides on <c>completed</c>.
+/// <see cref="BookMutationEffects"/> on the wire, with <see cref="Facets"/> as a list of single facets
+/// (never <c>None</c> or <c>All</c>): a <c>[Flags]</c> value would travel as one comma-joined string the
+/// document can't describe.
+/// </summary>
+public sealed record ReceiptEffects(
+    BookMutationScope Scope,
+    IReadOnlyList<BookFacets> Facets,
+    Guid? CreatedId,
+    Guid? CreatedParentId,
+    IReadOnlyList<Guid> NodeIds,
+    IReadOnlyList<Guid> ParagraphIds,
+    IReadOnlyList<Guid> ParagraphItemIds,
+    IReadOnlyList<BookStructuralRelation> Structural,
+    bool ChangedNothing)
+{
+    private static readonly BookFacets[] Single =
+        [.. Enum.GetValues<BookFacets>().Where(f => f is not (BookFacets.None or BookFacets.All))];
+
+    public static ReceiptEffects From(BookMutationEffects e) =>
+        new(e.Scope, [.. Single.Where(f => e.Facets.HasFlag(f))], e.CreatedId, e.CreatedParentId,
+            e.NodeIds, e.ParagraphIds, e.ParagraphItemIds, e.Structural, e.ChangedNothing);
+}
+
+public enum AssemblyMessageKind { PhaseStarted, Progress, Completed, Failed, Cancelled }
+
+/// <summary>
+/// <c>Folder</c> is the project the (single, global) run belongs to; <c>OutputFileName</c> rides on
+/// <c>Completed</c>.
 /// </summary>
 public sealed record AssemblyMessage(
-    string Kind, AssemblyPhase? Phase = null, double? Fraction = null, string? Reason = null,
+    AssemblyMessageKind Kind, AssemblyPhase? Phase = null, double? Fraction = null, string? Reason = null,
     string? Folder = null, string? OutputFileName = null);
 
 /// <summary>Assembly service state for the connect-time snapshot.</summary>
@@ -87,9 +114,10 @@ public sealed record AssemblyState(
     bool IsRunning, AssemblyPhase? CurrentPhase, double EncodePercent, string? LastError, int AudioRemainingCount,
     string? Folder = null, string? OutputFileName = null);
 
-/// <summary><c>kind</c>: started | progress | voiceUpdated | completed | cancelled.</summary>
+public enum VoiceBatchMessageKind { Started, Progress, VoiceUpdated, Completed, Cancelled }
+
 public sealed record VoiceBatchMessage(
-    string Kind,
+    VoiceBatchMessageKind Kind,
     string? Operation = null,
     int? Processed = null,
     int? Total = null,
@@ -107,40 +135,46 @@ public sealed record VoiceBatchMessage(
 public sealed record VoiceBatchState(
     bool IsRunning, int Processed, int Total, int Failed, string? CurrentVoiceName, string? CurrentOperation, string? LastError);
 
-/// <summary><c>kind</c>: recoveryStarted | containerRestarted | serviceHealthy | serviceDown.</summary>
-public sealed record WatchdogMessage(string Kind, string Service, string? Reason = null);
+/// <summary>A watchdog transition; the snapshot keeps the last one per service.</summary>
+public enum WatchdogKind { RecoveryStarted, ContainerRestarted, ServiceHealthy, ServiceDown }
+
+public sealed record WatchdogMessage(WatchdogKind Kind, string Service, string? Reason = null);
 
 /// <summary>
-/// A managed service's status as last observed (<c>AiServiceStatus</c> member name), pushed after
-/// every probe, lifecycle op and watchdog transition so chips follow without polling (Angular
-/// ticket 25). <c>op</c> (start | restart | shutdown) with <c>ok</c> / <c>error</c> is present only
-/// when a lifecycle op produced the observation — that is what a client toasts.
+/// A managed service's status as last observed, pushed after every probe, lifecycle op and watchdog
+/// transition so chips follow without polling (Angular ticket 25). <c>Op</c> with <c>Ok</c> /
+/// <c>Error</c> is set only when a lifecycle op produced the observation — that is what a client toasts.
 /// </summary>
 public sealed record ServiceStatusMessage(
-    string Name, AiServiceStatus Status, string? Op = null, bool? Ok = null, string? Error = null);
+    string Name, AiServiceStatus Status, AiServiceOp? Op = null, bool? Ok = null, string? Error = null);
+
+public enum PreflightMessageKind { Stage, Done }
+
+/// <summary>Where one service of a pre-flight run is; <c>Pending</c> splits on what the row will do.</summary>
+public enum PreflightStage { WaitingToStop, Stopping, Stopped, WaitingToStart, Starting, Ready, Failed }
 
 /// <summary>
-/// <c>kind</c>: stage | done — one pre-flight run (Angular ticket 25), sent to the connection that
-/// started it. <c>stage</c> carries a service and its stage (waitingToStop | stopping | stopped |
-/// waitingToStart | starting | ready | failed); <c>done</c> carries <c>ok</c> and, on failure, the
-/// summary <c>reason</c>. <c>run</c> is the id the 202 answered with.
+/// One pre-flight run (Angular ticket 25), sent to the connection that started it. <c>Stage</c>
+/// carries a service and its stage; <c>Done</c> carries <c>Ok</c> and, on failure, the summary
+/// <c>Reason</c>. <c>Run</c> is the id the 202 answered with.
 /// </summary>
 public sealed record PreflightMessage(
-    string Kind,
+    PreflightMessageKind Kind,
     string Run,
     string? Name = null,
-    string? Stage = null,
+    PreflightStage? Stage = null,
     string? Error = null,
     bool? Ok = null,
     string? Reason = null);
 
-/// <summary>
-/// <c>kind</c>: runStarted | runEnded | requestStarted | delta | streamCompleted | streamFailed |
-/// streamAborted | escalationStarted. <c>delta</c> is a 100 ms batch of thinking + content text.
-/// Stream group only.
-/// </summary>
+public enum LlmMessageKind
+{
+    RunStarted, RunEnded, RequestStarted, Delta, StreamCompleted, StreamFailed, StreamAborted, EscalationStarted,
+}
+
+/// <summary><c>Delta</c> is a 100 ms batch of thinking + content text. Stream group only.</summary>
 public sealed record LlmMessage(
-    string Kind,
+    LlmMessageKind Kind,
     string? Thinking = null,
     string? Content = null,
     string? ParagraphPreview = null,
@@ -155,13 +189,17 @@ public sealed record LlmMessage(
     int? Step = null,
     int? ItemCount = null);
 
+public enum AudioGenMessageKind
+{
+    ItemStarted, AudioGenerated, Normalized, PostProcessed, Transcribed, Verified, Failed, ModelLoading,
+}
+
 /// <summary>
-/// <c>kind</c>: itemStarted | audioGenerated | normalized | postProcessed | transcribed | verified |
-/// failed | modelLoading — one per <see cref="AudioGenEvent"/>. Stream group only. <c>modelLoading</c>
-/// is not tied to an item: its <c>id</c> is empty and <c>model</c> names the TTS model loading.
+/// One per <see cref="AudioGenEvent"/>. Stream group only. <c>ModelLoading</c> is not tied to an item:
+/// its <c>Id</c> is empty and <c>Model</c> names the TTS model loading.
 /// </summary>
 public sealed record AudioGenMessage(
-    string Kind,
+    AudioGenMessageKind Kind,
     Guid Id,
     int Attempt,
     string? Character = null,
@@ -178,15 +216,17 @@ public sealed record AudioGenMessage(
 /// <summary>Which settings area changed, so other clients refresh their list.</summary>
 public sealed record SettingsChangedMessage(string Area);
 
+public enum BookEditMessageKind { Progress, Done, Failed, Dropped }
+
 /// <summary>
-/// <c>kind</c>: progress | done | failed — one AI book-edit proposal run (Angular ticket 19), sent
-/// to the connection that started it. <c>program</c> is the session id the run belongs to;
-/// <c>done</c> carries every row the run landed (all of them, or the partial set a cancel kept).
-/// <c>dropped</c>: a Restore of the project dropped the session, with the <c>reason</c> to show; sent
-/// to the project group, since the session outlives its runs.
+/// One AI book-edit proposal run (Angular ticket 19), sent to the connection that started it.
+/// <c>Program</c> is the session id the run belongs to; <c>Done</c> carries every row the run landed
+/// (all of them, or the partial set a cancel kept). <c>Dropped</c>: a Restore of the project dropped
+/// the session, with the <c>Reason</c> to show; sent to the project group, since the session outlives
+/// its runs.
 /// </summary>
 public sealed record BookEditMessage(
-    string Kind,
+    BookEditMessageKind Kind,
     string Program,
     int? Done = null,
     int? Total = null,
@@ -194,24 +234,28 @@ public sealed record BookEditMessage(
     IReadOnlyList<BookEditRowDto>? Rows = null,
     string? Reason = null);
 
-/// <summary>
-/// <c>kind</c>: done | failed | cancelled — how the LLM settings test send ended (Angular ticket 21),
-/// sent to the connection that started it. The tokens themselves travel on <c>stream:llm</c>.
-/// </summary>
-public sealed record LlmTestMessage(string Kind, int ConfigId, string? Reason = null);
+public enum LlmTestMessageKind { Done, Failed, Cancelled }
 
 /// <summary>
-/// <c>kind</c>: stepLanded | stepChanged | stepClosed — a step that appeared in a project's History,
-/// an open one a later commit extended, or one that closed, with its row as <c>GET /api/projects/{folder}/history</c> lists it. Sent to the project
-/// group. A step recorded by one mutation lands and closes together, so both arrive back to back.
-/// <c>busyChanged</c> carries no step: the project's busy reason ("Attribution: 128 paragraphs left")
-/// moved, or went null (omitted on the wire) when the project went idle. A busy project can't be
-/// viewed at a step.
-/// <c>restoring</c>: a Restore of the project <c>phase</c> started | finished; <c>finished</c> carries the
-/// Restore step it added, or no step when it added none or failed. Writes are refused in between.
+/// How the LLM settings test send ended (Angular ticket 21), sent to the connection that started it.
+/// The tokens themselves travel on <c>stream:llm</c>.
+/// </summary>
+public sealed record LlmTestMessage(LlmTestMessageKind Kind, int ConfigId, string? Reason = null);
+
+public enum HistoryMessageKind { StepLanded, StepChanged, StepClosed, BusyChanged, Restoring }
+
+/// <summary>
+/// <c>StepLanded</c> | <c>StepChanged</c> | <c>StepClosed</c>: a step that appeared in a project's
+/// History, an open one a later commit extended, or one that closed, with its row as
+/// <c>GET /api/projects/{folder}/history</c> lists it. Sent to the project group. A step recorded by
+/// one mutation lands and closes together, so both arrive back to back.
+/// <c>BusyChanged</c> carries no step: the project's busy reason ("Attribution: 128 paragraphs left")
+/// moved, or went null when the project went idle. A busy project can't be viewed at a step.
+/// <c>Restoring</c>: a Restore of the project <c>Phase</c> started or finished; <c>Finished</c> carries
+/// the Restore step it added, or no step when it added none or failed. Writes are refused in between.
 /// </summary>
 public sealed record HistoryMessage(
-    string Kind, string Folder, HistoryStep? Step = null, string? Reason = null, string? Phase = null);
+    HistoryMessageKind Kind, string Folder, HistoryStep? Step = null, string? Reason = null, RestoreEventKind? Phase = null);
 
 /// <summary>
 /// <see cref="ProposedEdit"/> on the wire; enums as member names. Shared with the REST reads of a
@@ -225,18 +269,20 @@ public sealed record BookEditRowDto(
         new(p.Kind, p.Id, p.DisplayPath, p.OldValue, p.NewValue, p.Status, p.FailureReason);
 }
 
+public enum SetupCheckMessageKind { Progress, Done }
+
 /// <summary>
-/// <c>kind</c>: progress | done — the Setup check's Full check, sent to every client (group <c>global</c>)
-/// so the page, the app-bar shield and every tab read one source. Each carries the whole report: the
-/// rows (the current step's are Checking) and <c>fullRun</c>; <c>done</c> carries the final one.
+/// The Setup check's Full check, sent to every client (group <c>global</c>) so the page, the app-bar
+/// shield and every tab read one source. Each carries the whole report: the rows (the current step's
+/// are Checking) and <c>FullRun</c>; <c>Done</c> carries the final one.
 /// </summary>
-public sealed record SetupCheckMessage(string Kind, SetupCheckReport Report);
+public sealed record SetupCheckMessage(SetupCheckMessageKind Kind, SetupCheckReport Report);
 
 /// <summary>Everything a project group member needs on join: current revision plus full status maps.</summary>
 public sealed record ProjectSnapshot(
     string Folder,
     long Revision,
-    IReadOnlyDictionary<string, NodeStatusSummary?> Nodes,
+    IReadOnlyDictionary<string, NodeStatusSummaryDto?> Nodes,
     int FolderAudioRemaining,
     IReadOnlyDictionary<string, ParagraphStatusEntry?> Paragraphs,
     IReadOnlyDictionary<string, ItemStatusEntry?> Items);
@@ -246,7 +292,7 @@ public sealed record LiveSnapshot(
     QueueMessage Queue,
     AssemblyState Assembly,
     VoiceBatchState VoiceBatch,
-    IReadOnlyDictionary<string, string> Watchdog,
+    IReadOnlyDictionary<string, WatchdogKind> Watchdog,
     IReadOnlyDictionary<string, AiServiceStatus> ServiceStatus,
     ThroughputSnapshot Throughput,
     IReadOnlyDictionary<string, ProjectSnapshot> Projects);

@@ -57,8 +57,8 @@ public class DeliveryCueApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
         var receipt = Assert.Single(receipts);
         Assert.Equal("SetItemDeliveryCueMutation", receipt.GetProperty("mutationName").GetString());
         var effects = receipt.GetProperty("effects");
-        Assert.Contains("Audio", effects.GetProperty("facets").GetString());
-        Assert.DoesNotContain("Structure", effects.GetProperty("facets").GetString());
+        Assert.Contains("Audio", effects.GetProperty("facets").EnumerateArray().Select(f => f.GetString()));
+        Assert.DoesNotContain("Structure", effects.GetProperty("facets").EnumerateArray().Select(f => f.GetString()));
         Assert.Contains(line, effects.GetProperty("paragraphItemIds").EnumerateArray().Select(i => i.GetGuid()));
 
         Assert.Equal(remainingBefore + 1, (await GetJsonAsync(statusPath)).GetProperty("audioRemaining").GetInt32());

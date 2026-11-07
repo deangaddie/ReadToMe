@@ -54,9 +54,9 @@ public class AiServicesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
 
             var shutdown = await Http.PostAsync(Url("/llama/shutdown"), null);
             Assert.Equal(HttpStatusCode.Accepted, shutdown.StatusCode);
-            await WaitForAsync(() => pushed.Any(m => m.TryGetProperty("op", out var op) && op.GetString() == "shutdown"));
+            await WaitForAsync(() => pushed.Any(m => m.GetProperty("op").GetString() == "Shutdown"));
 
-            var stopped = pushed.First(m => m.TryGetProperty("op", out var op) && op.GetString() == "shutdown");
+            var stopped = pushed.First(m => m.GetProperty("op").GetString() == "Shutdown");
             Assert.Equal("llama", stopped.GetProperty("name").GetString());
             Assert.Equal("Stopped", stopped.GetProperty("status").GetString());
             Assert.True(stopped.GetProperty("ok").GetBoolean());
@@ -64,8 +64,8 @@ public class AiServicesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
 
             var start = await Http.PostAsync(Url("/llama/start"), null);
             Assert.Equal(HttpStatusCode.Accepted, start.StatusCode);
-            await WaitForAsync(() => pushed.Any(m => m.TryGetProperty("op", out var op) && op.GetString() == "start"));
-            var ready = pushed.First(m => m.TryGetProperty("op", out var op) && op.GetString() == "start");
+            await WaitForAsync(() => pushed.Any(m => m.GetProperty("op").GetString() == "Start"));
+            var ready = pushed.First(m => m.GetProperty("op").GetString() == "Start");
             Assert.Equal("Ready", ready.GetProperty("status").GetString());
 
             // The snapshot remembers what was last observed, for a client that connects later.
@@ -91,9 +91,9 @@ public class AiServicesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
 
             var restart = await Http.PostAsync(Url("/whisper/restart"), null);
             Assert.Equal(HttpStatusCode.Accepted, restart.StatusCode);
-            await WaitForAsync(() => pushed.Any(m => m.TryGetProperty("op", out var op) && op.GetString() == "restart"));
+            await WaitForAsync(() => pushed.Any(m => m.GetProperty("op").GetString() == "Restart"));
 
-            var outcome = pushed.First(m => m.TryGetProperty("op", out var op) && op.GetString() == "restart");
+            var outcome = pushed.First(m => m.GetProperty("op").GetString() == "Restart");
             Assert.Equal("whisper", outcome.GetProperty("name").GetString());
             Assert.Equal("Ready", outcome.GetProperty("status").GetString());
             Assert.True(outcome.GetProperty("ok").GetBoolean());
@@ -132,7 +132,7 @@ public class AiServicesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
             await WaitForAsync(() => pushed.Any(m => m.GetProperty("name").GetString() == "minilm-l6"));
             var message = pushed.First(m => m.GetProperty("name").GetString() == "minilm-l6");
             Assert.Equal("Starting", message.GetProperty("status").GetString());
-            Assert.False(message.TryGetProperty("op", out _));
+            Assert.Equal(JsonValueKind.Null, message.GetProperty("op").ValueKind);
         }
         finally
         {

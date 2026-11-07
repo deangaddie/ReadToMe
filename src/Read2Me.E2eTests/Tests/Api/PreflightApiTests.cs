@@ -75,12 +75,12 @@ public class PreflightApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             var run = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("run").GetString();
             Assert.False(string.IsNullOrEmpty(run));
 
-            await WaitForAsync(() => messages.Any(m => m.GetProperty("kind").GetString() == "done"));
+            await WaitForAsync(() => messages.Any(m => m.GetProperty("kind").GetString() == "Done"));
 
             Assert.All(messages, m => Assert.Equal(run, m.GetProperty("run").GetString()));
-            var stages = messages.Where(m => m.GetProperty("kind").GetString() == "stage")
+            var stages = messages.Where(m => m.GetProperty("kind").GetString() == "Stage")
                 .Select(m => $"{m.GetProperty("name").GetString()}:{m.GetProperty("stage").GetString()}").ToList();
-            Assert.Equal([$"{Llm}:waitingToStart", $"{Llm}:starting", $"{Llm}:ready"], stages);
+            Assert.Equal([$"{Llm}:WaitingToStart", $"{Llm}:Starting", $"{Llm}:Ready"], stages);
             var done = messages.Last();
             Assert.True(done.GetProperty("ok").GetBoolean());
             Assert.Contains($"start:{Llm}", app.FakeControl.OpLog);

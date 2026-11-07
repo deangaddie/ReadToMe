@@ -2,7 +2,9 @@ using System.Reflection;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
+using Read2Me.App.Live;
 using Read2Me.E2eTests.Infrastructure;
 
 namespace Read2Me.E2eTests.Tests;
@@ -160,8 +162,55 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
     }
 
     /// <summary>
-    /// The request and response types the endpoints declare, and every type they reach, have distinct short
-    /// names (#168): the document names its components by the short CLR name, so two types sharing one would
+    /// The hub's contract is in the document (#238): every <see cref="ILiveClient"/> payload and every
+    /// <see cref="LiveHub"/> answer is a component, and <c>LiveMessageMap</c> maps exactly the
+    /// <c>[HubMethodName]</c> families to their payloads.
+    /// </summary>
+    [Fact]
+    public async Task Every_hub_payload_and_answer_is_a_component()
+    {
+        var schemas = (await DocumentAsync())["components"]!["schemas"]!.AsObject();
+
+        var missing = HubPayloads().Concat(HubAnswers()).Select(t => t.Name).Where(n => !schemas.ContainsKey(n)).ToList();
+
+        Assert.True(missing.Count == 0, "Hub types with no component:\n  " + string.Join("\n  ", missing));
+    }
+
+    [Fact]
+    public async Task The_live_message_map_lists_exactly_the_hub_families()
+    {
+        var map = (await DocumentAsync())["components"]!["schemas"]!["LiveMessageMap"]!["properties"]!.AsObject();
+
+        var expected = typeof(ILiveClient).GetMethods().ToDictionary(
+            m => m.GetCustomAttribute<HubMethodNameAttribute>()!.Name,
+            m => $"#/components/schemas/{m.GetParameters().Single().ParameterType.Name}");
+        Assert.Equal(
+            expected.OrderBy(e => e.Key, StringComparer.Ordinal),
+            map.Select(p => KeyValuePair.Create(p.Key, p.Value!["$ref"]!.GetValue<string>())).OrderBy(e => e.Key, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task The_hub_method_enum_lists_the_methods_a_client_invokes()
+    {
+        var methods = (await DocumentAsync())["components"]!["schemas"]!["LiveHubMethod"]!["enum"]!.AsArray()
+            .Select(m => m!.GetValue<string>());
+
+        Assert.Equal(["GetSnapshot", "JoinProject", "JoinStream", "LeaveProject", "LeaveStream"], methods.Order(StringComparer.Ordinal));
+    }
+
+    private static IEnumerable<Type> HubPayloads() =>
+        typeof(ILiveClient).GetMethods().Select(m => m.GetParameters().Single().ParameterType);
+
+    /// <summary>What <see cref="LiveHub"/>'s client-invoked methods answer with (<c>Task&lt;T&gt;</c> or <c>T</c>).</summary>
+    private static IEnumerable<Type> HubAnswers() =>
+        typeof(LiveHub).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Select(m => m.ReturnType)
+            .Select(t => t.IsGenericType && t.GetGenericTypeDefinition() == typeof(Task<>) ? t.GetGenericArguments()[0] : t)
+            .Where(t => t != typeof(Task) && t != typeof(void));
+
+    /// <summary>
+    /// The request and response types the endpoints declare, the hub's payloads and answers, and every type
+    /// they reach, have distinct short names (#168, #238): the document names its components by the short CLR name, so two types sharing one would
     /// share one component. The fix is to rename the type that goes on the wire.
     /// </summary>
     [Fact]
@@ -172,7 +221,9 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
             .Where(e => e.RoutePattern.RawText?.StartsWith("/api/", StringComparison.Ordinal) == true)
             .SelectMany(e => e.Metadata.OfType<IProducesResponseTypeMetadata>().Select(m => m.Type)
                 .Concat(e.Metadata.OfType<IAcceptsMetadata>().Select(m => m.RequestType)))
-            .OfType<Type>();
+            .OfType<Type>()
+            .Concat(HubPayloads())
+            .Concat(HubAnswers());
 
         var seen = new HashSet<Type>();
         foreach (var root in roots)

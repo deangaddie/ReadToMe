@@ -17,17 +17,13 @@ public sealed class AiServiceOpCoordinator(
     EventBroadcaster<ServiceStatusChanged> events,
     ILogger<AiServiceOpCoordinator> logger)
 {
-    public const string Start = "start";
-    public const string Restart = "restart";
-    public const string Shutdown = "shutdown";
-
-    private readonly ConcurrentDictionary<string, string> _inFlight = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, AiServiceOp> _inFlight = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Services with an op in flight, with the op's name.</summary>
-    public IReadOnlyDictionary<string, string> InFlight => _inFlight;
+    public IReadOnlyDictionary<string, AiServiceOp> InFlight => _inFlight;
 
     /// <summary>False when the service already has an op in flight.</summary>
-    public bool TryStart(DockerAiService service, string op)
+    public bool TryStart(DockerAiService service, AiServiceOp op)
     {
         if (!_inFlight.TryAdd(service.Name, op))
             return false;
@@ -36,15 +32,15 @@ public sealed class AiServiceOpCoordinator(
         return true;
     }
 
-    private async Task RunAsync(DockerAiService service, string op)
+    private async Task RunAsync(DockerAiService service, AiServiceOp op)
     {
         try
         {
             var result = op switch
             {
-                Start => await control.StartAsync(service, CancellationToken.None),
-                Restart => await control.RestartAsync(service, CancellationToken.None),
-                Shutdown => await control.ShutdownAsync(service, CancellationToken.None),
+                AiServiceOp.Start => await control.StartAsync(service, CancellationToken.None),
+                AiServiceOp.Restart => await control.RestartAsync(service, CancellationToken.None),
+                AiServiceOp.Shutdown => await control.ShutdownAsync(service, CancellationToken.None),
                 _ => throw new ArgumentOutOfRangeException(nameof(op), op, "Unknown service op"),
             };
             if (!result.Succeeded)

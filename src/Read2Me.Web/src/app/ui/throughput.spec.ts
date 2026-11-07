@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { render } from 'lit-html';
 import type { ThroughputSnapshot } from '@app/live/live-messages';
 import { sparkline, sparklinePoints, throughput } from './throughput';
+import { configThroughput } from '../../testing/live-messages';
 
 const ACTIVE: ThroughputSnapshot = {
   hasRun: true,
@@ -9,7 +10,7 @@ const ACTIVE: ThroughputSnapshot = {
   runThroughput: null,
   generationRate: 41.26,
   generationRateHistory: [null, 10, 20],
-  perConfig: [{ configId: 1, configName: 'small', requests: 1 }],
+  perConfig: [configThroughput({ configId: 1, configName: 'small', requests: 1 })],
 };
 
 function mount(snapshot: ThroughputSnapshot): HTMLElement {
@@ -76,7 +77,7 @@ describe('throughput()', () => {
           generationMs: 30000,
           tokensPerSecond: 30,
         },
-        { configId: 2, configName: 'big', requests: 1 },
+        configThroughput({ configId: 2, configName: 'big', requests: 1 }),
       ],
     });
     expect(el.querySelector('.r2m-throughput__headline')?.textContent).toBe(

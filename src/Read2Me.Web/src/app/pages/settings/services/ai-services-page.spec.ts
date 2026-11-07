@@ -7,6 +7,7 @@ import { settle } from '../../../../testing/fake-navigation';
 import type { AiServicesPage } from './ai-services-page';
 import { formatLogTime } from './ai-services-page';
 import './ai-services-page';
+import { serviceStatusMessage, watchdogMessage } from '../../../../testing/live-messages';
 
 /** Ported from the Angular TestBed spec, case for case, over a recorded `AiServicesApi` and `FakeLive`. */
 const CATALOG: AiServiceDto[] = [
@@ -98,7 +99,10 @@ describe('r2m-ai-services-page', () => {
     expect(llama().querySelectorAll('button:disabled')).toHaveLength(4);
 
     live.serviceStatus.set({ llama: 'Stopped' });
-    live.emit('serviceStatus', { name: 'llama', status: 'Stopped', op: 'shutdown', ok: true });
+    live.emit(
+      'serviceStatus',
+      serviceStatusMessage({ name: 'llama', status: 'Stopped', op: 'Shutdown', ok: true }),
+    );
     await flush(page);
     expect(chip(llama())).toContain('Stopped');
     expect(llama().querySelector<HTMLButtonElement>('button[aria-label="Start"]')!.disabled).toBe(
@@ -109,16 +113,16 @@ describe('r2m-ai-services-page', () => {
   it('lists watchdog events newest first with their labels', async () => {
     const page = await mount();
     live.emit('watchdog', {
-      kind: 'recoveryStarted',
+      kind: 'RecoveryStarted',
       service: 'llama',
       reason: 'health timed out',
     });
-    live.emit('watchdog', { kind: 'serviceHealthy', service: 'llama' });
+    live.emit('watchdog', watchdogMessage({ kind: 'ServiceHealthy', service: 'llama' }));
     await flush(page);
     const rows = Array.from(page.querySelectorAll('.services-page__log-row'));
     expect(rows.map((r) => r.getAttribute('data-kind'))).toEqual([
-      'serviceHealthy',
-      'recoveryStarted',
+      'ServiceHealthy',
+      'RecoveryStarted',
     ]);
     expect(rows[1]?.textContent).toContain('Recovery started');
     expect(rows[1]?.textContent).toContain('health timed out');

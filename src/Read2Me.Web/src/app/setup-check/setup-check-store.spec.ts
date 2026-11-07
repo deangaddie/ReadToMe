@@ -87,14 +87,14 @@ describe('SetupCheckStore and the Full check', () => {
   it('applies hub progress to the rows, the strip and the shield, and done clears the run', async () => {
     await store().load();
 
-    live.emit('setupCheck', { kind: 'progress', report: report('Checking', { fullRun: RUN }) });
+    live.emit('setupCheck', { kind: 'Progress', report: report('Checking', { fullRun: RUN }) });
 
     expect(store().report()?.rows[0]?.result).toBe('Checking');
     expect(store().fullRun()).toEqual(RUN);
     expect(store().shield()).toEqual({ status: 'busy', failed: 0, label: 'Full check 1/1' });
 
     live.emit('setupCheck', {
-      kind: 'done',
+      kind: 'Done',
       report: report('Failed', { fullCheckedAt: '2026-10-29T09:05:00Z' }),
     });
 
@@ -109,7 +109,7 @@ describe('SetupCheckStore and the Full check', () => {
 
   it('reads the report again when the hub reconnects, so a missed done is not left spinning', async () => {
     store();
-    live.emit('setupCheck', { kind: 'progress', report: report('Checking', { fullRun: RUN }) });
+    live.emit('setupCheck', { kind: 'Progress', report: report('Checking', { fullRun: RUN }) });
     expect(store().fullRun()).toEqual(RUN);
 
     live.resync();
@@ -133,7 +133,7 @@ describe('SetupCheckStore and the Full check', () => {
   it('keeps the hub done message when it arrives before the 202 that started the run', async () => {
     await store().load();
     api.startFull.mockImplementation(async () => {
-      live.emit('setupCheck', { kind: 'done', report: report('Failed') });
+      live.emit('setupCheck', { kind: 'Done', report: report('Failed') });
       return report('Checking', { fullRun: RUN });
     });
 
@@ -169,7 +169,7 @@ describe('SetupCheckStore and the Full check', () => {
 
   it('runs no Quick check while a Full check runs, and cancel shows it cancelling', async () => {
     store();
-    live.emit('setupCheck', { kind: 'progress', report: report('Checking', { fullRun: RUN }) });
+    live.emit('setupCheck', { kind: 'Progress', report: report('Checking', { fullRun: RUN }) });
 
     await store().runQuick();
     expect(api.runQuick).not.toHaveBeenCalled();

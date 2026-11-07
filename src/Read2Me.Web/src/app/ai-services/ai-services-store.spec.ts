@@ -7,6 +7,7 @@ import type { LiveFamily, LiveMessageMap } from '@app/live/live-messages';
 import { LiveService } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast';
 import { AiServicesStore, WATCHDOG_LOG_LIMIT, watchdogLogEntry } from './ai-services-store';
+import { serviceStatusMessage, watchdogMessage } from '../../testing/live-messages';
 
 /** Ported from the Angular TestBed spec, case for case. */
 const CATALOG: AiServiceDto[] = [
@@ -114,13 +115,16 @@ describe('AiServicesStore', () => {
     const s = store();
     await s.shutdown('llama');
     expect(api.shutdown).toHaveBeenCalledWith('llama');
-    expect(s.busy()).toEqual({ llama: 'shutdown' });
+    expect(s.busy()).toEqual({ llama: 'Shutdown' });
 
     // An outcome for another op (a probe, or someone else's start) is not this tab's answer.
-    live.emit('serviceStatus', { name: 'llama', status: 'Ready' });
+    live.emit('serviceStatus', serviceStatusMessage({ name: 'llama', status: 'Ready' }));
     expect(s.isBusy('llama')).toBe(true);
 
-    live.emit('serviceStatus', { name: 'llama', status: 'Stopped', op: 'shutdown', ok: true });
+    live.emit(
+      'serviceStatus',
+      serviceStatusMessage({ name: 'llama', status: 'Stopped', op: 'Shutdown', ok: true }),
+    );
     expect(s.busy()).toEqual({});
     expect(toast.success).toHaveBeenCalledWith('llama shut down');
 
@@ -128,7 +132,7 @@ describe('AiServicesStore', () => {
     live.emit('serviceStatus', {
       name: 'llama',
       status: 'Down',
-      op: 'start',
+      op: 'Start',
       ok: false,
       error: 'boom',
     });
@@ -162,31 +166,31 @@ describe('AiServicesStore', () => {
   it('logs watchdog events newest first, capped', () => {
     const s = store();
     live.emit('watchdog', {
-      kind: 'recoveryStarted',
+      kind: 'RecoveryStarted',
       service: 'llama',
       reason: 'health timed out',
     });
-    live.emit('watchdog', { kind: 'serviceHealthy', service: 'llama' });
+    live.emit('watchdog', watchdogMessage({ kind: 'ServiceHealthy', service: 'llama' }));
     expect(s.log().map((e) => `${e.service}:${e.kind}`)).toEqual([
-      'llama:serviceHealthy',
-      'llama:recoveryStarted',
+      'llama:ServiceHealthy',
+      'llama:RecoveryStarted',
     ]);
     expect(s.log()[1]?.reason).toBe('health timed out');
     expect(s.log()[1]?.label).toBe('Recovery started');
 
     for (let i = 0; i < WATCHDOG_LOG_LIMIT + 5; i++) {
-      live.emit('watchdog', { kind: 'containerRestarted', service: `s${i}` });
+      live.emit('watchdog', watchdogMessage({ kind: 'ContainerRestarted', service: `s${i}` }));
     }
     expect(s.log()).toHaveLength(WATCHDOG_LOG_LIMIT);
     expect(s.log()[0]?.service).toBe(`s${WATCHDOG_LOG_LIMIT + 4}`);
   });
 
   it('labels every watchdog kind', () => {
-    expect(watchdogLogEntry({ kind: 'serviceDown', service: 'x', reason: 'gave up' }).label).toBe(
+    expect(watchdogLogEntry({ kind: 'ServiceDown', service: 'x', reason: 'gave up' }).label).toBe(
       'Down — recovery gave up',
     );
-    expect(watchdogLogEntry({ kind: 'containerRestarted', service: 'x' }).label).toBe(
-      'Container restarted',
-    );
+    expect(
+      watchdogLogEntry(watchdogMessage({ kind: 'ContainerRestarted', service: 'x' })).label,
+    ).toBe('Container restarted');
   });
 });

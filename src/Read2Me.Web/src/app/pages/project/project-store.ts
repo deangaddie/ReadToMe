@@ -1,6 +1,7 @@
 import {
   AssemblyApi,
   type AssemblyOutputDto,
+  type NodeStatusSummaryDto,
   type ProjectDetailDto,
   type ProjectStatusDto,
   ProjectsApi,
@@ -9,12 +10,11 @@ import {
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import {
-  type BookFacet,
+  type BookFacets,
   type ItemStatusEntry,
   type ItemStatusMessage,
   type LiveSnapshot,
   type NodeStatusMessage,
-  type NodeStatusSummary,
   type ParagraphStatusEntry,
   type Receipt,
   hasFacet,
@@ -27,7 +27,7 @@ import { type PipelineStep, derivePipeline } from './pipeline-steps';
 export { REFETCH_DEBOUNCE_MS };
 
 /** Facets that move a `/status` value: structure, speakers, audio, reviews, cast, voices and checkpoints. */
-const STATUS_FACETS: readonly BookFacet[] = [
+const STATUS_FACETS: readonly BookFacets[] = [
   'Structure',
   'Attribution',
   'Audio',
@@ -39,7 +39,7 @@ const STATUS_FACETS: readonly BookFacet[] = [
 ];
 
 /** Facets the project detail shows: narrator link and name, narrator-only policy. */
-const DETAIL_FACETS: readonly BookFacet[] = ['Characters', 'Narrator', 'ProjectPolicy'];
+const DETAIL_FACETS: readonly BookFacets[] = ['Characters', 'Narrator', 'ProjectPolicy'];
 
 type StatusMap<T> = Record<string, T | null>;
 
@@ -71,7 +71,7 @@ export class ProjectStore {
   private readonly _detail = signal<ProjectDetailDto | null>(null);
   private readonly _status = signal<ProjectStatusDto | null>(null);
   private readonly _revision = signal(0);
-  private readonly _nodes = signal<StatusMap<NodeStatusSummary>>({});
+  private readonly _nodes = signal<StatusMap<NodeStatusSummaryDto>>({});
   private readonly _folderAudioRemaining = signal(0);
   private readonly _paragraphs = signal<StatusMap<ParagraphStatusEntry>>({});
   private readonly _items = signal<StatusMap<ItemStatusEntry>>({});
@@ -140,7 +140,7 @@ export class ProjectStore {
       this.live.receipts(folder, (r) => this.onReceipt(r)),
       this.live.resynced((s) => this.onResync(s)),
       this.live.on('assembly', (m) => {
-        if (m.kind === 'completed' && this.isMine(m.folder ?? folder)) void this.loadLastOutput();
+        if (m.kind === 'Completed' && this.isMine(m.folder ?? folder)) void this.loadLastOutput();
       }),
     ];
     void this.live.joinProject(folder).then(() => this.seedItemsFromLive());

@@ -16,7 +16,7 @@ import {
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import {
-  type BookFacet,
+  type BookFacets,
   type Receipt,
   type VoiceBatchMessage,
   hasFacet,
@@ -31,14 +31,14 @@ import { applyVoiceUpdated } from './voices/voice-logic';
  * Facets that change a roster row: the cast itself, the narrator link, voices (readiness) and
  * attribution (line counts, and the selected character's lines).
  */
-const CAST_FACETS: readonly BookFacet[] = ['Characters', 'Narrator', 'Voices', 'Attribution'];
+const CAST_FACETS: readonly BookFacets[] = ['Characters', 'Narrator', 'Voices', 'Attribution'];
 
 /**
  * Facets that change the selected character's voice rules or their preview (ticket 17): the rules
  * themselves, voices (a rename shows in the rows) and structure (a deleted node dangles a rule,
  * a new chapter adds a preview row).
  */
-const VOICE_RULE_FACETS: readonly BookFacet[] = ['VoiceRules', 'Voices', 'Structure'];
+const VOICE_RULE_FACETS: readonly BookFacets[] = ['VoiceRules', 'Voices', 'Structure'];
 
 const NO_VOICES: CharacterVoicesDto = { defaultVoiceId: null, voices: [] };
 
@@ -282,7 +282,7 @@ export class CastStore {
    */
   private onVoiceBatch(m: VoiceBatchMessage): void {
     switch (m.kind) {
-      case 'voiceUpdated': {
+      case 'VoiceUpdated': {
         if (m.characterId !== this._selectedId() || !m.voiceId) return;
         const patched = applyVoiceUpdated(this._voices(), m);
         if (patched === this._voices()) {
@@ -294,8 +294,8 @@ export class CastStore {
         if (m.audioFileName) this.bumpAudio(m.voiceId);
         return;
       }
-      case 'completed':
-      case 'cancelled':
+      case 'Completed':
+      case 'Cancelled':
         this.refetch.schedule();
         return;
       default:

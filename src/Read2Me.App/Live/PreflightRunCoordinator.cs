@@ -8,7 +8,7 @@ namespace Read2Me.App.Live;
 /// <summary>
 /// Runs a pre-flight plan in the background — the request that started it has answered 202 with
 /// the run id — and reports every service's stage to the caller's hub connection as
-/// <c>preflight</c> messages, then <c>done</c>. The state machine is the same
+/// <c>preflight</c> messages, then <c>Done</c>. The state machine is the same
 /// <see cref="AiPreflightProgress"/>, driven from here; lifecycle ops go through
 /// <see cref="ObservedAiServiceControl"/> so every other client's chips follow too. Runs are
 /// independent: the control facade serialises the docker work.
@@ -57,15 +57,15 @@ public sealed class PreflightRunCoordinator(
         }
     }
 
-    /// <summary>The wire stage names the ticket fixes; Pending splits on what the row will do.</summary>
-    public static string StageName(AiPreflightProgress.Row row) => row.Stage switch
+    /// <summary>The wire stage; Pending splits on what the row will do.</summary>
+    public static PreflightStage StageName(AiPreflightProgress.Row row) => row.Stage switch
     {
-        AiPreflightProgress.ServiceStage.Pending => row.IsConflict ? "waitingToStop" : "waitingToStart",
-        AiPreflightProgress.ServiceStage.Stopping => "stopping",
-        AiPreflightProgress.ServiceStage.Stopped => "stopped",
-        AiPreflightProgress.ServiceStage.Starting => "starting",
-        AiPreflightProgress.ServiceStage.Ready => "ready",
-        AiPreflightProgress.ServiceStage.Failed => "failed",
+        AiPreflightProgress.ServiceStage.Pending => row.IsConflict ? PreflightStage.WaitingToStop : PreflightStage.WaitingToStart,
+        AiPreflightProgress.ServiceStage.Stopping => PreflightStage.Stopping,
+        AiPreflightProgress.ServiceStage.Stopped => PreflightStage.Stopped,
+        AiPreflightProgress.ServiceStage.Starting => PreflightStage.Starting,
+        AiPreflightProgress.ServiceStage.Ready => PreflightStage.Ready,
+        AiPreflightProgress.ServiceStage.Failed => PreflightStage.Failed,
         _ => throw new ArgumentOutOfRangeException(nameof(row), row.Stage, "Unmapped preflight stage"),
     };
 

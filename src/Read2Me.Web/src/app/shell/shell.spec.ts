@@ -17,6 +17,7 @@ import { FakeLive } from '../../testing/fake-live';
 import { installNavigation, settle } from '../../testing/fake-navigation';
 import { RailState } from './rail-state';
 import './shell';
+import { historyMessage } from '../../testing/live-messages';
 
 /** Every design §4 path, the rail group it should show, and the breadcrumb it should render. */
 const CASES: { path: string; context: string[]; crumbs: string[]; title: string }[] = [
@@ -359,9 +360,9 @@ describe('Setup check surfacing', () => {
     const { shell } = await mount('projects');
     const report = use(SetupCheckStore).report();
     live.emit('setupCheck', {
-      kind: 'progress',
+      kind: 'Progress',
       report: {
-        ...report,
+        ...report!,
         fullRun: {
           step: 1,
           total: 1,
@@ -379,7 +380,7 @@ describe('Setup check surfacing', () => {
     expect(shield?.querySelector('.r2m-spinner')).not.toBeNull();
     expect(shield?.querySelector('.shell__setup-shield-count')).toBeNull();
 
-    live.emit('setupCheck', { kind: 'done', report: { ...report, fullRun: null } });
+    live.emit('setupCheck', { kind: 'Done', report: { ...report!, fullRun: null } });
     await settle();
     expect(shield?.classList.contains('shell__setup-shield--error')).toBe(true);
     expect(shell.querySelector('.shell__setup-shield .r2m-spinner')).toBeNull();
@@ -736,11 +737,14 @@ describe('viewing a History step', () => {
 
   it("can't view while busy: the sheet says why and opens the activity drawer", async () => {
     const { shell } = await openSheet();
-    live.emit('history', {
-      kind: 'busyChanged',
-      folder: 'pride-and-prejudice',
-      reason: 'Attribution: 128 paragraphs left',
-    });
+    live.emit(
+      'history',
+      historyMessage({
+        kind: 'BusyChanged',
+        folder: 'pride-and-prejudice',
+        reason: 'Attribution: 128 paragraphs left',
+      }),
+    );
     await settle();
 
     expect(stepButton(shell, 's1')?.disabled).toBe(true);
@@ -757,11 +761,14 @@ describe('viewing a History step', () => {
     stepButton(shell, 's1')?.click();
     await settle();
 
-    live.emit('history', {
-      kind: 'busyChanged',
-      folder: 'pride-and-prejudice',
-      reason: 'Voice batch',
-    });
+    live.emit(
+      'history',
+      historyMessage({
+        kind: 'BusyChanged',
+        folder: 'pride-and-prejudice',
+        reason: 'Voice batch',
+      }),
+    );
     await settle();
 
     expect(shell.querySelector('.shell__viewing')).toBeNull();

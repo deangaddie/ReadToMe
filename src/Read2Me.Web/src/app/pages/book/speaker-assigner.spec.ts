@@ -9,6 +9,7 @@ import type { ProjectStore } from '../project/project-store';
 import type { BookEditor } from './book-editor';
 import type { BookStore } from './book-store';
 import { SpeakerAssigner } from './speaker-assigner';
+import { paragraphEntry } from '../../../testing/live-messages';
 
 /**
  * Ported from the Angular TestBed spec, case for case: the app-wide collaborators go in through
@@ -223,7 +224,7 @@ describe('SpeakerAssigner', () => {
   });
 
   it('bulk: previews, confirms with the wording, writes once and clears only remembered outcomes', async () => {
-    paragraphs.set({ p1: { outcome: { kind: 'Failed' } }, p2: null });
+    paragraphs.set({ p1: paragraphEntry({ outcome: { kind: 'Failed', reason: null } }), p2: null });
     await assigner.assign({ kind: 'selection', paragraphIds: ['p1', 'p2', 'p3'] }, 'h');
 
     expect(bulkAssignPreview).toHaveBeenCalledWith('dracula', ['p1', 'p2', 'p3']);

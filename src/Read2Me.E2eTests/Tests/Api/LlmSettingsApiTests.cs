@@ -78,13 +78,13 @@ public class LlmSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
 
             await WaitForAsync(() => !test.IsEmpty);
             var done = test.Single();
-            Assert.Equal("done", done.GetProperty("kind").GetString());
+            Assert.Equal("Done", done.GetProperty("kind").GetString());
             Assert.Equal(id, done.GetProperty("configId").GetInt32());
 
-            await WaitForAsync(() => llm.Any(m => m.GetProperty("kind").GetString() == "runEnded"));
+            await WaitForAsync(() => llm.Any(m => m.GetProperty("kind").GetString() == "RunEnded"));
             var kinds = llm.Select(m => m.GetProperty("kind").GetString()).ToList();
-            Assert.Contains("runStarted", kinds);
-            Assert.Contains("requestStarted", kinds);
+            Assert.Contains("RunStarted", kinds);
+            Assert.Contains("RequestStarted", kinds);
             lock (app.FakeAi.LlmPromptsSeen) Assert.Contains("say hello", app.FakeAi.LlmPromptsSeen);
 
             Assert.False((await GetJsonAsync(Url("/test"))).GetProperty("running").GetBoolean());
@@ -122,7 +122,7 @@ public class LlmSettingsApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixtur
             Assert.Equal(HttpStatusCode.NoContent, cancel.StatusCode);
 
             await WaitForAsync(() => !test.IsEmpty);
-            Assert.Equal("cancelled", test.Single().GetProperty("kind").GetString());
+            Assert.Equal("Cancelled", test.Single().GetProperty("kind").GetString());
             Assert.False((await GetJsonAsync(Url("/test"))).GetProperty("running").GetBoolean());
 
             // Cancelling with nothing running is harmless.

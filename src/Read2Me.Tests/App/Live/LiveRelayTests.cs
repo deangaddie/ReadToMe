@@ -81,7 +81,7 @@ public class LiveRelayTests : IAsyncLifetime
     [Fact]
     public async Task Service_status_observations_and_watchdog_transitions_reach_global_and_the_snapshot()
     {
-        _serviceStatus.Publish(new ServiceStatusChanged("llama", AiServiceStatus.Stopped, "shutdown", true, null));
+        _serviceStatus.Publish(new ServiceStatusChanged("llama", AiServiceStatus.Stopped, AiServiceOp.Shutdown, true, null));
         _watchdog.Publish(new ServiceDown("whisper", "gave up"));
 
         await WaitForAsync(() => _hub.Method("serviceStatus").Count == 2);
@@ -89,14 +89,14 @@ public class LiveRelayTests : IAsyncLifetime
         var sent = _hub.Method("serviceStatus");
         Assert.All(sent, s => Assert.Equal("global", s.Target));
         var op = Assert.IsType<ServiceStatusMessage>(sent[0].Payload);
-        Assert.Equal(new ServiceStatusMessage("llama", AiServiceStatus.Stopped, "shutdown", true, null), op);
+        Assert.Equal(new ServiceStatusMessage("llama", AiServiceStatus.Stopped, AiServiceOp.Shutdown, true, null), op);
         var implied = Assert.IsType<ServiceStatusMessage>(sent[1].Payload);
         Assert.Equal(new ServiceStatusMessage("whisper", AiServiceStatus.Down), implied);
 
         var snapshot = _relay.BuildSnapshot([]);
         Assert.Equal(AiServiceStatus.Stopped, snapshot.ServiceStatus["llama"]);
         Assert.Equal(AiServiceStatus.Down, snapshot.ServiceStatus["whisper"]);
-        Assert.Equal("serviceDown", snapshot.Watchdog["whisper"]);
+        Assert.Equal(WatchdogKind.ServiceDown, snapshot.Watchdog["whisper"]);
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public class LiveRelayTests : IAsyncLifetime
         var sent = _hub.Method("history");
         Assert.All(sent, s => Assert.Equal("project:folder-a", s.Target));
         Assert.Equal(
-            [new HistoryMessage("stepLanded", "folder-a", step), new HistoryMessage("stepClosed", "folder-a", step)],
+            [new HistoryMessage(HistoryMessageKind.StepLanded, "folder-a", step), new HistoryMessage(HistoryMessageKind.StepClosed, "folder-a", step)],
             sent.Select(s => Assert.IsType<HistoryMessage>(s.Payload)));
     }
 
@@ -149,9 +149,9 @@ public class LiveRelayTests : IAsyncLifetime
         Assert.All(_hub.Messages, s => Assert.Equal("project:folder-a", s.Target));
         Assert.Equal(
             [
-                ("history", (object)new HistoryMessage("restoring", "folder-a", Phase: "started")),
-                ("bookEdit", new BookEditMessage("dropped", "session-1", Reason: "The project was restored — run it again")),
-                ("history", new HistoryMessage("restoring", "folder-a", step, Phase: "finished")),
+                ("history", (object)new HistoryMessage(HistoryMessageKind.Restoring, "folder-a", Phase: RestoreEventKind.Started)),
+                ("bookEdit", new BookEditMessage(BookEditMessageKind.Dropped, "session-1", Reason: "The project was restored — run it again")),
+                ("history", new HistoryMessage(HistoryMessageKind.Restoring, "folder-a", step, Phase: RestoreEventKind.Finished)),
             ],
             _hub.Messages.Select(s => (s.Method, s.Payload)));
     }
@@ -200,7 +200,7 @@ public class LiveRelayTests : IAsyncLifetime
         await WaitForAsync(() => _hub.Method("llm").Count == 3);
 
         var llm = _hub.Method("llm").Select(m => (LlmMessage)m.Payload).ToList();
-        Assert.Equal(["requestStarted", "delta", "streamCompleted"], llm.Select(m => m.Kind));
+        Assert.Equal([LlmMessageKind.RequestStarted, LlmMessageKind.Delta, LlmMessageKind.StreamCompleted], llm.Select(m => m.Kind));
         Assert.Equal(new string('t', 50), llm[1].Thinking);
         Assert.Equal(new string('c', 50), llm[1].Content);
         Assert.All(_hub.Method("llm"), m => Assert.Equal(LiveGroups.StreamLlm, m.Target));
@@ -247,7 +247,7 @@ public class LiveRelayTests : IAsyncLifetime
         var nodeStatus = Assert.IsType<NodeStatusMessage>(Assert.Single(_hub.Method("nodeStatus")).Payload);
         Assert.Equal(3, nodeStatus.Nodes.Count);
         Assert.Equal(1, nodeStatus.FolderAudioRemaining);
-        Assert.Equal(1, nodeStatus.Nodes[chapter.ToString()]!.Value.AttributionQueued);
+        Assert.Equal(1, nodeStatus.Nodes[chapter.ToString()]!.AttributionQueued);
         var itemStatus = Assert.IsType<ItemStatusMessage>(Assert.Single(_hub.Method("itemStatus")).Payload);
         Assert.Equal(ParagraphQueueStatus.Queued, itemStatus.Paragraphs[paragraph.ToString()]!.Status);
         Assert.Single(itemStatus.Items);
@@ -273,7 +273,7 @@ public class LiveRelayTests : IAsyncLifetime
         var sent = _hub.Method("history");
         Assert.All(sent, s => Assert.Equal("project:proj-a", s.Target));
         Assert.Equal(
-            [new HistoryMessage("busyChanged", "proj-a", Reason: "Attribution: 1 paragraph left"), new HistoryMessage("busyChanged", "proj-a")],
+            [new HistoryMessage(HistoryMessageKind.BusyChanged, "proj-a", Reason: "Attribution: 1 paragraph left"), new HistoryMessage(HistoryMessageKind.BusyChanged, "proj-a")],
             sent.Select(s => (HistoryMessage)s.Payload));
     }
 
@@ -285,10 +285,10 @@ public class LiveRelayTests : IAsyncLifetime
         _assembly.Publish(new AssemblyEncodeProgress(0.5));
         _assembly.Publish(new AssemblyCompleted("Dracula.m4b") { Folder = "dracula" });
 
-        await WaitForAsync(() => _hub.Method("assembly").Any(m => ((AssemblyMessage)m.Payload).Kind == "completed"));
+        await WaitForAsync(() => _hub.Method("assembly").Any(m => ((AssemblyMessage)m.Payload).Kind == AssemblyMessageKind.Completed));
 
         var kinds = _hub.Method("assembly").Select(m => (AssemblyMessage)m.Payload).ToList();
-        Assert.Equal(["phaseStarted", "progress", "progress", "completed"], kinds.Select(k => k.Kind));
+        Assert.Equal([AssemblyMessageKind.PhaseStarted, AssemblyMessageKind.Progress, AssemblyMessageKind.Progress, AssemblyMessageKind.Completed], kinds.Select(k => k.Kind));
         Assert.Equal(0.0, kinds[1].Fraction);
         Assert.Equal(0.5, kinds[2].Fraction);
         Assert.Equal(AssemblyPhase.Encode, kinds[0].Phase);
@@ -306,7 +306,7 @@ public class LiveRelayTests : IAsyncLifetime
 
         Assert.Equal("llm", ((SettingsChangedMessage)_hub.Method("settingsChanged")[0].Payload).Area);
         var snapshot = _relay.BuildSnapshot([]);
-        Assert.Equal("recoveryStarted", snapshot.Watchdog["llama"]);
+        Assert.Equal(WatchdogKind.RecoveryStarted, snapshot.Watchdog["llama"]);
         Assert.False(snapshot.Assembly.IsRunning);
         Assert.Empty(snapshot.Projects);
     }

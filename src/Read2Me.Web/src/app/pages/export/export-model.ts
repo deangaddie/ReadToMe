@@ -8,7 +8,7 @@ import type { StatusKind } from '@app/ui/partials';
  * and what the last run came to.
  */
 
-/** How a run ended, from the hub's terminal `assembly` kinds. */
+/** How the watched run ended, in the page's own words (the hub's `AssemblyMessageKind` maps onto it). */
 export type RunOutcome = 'completed' | 'failed' | 'cancelled';
 
 export type PhaseStepState = 'pending' | 'active' | 'done' | 'failed' | 'cancelled';
