@@ -32,26 +32,6 @@ namespace Read2Me.Services
 
         public string SanitizeName(string name) => Core.Models.NameSanitizer.Sanitize(name);
 
-        public bool CreateProject(string name)
-        {
-            var sanitized = SanitizeName(name);
-            if (string.IsNullOrEmpty(sanitized))
-            {
-                _logger.LogWarning("CreateProject: name '{Name}' produced an empty sanitized folder name", name);
-                return false;
-            }
-
-            if (_fs.ProjectFolderExists(sanitized))
-            {
-                _logger.LogWarning("CreateProject: folder already exists for '{Name}'", sanitized);
-                return false;
-            }
-
-            _fs.CreateProjectFolder(sanitized);
-            _logger.LogInformation("Created project folder: {Name}", sanitized);
-            return true;
-        }
-
         public async Task<string> CreateProjectAsync(
             string title, string bookTitle, string author,
             string originalFileName, Stream fileStream, BookFileType fileType)

@@ -149,6 +149,32 @@ namespace Read2Me.Tests.Services
             var stream = new MemoryStream(new byte[] { 1 });
             await Assert.ThrowsAsync<ArgumentException>(() =>
                 _writer.CreateProjectAsync("!!!", "Title", "Author", "book.txt", stream, BookFileType.Text));
+            Assert.Empty(Directory.GetDirectories(_tempDir));
+        }
+
+        // ---------------------------------------------------------------
+        // DeleteProject
+        // ---------------------------------------------------------------
+
+        [Fact]
+        public async Task DeleteProject_RemovesTheFolderAndItsDatabase()
+        {
+            var folderName = await _writer.CreateProjectAsync(
+                "My Book", "Title", "Author", "book.txt", new MemoryStream([1]), BookFileType.Text);
+            Assert.NotNull(await _reader.GetProjectAsync(folderName));
+
+            _writer.DeleteProject(folderName);
+
+            Assert.False(Directory.Exists(Path.Combine(_tempDir, folderName)));
+            Assert.Empty(_reader.GetProjects());
+        }
+
+        [Fact]
+        public void DeleteProject_WhenTheFolderIsGone_DoesNotThrow()
+        {
+            var ex = Record.Exception(() => _writer.DeleteProject("nonexistent"));
+
+            Assert.Null(ex);
         }
 
         // ---------------------------------------------------------------

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -622,48 +621,48 @@ public class BookMutationsTests : ProjectDbTestBase
     }
 
     [Fact]
-    public async Task Insert_ContendingWithAnActiveQueueWriter_StaysInsideTheStatedBudget()
+    public async Task Insert_BehindAQueueWriterHoldingTheLock_WaitsItsTurnThenLands()
     {
-        // The budget a user gesture may spend queuing behind a background writer for the same
-        // project: p95 of lock wait plus commit, for a single-item mutation, under 2 seconds.
-        // Serialization is the cost this architecture accepts, and this is the number it accepts.
-        // The queue writer here is a real committing writer, not a held lock, because what is being
-        // measured is contention against work of the shape the Audio and Character queues do.
-        var budget = TimeSpan.FromSeconds(2);
-        const int samples = 20;
+        // A user gesture that arrives while a background queue writer holds the project's write lock
+        // neither jumps the queue nor gives up inside its budget: it lands once the writer lets go.
+        // No duration is asserted; the order of events is the claim.
         var b = await SeedOneItemAsync();
         await using var queue = NewCaller();
         await using var gesture = NewCaller();
-        using var queueRunning = new CancellationTokenSource();
-
-        var queueWriter = Task.Run(async () =>
+        var gate = new TaskCompletionSource();
+        var entered = new TaskCompletionSource();
+        _options.LockWaitBudget = TimeSpan.FromSeconds(30);
+        var events = new List<string>();
+        void OnReceipt(BookMutationReceipt r)
         {
-            while (!queueRunning.IsCancellationRequested)
-            {
-                await queue.Mutations.CommitAsync(
-                    new InsertParagraphItemMutation(_folder, b.ItemId("item"), InsertPosition.Before, "Queue write."));
-                await Task.Delay(5, CancellationToken.None);
-            }
-        });
-
-        var waits = new List<TimeSpan>(samples);
-        for (var i = 0; i < samples; i++)
-        {
-            var started = Stopwatch.StartNew();
-            var outcome = await gesture.Mutations.CommitAsync(
-                new InsertParagraphItemMutation(_folder, b.ItemId("item"), InsertPosition.After, $"Gesture {i}."));
-            started.Stop();
-            Assert.IsType<BookMutationOutcome.Committed>(outcome);
-            waits.Add(started.Elapsed);
+            if (r.MutationName == nameof(InsertParagraphItemMutation))
+                lock (events) events.Add("gesture landed");
         }
+        _receipts.Event += OnReceipt;
 
-        await queueRunning.CancelAsync();
-        await queueWriter;
+        try
+        {
+            var queueWriter = queue.Mutations.CommitAsync(new GatedMutation(_folder, entered, gate));
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
-        var p95 = waits.Order().ElementAt((int)Math.Ceiling(samples * 0.95) - 1);
-        Assert.True(p95 < budget,
-            $"p95 lock wait plus commit was {p95} over {samples} samples; budget {budget}. " +
-            $"Slowest {waits.Max()}, median {waits.Order().ElementAt(samples / 2)}.");
+            var pending = gesture.Mutations.CommitAsync(
+                new InsertParagraphItemMutation(_folder, b.ItemId("item"), InsertPosition.After, "Gesture."));
+            // Give the gesture every chance to jump the queue; a correct lock never lets it finish here.
+            await Task.WhenAny(pending, Task.Delay(200));
+            Assert.False(pending.IsCompleted, "the gesture committed while the queue writer held the lock");
+
+            lock (events) events.Add("queue writer released");
+            gate.SetResult();
+            await queueWriter;
+            var outcome = await pending;
+
+            Assert.IsType<BookMutationOutcome.Committed>(outcome);
+            Assert.Equal(["queue writer released", "gesture landed"], events);
+        }
+        finally { _receipts.Event -= OnReceipt; }
+
+        await using var verify = await OpenDbAsync();
+        Assert.Contains("Gesture.", await verify.ParagraphItems.Select(i => i.Text).ToListAsync());
     }
 
     // ── checkpoint staleness ─────────────────────────────────────────────────

@@ -12,6 +12,10 @@ using Xunit;
 
 namespace Read2Me.Tests.Services
 {
+    /// <summary>
+    /// One persisted merge per level, plus the not-found refusals, against a real project database.
+    /// The shape matrix (direction, first or last sibling, item text) is <see cref="Books.BookHierarchyMergeTests"/>'s.
+    /// </summary>
     public class ProjectServiceMergeTests : IDisposable
     {
         private readonly string _tempDir;
@@ -123,63 +127,12 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task MergeVolumeWithPrevious_WhenFirst_NoOp()
-        {
-            var folder = await CreateProjectAsync("MergeVolPrevFirst");
-            var folderPath = Path.Combine(_tempDir, folder);
-            var ids = await SeedTwoOfEachAsync(folderPath);
-
-            await _mutations.CommitAsync(new MergeVolumeMutation(folder, ids.Vol1, MergeDirection.Previous));
-
-            await using var verify = await OpenDbAsync(folderPath);
-            Assert.Equal(2, await verify.Volumes.CountAsync());
-        }
-
-        [Fact]
         public async Task MergeVolumeWithPrevious_WhenNotFound_IsRefused()
         {
             var folder = await CreateProjectAsync("MergeVolPrevNF");
             // A merge naming a node the Book does not contain is refused, not silently applied.
             Assert.Equal(BookMutationRejection.NotFound,
                 Assert.IsType<BookMutationOutcome.Rejected>(await _mutations.CommitAsync(new MergeVolumeMutation(folder, Guid.NewGuid(), MergeDirection.Previous))).Reason);
-        }
-
-        // ---------------------------------------------------------------
-        // MergeVolumeWithNextAsync
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task MergeVolumeWithNext_MovesNextChildrenToSelf_DeletesNext()
-        {
-            var folder = await CreateProjectAsync("MergeVolNext");
-            var folderPath = Path.Combine(_tempDir, folder);
-            var ids = await SeedTwoOfEachAsync(folderPath);
-
-            await using (var db = await OpenDbAsync(folderPath))
-            {
-                db.Parts.Add(new Data.Entities.Part { Id = Guid.NewGuid(), VolumeId = ids.Vol2, Title = "P3", Order = "a" });
-                await db.SaveChangesAsync();
-            }
-
-            await _mutations.CommitAsync(new MergeVolumeMutation(folder, ids.Vol1, MergeDirection.Next));
-
-            await using var verify = await OpenDbAsync(folderPath);
-            Assert.Equal(1, await verify.Volumes.CountAsync());
-            Assert.Equal(ids.Vol1, (await verify.Volumes.SingleAsync()).Id);
-            Assert.Equal(3, await verify.Parts.Where(p => p.VolumeId == ids.Vol1).CountAsync());
-        }
-
-        [Fact]
-        public async Task MergeVolumeWithNext_WhenLast_NoOp()
-        {
-            var folder = await CreateProjectAsync("MergeVolNextLast");
-            var folderPath = Path.Combine(_tempDir, folder);
-            var ids = await SeedTwoOfEachAsync(folderPath);
-
-            await _mutations.CommitAsync(new MergeVolumeMutation(folder, ids.Vol2, MergeDirection.Next));
-
-            await using var verify = await OpenDbAsync(folderPath);
-            Assert.Equal(2, await verify.Volumes.CountAsync());
         }
 
         // ---------------------------------------------------------------
@@ -209,63 +162,12 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task MergePartWithPrevious_WhenFirst_NoOp()
-        {
-            var folder = await CreateProjectAsync("MergePartPrevFirst");
-            var folderPath = Path.Combine(_tempDir, folder);
-            var ids = await SeedTwoOfEachAsync(folderPath);
-
-            await _mutations.CommitAsync(new MergePartMutation(folder, ids.Part1, MergeDirection.Previous));
-
-            await using var verify = await OpenDbAsync(folderPath);
-            Assert.Equal(2, await verify.Parts.CountAsync());
-        }
-
-        [Fact]
         public async Task MergePartWithPrevious_WhenNotFound_IsRefused()
         {
             var folder = await CreateProjectAsync("MergePartPrevNF");
             // A merge naming a node the Book does not contain is refused, not silently applied.
             Assert.Equal(BookMutationRejection.NotFound,
                 Assert.IsType<BookMutationOutcome.Rejected>(await _mutations.CommitAsync(new MergePartMutation(folder, Guid.NewGuid(), MergeDirection.Previous))).Reason);
-        }
-
-        // ---------------------------------------------------------------
-        // MergePartWithNextAsync
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task MergePartWithNext_MovesNextChildrenToSelf_DeletesNext()
-        {
-            var folder = await CreateProjectAsync("MergePartNext");
-            var folderPath = Path.Combine(_tempDir, folder);
-            var ids = await SeedTwoOfEachAsync(folderPath);
-
-            await using (var db = await OpenDbAsync(folderPath))
-            {
-                db.Chapters.Add(new Data.Entities.Chapter { Id = Guid.NewGuid(), PartId = ids.Part2, Title = "C3", Order = "a" });
-                await db.SaveChangesAsync();
-            }
-
-            await _mutations.CommitAsync(new MergePartMutation(folder, ids.Part1, MergeDirection.Next));
-
-            await using var verify = await OpenDbAsync(folderPath);
-            Assert.Equal(1, await verify.Parts.CountAsync());
-            Assert.Equal(ids.Part1, (await verify.Parts.SingleAsync()).Id);
-            Assert.Equal(3, await verify.Chapters.Where(c => c.PartId == ids.Part1).CountAsync());
-        }
-
-        [Fact]
-        public async Task MergePartWithNext_WhenLast_NoOp()
-        {
-            var folder = await CreateProjectAsync("MergePartNextLast");
-            var folderPath = Path.Combine(_tempDir, folder);
-            var ids = await SeedTwoOfEachAsync(folderPath);
-
-            await _mutations.CommitAsync(new MergePartMutation(folder, ids.Part2, MergeDirection.Next));
-
-            await using var verify = await OpenDbAsync(folderPath);
-            Assert.Equal(2, await verify.Parts.CountAsync());
         }
 
         // ---------------------------------------------------------------
@@ -295,63 +197,12 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task MergeChapterWithPrevious_WhenFirst_NoOp()
-        {
-            var folder = await CreateProjectAsync("MergeChPrevFirst");
-            var folderPath = Path.Combine(_tempDir, folder);
-            var ids = await SeedTwoOfEachAsync(folderPath);
-
-            await _mutations.CommitAsync(new MergeChapterMutation(folder, ids.Ch1, MergeDirection.Previous));
-
-            await using var verify = await OpenDbAsync(folderPath);
-            Assert.Equal(2, await verify.Chapters.CountAsync());
-        }
-
-        [Fact]
         public async Task MergeChapterWithPrevious_WhenNotFound_IsRefused()
         {
             var folder = await CreateProjectAsync("MergeChPrevNF");
             // A merge naming a node the Book does not contain is refused, not silently applied.
             Assert.Equal(BookMutationRejection.NotFound,
                 Assert.IsType<BookMutationOutcome.Rejected>(await _mutations.CommitAsync(new MergeChapterMutation(folder, Guid.NewGuid(), MergeDirection.Previous))).Reason);
-        }
-
-        // ---------------------------------------------------------------
-        // MergeChapterWithNextAsync
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task MergeChapterWithNext_MovesNextChildrenToSelf_DeletesNext()
-        {
-            var folder = await CreateProjectAsync("MergeChNext");
-            var folderPath = Path.Combine(_tempDir, folder);
-            var ids = await SeedTwoOfEachAsync(folderPath);
-
-            await using (var db = await OpenDbAsync(folderPath))
-            {
-                db.Paragraphs.Add(new Data.Entities.Paragraph { Id = Guid.NewGuid(), ChapterId = ids.Ch2, Order = "a" });
-                await db.SaveChangesAsync();
-            }
-
-            await _mutations.CommitAsync(new MergeChapterMutation(folder, ids.Ch1, MergeDirection.Next));
-
-            await using var verify = await OpenDbAsync(folderPath);
-            Assert.Equal(1, await verify.Chapters.CountAsync());
-            Assert.Equal(ids.Ch1, (await verify.Chapters.SingleAsync()).Id);
-            Assert.Equal(3, await verify.Paragraphs.Where(p => p.ChapterId == ids.Ch1).CountAsync());
-        }
-
-        [Fact]
-        public async Task MergeChapterWithNext_WhenLast_NoOp()
-        {
-            var folder = await CreateProjectAsync("MergeChNextLast");
-            var folderPath = Path.Combine(_tempDir, folder);
-            var ids = await SeedTwoOfEachAsync(folderPath);
-
-            await _mutations.CommitAsync(new MergeChapterMutation(folder, ids.Ch2, MergeDirection.Next));
-
-            await using var verify = await OpenDbAsync(folderPath);
-            Assert.Equal(2, await verify.Chapters.CountAsync());
         }
 
         // ---------------------------------------------------------------
@@ -381,19 +232,6 @@ namespace Read2Me.Tests.Services
         }
 
         [Fact]
-        public async Task MergeParagraphWithPrevious_WhenFirst_NoOp()
-        {
-            var folder = await CreateProjectAsync("MergeParaPrevFirst");
-            var folderPath = Path.Combine(_tempDir, folder);
-            var ids = await SeedTwoOfEachAsync(folderPath);
-
-            await _mutations.CommitAsync(new MergeParagraphMutation(folder, ids.Para1, MergeDirection.Previous));
-
-            await using var verify = await OpenDbAsync(folderPath);
-            Assert.Equal(2, await verify.Paragraphs.CountAsync());
-        }
-
-        [Fact]
         public async Task MergeParagraphWithPrevious_WhenNotFound_IsRefused()
         {
             var folder = await CreateProjectAsync("MergeParaPrevNF");
@@ -403,75 +241,8 @@ namespace Read2Me.Tests.Services
         }
 
         // ---------------------------------------------------------------
-        // MergeParagraphWithNextAsync
+        // MergeParagraphItemWithPreviousAsync
         // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task MergeParagraphWithNext_MovesNextItemsToSelf_DeletesNext()
-        {
-            var folder = await CreateProjectAsync("MergeParaNext");
-            var folderPath = Path.Combine(_tempDir, folder);
-            var ids = await SeedTwoOfEachAsync(folderPath);
-
-            await using (var db = await OpenDbAsync(folderPath))
-            {
-                db.ParagraphItems.Add(new Data.Entities.ParagraphItem { Id = Guid.NewGuid(), ParagraphId = ids.Para2, Text = "extra", Order = "a" });
-                await db.SaveChangesAsync();
-            }
-
-            await _mutations.CommitAsync(new MergeParagraphMutation(folder, ids.Para1, MergeDirection.Next));
-
-            await using var verify = await OpenDbAsync(folderPath);
-            Assert.Equal(1, await verify.Paragraphs.CountAsync());
-            Assert.Equal(ids.Para1, (await verify.Paragraphs.SingleAsync()).Id);
-            Assert.Equal(3, await verify.ParagraphItems.Where(i => i.ParagraphId == ids.Para1).CountAsync());
-        }
-
-        [Fact]
-        public async Task MergeParagraphWithNext_WhenLast_NoOp()
-        {
-            var folder = await CreateProjectAsync("MergeParaNextLast");
-            var folderPath = Path.Combine(_tempDir, folder);
-            var ids = await SeedTwoOfEachAsync(folderPath);
-
-            await _mutations.CommitAsync(new MergeParagraphMutation(folder, ids.Para2, MergeDirection.Next));
-
-            await using var verify = await OpenDbAsync(folderPath);
-            Assert.Equal(2, await verify.Paragraphs.CountAsync());
-        }
-
-        // ---------------------------------------------------------------
-        // MergeParagraphItemWithPreviousAsync (text concat)
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task MergeParagraphItemWithPrevious_ConcatsText_DeletesSelf()
-        {
-            var folder = await CreateProjectAsync("MergeItemPrev");
-            var folderPath = Path.Combine(_tempDir, folder);
-            var ids = await SeedTwoOfEachAsync(folderPath);
-
-            await _mutations.CommitAsync(new MergeParagraphItemMutation(folder, ids.Item2, MergeDirection.Previous));
-
-            await using var verify = await OpenDbAsync(folderPath);
-            Assert.Equal(1, await verify.ParagraphItems.CountAsync());
-            var item = await verify.ParagraphItems.SingleAsync();
-            Assert.Equal(ids.Item1, item.Id);
-            Assert.Equal("hello world", item.Text);
-        }
-
-        [Fact]
-        public async Task MergeParagraphItemWithPrevious_WhenFirst_NoOp()
-        {
-            var folder = await CreateProjectAsync("MergeItemPrevFirst");
-            var folderPath = Path.Combine(_tempDir, folder);
-            var ids = await SeedTwoOfEachAsync(folderPath);
-
-            await _mutations.CommitAsync(new MergeParagraphItemMutation(folder, ids.Item1, MergeDirection.Previous));
-
-            await using var verify = await OpenDbAsync(folderPath);
-            Assert.Equal(2, await verify.ParagraphItems.CountAsync());
-        }
 
         [Fact]
         public async Task MergeParagraphItemWithPrevious_WhenNotFound_IsRefused()
@@ -480,82 +251,6 @@ namespace Read2Me.Tests.Services
             // A merge naming a node the Book does not contain is refused, not silently applied.
             Assert.Equal(BookMutationRejection.NotFound,
                 Assert.IsType<BookMutationOutcome.Rejected>(await _mutations.CommitAsync(new MergeParagraphItemMutation(folder, Guid.NewGuid(), MergeDirection.Previous))).Reason);
-        }
-
-        // ---------------------------------------------------------------
-        // MergeParagraphItemWithNextAsync (text concat)
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task MergeParagraphItemWithNext_ConcatsText_DeletesNext()
-        {
-            var folder = await CreateProjectAsync("MergeItemNext");
-            var folderPath = Path.Combine(_tempDir, folder);
-            var ids = await SeedTwoOfEachAsync(folderPath);
-
-            await _mutations.CommitAsync(new MergeParagraphItemMutation(folder, ids.Item1, MergeDirection.Next));
-
-            await using var verify = await OpenDbAsync(folderPath);
-            Assert.Equal(1, await verify.ParagraphItems.CountAsync());
-            var item = await verify.ParagraphItems.SingleAsync();
-            Assert.Equal(ids.Item1, item.Id);
-            Assert.Equal("hello world", item.Text);
-        }
-
-        [Fact]
-        public async Task MergeParagraphItemWithNext_WhenLast_NoOp()
-        {
-            var folder = await CreateProjectAsync("MergeItemNextLast");
-            var folderPath = Path.Combine(_tempDir, folder);
-            var ids = await SeedTwoOfEachAsync(folderPath);
-
-            await _mutations.CommitAsync(new MergeParagraphItemMutation(folder, ids.Item2, MergeDirection.Next));
-
-            await using var verify = await OpenDbAsync(folderPath);
-            Assert.Equal(2, await verify.ParagraphItems.CountAsync());
-        }
-
-        // ---------------------------------------------------------------
-        // Empty-children edge case: merge works even when entity has no children
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task MergeChapterWithPrevious_EmptyChapter_StillDeletes()
-        {
-            var folder = await CreateProjectAsync("MergeChPrevEmpty");
-            var folderPath = Path.Combine(_tempDir, folder);
-
-            var b = BuilderFor(folderPath);
-            await b.AddVolume("vol", v => v.AddPart(configure: p => p
-                .AddChapter("ch1")
-                .AddChapter("ch2")))
-                .AddHierarchyAsync();
-
-            await _mutations.CommitAsync(new MergeChapterMutation(folder, b.ChapterId("ch2"), MergeDirection.Previous));
-
-            await using var verify = await OpenDbAsync(folderPath);
-            Assert.Equal(1, await verify.Chapters.CountAsync());
-            Assert.Equal(b.ChapterId("ch1"), (await verify.Chapters.SingleAsync()).Id);
-        }
-
-        // ---------------------------------------------------------------
-        // Single sibling (only one in parent): merge is a no-op
-        // ---------------------------------------------------------------
-
-        [Fact]
-        public async Task MergePartWithPrevious_OnlySibling_NoOp()
-        {
-            var folder = await CreateProjectAsync("MergePartOnlySibling");
-            var folderPath = Path.Combine(_tempDir, folder);
-
-            var b = BuilderFor(folderPath);
-            await b.AddVolume("vol", v => v.AddPart("part"))
-                .AddHierarchyAsync();
-
-            await _mutations.CommitAsync(new MergePartMutation(folder, b.PartId("part"), MergeDirection.Previous));
-
-            await using var verify = await OpenDbAsync(folderPath);
-            Assert.Equal(1, await verify.Parts.CountAsync());
         }
     }
 }

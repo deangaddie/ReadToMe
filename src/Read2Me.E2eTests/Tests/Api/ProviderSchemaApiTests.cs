@@ -14,7 +14,7 @@ public class ProviderSchemaApiTests(E2eAppFixture app) : IClassFixture<E2eAppFix
 
     /// <summary>
     /// The endpoint's wire shape, on one provider. Every provider's fields keep the same rules in
-    /// ProviderSettingsSchemaTests, and each one's field list in its *ProviderSettingsTests class.
+    /// ProviderSettingsSchemaTests.
     /// </summary>
     [Fact]
     public async Task Schema_describes_a_provider_type()

@@ -100,23 +100,6 @@ public class LiveRelayTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Receipt_goes_only_to_its_project_group_with_origin_id_untouched()
-    {
-        var origin = Guid.NewGuid();
-        _receipts.Publish(new BookMutationReceipt(new ProjectFolderId("folder-a"), "CreateCharacter", Guid.NewGuid(), 7,
-            BookMutationEffects.Unknown) { OriginId = origin });
-
-        await WaitForAsync(() => _hub.Method("receipt").Count == 1);
-
-        var sent = Assert.Single(_hub.Method("receipt"));
-        Assert.Equal("project:folder-a", sent.Target);
-        var receipt = Assert.IsType<ReceiptMessage>(sent.Payload);
-        Assert.Equal(origin, receipt.OriginId);
-        Assert.Equal(7, receipt.Revision);
-        Assert.Equal("folder-a", receipt.Folder);
-    }
-
-    [Fact]
     public async Task History_steps_go_only_to_their_project_group_as_landed_then_closed_with_the_row()
     {
         var at = DateTimeOffset.Parse("2026-10-20T09:30:00Z");

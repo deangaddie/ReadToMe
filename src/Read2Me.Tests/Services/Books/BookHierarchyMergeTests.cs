@@ -145,6 +145,19 @@ namespace Read2Me.Tests.Services.Books
         }
 
         [Fact]
+        public void PlanMergeChapter_Previous_EmptyLoser_IsStillDeleted()
+        {
+            var (h, c1, c2) = TwoChapterHierarchy();
+            h.Paragraphs[c2.Id] = [];
+
+            var plan = h.PlanMergeChapter(c2.Id, MergeDirection.Previous);
+
+            Assert.NotNull(plan);
+            Assert.Contains(c2, plan!.Mutation.ToDelete);
+            Assert.Equal(c1.Id, plan.SurvivorId);
+        }
+
+        [Fact]
         public void PlanMergeChapter_Previous_FirstChapter_ReturnsNull()
         {
             var (h, c1, _) = TwoChapterHierarchy();

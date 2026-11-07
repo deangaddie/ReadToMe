@@ -1,5 +1,8 @@
+using System.Text.Json;
 using Read2Me.AppData.Entities;
 using Read2Me.Services;
+using Read2Me.Services.Audio.ParagraphTts.Settings;
+using Read2Me.Services.Audio.VoiceDesign.Settings;
 using Xunit;
 
 namespace Read2Me.Tests.Services
@@ -53,6 +56,28 @@ namespace Read2Me.Tests.Services
             {
                 Type = ParagraphTtsServiceType.Qwen3Base,
                 SettingsJson = settingsJson,
+            };
+            Assert.Equal("http://localhost:8004", ServiceConfigBaseUrls.For(config));
+        }
+
+        [Fact]
+        public void ParagraphTts_Breeze_ReadsBaseUrlFromItsSettingsRecord()
+        {
+            var config = new ParagraphTtsServiceConfig
+            {
+                Type = ParagraphTtsServiceType.Breeze,
+                SettingsJson = JsonSerializer.Serialize(BreezeParagraphTtsSettings.Recommended with { BaseUrl = "http://localhost:8004" }),
+            };
+            Assert.Equal("http://localhost:8004", ServiceConfigBaseUrls.For(config));
+        }
+
+        [Fact]
+        public void VoiceDesign_Breeze_ReadsBaseUrlFromItsSettingsRecord()
+        {
+            var config = new VoiceDesignServiceConfig
+            {
+                Type = VoiceDesignServiceType.Breeze,
+                SettingsJson = JsonSerializer.Serialize(BreezeVoiceDesignSettings.Recommended with { BaseUrl = "http://localhost:8004" }),
             };
             Assert.Equal("http://localhost:8004", ServiceConfigBaseUrls.For(config));
         }

@@ -7,8 +7,7 @@ namespace Read2Me.Tests.App
     /// <summary>
     /// What every provider schema owes the settings form, whatever the provider: a label and a kind
     /// the form can render, a recommended default or an explicit "server default" (nullable), and no
-    /// per-config knob (connection, chunking) masquerading as a per-voice one. Each provider's own
-    /// field list is its *ProviderSettingsTests class.
+    /// per-config knob (connection, chunking) masquerading as a per-voice one.
     /// </summary>
     public class ProviderSettingsSchemaTests
     {
