@@ -559,10 +559,6 @@ namespace Read2Me.Services.Llm
             {{edit_items_json}}
             """;
 
-    /// <summary>Serializes edit targets for the batch edit prompt.</summary>
-    public static string BuildEditItemsJson(IEnumerable<(int Index, string Path, string Text)> items)
-        => BuildEditItemsJson(items.Select(i => (i.Index, i.Path, i.Text, (IReadOnlyList<KeyValuePair<string, string>>?)null)));
-
     /// <summary>
     /// Serializes edit targets with their Edit sources (name → trimmed value, in the plan's order);
     /// an entry with no sources leaves the key out.

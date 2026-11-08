@@ -67,6 +67,15 @@ namespace Read2Me.Tests.Services.BookEdits
             Assert.Empty(plan.TooLong);
         }
 
+
+        [Fact]
+        public void PlanFor_MapsTooLongRowsToTargetPositions()
+        {
+            var failed = Target("x") with { Sources = [new("p1", null, "p1 is missing")] };
+            var plan = BatchPacker.PlanFor([failed, Target("a"), Target(new string('z', BatchPacker.MaxItemChars + 1)), Target("b")]);
+            Assert.Equal([[1, 3]], plan.Batches.Select(b => b.ToArray()));
+            Assert.Equal([2], plan.TooLong);
+        }
         [Fact]
         public void RequestCount_MatchesThePackedBatches()
         {

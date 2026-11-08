@@ -65,11 +65,11 @@ namespace Read2Me.Services.BookEdits
         /// <summary>Packs the targets that can be sent (no missing or self source); positions index into <paramref name="targets"/>.</summary>
         public static BatchPlan PlanFor(IReadOnlyList<EditTarget> targets)
         {
+            // Pack sees only the sendable targets, so its positions are into that list; map them back.
             var sendable = Enumerable.Range(0, targets.Count).Where(i => targets[i].SourceFailure == null).ToList();
             var plan = Pack(sendable.Select(i => Size(targets[i])).ToList());
-            return new BatchPlan(
-                plan.Batches.Select(b => (IReadOnlyList<int>)b.Select(p => sendable[p]).ToList()).ToList(),
-                plan.TooLong.Select(p => sendable[p]).ToList());
+            IReadOnlyList<int> ToTargets(IEnumerable<int> positions) => positions.Select(p => sendable[p]).ToList();
+            return new BatchPlan(plan.Batches.Select(ToTargets).ToList(), ToTargets(plan.TooLong));
         }
 
         /// <summary>Requests an LLM plan sends for these targets.</summary>

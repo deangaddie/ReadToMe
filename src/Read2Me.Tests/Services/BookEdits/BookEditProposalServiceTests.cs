@@ -197,7 +197,7 @@ namespace Read2Me.Tests.Services.BookEdits
             Assert.StartsWith("1 edit(s):", request.Label);
             // batch of one: the items block is exactly this target at index 0
             Assert.Contains(
-                PromptTemplates.BuildEditItemsJson([(0, target.DisplayPath, target.CurrentValue)]),
+                PromptTemplates.BuildEditItemsJson([(0, target.DisplayPath, target.CurrentValue, null)]),
                 request.Prompt);
         }
 
