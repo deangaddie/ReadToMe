@@ -70,7 +70,13 @@ namespace Read2Me.Services.BookEdits
             foreach (var target in targets)
             {
                 string? newValue = null;
-                string? failure = null;
+                // A missing or self source fails only its row, in place; the rest of the plan runs.
+                var failure = target.SourceFailure;
+                if (failure != null)
+                {
+                    proposals.Add(Build(target, null, failure));
+                    continue;
+                }
                 try
                 {
                     newValue = program.Transform.Kind switch
@@ -81,7 +87,7 @@ namespace Read2Me.Services.BookEdits
                             target.CurrentValue, program.Transform.Pattern, program.Transform.CaseMode!.Value,
                             protection),
                         _ => DeterministicTransformer.RenderTemplate(
-                            program.Transform.Template!, target.OrdinalInScope, target.CurrentValue),
+                            program.Transform.Template!, target.OrdinalInScope, target.CurrentValue, target.Sources),
                     };
                 }
                 catch (RegexMatchTimeoutException)

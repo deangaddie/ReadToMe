@@ -128,5 +128,29 @@ namespace Read2Me.Tests.Services.BookEdits
         {
             Assert.Equal(expected, DeterministicTransformer.RenderTemplate(template, n, old));
         }
+
+        private static EditSourceValue Source(string name, string value) => new(name, value, null);
+
+        [Fact]
+        public void RenderTemplate_SourceTokens_InsertTheTrimmedValue()
+        {
+            Assert.Equal("Chapter 1, The Period",
+                DeterministicTransformer.RenderTemplate("Chapter {p1}, {p2}", 4, "",
+                    [Source("p1", "1"), Source("p2", " The Period \n")]));
+        }
+
+        [Fact]
+        public void RenderTemplate_SourceTokens_SitBesideOldAndN_WithNoOtherChange()
+        {
+            Assert.Equal("CHAPTER IV. It was {p1} 2",
+                DeterministicTransformer.RenderTemplate("{chapter} {old} {n}", 2, "It was {p1}",
+                    [Source("chapter", "CHAPTER IV."), Source("p1", "x")]));
+        }
+
+        [Fact]
+        public void RenderTemplate_NonIdentifierBraces_StayLiteral()
+        {
+            Assert.Equal("{ p1 } {1} x", DeterministicTransformer.RenderTemplate("{ p1 } {1} {p1}", 1, "", [Source("p1", "x")]));
+        }
     }
 }

@@ -184,6 +184,8 @@ namespace Read2Me.Tests.Services.BookEdits
             Assert.True(EditProgramParser.TryParse(EditProgramSchema.JsonExample, out var program, out var error), error);
             Assert.Equal(TransformKind.SetTemplate, program!.Transform.Kind);
             Assert.Contains("\"case_mode\": null", EditProgramSchema.JsonExample);
+            Assert.Contains("\"sources\": []", EditProgramSchema.JsonExample);
+            Assert.Empty(program.Transform.Sources);
         }
 
         [Fact]
@@ -192,6 +194,136 @@ namespace Read2Me.Tests.Services.BookEdits
             var raw = ValidProgram.Replace("\"paragraph_filter\": { \"where\": [] },", "");
             Assert.True(EditProgramParser.TryParse(raw, out var program, out _));
             Assert.Empty(program!.ParagraphFilter.Where);
+        }
+
+        // ── Edit sources ──────────────────────────────────────────────────────
+
+        private static string Plan(string target, string kind, string? template = null, string? instruction = null,
+            string sources = "[]", string? pattern = null, string? caseMode = null)
+        {
+            static string Json(string? s) => s == null ? "null" : System.Text.Json.JsonSerializer.Serialize(s);
+            return $$"""
+                { "reasoning": "r", "supported": true, "unsupported_reason": null, "target": "{{target}}",
+                  "node_filter": { "ordinal_from": null, "ordinal_to": null, "title_regex": null },
+                  "paragraph_filter": { "where": [] },
+                  "transform": { "kind": "{{kind}}", "pattern": {{Json(pattern)}}, "replacement": "", "template": {{Json(template)}},
+                    "instruction": {{Json(instruction)}}, "case_mode": {{Json(caseMode)}}, "sources": {{sources}} } }
+                """;
+        }
+
+        private static EditProgram Parsed(string raw)
+        {
+            Assert.True(EditProgramParser.TryParse(raw, out var program, out var error), error);
+            return program!;
+        }
+
+        [Fact]
+        public void TryParse_SetTemplate_SourcesComeFromTheTokens_AndTheArrayIsIgnored()
+        {
+            var program = Parsed(Plan("chapter_title", "set_template", template: "Chapter {p1}, {p2} {n} {p1}",
+                sources: "[\"volume\", \"p5\"]"));
+
+            Assert.True(program.Supported);
+            Assert.Equal(["p1", "p2"], program.Transform.Sources.Select(s => s.Name));
+        }
+
+        [Fact]
+        public void TryParse_SetTemplate_UnknownToken_IsUnsupported()
+        {
+            var program = Parsed(Plan("chapter_title", "set_template", template: "Chapter {n}: {title}"));
+
+            Assert.False(program.Supported);
+            Assert.Equal("Unknown token {title}", program.UnsupportedReason);
+        }
+
+        [Theory]
+        [InlineData("Chapter { p1 }")]
+        [InlineData("Chapter {1}")]
+        [InlineData("Chapter {p-1} {}")]
+        public void TryParse_SetTemplate_NonIdentifierBraces_StayLiteral(string template)
+        {
+            var program = Parsed(Plan("chapter_title", "set_template", template: template));
+
+            Assert.True(program.Supported);
+            Assert.Empty(program.Transform.Sources);
+            Assert.Equal(template, program.Transform.Template);
+        }
+
+        [Theory]
+        [InlineData("volume_title", "{p1} {old}", "Volume titles can't read paragraphs — rename the chapter first")]
+        [InlineData("chapter_title", "{p6}", "p6 is out of reach: sources count only 1 to 5 from the start or end")]
+        [InlineData("chapter_title", "{prev}", "Chapter titles can't read prev or next — use p1…p5 or p_end1…p_end5")]
+        public void TryParse_SetTemplate_SourceTheTargetCantRead_IsUnsupportedWithTheCatalogueReason(
+            string target, string template, string reason)
+        {
+            var program = Parsed(Plan(target, "set_template", template: template));
+
+            Assert.False(program.Supported);
+            Assert.Equal(reason, program.UnsupportedReason);
+        }
+
+        [Fact]
+        public void TryParse_Llm_ReadsTheSourcesList_AndCatalogueRejectsFirst()
+        {
+            var program = Parsed(Plan("part_title", "llm", instruction: "use p1", sources: "[\"p1\"]"));
+
+            Assert.False(program.Supported);
+            Assert.Equal("Part titles can't read paragraphs — rename the chapter first", program.UnsupportedReason);
+        }
+
+        [Fact]
+        public void TryParse_Llm_UnknownSourceName_IsUnsupported()
+        {
+            var program = Parsed(Plan("chapter_title", "llm", instruction: "x", sources: "[\"title\"]"));
+
+            Assert.False(program.Supported);
+            Assert.Equal("Unknown source title", program.UnsupportedReason);
+        }
+
+        [Fact]
+        public void TryParse_Llm_WithSources_IsUnsupportedUntilBatchesCarryThem()
+        {
+            var program = Parsed(Plan("chapter_title", "llm", instruction: "the number in p1 as a digit", sources: "[\"p1\"]"));
+
+            Assert.False(program.Supported);
+            Assert.Equal("AI edits can't read sources yet", program.UnsupportedReason);
+        }
+
+        [Fact]
+        public void TryParse_Llm_WithoutSources_IsSupported()
+        {
+            var program = Parsed(Plan("chapter_title", "llm", instruction: "fix"));
+
+            Assert.True(program.Supported);
+            Assert.Empty(program.Transform.Sources);
+        }
+
+        [Theory]
+        [InlineData("regex_replace", "x", null)]
+        [InlineData("change_case", null, "upper")]
+        public void TryParse_RegexAndChangeCase_IgnoreSources(string kind, string? pattern, string? caseMode)
+        {
+            var program = Parsed(Plan("volume_title", kind, pattern: pattern, caseMode: caseMode, sources: "[\"p1\", \"prev\"]"));
+
+            Assert.True(program.Supported);
+            Assert.Empty(program.Transform.Sources);
+        }
+
+        [Fact]
+        public void TryParse_MissingSourcesField_ReadsNone()
+        {
+            var program = Parsed(ValidProgram);
+
+            Assert.True(program.Supported);
+            Assert.Empty(program.Transform.Sources);
+        }
+
+        [Fact]
+        public void TryParse_SourceRejection_KeepsTheReasoning()
+        {
+            var program = Parsed(Plan("chapter_title", "set_template", template: "{title}"));
+
+            Assert.Equal("r", program.Reasoning);
         }
     }
 

@@ -41,13 +41,20 @@ namespace Read2Me.Services.BookEdits
         public static readonly ParagraphFilter All = new([]);
     }
 
+    /// <param name="Sources">The Edit sources the transform reads, in the order the plan names them:
+    /// a set_template's tokens, or an llm's <c>sources</c> list. Empty for regex_replace and
+    /// change_case, which read none.</param>
     public sealed record EditTransform(
         TransformKind Kind,
         string? Pattern = null,
         string? Replacement = null,
         string? Template = null,
         string? Instruction = null,
-        CaseMode? CaseMode = null);
+        CaseMode? CaseMode = null,
+        IReadOnlyList<EditSource>? Sources = null)
+    {
+        public IReadOnlyList<EditSource> Sources { get; init; } = Sources ?? [];
+    }
 
     /// <summary>Structured edit plan produced by the phase-A LLM call from the user's
     /// free-text instruction. Keep in sync with EditProgramSchema below.</summary>
@@ -78,7 +85,7 @@ namespace Read2Me.Services.BookEdits
             "\"target\": \"chapter_title\", " +
             "\"node_filter\": { \"ordinal_from\": null, \"ordinal_to\": null, \"title_regex\": null }, " +
             "\"paragraph_filter\": { \"where\": [] }, " +
-            "\"transform\": { \"kind\": \"set_template\", \"pattern\": null, \"replacement\": null, \"template\": \"Chapter {n}: {old}\", \"instruction\": null, \"case_mode\": null } }";
+            "\"transform\": { \"kind\": \"set_template\", \"pattern\": null, \"replacement\": null, \"template\": \"Chapter {n}: {old}\", \"instruction\": null, \"case_mode\": null, \"sources\": [] } }";
 
         /// <summary>
         /// Sent as response_format json_schema so the server constrains generation to this shape.
@@ -130,9 +137,21 @@ namespace Read2Me.Services.BookEdits
                     "replacement": { "type": ["string", "null"] },
                     "template": { "type": ["string", "null"] },
                     "instruction": { "type": ["string", "null"] },
-                    "case_mode": { "type": ["string", "null"], "enum": ["upper", "lower", "sentence", "title", null] }
+                    "case_mode": { "type": ["string", "null"], "enum": ["upper", "lower", "sentence", "title", null] },
+                    "sources": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "p1", "p2", "p3", "p4", "p5", "p_end1", "p_end2", "p_end3", "p_end4", "p_end5",
+                          "prev", "next", "chapter", "part", "volume",
+                          "ch1", "ch2", "ch3", "ch4", "ch5", "ch_end1", "ch_end2", "ch_end3", "ch_end4", "ch_end5",
+                          "pt1", "pt2", "pt3", "pt4", "pt5", "pt_end1", "pt_end2", "pt_end3", "pt_end4", "pt_end5"
+                        ]
+                      }
+                    }
                   },
-                  "required": ["kind", "pattern", "replacement", "template", "instruction", "case_mode"]
+                  "required": ["kind", "pattern", "replacement", "template", "instruction", "case_mode", "sources"]
                 }
               },
               "required": ["reasoning", "supported", "unsupported_reason", "target", "node_filter", "paragraph_filter", "transform"]

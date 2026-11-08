@@ -430,6 +430,48 @@ public static class WorkspaceSeeder
         return builder;
     }
     /// <summary>
+    /// The Gutenberg-import shape Edit sources exist for, from A Tale of Two Cities: one volume of
+    /// untitled chapters, each opening with a bare chapter number then the chapter's name, and a third
+    /// chapter with no paragraphs. Item names are "c{chapter}p{paragraph}".
+    /// </summary>
+    public static async Task<BookHierarchyBuilder> SeedChapterHeadingBookAsync(
+        IServiceProvider services, string workspaceDir, string folderName)
+    {
+        var factory = services.GetRequiredService<IProjectDbContextFactory>();
+        var folderPath = Path.Combine(workspaceDir, folderName);
+
+        string[][] chapters =
+        [
+            ["1", "The Period", "It was the best of times, it was the worst of times."],
+            ["2", "The Mail", "It was the Dover road that lay, on a Friday night late in November."],
+            [],
+        ];
+        var builder = new BookHierarchyBuilder(() => factory.CreateAsync(folderPath));
+        builder
+            .WithProject(title: "A Tale of Two Cities", author: "Charles Dickens")
+            .AddVolume("Book the First", v =>
+            {
+                for (var c = 0; c < chapters.Length; c++)
+                {
+                    var paragraphs = chapters[c];
+                    var cn = c + 1;
+                    v.AddChapter(null, ch =>
+                    {
+                        for (var p = 0; p < paragraphs.Length; p++)
+                        {
+                            var text = paragraphs[p];
+                            var name = $"c{cn}p{p + 1}";
+                            ch.AddParagraph(name, para => para.AddNarration($"{name}-i", text));
+                        }
+                    });
+                }
+            });
+        await builder.BuildAsync();
+
+        return builder;
+    }
+
+    /// <summary>
     /// A long book for the native reader's big-book tests: one volume and <paramref name="chapters"/>
     /// chapters titled "Chapter 1"… (the builder names too), each holding <paramref name="paragraphs"/>
     /// paragraphs that alternate two sentences of narration with a line spoken by the known

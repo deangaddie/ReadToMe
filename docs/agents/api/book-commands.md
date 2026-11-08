@@ -138,6 +138,10 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/book-edits/{program}
   -H 'content-type: application/json' -d '{ "thinking": false, "connectionId": null }'
 curl -s http://localhost:5000/api/projects/{folder}/book-edits/{program}
 # row status: Proposed (usable) | NoChange (the value equals the current text) | Failed
+# SetTemplate copies Edit sources through tokens beside {n} and {old} ("Chapter {p1}, {p2}"; names in
+# EditSourceCatalog), trimmed; a row whose source is missing or its own paragraph is Failed with the reason
+# ("p2 is missing: the chapter has only 1 paragraph", "chapter is missing: the chapter title is blank",
+# "p1 is the paragraph being edited"); a source the target can't read, or past 5, makes the plan Unsupported.
 
 # stop early — the rows already computed stay reviewable and appliable:
 curl -s -X POST http://localhost:5000/api/projects/{folder}/book-edits/{program}/cancel   # 204

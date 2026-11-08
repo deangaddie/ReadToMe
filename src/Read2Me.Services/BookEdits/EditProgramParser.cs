@@ -130,15 +130,58 @@ namespace Read2Me.Services.BookEdits
             if (!TryMapPredicates(dto.ParagraphFilter?.Where, out var where, ref error))
                 return false;
 
+            var sourcesRejected = TryMapSources(kind, target, dto.Transform, out var sources);
+
             program = new EditProgram(
-                Supported: true,
-                UnsupportedReason: null,
+                Supported: sourcesRejected == null,
+                UnsupportedReason: sourcesRejected,
                 Target: target,
                 NodeFilter: new NodeFilter(dto.NodeFilter?.OrdinalFrom, dto.NodeFilter?.OrdinalTo, dto.NodeFilter?.TitleRegex),
                 ParagraphFilter: new ParagraphFilter(where),
-                Transform: new EditTransform(kind, dto.Transform.Pattern, dto.Transform.Replacement, dto.Transform.Template, dto.Transform.Instruction, caseMode),
+                Transform: new EditTransform(kind, dto.Transform.Pattern, dto.Transform.Replacement, dto.Transform.Template, dto.Transform.Instruction, caseMode, sources),
                 Reasoning: dto.Reasoning);
             return true;
+        }
+
+        /// <summary>Temporary guard: until batch entries carry source values, an llm plan that names
+        /// sources would ask the AI to read values it is never sent.</summary>
+        internal const string LlmSourcesNotYet = "AI edits can't read sources yet";
+
+        /// <summary>
+        /// Fills the transform's sources: a set_template's tokens (its <c>sources</c> array is
+        /// ignored), an llm's <c>sources</c> list, none for regex_replace and change_case. Returns the
+        /// Unsupported reason when the target can't read one, or null.
+        /// </summary>
+        private static string? TryMapSources(
+            TransformKind kind, EditTargetSelector target, TransformDto dto, out IReadOnlyList<EditSource> sources)
+        {
+            var result = new List<EditSource>();
+            sources = result;
+            switch (kind)
+            {
+                case TransformKind.SetTemplate:
+                    foreach (var token in EditSourceCatalog.TemplateTokens(dto.Template!))
+                    {
+                        if (token is "n" or "old")
+                            continue;
+                        if (EditSourceCatalog.Reject(token, target, $"Unknown token {{{token}}}", out var source) is { } reason)
+                            return reason;
+                        result.Add(source);
+                    }
+                    return null;
+
+                case TransformKind.Llm:
+                    foreach (var name in (dto.Sources ?? []).OfType<string>().Distinct(StringComparer.Ordinal))
+                    {
+                        if (EditSourceCatalog.Reject(name, target, $"Unknown source {name}", out var source) is { } reason)
+                            return reason;
+                        result.Add(source);
+                    }
+                    return result.Count > 0 ? LlmSourcesNotYet : null;
+
+                default:
+                    return null;
+            }
         }
 
         private static bool ValidateRegex(string? pattern, string label, ref string? error)
@@ -359,6 +402,9 @@ namespace Read2Me.Services.BookEdits
 
             [JsonPropertyName("case_mode")]
             public string? CaseMode { get; set; }
+
+            [JsonPropertyName("sources")]
+            public List<string>? Sources { get; set; }
         }
     }
 }

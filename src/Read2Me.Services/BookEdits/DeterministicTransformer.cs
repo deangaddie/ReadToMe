@@ -13,12 +13,19 @@ namespace Read2Me.Services.BookEdits
         public static string RegexReplace(string oldValue, string pattern, string? replacement)
             => Regex.Replace(oldValue, pattern, replacement ?? string.Empty, RegexOptions.None, RegexTimeout);
 
-        /// <summary>Renders a whole-value template. Tokens: {n} = 1-based ordinal within
-        /// the resolved scope, {old} = current value.</summary>
-        public static string RenderTemplate(string template, int n, string oldValue)
-            => template
-                .Replace("{n}", n.ToString(System.Globalization.CultureInfo.InvariantCulture))
-                .Replace("{old}", oldValue);
+        /// <summary>Renders a whole-value template in one pass, so a substituted value is never
+        /// re-read as a token. Tokens: {n} = 1-based ordinal within the resolved scope, {old} =
+        /// current value, {source} = that Edit source's value, trimmed and otherwise unchanged.
+        /// Braces around anything but a bare identifier, and a token with no value (callers fail
+        /// rows with a missing source first), stay literal.</summary>
+        public static string RenderTemplate(
+            string template, int n, string oldValue, IReadOnlyList<EditSourceValue>? sources = null)
+            => EditSourceCatalog.TokenPattern.Replace(template, m => m.Groups[1].Value switch
+            {
+                "n" => n.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                "old" => oldValue,
+                var name => sources?.FirstOrDefault(s => s.Name == name)?.Value?.Trim() ?? m.Value,
+            });
 
         /// <summary>Re-cases the whole value when <paramref name="pattern"/> is null, otherwise only
         /// the spans it matches. Upper and lower are literal; sentence and title read sentence
