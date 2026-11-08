@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Read2Me.Core.Models;
 using Read2Me.Services.BookEdits;
 
@@ -16,10 +17,10 @@ namespace Read2Me.Services.Llm
         public const int ChapterLimit = 20;
 
         /// <summary>How many content paragraphs the edit outline samples per chapter (the Edit source depth cap).</summary>
-        public const int SampleParagraphs = 5;
+        private const int SampleParagraphs = 5;
 
         /// <summary>A sampled value is cut at this many characters, then gets "…".</summary>
-        public const int SampleValueLength = 80;
+        private const int SampleValueLength = 80;
 
         public Task<string> BuildAsync(ProjectFolderId folderId, CancellationToken ct) =>
             BuildCoreAsync(folderId, forEdit: false, ct);
@@ -92,7 +93,13 @@ namespace Read2Me.Services.Llm
         private static string TitleOrUntitled(string? title) =>
             string.IsNullOrWhiteSpace(title) ? "(untitled)" : title;
 
-        private static string Cut(string value) =>
-            value.Length <= SampleValueLength ? value : value[..SampleValueLength] + "…";
+        /// <summary>One line: runs of whitespace (a paragraph can hold newlines) become a single space.</summary>
+        private static string Cut(string value)
+        {
+            value = Whitespace.Replace(value, " ");
+            return value.Length <= SampleValueLength ? value : value[..SampleValueLength] + "…";
+        }
+
+        private static readonly Regex Whitespace = new(@"\s+", RegexOptions.Compiled);
     }
 }

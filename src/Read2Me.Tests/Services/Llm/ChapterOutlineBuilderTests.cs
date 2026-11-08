@@ -125,6 +125,20 @@ namespace Read2Me.Tests.Services.Llm
         }
 
         [Fact]
+        public async Task EditOutline_KeepsEachSampleOnOneLine()
+        {
+            await new BookHierarchyBuilder(OpenDbAsync)
+                .AddVolume("V", v => v
+                    .AddChapter("C", c => c
+                        .AddParagraph(null, x => x.AddNarration("a", "line one\n  line two"))))
+                .BuildAsync();
+
+            var outline = await _sut.BuildForEditAsync(_folder, CancellationToken.None);
+
+            Assert.Contains("p1: line one line two" + Environment.NewLine, outline);
+        }
+
+        [Fact]
         public async Task EditOutline_CapsAtTwentyChaptersWithMoreLine()
         {
             await new BookHierarchyBuilder(OpenDbAsync)
