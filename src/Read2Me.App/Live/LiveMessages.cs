@@ -266,8 +266,8 @@ public sealed record HistoryMessage(
 /// back after missing the push have to be the same shape, or a review screen would need two.
 /// <paramref name="NewValue"/> is null on a <c>Failed</c> row.
 /// <paramref name="Sources"/> are in the order the plan names them (empty when it reads none; a missing
-/// source is left out, the reason names it). <paramref name="CanAskAgain"/> is false on a missing- or
-/// self-source Failed row, where asking again would only return the same failure.
+/// source is left out, the reason names it). <paramref name="CanAskAgain"/> is false on a missing-source,
+/// self-source or too-long Failed row, where asking again would only return the same failure.
 /// </summary>
 public sealed record BookEditRowDto(
     BookEditTargetKind Kind, Guid Id, string DisplayPath, string OldValue, string? NewValue, ProposalStatus Status, string? FailureReason,
