@@ -1747,6 +1747,13 @@ progress {
   &:focus-visible::before {
     inline-size: 4px;
   }
+  /* Forced colours drop backgrounds: draw the handle in the system highlight instead. */
+  @media (forced-colors: active) {
+    &::before {
+      background: Highlight;
+      forced-color-adjust: none;
+    }
+  }
 }
 .r2m-splitter--horizontal {
   inline-size: auto;
