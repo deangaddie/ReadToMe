@@ -53,6 +53,17 @@ const elapse = () => {
   run?.();
 };
 
+/** A one-line text opted into the overflow gate, its widths stubbed as happy-dom lays nothing out. */
+function overflowText(text: string, widths: { content: number; box: number }): HTMLElement {
+  const span = document.createElement('span');
+  span.textContent = text;
+  span.dataset['tooltip'] = text;
+  span.dataset['tooltipOverflow'] = '';
+  Object.defineProperty(span, 'scrollWidth', { get: () => widths.content });
+  Object.defineProperty(span, 'clientWidth', { get: () => widths.box });
+  return span;
+}
+
 describe('installTooltips', () => {
   it('adds one shared tooltip popover to the document', () => {
     expect(tip.getAttribute('role')).toBe('tooltip');
@@ -115,16 +126,8 @@ describe('installTooltips', () => {
   });
 
   describe('data-tooltip-overflow (a tip only for cut-off text)', () => {
-    /** A one-line title whose content and box widths are stubbed, as happy-dom lays nothing out. */
     function title(text: string, widths: { content: number; box: number }): HTMLElement {
-      const span = document.createElement('span');
-      span.textContent = text;
-      span.dataset['tooltip'] = text;
-      span.dataset['tooltipOverflow'] = '';
-      Object.defineProperty(span, 'scrollWidth', { get: () => widths.content });
-      Object.defineProperty(span, 'clientWidth', { get: () => widths.box });
-      document.body.append(span);
-      return span;
+      return document.body.appendChild(overflowText(text, widths));
     }
 
     it('shows the tip when the text is wider than its box', () => {
@@ -170,12 +173,8 @@ describe('installTooltips', () => {
       const item = document.createElement('div');
       item.tabIndex = 0;
       item.dataset['tooltipDelegate'] = '.title';
-      const span = document.createElement('span');
+      const span = overflowText('CHAPTER II. THE SCIENCE OF DEDUCTION.', widths);
       span.className = 'title';
-      span.dataset['tooltip'] = 'CHAPTER II. THE SCIENCE OF DEDUCTION.';
-      span.dataset['tooltipOverflow'] = '';
-      Object.defineProperty(span, 'scrollWidth', { get: () => widths.content });
-      Object.defineProperty(span, 'clientWidth', { get: () => widths.box });
       item.append(span);
       document.body.append(item);
       return { row: item, span };

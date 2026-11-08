@@ -4,7 +4,7 @@
     display: block;
     font-size: var(--r2m-text-md);
   }
-  /* Layout C: line 1 is the indent, chevron slot, checkbox, title and menu trigger; line 2, only on
+  /* Two-line rows: line 1 is the indent, chevron slot, checkbox, title and menu trigger; line 2, only on
      a row with something to show, holds the status chip and badges under the title and wraps. */
   .tree__node {
     display: flex;
