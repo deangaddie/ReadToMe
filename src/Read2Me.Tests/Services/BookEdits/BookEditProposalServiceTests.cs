@@ -321,6 +321,32 @@ namespace Read2Me.Tests.Services.BookEdits
         }
 
         [Fact]
+        public async Task Propose_SetTemplateWithSources_MissingAndSelfRowsFail_InPlace_TheRestPropose()
+        {
+            var program = Program(new EditTransform(TransformKind.SetTemplate, Template: "Chapter {p1}, {p2}",
+                Sources: [new EditSource(EditSourceKind.Paragraph, 1), new EditSource(EditSourceKind.Paragraph, 2)]));
+            EditTarget With(int n, params EditSourceValue[] sources) => Target(n, "") with { Sources = sources };
+            var targets = new[]
+            {
+                With(1, new("p1", "1", null), new("p2", "The Period", null)),
+                With(2, new("p1", "2", null), new("p2", null, "p2 is missing: the chapter has only 1 paragraph")),
+                With(3, new("p1", null, "p1 is the paragraph being edited"), new("p2", "x", null)),
+                With(4, new("p1", "4", null), new("p2", "The Mail", null)),
+            };
+
+            var proposals = await NewService(new FakeLlmCompletionRunner(), NewSettings())
+                .ProposeAsync(Folder, program, targets, null, false, CancellationToken.None);
+
+            Assert.Equal(targets.Select(t => t.Id), proposals.Select(p => p.Id));
+            Assert.Equal(
+                [(ProposalStatus.Proposed, "Chapter 1, The Period", null),
+                 (ProposalStatus.Failed, null, "p2 is missing: the chapter has only 1 paragraph"),
+                 (ProposalStatus.Failed, null, "p1 is the paragraph being edited"),
+                 (ProposalStatus.Proposed, "Chapter 4, The Mail", null)],
+                proposals.Select(p => (p.Status, p.NewValue, p.FailureReason)));
+        }
+
+        [Fact]
         public async Task ProposeOne_DeterministicProgram_FailsWithoutCallingLlm()
         {
             var settings = NewSettings();

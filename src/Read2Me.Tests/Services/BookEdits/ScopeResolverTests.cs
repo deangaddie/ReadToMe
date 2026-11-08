@@ -259,6 +259,131 @@ namespace Read2Me.Tests.Services.BookEdits
             Assert.Equal([b.ItemId("i1")], targets.Select(t => t.Id));
         }
 
+        // ── Edit sources ──────────────────────────────────────────────────────
+
+        private static EditProgram Reading(
+            EditTargetSelector target, string names, NodeFilter? nodeFilter = null, ParagraphFilter? paragraphFilter = null) =>
+            new(true, null, target, nodeFilter ?? NodeFilter.All, paragraphFilter ?? ParagraphFilter.All,
+                new EditTransform(TransformKind.SetTemplate, Template: "{old}",
+                    Sources: names.Split(' ').Select(n => EditSourceCatalog.TryParse(n, out var s) ? s : throw new ArgumentException(n)).ToList()));
+
+        /// <summary>
+        /// Book One › The First Part › [A: pause-only ¶, "  CHAPTER I.  ", "The" + pause + "Period.", "It was the best of times."],
+        ///                              [(untitled): "Only one."]
+        ///           › The Second Part › [C: no paragraphs]
+        /// Book Two › (lone untitled part) › [D: "Alone."]
+        /// </summary>
+        private async Task SeedSourceBookAsync()
+        {
+            var b = new BookHierarchyBuilder(OpenDbAsync);
+            await b
+                .AddVolume("Book One", v => v
+                    .AddPart("The First Part", p => p
+                        .AddChapter("A", c => c
+                            .AddParagraph("a0", pp => pp.AddPause("a0-pause"))
+                            .AddParagraph("a1", pp => pp.AddNarration("a1-i", "  CHAPTER I.  "))
+                            .AddParagraph("a2", pp => pp
+                                .AddNarration("a2-i1", "The")
+                                .AddPause("a2-pause")
+                                .AddNarration("a2-i2", "Period. "))
+                            .AddParagraph("a3", pp => pp.AddNarration("a3-i", "It was the best of times.")))
+                        .AddChapter(null, c => c
+                            .AddParagraph("b1", pp => pp.AddNarration("b1-i", "Only one."))))
+                    .AddPart("The Second Part", p => p.AddChapter("C")))
+                .AddVolume("Book Two", v => v
+                    .AddChapter("D", c => c.AddParagraph("d1", pp => pp.AddNarration("d1-i", "Alone."))))
+                .BuildAsync();
+        }
+
+        private static (string Name, string? Value, string? Missing)[] Read(EditTarget target) =>
+            target.Sources.Select(s => (s.Name, s.Value, s.MissingReason)).ToArray();
+
+        [Fact]
+        public async Task Sources_ChapterTitle_ReadsParagraphsByPosition_SkippingPauses_JoiningItems_CountingHeadings()
+        {
+            await SeedSourceBookAsync();
+            var targets = await _sut.ResolveAsync(_folder,
+                Reading(EditTargetSelector.ChapterTitle, "p1 p2 p_end1 part volume", new NodeFilter(1, 1, null)));
+
+            Assert.Equal(
+                [("p1", "CHAPTER I.", null), ("p2", "The Period.", null), ("p_end1", "It was the best of times.", null),
+                 ("part", "The First Part", null), ("volume", "Book One", null)],
+                Read(Assert.Single(targets)));
+        }
+
+        [Fact]
+        public async Task Sources_ChapterTitle_PastTheEnd_AndBlankLonePart_AreMissing()
+        {
+            await SeedSourceBookAsync();
+            var targets = await _sut.ResolveAsync(_folder, Reading(EditTargetSelector.ChapterTitle, "p2 part"));
+
+            Assert.Equal(4, targets.Count);
+            Assert.Equal(("p2", null, "p2 is missing: the chapter has only 1 paragraph"), Read(targets[1])[0]);
+            Assert.Equal(("p1", null, "p1 is missing: the chapter has no paragraphs"),
+                Read((await _sut.ResolveAsync(_folder, Reading(EditTargetSelector.ChapterTitle, "p1")))[2])[0]);
+            Assert.Equal(("part", null, "part is missing: the part title is blank"), Read(targets[3])[1]);
+        }
+
+        [Fact]
+        public async Task Sources_ParagraphText_PrevNextStopAtTheChaptersEdges_AndOwnParagraphIsSelf()
+        {
+            await SeedSourceBookAsync();
+            var targets = await _sut.ResolveAsync(_folder,
+                Reading(EditTargetSelector.ParagraphText, "prev next p1 p_end1 chapter", new NodeFilter(1, 2, null),
+                    Where(new EditPredicate(PredicateField.ItemOrdinal, PredicateOp.Eq, 1))));
+
+            Assert.Equal(4, targets.Count); // three content paragraphs in A, one in the untitled chapter
+            Assert.Equal(
+                [("prev", null, "prev is missing: this is the chapter's first paragraph"), ("next", "The Period.", null),
+                 ("p1", null, "p1 is the paragraph being edited"), ("p_end1", "It was the best of times.", null),
+                 ("chapter", "A", null)],
+                Read(targets[0]));
+            Assert.Equal(("prev", "The Period.", null), Read(targets[2])[0]);
+            Assert.Equal(("next", null, "next is missing: this is the chapter's last paragraph"), Read(targets[2])[1]);
+            Assert.Equal(("p_end1", null, "p_end1 is the paragraph being edited"), Read(targets[2])[3]);
+            Assert.Equal(("chapter", null, "chapter is missing: the chapter title is blank"), Read(targets[3])[4]);
+        }
+
+        [Fact]
+        public async Task Sources_VolumeTitle_CountsChaptersAcrossTheVolume_AndReadsItsParts()
+        {
+            await SeedSourceBookAsync();
+            var targets = await _sut.ResolveAsync(_folder,
+                Reading(EditTargetSelector.VolumeTitle, "ch1 ch2 ch3 ch4 ch_end1 pt2 pt3 pt_end1"));
+
+            Assert.Equal(
+                [("ch1", "A", null), ("ch2", null, "ch2 is missing: that chapter title is blank"), ("ch3", "C", null),
+                 ("ch4", null, "ch4 is missing: the volume has only 3 chapters"), ("ch_end1", "C", null),
+                 ("pt2", "The Second Part", null), ("pt3", null, "pt3 is missing: the volume has only 2 parts"),
+                 ("pt_end1", "The Second Part", null)],
+                Read(targets[0]));
+            Assert.Equal(("pt2", null, "pt2 is missing: the volume has only 1 part"), Read(targets[1])[5]);
+            Assert.Equal(("pt_end1", null, "pt_end1 is missing: that part title is blank"), Read(targets[1])[7]);
+        }
+
+        [Fact]
+        public async Task Sources_PartTitle_ReadsItsOwnChapters_AndItsVolume()
+        {
+            await SeedSourceBookAsync();
+            var targets = await _sut.ResolveAsync(_folder, Reading(EditTargetSelector.PartTitle, "ch1 ch2 ch_end1 volume"));
+
+            Assert.Equal(3, targets.Count);
+            Assert.Equal(
+                [("ch1", "A", null), ("ch2", null, "ch2 is missing: that chapter title is blank"),
+                 ("ch_end1", null, "ch_end1 is missing: that chapter title is blank"), ("volume", "Book One", null)],
+                Read(targets[0]));
+            Assert.Equal(("ch2", null, "ch2 is missing: the part has only 1 chapter"), Read(targets[1])[1]);
+        }
+
+        [Fact]
+        public async Task Sources_PlanWithoutSources_ReadsNone()
+        {
+            await SeedSourceBookAsync();
+            var targets = await _sut.ResolveAsync(_folder, Program(EditTargetSelector.ParagraphText));
+
+            Assert.All(targets, t => Assert.Empty(t.Sources));
+        }
+
         private async Task SeedAllCapsTitlesAsync()
         {
             var b = new BookHierarchyBuilder(OpenDbAsync);

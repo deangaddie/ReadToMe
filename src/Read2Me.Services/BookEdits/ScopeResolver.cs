@@ -7,6 +7,8 @@ using Read2Me.Data.Enums;
 namespace Read2Me.Services.BookEdits
 {
     /// <summary>One concrete entity matched by an edit program's scope.</summary>
+    /// <param name="Sources">The plan's named Edit sources as read for this target at plan time, in
+    /// the plan's order; empty when the plan reads none.</param>
     public sealed record EditTarget(
         BookEditTargetKind Kind,
         Guid Id,
@@ -14,7 +16,14 @@ namespace Read2Me.Services.BookEdits
         string DisplayPath,
         int OrdinalInScope,
         Guid? ChapterId,
-        Guid? ParagraphId);
+        Guid? ParagraphId,
+        IReadOnlyList<EditSourceValue>? Sources = null)
+    {
+        public IReadOnlyList<EditSourceValue> Sources { get; init; } = Sources ?? [];
+
+        /// <summary>The first missing or self source's reason: the row fails with it.</summary>
+        public string? SourceFailure => Sources.FirstOrDefault(s => s.IsMissing)?.MissingReason;
+    }
 
     /// <summary>How many volume, part and chapter titles a pattern matches, book-wide.</summary>
     public sealed record TitleMatchCounts(int Volume, int Part, int Chapter)
@@ -30,6 +39,10 @@ namespace Read2Me.Services.BookEdits
     /// empty strings otherwise. A regex_replace, or a change_case with a pattern, keeps
     /// only the targets its pattern matches, so the count is the real job; a value the
     /// pattern times out on is kept, so its row fails visibly rather than vanishing.
+    /// Each target also gets the plan's named Edit sources, read here at plan time: positions count
+    /// content paragraphs only (pauses skipped, heading-like paragraphs counted), nothing is read
+    /// across a chapter, and a blank title is missing. The book is only read further than the target
+    /// level when a plan names sources that need it.
     /// </summary>
     public class ScopeResolver(IBookContentReader reader)
     {
@@ -44,6 +57,9 @@ namespace Read2Me.Services.BookEdits
                 .Select(p => (Predicate: p, Regex: CreateRegex(p.Regex)))
                 .ToList();
             var targets = new List<EditTarget>();
+            var sources = program.Transform.Sources;
+            var readsChapterTitles = sources.Any(s => s.ReadsChapterTitles);
+            var readsParagraphs = sources.Any(s => s.ReadsParagraphs);
 
             var volumes = await reader.GetVolumesAsync(folderId);
             int volumeN = 0, partN = 0, chapterN = 0;
@@ -57,7 +73,12 @@ namespace Read2Me.Services.BookEdits
                 if (program.Target == EditTargetSelector.VolumeTitle)
                 {
                     if (NodeMatches(program.NodeFilter, titleRegex, volumeN, volume.Title))
-                        AddTitleTarget(targets, program, transformRegex, BookEditTargetKind.VolumeTitle, volume.Id, volume.Title, volumeLabel);
+                    {
+                        IReadOnlyList<EditSourceValue> read = sources.Count == 0
+                            ? []
+                            : EditSourceReader.Read(sources, await VolumeScopeAsync(folderId, volume.Id, readsChapterTitles));
+                        AddTitleTarget(targets, program, transformRegex, BookEditTargetKind.VolumeTitle, volume.Id, volume.Title, volumeLabel, read);
+                    }
                     continue;
                 }
 
@@ -71,8 +92,17 @@ namespace Read2Me.Services.BookEdits
                     if (program.Target == EditTargetSelector.PartTitle)
                     {
                         if (NodeMatches(program.NodeFilter, titleRegex, partN, part.Title))
+                        {
+                            IReadOnlyList<EditSourceValue> read = [];
+                            if (sources.Count > 0)
+                            {
+                                var titles = readsChapterTitles ? await ChapterTitlesAsync(folderId, part.Id) : null;
+                                read = EditSourceReader.Read(sources,
+                                    new EditSourceScope(VolumeTitle: volume.Title, ChapterTitles: titles));
+                            }
                             AddTitleTarget(targets, program, transformRegex, BookEditTargetKind.PartTitle, part.Id, part.Title,
-                                $"{volumeLabel} › {partLabel ?? $"Part {partN}"}");
+                                $"{volumeLabel} › {partLabel ?? $"Part {partN}"}", read);
+                        }
                         continue;
                     }
 
@@ -87,11 +117,22 @@ namespace Read2Me.Services.BookEdits
                         var chapterPath = partLabel == null
                             ? $"{volumeLabel} › {chapterLabel}"
                             : $"{volumeLabel} › {partLabel} › {chapterLabel}";
+                        var scope = new EditSourceScope(volume.Title, part.Title, chapter.Title);
 
                         if (program.Target == EditTargetSelector.ChapterTitle)
                         {
                             if (NodeMatches(program.NodeFilter, titleRegex, chapterN, chapter.Title))
-                                AddTitleTarget(targets, program, transformRegex, BookEditTargetKind.ChapterTitle, chapter.Id, chapter.Title, chapterPath);
+                            {
+                                IReadOnlyList<EditSourceValue> read = [];
+                                if (sources.Count > 0)
+                                {
+                                    var values = readsParagraphs
+                                        ? ContentParagraphs(await ParagraphsAsync(folderId, chapter.Id)).Select(p => p.Value).ToList()
+                                        : null;
+                                    read = EditSourceReader.Read(sources, scope with { Paragraphs = values });
+                                }
+                                AddTitleTarget(targets, program, transformRegex, BookEditTargetKind.ChapterTitle, chapter.Id, chapter.Title, chapterPath, read);
+                            }
                             continue;
                         }
 
@@ -99,13 +140,34 @@ namespace Read2Me.Services.BookEdits
                         if (!NodeMatches(program.NodeFilter, titleRegex, chapterN, chapter.Title))
                             continue;
 
-                        var paragraphs = (await reader.GetChildrenAsync(folderId, BookNodeLevel.Chapter, chapter.Id)).Paragraphs ?? [];
-                        AddParagraphTargets(targets, predicates, transformRegex, chapter.Id, chapterPath, paragraphs);
+                        AddParagraphTargets(targets, predicates, transformRegex, sources, scope,
+                            chapter.Id, chapterPath, await ParagraphsAsync(folderId, chapter.Id));
                     }
                 }
             }
 
             return targets;
+        }
+
+        private async Task<List<Paragraph>> ParagraphsAsync(ProjectFolderId folderId, Guid chapterId) =>
+            (await reader.GetChildrenAsync(folderId, BookNodeLevel.Chapter, chapterId)).Paragraphs ?? [];
+
+        private async Task<List<string?>> ChapterTitlesAsync(ProjectFolderId folderId, Guid partId) =>
+            ((await reader.GetChildrenAsync(folderId, BookNodeLevel.Part, partId)).Chapters ?? []).Select(c => c.Title).ToList();
+
+        /// <summary>A volume title reads its parts' titles and the chapter titles counted across the whole volume.</summary>
+        private async Task<EditSourceScope> VolumeScopeAsync(ProjectFolderId folderId, Guid volumeId, bool readsChapterTitles)
+        {
+            var parts = (await reader.GetChildrenAsync(folderId, BookNodeLevel.Volume, volumeId)).Parts ?? [];
+            List<string?>? chapterTitles = null;
+            if (readsChapterTitles)
+            {
+                chapterTitles = [];
+                foreach (var part in parts)
+                    chapterTitles.AddRange(await ChapterTitlesAsync(folderId, part.Id));
+            }
+            return new EditSourceScope(
+                ChapterTitles: chapterTitles, ChapterTitlesOwner: "volume", PartTitles: parts.Select(p => p.Title).ToList());
         }
 
         /// <summary>
@@ -145,28 +207,37 @@ namespace Read2Me.Services.BookEdits
 
         private static void AddTitleTarget(
             List<EditTarget> targets, EditProgram program, Regex? transformRegex,
-            BookEditTargetKind kind, Guid id, string? title, string path)
+            BookEditTargetKind kind, Guid id, string? title, string path, IReadOnlyList<EditSourceValue> sources)
         {
             if (title == null && program.Transform.Kind == TransformKind.RegexReplace)
                 return;
             if (!MatchesOrTimesOut(transformRegex, title ?? string.Empty))
                 return;
-            targets.Add(new EditTarget(kind, id, title ?? string.Empty, path, targets.Count + 1, null, null));
+            targets.Add(new EditTarget(kind, id, title ?? string.Empty, path, targets.Count + 1, null, null, sources));
         }
+
+        /// <summary>A chapter's content paragraphs (those with a text item; pauses skipped) with their
+        /// 1-based number and their value as a source: the text items joined and trimmed.</summary>
+        private static List<(Paragraph Paragraph, List<ParagraphItem> Items, int Number, string Value)> ContentParagraphs(
+            List<Paragraph> paragraphs) =>
+            paragraphs
+                .Select(p => (Paragraph: p, Items: ContentItems(p)))
+                .Where(x => x.Items.Count > 0)
+                .Select((x, i) => (x.Paragraph, x.Items, Number: i + 1, Value: string.Join(" ", x.Items.Select(t => t.Text)).Trim()))
+                .ToList();
 
         private void AddParagraphTargets(
             List<EditTarget> targets, List<(EditPredicate Predicate, Regex? Regex)> predicates, Regex? transformRegex,
+            IReadOnlyList<EditSource> sources, EditSourceScope chapterScope,
             Guid chapterId, string chapterPath, List<Paragraph> paragraphs)
         {
-            var contentParagraphs = paragraphs
-                .Select((p, i) => (Paragraph: p, Items: ContentItems(p)))
-                .Where(x => x.Items.Count > 0)
-                .Select((x, i) => (x.Paragraph, x.Items, Number: i + 1))
-                .ToList();
+            var contentParagraphs = ContentParagraphs(paragraphs);
+            var values = sources.Count == 0 ? null : contentParagraphs.Select(p => p.Value).ToList();
 
-            foreach (var (paragraph, items, number) in contentParagraphs)
+            foreach (var (paragraph, items, number, _) in contentParagraphs)
             {
                 var fromEnd = contentParagraphs.Count - number + 1;
+                IReadOnlyList<EditSourceValue>? read = null;
                 for (var j = 0; j < items.Count; j++)
                 {
                     var text = items[j].Text!;
@@ -175,9 +246,12 @@ namespace Read2Me.Services.BookEdits
                         continue;
                     if (!MatchesOrTimesOut(transformRegex, text))
                         continue;
+                    read ??= values == null
+                        ? []
+                        : EditSourceReader.Read(sources, chapterScope with { Paragraphs = values, ParagraphIndex = number - 1 });
                     targets.Add(new EditTarget(
                         BookEditTargetKind.ParagraphItemText, items[j].Id, text,
-                        $"{chapterPath} › ¶{number}", targets.Count + 1, chapterId, paragraph.Id));
+                        $"{chapterPath} › ¶{number}", targets.Count + 1, chapterId, paragraph.Id, read));
                 }
             }
         }

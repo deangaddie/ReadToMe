@@ -217,6 +217,37 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     [Fact]
+    public async Task A_template_reading_paragraphs_proposes_from_their_text_and_fails_a_chapter_without_them()
+    {
+        var folder = $"api-edit-sources-{Guid.NewGuid():N}";
+        await app.SeedChapterHeadingBookAsync(folder);
+        app.FakeAi.LlmReply = _ => TemplatePlan.Replace("\"template\": \"{n}. {old}\"", "\"template\": \"Chapter {p1}, {p2}\"");
+        try
+        {
+            var plan = await PlanAsync(folder, "title each chapter from its first two paragraphs");
+            Assert.Equal("Ok", plan.GetProperty("status").GetString());
+            var program = plan.GetProperty("program").GetString()!;
+
+            var propose = await Http.PostAsJsonAsync(Url(folder, $"/{program}/propose"), new { thinking = false });
+            Assert.Equal(HttpStatusCode.Accepted, propose.StatusCode);
+            var rows = (await WaitForRunAsync(folder, program, "Completed")).GetProperty("rows").EnumerateArray()
+                .Select(r => (Status: r.GetProperty("status").GetString(),
+                    New: r.GetProperty("newValue").GetString(),
+                    Reason: r.GetProperty("failureReason").GetString()))
+                .ToList();
+
+            Assert.Equal(
+                [("Proposed", "Chapter 1, The Period", null), ("Proposed", "Chapter 2, The Mail", null),
+                 ("Failed", null, "p1 is missing: the chapter has no paragraphs")],
+                rows);
+        }
+        finally
+        {
+            app.FakeAi.Reset();
+        }
+    }
+
+    [Fact]
     public async Task Plan_reports_unsupported_and_no_target_outcomes_and_a_blank_instruction_is_400()
     {
         var folder = $"api-edit-plan-{Guid.NewGuid():N}";
