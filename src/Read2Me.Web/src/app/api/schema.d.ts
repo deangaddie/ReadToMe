@@ -2045,7 +2045,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start computing a proposed new value per matched item (202). Progress and the finished rows arrive on /hubs/live as bookEdit { kind: progress | done | failed } on the connectionId in the body; GET the session to read them back. Deterministic transforms finish at once; Llm ones send one request per 8 items. 409 while a run is already in flight. */
+        /** Start computing a proposed new value per matched item (202). Progress and the finished rows arrive on /hubs/live as bookEdit { kind: progress | done | failed } on the connectionId in the body; GET the session to read them back. Deterministic transforms finish at once; Llm ones pack up to 8 items and ~12,000 characters of text and sources into each request. 409 while a run is already in flight. */
         post: {
             parameters: {
                 query?: never;

@@ -361,6 +361,190 @@ namespace Read2Me.Tests.Services.BookEdits
             Assert.Empty(runner.Requests);
         }
 
+        private static EditProgram SourceProgram(string instruction, params EditSourceKind[] kinds) =>
+            Program(new EditTransform(TransformKind.Llm, Instruction: instruction,
+                Sources: kinds.Select((k, i) => new EditSource(k, k == EditSourceKind.Paragraph ? i + 1 : 0)).ToList()));
+
+        private static EditTarget WithSources(int n, string value, params (string Name, string? Value, string? Missing)[] sources) =>
+            Target(n, value) with { Sources = sources.Select(s => new EditSourceValue(s.Name, s.Value, s.Missing)).ToList() };
+
+        [Fact]
+        public async Task Propose_Llm_Sources_RideOnTheirEntriesWithGlossesForNamesPresent()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner().Completes("""
+                [ { "index": 0, "reasoning": "r", "new_text": "Chapter 1, The Period" } ]
+                """);
+            var program = SourceProgram("Chapter <number in p1>, <p2>", EditSourceKind.Paragraph, EditSourceKind.Paragraph);
+            var target = WithSources(1, "", ("p1", "CHAPTER I.", null), ("p2", "The Period.", null));
+
+            var proposals = await NewService(runner, settings)
+                .ProposeAsync(Folder, program, [target], null, false, CancellationToken.None);
+
+            Assert.Equal("Chapter 1, The Period", proposals[0].NewValue);
+            var prompt = Assert.Single(runner.Requests).Prompt;
+            Assert.Contains("\"sources\": {", prompt);
+            Assert.Contains("\"p1\": \"CHAPTER I.\"", prompt);
+            Assert.Contains("\"p2\": \"The Period.\"", prompt);
+            Assert.Contains("Entries may also carry \"sources\"", prompt);
+            Assert.Contains("p1: Paragraph 1", prompt);
+            Assert.Contains("p2: Paragraph 2", prompt);
+            Assert.DoesNotContain("p3:", prompt);
+        }
+
+        [Fact]
+        public async Task Propose_Llm_WithoutSources_LeavesSourcesOutOfThePrompt()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner().Completes("""[ { "index": 0, "reasoning": "r", "new_text": "x" } ]""");
+
+            await NewService(runner, settings).ProposeAsync(Folder,
+                Program(new EditTransform(TransformKind.Llm, Instruction: "fix")),
+                [Target(1, "a")], null, false, CancellationToken.None);
+
+            var prompt = Assert.Single(runner.Requests).Prompt;
+            Assert.DoesNotContain("sources", prompt);
+        }
+
+        [Fact]
+        public async Task Propose_Llm_MissingSourceRows_FailBeforeAnyRequest_InPlace_AndIndicesStayContiguous()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner().Completes("""
+                [ { "index": 0, "reasoning": "r", "new_text": "A" }, { "index": 1, "reasoning": "r", "new_text": "C" } ]
+                """);
+            var program = SourceProgram("use p1", EditSourceKind.Paragraph);
+            var targets = new[]
+            {
+                WithSources(1, "a", ("p1", "x", null)),
+                WithSources(2, "b", ("p1", null, "p1 is missing: the chapter has no paragraphs")),
+                WithSources(3, "c", ("p1", "z", null)),
+            };
+
+            var proposals = await NewService(runner, settings)
+                .ProposeAsync(Folder, program, targets, null, false, CancellationToken.None);
+
+            Assert.Equal(targets.Select(t => t.Id), proposals.Select(p => p.Id));
+            Assert.Equal(
+                [(ProposalStatus.Proposed, "A", null),
+                 (ProposalStatus.Failed, null, "p1 is missing: the chapter has no paragraphs"),
+                 (ProposalStatus.Proposed, "C", null)],
+                proposals.Select(p => (p.Status, p.NewValue, p.FailureReason)));
+            var prompt = Assert.Single(runner.Requests).Prompt;
+            Assert.DoesNotContain("\"index\": 2", prompt);
+            Assert.DoesNotContain("\"text\": \"b\"", prompt);
+        }
+
+        [Fact]
+        public async Task Propose_Llm_PacksByCharacterBudget()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner()
+                .Completes("""[ { "index": 0, "reasoning": "r", "new_text": "1" }, { "index": 1, "reasoning": "r", "new_text": "2" } ]""")
+                .Completes("""[ { "index": 0, "reasoning": "r", "new_text": "3" } ]""");
+            var big = new string('x', 7000);
+            var targets = new[] { Target(1, big), Target(2, "small"), Target(3, big) };
+
+            var proposals = await NewService(runner, settings)
+                .ProposeAsync(Folder, Program(new EditTransform(TransformKind.Llm, Instruction: "fix")),
+                    targets, null, false, CancellationToken.None);
+
+            Assert.Equal(2, runner.Requests.Count);
+            Assert.Equal(["1", "2", "3"], proposals.Select(p => p.NewValue));
+            Assert.Equal(BatchPacker.RequestCount(targets), runner.Requests.Count);
+        }
+
+        [Fact]
+        public async Task Propose_Llm_AnItemOverTheCeiling_FailsAlone_WithoutTrippingTheRemainingRows()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner().Completes("""
+                [ { "index": 0, "reasoning": "r", "new_text": "A" }, { "index": 1, "reasoning": "r", "new_text": "C" } ]
+                """);
+            var targets = new[] { Target(1, "a"), Target(2, new string('x', 60_001)), Target(3, "c") };
+
+            var proposals = await NewService(runner, settings)
+                .ProposeAsync(Folder, Program(new EditTransform(TransformKind.Llm, Instruction: "fix")),
+                    targets, null, false, CancellationToken.None);
+
+            Assert.Equal(
+                [(ProposalStatus.Proposed, "A", null),
+                 (ProposalStatus.Failed, null, "Too long to send to the AI (text and sources)"),
+                 (ProposalStatus.Proposed, "C", null)],
+                proposals.Select(p => (p.Status, p.NewValue, p.FailureReason)));
+            Assert.Single(runner.Requests);
+        }
+
+        [Fact]
+        public async Task Propose_Llm_ServiceDown_FailsOnlyTheRemainingSendableRows_KeepingEarlierFailures()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner().Fails(LlmRunOutcome.ServiceUnavailable, "down");
+            var targets = new[]
+            {
+                WithSources(1, "a", ("p1", null, "p1 is missing: the chapter has no paragraphs")),
+                WithSources(2, "b", ("p1", "x", null)),
+            };
+
+            var proposals = await NewService(runner, settings)
+                .ProposeAsync(Folder, SourceProgram("use p1", EditSourceKind.Paragraph), targets, null, false, CancellationToken.None);
+
+            Assert.Equal(["p1 is missing: the chapter has no paragraphs", "down"], proposals.Select(p => p.FailureReason));
+        }
+
+        [Fact]
+        public async Task ProposeOne_Llm_MissingSourceRow_FailsWithTheSameReasonWithoutARequest()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner();
+            var target = WithSources(1, "a", ("p1", null, "p1 is missing: the chapter has no paragraphs"));
+
+            var proposal = await NewService(runner, settings).ProposeOneAsync(
+                Folder, SourceProgram("use p1", EditSourceKind.Paragraph), target, "hint", false, CancellationToken.None);
+
+            Assert.Equal(ProposalStatus.Failed, proposal.Status);
+            Assert.Equal("p1 is missing: the chapter has no paragraphs", proposal.FailureReason);
+            Assert.Empty(runner.Requests);
+        }
+
+        [Fact]
+        public async Task ProposeOne_Llm_SendsTheStoredSourcesUnchanged_AndTheHintAddsNone()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner().Completes("""[ { "index": 0, "reasoning": "r", "new_text": "ok" } ]""");
+            var target = WithSources(1, "a", ("p1", "CHAPTER IV.", null));
+
+            await NewService(runner, settings).ProposeOneAsync(
+                Folder, SourceProgram("use p1", EditSourceKind.Paragraph), target, "as a digit", false, CancellationToken.None);
+
+            var prompt = Assert.Single(runner.Requests).Prompt;
+            Assert.Contains("\"p1\": \"CHAPTER IV.\"", prompt);
+            Assert.Contains("Additional guidance from the user: as a digit", prompt);
+        }
+
+        [Fact]
+        public async Task ProposeOne_Llm_AnItemOverTheCeiling_Fails_WithoutARequest()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner();
+
+            var proposal = await NewService(runner, settings).ProposeOneAsync(
+                Folder, Program(new EditTransform(TransformKind.Llm, Instruction: "fix")),
+                Target(1, new string('x', 60_001)), null, false, CancellationToken.None);
+
+            Assert.Equal("Too long to send to the AI (text and sources)", proposal.FailureReason);
+            Assert.Empty(runner.Requests);
+        }
+
         [Fact]
         public async Task ProposeOne_Llm_ResponseMissingIndexZero_Fails()
         {

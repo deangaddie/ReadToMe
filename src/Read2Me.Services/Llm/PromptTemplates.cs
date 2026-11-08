@@ -21,6 +21,7 @@ namespace Read2Me.Services.Llm
     public const string Instruction = "instruction";
     public const string BookOutline = "book_outline";
     public const string EditItemsJson = "edit_items_json";
+    public const string EditSourceNotes = "edit_source_notes";
     public const string AllCapsPattern = "all_caps_pattern";
 
     public const int DefaultContextParagraphsBefore = 6;
@@ -545,7 +546,7 @@ namespace Read2Me.Services.Llm
             Each entry has an "index", a "path" describing where the text sits in the book,
             and the current "text".
 
-            Rules:
+            {{edit_source_notes}}Rules:
             - For each index, first write one short sentence in "reasoning", then return the
               complete edited text as "new_text" — the full replacement value, not a diff.
             - Change only what the instruction requires; keep everything else exactly as is.
@@ -560,15 +561,41 @@ namespace Read2Me.Services.Llm
 
     /// <summary>Serializes edit targets for the batch edit prompt.</summary>
     public static string BuildEditItemsJson(IEnumerable<(int Index, string Path, string Text)> items)
+        => BuildEditItemsJson(items.Select(i => (i.Index, i.Path, i.Text, (IReadOnlyList<KeyValuePair<string, string>>?)null)));
+
+    /// <summary>
+    /// Serializes edit targets with their Edit sources (name → trimmed value, in the plan's order);
+    /// an entry with no sources leaves the key out.
+    /// </summary>
+    public static string BuildEditItemsJson(
+        IEnumerable<(int Index, string Path, string Text, IReadOnlyList<KeyValuePair<string, string>>? Sources)> items)
     {
-      var arr = items.Select(i => new EditItemDto(i.Index, i.Path, i.Text)).ToArray();
+      var arr = items.Select(i => new EditItemDto(i.Index, i.Path, i.Text,
+          i.Sources is { Count: > 0 } ? i.Sources.ToDictionary(s => s.Key, s => s.Value) : null)).ToArray();
       return JsonSerializer.Serialize(arr, _jsonOptions);
+    }
+
+    /// <summary>
+    /// The batch edit prompt's note about "sources": the explanation and one gloss line per source
+    /// name present in the batch, ending in a blank line so it sits before the rules; empty when the
+    /// batch carries none.
+    /// </summary>
+    public static string BuildEditSourceNotes(IReadOnlyList<(string Name, string Label)> glosses)
+    {
+      if (glosses.Count == 0) return string.Empty;
+      var sb = new StringBuilder();
+      sb.Append("Entries may also carry \"sources\": values from nearby parts of the book, keyed by the names the instruction uses. ")
+        .Append("Read them only as the instruction says; never edit them, and return new_text only for \"text\".\n");
+      foreach (var (name, label) in glosses)
+        sb.Append(name).Append(": ").Append(label).Append('\n');
+      return sb.Append('\n').ToString();
     }
 
     private sealed record EditItemDto(
         [property: JsonPropertyName("index")] int Index,
         [property: JsonPropertyName("path")] string Path,
-        [property: JsonPropertyName("text")] string Text);
+        [property: JsonPropertyName("text")] string Text,
+        [property: JsonPropertyName("sources")] Dictionary<string, string>? Sources);
 
     /// <summary>
     /// A neutral voice-test sentence used as the sample text sent to the voice-design AI.

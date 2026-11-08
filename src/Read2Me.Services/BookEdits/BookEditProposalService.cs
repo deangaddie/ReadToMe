@@ -32,8 +32,6 @@ namespace Read2Me.Services.BookEdits
         IBookContentReader content,
         ILogger<BookEditProposalService> logger)
     {
-        /// <summary>Targets per LLM request. The plan's request count is derived from it.</summary>
-        public const int BatchSize = 8;
         private const string MissingItemMessage = "The AI response did not include this item.";
         private const string NoConfigMessage = "No active LLM server configured";
         private const string RunFailed = "The AI request failed.";
@@ -108,25 +106,34 @@ namespace Read2Me.Services.BookEdits
             bool disableThinking,
             CancellationToken ct)
         {
-            var proposals = new List<ProposedEdit>(targets.Count);
-
             var config = await settings.GetActiveConfigAsync();
             if (config == null)
-            {
-                foreach (var target in targets)
-                    proposals.Add(Build(target, null, NoConfigMessage));
-                return proposals;
-            }
+                return targets.Select(t => Build(t, null, t.SourceFailure ?? NoConfigMessage)).ToList();
 
             var project = await catalog.GetProjectAsync(folderId);
             var instruction = program.Transform.Instruction!;
 
-            for (var offset = 0; offset < targets.Count; offset += BatchSize)
+            // Answers sit at their target's position; rows that fail before any request (a missing
+            // source, too long to send) are filled first and never occupy an index in a request.
+            var proposals = new ProposedEdit?[targets.Count];
+            var plan = BatchPacker.PlanFor(targets);
+            for (var i = 0; i < targets.Count; i++)
+                if (targets[i].SourceFailure is { } failure)
+                    proposals[i] = Build(targets[i], null, failure);
+            foreach (var i in plan.TooLong)
+                proposals[i] = Build(targets[i], null, BatchPacker.TooLongMessage);
+
+            IReadOnlyList<ProposedEdit> Answered() => proposals.OfType<ProposedEdit>().ToList();
+            var sendable = plan.Batches.Sum(b => b.Count);
+            var settled = targets.Count - sendable;
+            progress?.Report((settled, targets.Count));
+
+            foreach (var positions in plan.Batches)
             {
                 if (ct.IsCancellationRequested)
-                    return proposals; // partial set stays reviewable
+                    return Answered(); // partial set stays reviewable
 
-                var batch = targets.Skip(offset).Take(BatchSize).ToList();
+                var batch = positions.Select(p => targets[p]).ToList();
                 LlmRunResult<IReadOnlyDictionary<int, string>> run;
                 try
                 {
@@ -134,32 +141,32 @@ namespace Read2Me.Services.BookEdits
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
-                    return proposals; // partial set stays reviewable
+                    return Answered(); // partial set stays reviewable
                 }
 
                 if (run.Outcome is LlmRunOutcome.Failed or LlmRunOutcome.ServiceUnavailable)
                 {
-                    logger.LogError("Batch edit request failed at offset {Offset}: {Reason}", offset, run.Error);
+                    logger.LogError("Batch edit request failed at {Path}: {Reason}", batch[0].DisplayPath, run.Error);
 
                     // Service likely down — fail every remaining target instead of retrying batch after batch.
-                    foreach (var target in targets.Skip(offset))
-                        proposals.Add(Build(target, null, run.Error ?? RunFailed));
+                    for (var i = 0; i < targets.Count; i++)
+                        proposals[i] ??= Build(targets[i], null, run.Error ?? RunFailed);
                     progress?.Report((targets.Count, targets.Count));
-                    return proposals;
+                    return Answered();
                 }
 
                 var results = run.Outcome == LlmRunOutcome.Completed ? run.Value : null;
                 for (var i = 0; i < batch.Count; i++)
                 {
-                    proposals.Add(results != null && results.TryGetValue(i, out var newText)
+                    proposals[positions[i]] = results != null && results.TryGetValue(i, out var newText)
                         ? Build(batch[i], newText, null)
-                        : Build(batch[i], null, MissingItemMessage));
+                        : Build(batch[i], null, MissingItemMessage);
                 }
 
-                progress?.Report((proposals.Count, targets.Count));
+                progress?.Report((proposals.Count(p => p != null), targets.Count));
             }
 
-            return proposals;
+            return Answered();
         }
 
         /// <summary>
@@ -177,6 +184,12 @@ namespace Read2Me.Services.BookEdits
         {
             if (program.Transform.Kind != TransformKind.Llm)
                 return Build(target, null, "Asking the AI again is only available for AI-written plans.");
+
+            // The same failures as the run gives the row, without a request.
+            if (target.SourceFailure is { } sourceFailure)
+                return Build(target, null, sourceFailure);
+            if (BatchPacker.Size(target) > BatchPacker.MaxItemChars)
+                return Build(target, null, BatchPacker.TooLongMessage);
 
             var config = await settings.GetActiveConfigAsync();
             if (config == null)
@@ -212,22 +225,37 @@ namespace Read2Me.Services.BookEdits
                 ? instruction
                 : $"{instruction}\n\nAdditional guidance from the user: {hint.Trim()}";
 
+        /// <summary>The batch edit prompt for these targets, entries indexed 0..n-1 in order.</summary>
+        public static string RenderBatchPrompt(
+            string? bookTitle, string? author, string instruction, IReadOnlyList<EditTarget> batch)
+        {
+            var itemsJson = PromptTemplates.BuildEditItemsJson(batch.Select((t, i) =>
+                (i, t.DisplayPath, t.CurrentValue, (IReadOnlyList<KeyValuePair<string, string>>?)t.Sources
+                    .Where(s => s.Value != null)
+                    .Select(s => new KeyValuePair<string, string>(s.Name, s.Value!)).ToList())));
+
+            // One gloss per source name present in this batch, from the catalogue labels.
+            var glosses = batch.SelectMany(t => t.Sources).Select(s => s.Name).Distinct(StringComparer.Ordinal)
+                .Select(n => (Name: n, Label: EditSourceCatalog.TryParse(n, out var source) ? EditSourceCatalog.Label(source) : n))
+                .ToList();
+
+            return PromptTemplates.Render(PromptTemplates.DefaultBatchEditPrompt, new Dictionary<string, string>
+            {
+                [PromptTemplates.BookTitle]      = bookTitle ?? string.Empty,
+                [PromptTemplates.BookAuthor]     = author ?? string.Empty,
+                [PromptTemplates.Instruction]    = instruction,
+                [PromptTemplates.EditItemsJson]  = itemsJson,
+                [PromptTemplates.EditSourceNotes] = PromptTemplates.BuildEditSourceNotes(glosses),
+                [PromptTemplates.ResponseFormat] = BookEditBatchSchema.JsonExample,
+            });
+        }
+
         private Task<LlmRunResult<IReadOnlyDictionary<int, string>>> RunBatchAsync(
             LlmServerConfig config, Read2Me.Data.Entities.Project? project,
             string instruction, IReadOnlyList<EditTarget> batch, bool disableThinking,
             CancellationToken ct)
         {
-            var itemsJson = PromptTemplates.BuildEditItemsJson(
-                batch.Select((t, i) => (i, t.DisplayPath, t.CurrentValue)));
-
-            var prompt = PromptTemplates.Render(PromptTemplates.DefaultBatchEditPrompt, new Dictionary<string, string>
-            {
-                [PromptTemplates.BookTitle]      = project?.BookTitle ?? string.Empty,
-                [PromptTemplates.BookAuthor]     = project?.Author ?? string.Empty,
-                [PromptTemplates.Instruction]    = instruction,
-                [PromptTemplates.EditItemsJson]  = itemsJson,
-                [PromptTemplates.ResponseFormat] = BookEditBatchSchema.JsonExample,
-            });
+            var prompt = RenderBatchPrompt(project?.BookTitle, project?.Author, instruction, batch);
 
             return runner.RunAsync<IReadOnlyDictionary<int, string>>(
                 new LlmRunRequest(config, prompt, $"{batch.Count} edit(s): {batch[0].DisplayPath}",

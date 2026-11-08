@@ -281,12 +281,12 @@ namespace Read2Me.Tests.Services.BookEdits
         }
 
         [Fact]
-        public void TryParse_Llm_WithSources_IsUnsupportedUntilBatchesCarryThem()
+        public void TryParse_Llm_WithSources_IsSupportedAndKeepsThemInOrder()
         {
-            var program = Parsed(Plan("chapter_title", "llm", instruction: "the number in p1 as a digit", sources: "[\"p1\"]"));
+            var program = Parsed(Plan("chapter_title", "llm", instruction: "the number in p1 and p2", sources: "[\"p2\", \"p1\"]"));
 
-            Assert.False(program.Supported);
-            Assert.Equal("AI edits can't read sources yet", program.UnsupportedReason);
+            Assert.True(program.Supported, program.UnsupportedReason);
+            Assert.Equal(["p2", "p1"], program.Transform.Sources.Select(s => s.Name));
         }
 
         [Fact]

@@ -124,8 +124,9 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/book-edits/plan \
   -H 'content-type: application/json' \
   -d '{ "instruction": "rename every chapter to Chapter {n}", "thinking": false }'
 # status Ok carries the program; NoLlmConfigured | Unsupported | ServiceUnavailable | Failed |
-# NoTargets explain themselves in reason instead. transform Llm means one LLM request per 8 items
-# (requestCount says how many) and per-row retries; RegexReplace / SetTemplate / ChangeCase run in code.
+# NoTargets explain themselves in reason instead. transform Llm packs items into requests of up to 8 items and ~12,000 characters of text plus
+# sources (an item over that goes alone; one over ~60,000 fails alone, "Too long to send to the AI (text and sources)");
+# requestCount says how many, from the same packing the run uses, counting only rows that can be sent. Per-row retries too; RegexReplace / SetTemplate / ChangeCase run in code.
 # RegexReplace, and ChangeCase with a pattern, count only the items their pattern matches (none → NoTargets);
 # a paragraph-text ChangeCase warns "N titles also match — run again targeting <levels> titles" when titles match too.
 # 409 "Project is restoring" while a Restore runs, and also when one began after the plan was asked for:
@@ -142,6 +143,10 @@ curl -s http://localhost:5000/api/projects/{folder}/book-edits/{program}
 # EditSourceCatalog), trimmed; a row whose source is missing or its own paragraph is Failed with the reason
 # ("p2 is missing: the chapter has only 1 paragraph", "chapter is missing: the chapter title is blank",
 # "p1 is the paragraph being edited"); a source the target can't read, or past 5, makes the plan Unsupported.
+# An Llm plan's transform.sources travel with each batch entry as "sources": {name: value} (only the names the plan
+# names); a row with a missing or self source is Failed with the same reasons before any request, keeps its place in the
+# rows, and never occupies an index in a request. propose-one re-sends the row's stored sources (the hint adds none),
+# and a missing-source or too-long row answers Failed without a request.
 
 # stop early — the rows already computed stay reviewable and appliable:
 curl -s -X POST http://localhost:5000/api/projects/{folder}/book-edits/{program}/cancel   # 204

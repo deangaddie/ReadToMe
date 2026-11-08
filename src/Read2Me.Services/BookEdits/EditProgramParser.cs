@@ -143,10 +143,6 @@ namespace Read2Me.Services.BookEdits
             return true;
         }
 
-        /// <summary>Temporary guard: until batch entries carry source values, an llm plan that names
-        /// sources would ask the AI to read values it is never sent.</summary>
-        internal const string LlmSourcesNotYet = "AI edits can't read sources yet";
-
         /// <summary>
         /// Fills the transform's sources: a set_template's tokens (its <c>sources</c> array is
         /// ignored), an llm's <c>sources</c> list, none for regex_replace and change_case. Returns the
@@ -177,7 +173,7 @@ namespace Read2Me.Services.BookEdits
                             return reason;
                         result.Add(source);
                     }
-                    return result.Count > 0 ? LlmSourcesNotYet : null;
+                    return null;
 
                 default:
                     return null;

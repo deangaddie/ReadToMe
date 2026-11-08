@@ -54,7 +54,7 @@ namespace Read2Me.App.Api
                 .WithSummary("Turn a plain-language instruction into an edit plan: one LLM call, then the plan's scope is resolved against the book. Answers status Ok with an opaque program id (valid 2 h after its last use), a summary, the matched item count and, for Llm transforms, the LLM request count; NoLlmConfigured / Unsupported / ServiceUnavailable / Failed / NoTargets carry a reason instead. thinking=true lets the model think first. 409 \"Project is restoring\" while a Restore runs, or when one began after the plan was asked for (its targets would predate it).");
             endpoints.MapPost("/api/projects/{folder}/book-edits/{program}/propose", ProposeAsync).RefusedWhileSetupCheckRuns()
                 .RecordsNoStep("Proposes an Edit with AI; nothing commits until it is applied.")
-                .WithSummary("Start computing a proposed new value per matched item (202). Progress and the finished rows arrive on /hubs/live as bookEdit { kind: progress | done | failed } on the connectionId in the body; GET the session to read them back. Deterministic transforms finish at once; Llm ones send one request per 8 items. 409 while a run is already in flight.");
+                .WithSummary("Start computing a proposed new value per matched item (202). Progress and the finished rows arrive on /hubs/live as bookEdit { kind: progress | done | failed } on the connectionId in the body; GET the session to read them back. Deterministic transforms finish at once; Llm ones pack up to 8 items and ~12,000 characters of text and sources into each request. 409 while a run is already in flight.");
             endpoints.MapGet("/api/projects/{folder}/book-edits/{program}", GetRun)
                 .ReadsLive("an Edit with AI run is a live proposal, not Project state.")
                 .WithSummary("The session's proposal run: status Idle | Running | Completed | Cancelled | Failed, progress and the rows landed so far (a cancelled run keeps the rows it computed).");
@@ -101,9 +101,8 @@ namespace Read2Me.App.Api
                 sessions.Remove(folderId, session.Id);
                 return StepReads.Refused(overtaken);
             }
-            // Read off the service that will send them, so the count cannot drift from the job.
-            var batch = BookEditProposalService.BatchSize;
-            var requestCount = session.IsLlmTransform ? (targets.Count + batch - 1) / batch : 0;
+            // The run packs with the same function, so the count cannot drift from the job.
+            var requestCount = session.IsLlmTransform ? BatchPacker.RequestCount(targets) : 0;
             var warnings = new List<string>();
             if (session.IsLlmTransform && targets.Count > LlmTargetWarnThreshold)
                 warnings.Add($"This is a large AI job ({targets.Count} items). It may take a long time.");

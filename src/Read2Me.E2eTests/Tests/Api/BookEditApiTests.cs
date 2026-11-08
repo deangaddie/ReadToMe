@@ -248,6 +248,60 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     [Fact]
+    public async Task An_AI_plan_reading_paragraphs_sends_their_text_and_fails_a_chapter_without_them_before_any_request()
+    {
+        var folder = $"api-edit-llm-sources-{Guid.NewGuid():N}";
+        await app.SeedChapterHeadingBookAsync(folder);
+        var batchPrompts = new ConcurrentQueue<string>();
+        app.FakeAi.LlmReply = p =>
+        {
+            if (IsPlanPrompt(p))
+                return LlmPlan.Replace("\"instruction\": \"capitalise the title\"",
+                    "\"instruction\": \"Chapter <p1 as a digit>, <p2>\", \"sources\": [\"p1\", \"p2\"]");
+            batchPrompts.Enqueue(p);
+            return "[" + string.Join(",", Regex.Matches(p, @"""index"":\s*(\d+)").Select(m =>
+                $$"""{ "index": {{m.Groups[1].Value}}, "reasoning": "fake", "new_text": "Chapter {{m.Groups[1].Value}}, from sources" }""")) + "]";
+        };
+        try
+        {
+            var plan = await PlanAsync(folder, "title each chapter from its first two paragraphs");
+            Assert.Equal("Ok", plan.GetProperty("status").GetString());
+            Assert.Equal(1, plan.GetProperty("requestCount").GetInt32()); // the empty chapter is not sendable
+            var program = plan.GetProperty("program").GetString()!;
+
+            var propose = await Http.PostAsJsonAsync(Url(folder, $"/{program}/propose"), new { thinking = false });
+            Assert.Equal(HttpStatusCode.Accepted, propose.StatusCode);
+            var run = await WaitForRunAsync(folder, program, "Completed");
+            var rows = run.GetProperty("rows").EnumerateArray().ToList();
+
+            Assert.Equal(["Proposed", "Proposed", "Failed"], rows.Select(r => r.GetProperty("status").GetString()));
+            Assert.Equal("p1 is missing: the chapter has no paragraphs", rows[2].GetProperty("failureReason").GetString());
+            var prompt = Assert.Single(batchPrompts);
+            Assert.Contains("\"p2\": \"The Mail\"", prompt);
+            Assert.DoesNotContain("\"index\": 2", prompt);
+
+            // Ask again: a normal row sends its stored sources; the missing-source row makes no request.
+            var retry = await Http.PostAsJsonAsync(Url(folder, $"/{program}/propose-one"),
+                new { targetId = rows[0].GetProperty("id").GetGuid(), hint = "x", thinking = false });
+            Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
+            Assert.Equal(2, batchPrompts.Count);
+            Assert.Contains("\"p1\": \"1\"", batchPrompts.Last());
+            Assert.Contains("\"p2\": \"The Period\"", batchPrompts.Last());
+
+            var again = await Http.PostAsJsonAsync(Url(folder, $"/{program}/propose-one"),
+                new { targetId = rows[2].GetProperty("id").GetGuid(), thinking = false });
+            var failed = JsonDocument.Parse(await again.Content.ReadAsStringAsync()).RootElement;
+            Assert.Equal("Failed", failed.GetProperty("status").GetString());
+            Assert.Equal("p1 is missing: the chapter has no paragraphs", failed.GetProperty("failureReason").GetString());
+            Assert.Equal(2, batchPrompts.Count);
+        }
+        finally
+        {
+            app.FakeAi.Reset();
+        }
+    }
+
+    [Fact]
     public async Task Plan_reports_unsupported_and_no_target_outcomes_and_a_blank_instruction_is_400()
     {
         var folder = $"api-edit-plan-{Guid.NewGuid():N}";
