@@ -285,8 +285,12 @@ namespace Read2Me.Services.BookEdits
         {
             // A missing source is left out of the list: the failure reason names it. Asking the AI
             // again would only return that same failure, so such a row can't ask again.
-            var sources = target.Sources.Where(s => !s.IsMissing && EditSourceCatalog.TryParse(s.Name, out _))
-                .Select(s => new ProposedSource(s.Name, EditSourceCatalog.Label(Parse(s.Name)), s.Value!))
+            var sources = target.Sources
+                .Where(s => !s.IsMissing)
+                .Select(s => EditSourceCatalog.TryParse(s.Name, out var source)
+                    ? new ProposedSource(s.Name, EditSourceCatalog.Label(source), s.Value!)
+                    : null)
+                .OfType<ProposedSource>()
                 .ToList();
             var canAskAgain = target.SourceFailure == null;
             if (failure != null)
@@ -296,7 +300,5 @@ namespace Read2Me.Services.BookEdits
             return new ProposedEdit(target.Kind, target.Id, target.DisplayPath,
                 target.CurrentValue, newValue, status, null, sources, canAskAgain);
         }
-
-        private static EditSource Parse(string name) => EditSourceCatalog.TryParse(name, out var s) ? s : default;
     }
 }

@@ -369,6 +369,26 @@ namespace Read2Me.Tests.Services.BookEdits
             Target(n, value) with { Sources = sources.Select(s => new EditSourceValue(s.Name, s.Value, s.Missing)).ToList() };
 
         [Fact]
+        public async Task ProposeOne_CarriesTheSourcesPresent_AndOnlyASourceFailureBlocksAskingAgain()
+        {
+            var service = NewService(new FakeLlmCompletionRunner(), NewSettings());
+            var program = SourceProgram("join", EditSourceKind.Paragraph, EditSourceKind.Paragraph);
+
+            // p1 present, p2 missing: p1 is listed, p2 is left out, and asking again would fail the same way.
+            var partial = await service.ProposeOneAsync(Folder, program,
+                WithSources(1, "x", ("p1", "1", null), ("p2", null, "p2 is missing: the chapter has only 1 paragraph")),
+                null, false, CancellationToken.None);
+            Assert.Equal(["p1|Paragraph 1|1"], partial.Sources.Select(s => $"{s.Name}|{s.Label}|{s.Value}"));
+            Assert.False(partial.CanAskAgain);
+
+            // The paragraph being edited is a source failure too.
+            var self = await service.ProposeOneAsync(Folder, program,
+                WithSources(1, "x", ("p1", null, "p1 is the paragraph being edited")), null, false, CancellationToken.None);
+            Assert.Empty(self.Sources);
+            Assert.False(self.CanAskAgain);
+        }
+
+        [Fact]
         public async Task Propose_Llm_Sources_RideOnTheirEntriesWithGlossesForNamesPresent()
         {
             var settings = NewSettings();
