@@ -382,7 +382,7 @@ function hasBadges(s: NodeStatusSummaryDto): boolean {
   );
 }
 
-/** A row's second line (layout C): the queued/Processing chip, the count badges, the Done mark. */
+/** A row's second line: the queued/Processing chip, the count badges, the Done mark. */
 function statusLine(s: NodeStatusSummaryDto) {
   return html`<span class="tree__status">
     ${
