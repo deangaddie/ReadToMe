@@ -43,9 +43,9 @@ export function rowSources(row: ReviewRow): BookEditRowDto['sources'] {
 }
 
 /**
- * Why Ask again is unavailable on this row, or null when it is. A missing- or self-source failure
- * would only fail the same way, so the server marks it `canAskAgain: false` and the client never
- * parses reasons; the failure reason is the explanation.
+ * Why Ask again is unavailable on this row, or null when it is. A missing-source, self-source or
+ * too-long failure would only fail the same way, so the server marks it `canAskAgain: false` and
+ * the client never parses reasons; the failure reason is the explanation.
  */
 export function askAgainBlockedReason(row: ReviewRow): string | null {
   return row.proposal.canAskAgain

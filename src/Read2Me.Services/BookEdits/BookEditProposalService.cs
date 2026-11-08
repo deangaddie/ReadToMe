@@ -283,8 +283,9 @@ namespace Read2Me.Services.BookEdits
 
         private static ProposedEdit Build(EditTarget target, string? newValue, string? failure)
         {
-            // A missing source is left out of the list: the failure reason names it. Asking the AI
-            // again would only return that same failure, so such a row can't ask again.
+            // A missing source is left out of the list: the failure reason names it. A row that fails
+            // before any request (a missing or self source, too long to send) would only fail the same
+            // way if asked again, so it can't ask again.
             var sources = target.Sources
                 .Where(s => !s.IsMissing)
                 .Select(s => EditSourceCatalog.TryParse(s.Name, out var source)
@@ -292,7 +293,7 @@ namespace Read2Me.Services.BookEdits
                     : null)
                 .OfType<ProposedSource>()
                 .ToList();
-            var canAskAgain = target.SourceFailure == null;
+            var canAskAgain = failure == null || BatchPacker.PreflightFailure(target) == null;
             if (failure != null)
                 return new ProposedEdit(target.Kind, target.Id, target.DisplayPath,
                     target.CurrentValue, null, ProposalStatus.Failed, failure, sources, canAskAgain);

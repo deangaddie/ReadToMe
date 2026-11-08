@@ -9302,8 +9302,8 @@ export interface components {
          *     back after missing the push have to be the same shape, or a review screen would need two.
          *     NewValue is null on a `Failed` row.
          *     Sources are in the order the plan names them (empty when it reads none; a missing
-         *     source is left out, the reason names it). CanAskAgain is false on a missing- or
-         *     self-source Failed row, where asking again would only return the same failure.
+         *     source is left out, the reason names it). CanAskAgain is false on a missing-source,
+         *     self-source or too-long Failed row, where asking again would only return the same failure.
          */
         BookEditRowDto: {
             canAskAgain: boolean;

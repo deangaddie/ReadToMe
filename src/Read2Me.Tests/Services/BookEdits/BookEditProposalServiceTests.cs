@@ -369,7 +369,7 @@ namespace Read2Me.Tests.Services.BookEdits
             Target(n, value) with { Sources = sources.Select(s => new EditSourceValue(s.Name, s.Value, s.Missing)).ToList() };
 
         [Fact]
-        public async Task ProposeOne_CarriesTheSourcesPresent_AndOnlyASourceFailureBlocksAskingAgain()
+        public async Task ProposeOne_CarriesTheSourcesPresent_AndASourceFailureBlocksAskingAgain()
         {
             var service = NewService(new FakeLlmCompletionRunner(), NewSettings());
             var program = SourceProgram("join", EditSourceKind.Paragraph, EditSourceKind.Paragraph);
@@ -497,6 +497,7 @@ namespace Read2Me.Tests.Services.BookEdits
                  (ProposalStatus.Failed, null, "Too long to send to the AI (text and sources)"),
                  (ProposalStatus.Proposed, "C", null)],
                 proposals.Select(p => (p.Status, p.NewValue, p.FailureReason)));
+            Assert.Equal([true, false, true], proposals.Select(p => p.CanAskAgain));
             Assert.Single(runner.Requests);
         }
 
@@ -562,6 +563,7 @@ namespace Read2Me.Tests.Services.BookEdits
                 Target(1, new string('x', 60_001)), null, false, CancellationToken.None);
 
             Assert.Equal("Too long to send to the AI (text and sources)", proposal.FailureReason);
+            Assert.False(proposal.CanAskAgain);
             Assert.Empty(runner.Requests);
         }
 

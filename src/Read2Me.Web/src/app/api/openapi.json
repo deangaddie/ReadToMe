@@ -1149,7 +1149,7 @@
         ]
       },
       "BookEditRowDto": {
-        "description": "ProposedEdit on the wire; enums as member names. Shared with the REST reads of a\r\nproposal run (`BookEditEndpoints`) on purpose: a row a client got pushed and a row it read\r\nback after missing the push have to be the same shape, or a review screen would need two.\r\nNewValue is null on a `Failed` row.\r\nSources are in the order the plan names them (empty when it reads none; a missing\r\nsource is left out, the reason names it). CanAskAgain is false on a missing- or\r\nself-source Failed row, where asking again would only return the same failure.",
+        "description": "ProposedEdit on the wire; enums as member names. Shared with the REST reads of a\r\nproposal run (`BookEditEndpoints`) on purpose: a row a client got pushed and a row it read\r\nback after missing the push have to be the same shape, or a review screen would need two.\r\nNewValue is null on a `Failed` row.\r\nSources are in the order the plan names them (empty when it reads none; a missing\r\nsource is left out, the reason names it). CanAskAgain is false on a missing-source,\r\nself-source or too-long Failed row, where asking again would only return the same failure.",
         "properties": {
           "canAskAgain": {
             "type": "boolean"

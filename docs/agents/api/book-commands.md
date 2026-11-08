@@ -150,7 +150,8 @@ curl -s http://localhost:5000/api/projects/{folder}/book-edits/{program}
 # Every row (the run read, the hub's Done rows and the propose-one answer share one shape) carries "sources": the values
 # the plan read for it, as [{ "name": "p1", "label": "Paragraph 1", "value": "1" }, ...] in the order the plan names
 # them (empty when the plan reads none; a missing source is left out, the failureReason names it), and
-# "canAskAgain": false on a missing- or self-source Failed row, where propose-one would only fail the same way.
+# "canAskAgain": false on a missing-source, self-source or too-long Failed row, where propose-one would only fail the
+# same way.
 # The plan summary ends " — reads p1 (paragraph 1), p2 (paragraph 2)" for a plan that reads sources.
 
 # stop early — the rows already computed stay reviewable and appliable:
