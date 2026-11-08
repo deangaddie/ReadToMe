@@ -1,0 +1,228 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway (wayfinder #306 "Structure tree row layout for readable titles").
+  Question: which structure tree row layout keeps Part / Chapter titles readable with the Node Status
+  Badges, the queued/Processing chip, the checkbox and the ⋮ trigger all present?
+  Variants (← / → or the bottom bar): A today (baseline), B wrap to 2 lines, C badges on a second line,
+  D summary indicator on a narrow tree, E badges only on hover / current row.
+  "Space savers" toggles 10px indent, no empty chevron slot on leaves, ⋮ overlaid — on top of any variant.
+  Each variant shows the tree at 220 / 280 / 400 px. Titles: A Study in Scarlet (Project Gutenberg).
+  Hover a cut-off title for the full one (stand-in for the settled r2m tooltip).
+  Open the file directly in a browser; no build, no persistence.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tree Row Layouts</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block" />
+<style>
+  :root {
+    color-scheme: light dark;
+    --r2m-space-1: 4px; --r2m-space-2: 8px; --r2m-space-8: 32px;
+    --r2m-radius-sm: 4px; --r2m-radius-pill: 999px;
+    --r2m-font-sans: 'Inter', system-ui, 'Segoe UI', sans-serif;
+    --r2m-text-xs: 0.6875rem; --r2m-text-sm: 0.75rem; --r2m-text-md: 0.875rem;
+    --r2m-accent: light-dark(#005cbb, #abc7ff);
+    --r2m-surface: light-dark(#f9f9ff, #111318);
+    --r2m-surface-low: light-dark(#f3f3fa, #191c20);
+    --r2m-surface-high: light-dark(#e7e8ee, #282a2f);
+    --r2m-text: light-dark(#1a1b1f, #e2e2e9);
+    --r2m-text-muted: light-dark(#44474e, #c4c6d0);
+    --r2m-nav-active-bg: light-dark(#d7e3f8, #3d4758);
+    --r2m-nav-active-fg: light-dark(#101c2b, #d7e3f8);
+    --r2m-border: light-dark(#c4c6d0, #44474e);
+    --r2m-status-ok: light-dark(#1b7f3b, #6fd58a);
+    --r2m-status-warn: light-dark(#9a5b00, #f2bf5e);
+    --r2m-status-info: light-dark(#0b5cad, #8ec5ff);
+    --r2m-status-info-soft: light-dark(#e0edfb, #12304d);
+    --r2m-status-busy: light-dark(#5b3fb3, #c3b0ff);
+    --r2m-status-busy-soft: light-dark(#ece6fb, #2b1f52);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px 16px 96px; font-family: var(--r2m-font-sans); background: var(--r2m-surface); color: var(--r2m-text); }
+  h1 { font-size: 1.1rem; margin: 0 0 4px; }
+  .lede { color: var(--r2m-text-muted); font-size: var(--r2m-text-md); margin: 0 0 12px; max-width: 80ch; }
+  .controls { display: flex; flex-wrap: wrap; gap: 16px; font-size: var(--r2m-text-md); margin-bottom: 16px; }
+  .controls fieldset { border: 1px solid var(--r2m-border); border-radius: 8px; padding: 4px 10px; margin: 0; }
+  .controls legend { font-size: var(--r2m-text-sm); color: var(--r2m-text-muted); }
+  .grid { display: flex; gap: 20px; align-items: flex-start; overflow-x: auto; }
+  .col h2 { font-size: var(--r2m-text-sm); color: var(--r2m-text-muted); margin: 0 0 6px; font-weight: 600; }
+  .pane { background: var(--r2m-surface-low); border: 1px solid var(--r2m-border); border-radius: 8px; padding: 6px 4px; container-type: inline-size; overflow: hidden; }
+  .r2m-icon { font-family: 'Material Symbols Rounded'; font-weight: normal; font-style: normal; line-height: 1; display: inline-block; white-space: nowrap; font-feature-settings: 'liga'; }
+
+  /* ---- shared pieces (copied from global.css / structure-tree.css) ---- */
+  .tree { display: block; font-size: var(--r2m-text-md); }
+  .node { position: relative; display: flex; align-items: center; gap: var(--r2m-space-1); min-height: 32px;
+          padding-left: calc(var(--d) * var(--indent, 14px)); padding-right: var(--r2m-space-2); border-radius: var(--r2m-radius-sm); }
+  .node:hover { background: color-mix(in srgb, var(--r2m-text) 6%, transparent); }
+  .node.current { background: var(--r2m-nav-active-bg); color: var(--r2m-nav-active-fg); }
+  .toggle { flex: 0 0 24px; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
+  .toggle .r2m-icon { font-size: 20px; }
+  .select { flex: 0 0 auto; margin: 0 2px 0 0; width: 13px; height: 13px; accent-color: var(--r2m-accent); }
+  .title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+  .badges { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: var(--r2m-radius-pill);
+          font-size: var(--r2m-text-xs); white-space: nowrap; color: var(--_fg); background: var(--_bg); }
+  .chip .r2m-icon { font-size: 16px; }
+  .chip.busy { --_fg: var(--r2m-status-busy); --_bg: var(--r2m-status-busy-soft); }
+  .chip.info { --_fg: var(--r2m-status-info); --_bg: var(--r2m-status-info-soft); }
+  .spin { width: 12px; height: 12px; border: 2px solid color-mix(in srgb, currentColor 25%, transparent); border-top-color: currentColor; border-radius: 50%; animation: s 0.9s linear infinite; }
+  @keyframes s { to { transform: rotate(360deg); } }
+  .cb { display: inline-flex; align-items: center; gap: 2px; height: 18px; padding: 0 6px 0 4px; border-radius: var(--r2m-radius-pill);
+        font-size: var(--r2m-text-xs); font-weight: 600; line-height: 1; white-space: nowrap; color: var(--_fg);
+        background: color-mix(in srgb, var(--_fg) 14%, transparent); }
+  .cb .r2m-icon { font-size: 14px; }
+  .cb.attribution { --_fg: var(--r2m-status-warn); }
+  .cb.audio { --_fg: var(--r2m-status-info); }
+  .cb.review { --_fg: var(--r2m-status-busy); }
+  .done { font-size: 16px; color: var(--r2m-status-ok); }
+  .menu { flex: 0 0 auto; display: inline-flex; width: 24px; height: 24px; align-items: center; justify-content: center; opacity: 0; transition: opacity 120ms; }
+  .menu .r2m-icon { font-size: 20px; }
+  .node:hover .menu, .node.current .menu { opacity: 1; }
+  .summary { display: none; }
+  .dot { display: none; }
+
+  /* ---- B: titles wrap to 2 lines ---- */
+  .vB .node { align-items: center; padding-top: 3px; padding-bottom: 3px; }
+  .vB .title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.25; }
+
+  /* ---- C: badges on a second line under the title ---- */
+  .vC .node { flex-wrap: wrap; row-gap: 0; padding-top: 2px; padding-bottom: 2px; }
+  .vC .title { flex: 1 1 0; }
+  .vC .badges { order: 10; flex-basis: 100%; padding-left: calc(24px + var(--r2m-space-1) + var(--selw, 0px)); padding-bottom: 3px; flex-wrap: wrap; gap: 3px; }
+  .vC .badges:empty { display: none; }
+  .vC .menu { order: 5; }
+
+  /* ---- D: narrow tree → one summary indicator ---- */
+  @container (max-width: 300px) {
+    .vD .cb { display: none; }
+    .vD .summary { display: inline-flex; }
+    .vD .chip .lbl { display: none; }
+    .vD .chip { padding: 0 4px; }
+  }
+  .summary { align-items: center; gap: 2px; height: 18px; padding: 0 6px 0 4px; border-radius: var(--r2m-radius-pill); font-size: var(--r2m-text-xs); font-weight: 600;
+             color: var(--r2m-text-muted); background: color-mix(in srgb, var(--r2m-text-muted) 14%, transparent); }
+  .summary .pips { display: inline-flex; gap: 1px; margin-right: 2px; }
+  .summary .pip { width: 4px; height: 10px; border-radius: 2px; background: var(--_fg); }
+
+  /* ---- E: badges only on hover / current row; a dot elsewhere ---- */
+  .vE .badges { display: none; }
+  .vE .node:hover .badges, .vE .node.current .badges { display: inline-flex; }
+  .vE .dot { display: inline-block; flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: var(--_fg); }
+  .vE .node:hover .dot, .vE .node.current .dot { display: none; }
+
+  /* ---- space savers (any variant) ---- */
+  .savers .node { --indent: 10px; }
+  .savers .node.leaf .toggle { display: none; }
+  .savers .node.leaf { padding-left: calc(var(--d) * var(--indent) + 6px); }
+  .savers .menu { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); border-radius: var(--r2m-radius-sm);
+                  background: var(--r2m-surface-high); box-shadow: -8px 0 8px -2px var(--r2m-surface-low); }
+  .savers .node.current .menu { opacity: 0; }
+  .savers .node:hover .menu { opacity: 1; }
+  .savers.vC .badges { padding-left: calc(6px + var(--selw, 0px)); }
+  .sel .node { --selw: 15px; }
+
+  .note { font-size: var(--r2m-text-sm); color: var(--r2m-text-muted); margin-top: 10px; max-width: 80ch; }
+  .bar { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+         background: #111; color: #fff; border-radius: 999px; box-shadow: 0 6px 20px rgb(0 0 0 / 0.35); font-size: 14px; z-index: 10; }
+  .bar button { background: #333; color: #fff; border: none; border-radius: 999px; width: 30px; height: 30px; cursor: pointer; font-size: 16px; }
+  .bar .lbl { min-width: 260px; text-align: center; }
+</style>
+</head>
+<body>
+<h1>Structure tree row layouts — PROTOTYPE</h1>
+<p class="lede">Wayfinder ticket “Structure tree row layout for readable titles”. Flip variants with ← / →. Chapter III is the current row. Hover a row to see the ⋮ trigger (and, in E, its badges); hover a cut-off title for the full one.</p>
+<div class="controls">
+  <fieldset><legend>Badges</legend>
+    <label><input type="radio" name="badges" value="all" checked /> every badge</label>
+    <label><input type="radio" name="badges" value="mixed" /> mixed (realistic)</label>
+    <label><input type="radio" name="badges" value="none" /> none</label>
+  </fieldset>
+  <fieldset><legend>Options</legend>
+    <label><input type="checkbox" id="savers" /> space savers</label>
+    <label><input type="checkbox" id="sel" /> selection checkboxes</label>
+  </fieldset>
+</div>
+<div class="grid" id="grid"></div>
+<p class="note" id="note"></p>
+<div class="bar"><button id="prev" aria-label="Previous variant">←</button><span class="lbl" id="label"></span><button id="next" aria-label="Next variant">→</button></div>
+<script>
+const VARIANTS = [
+  ['A', 'Today (baseline)', 'One line: chevron, title (ellipsis), chip + three count badges, ⋮. What ships now.'],
+  ['B', 'Titles wrap to 2 lines', 'Title clamps at two lines instead of one; badges stay on the right. Rows grow to ~40px where a title wraps.'],
+  ['C', 'Badges on a second line', 'Title gets the whole line beside the chevron; chip and count badges sit on a line under it. A row with no badges stays one line.'],
+  ['D', 'Summary indicator when narrow', 'Below 300px the three count badges fold into one pill (a coloured pip per kind + total; detail in the tooltip) and the chip goes icon-only. 400px looks like today.'],
+  ['E', 'Badges on hover / current row', 'Other rows show one dot (colour of the first pending kind). Hover or the current row reveals the badges.'],
+];
+const ROWS = [
+  { d: 0, t: 'PART I.', parent: true, s: { q: 4, a: 212, au: 380, r: 9 } },
+  { d: 1, t: 'CHAPTER I. MR. SHERLOCK HOLMES.', s: { done: true } },
+  { d: 1, t: 'CHAPTER II. THE SCIENCE OF DEDUCTION.', s: { au: 46, r: 9 } },
+  { d: 1, t: 'CHAPTER III. THE LAURISTON GARDENS MYSTERY', s: { proc: true, a: 38, au: 74 }, current: true },
+  { d: 1, t: 'CHAPTER IV. WHAT JOHN RANCE HAD TO TELL.', s: { q: 1, a: 41, au: 41 } },
+  { d: 1, t: 'CHAPTER V. OUR ADVERTISEMENT BRINGS A VISITOR.', s: { q: 1, a: 52, au: 52 } },
+  { d: 1, t: 'CHAPTER VI. TOBIAS GREGSON SHOWS WHAT HE CAN DO.', s: { q: 1, a: 81, au: 81 } },
+  { d: 1, t: 'CHAPTER VII. LIGHT IN THE DARKNESS.', s: { q: 1, a: 0, au: 86 } },
+  { d: 0, t: 'PART II. The Country of the Saints.', parent: true, s: { a: 7, au: 0, r: 128 } },
+  { d: 1, t: 'CHAPTER I. ON THE GREAT ALKALI PLAIN.', s: { r: 31 } },
+  { d: 1, t: 'CHAPTER III. JOHN FERRIER TALKS WITH THE PROPHET.', s: { a: 7, r: 22 } },
+  { d: 1, t: 'CHAPTER VI. A CONTINUATION OF THE REMINISCENCES OF JOHN WATSON, M.D.', s: { r: 40 } },
+  { d: 1, t: 'CHAPTER VII. THE CONCLUSION.', s: {} },
+];
+const ALL = { q: 3, a: 128, au: 240, r: 17 };
+const WIDTHS = [220, 280, 400];
+const KIND = { a: ['attribution', 'person_search', 'needing attribution'], au: ['audio', 'graphic_eq', 'needing audio'], r: ['review', 'rate_review', 'to review'] };
+const COLOR = { a: 'var(--r2m-status-warn)', au: 'var(--r2m-status-info)', r: 'var(--r2m-status-busy)' };
+const ic = (n) => `<span class="r2m-icon">${n}</span>`;
+
+function badges(s) {
+  if (s.done) return `<span class="badges"><span class="r2m-icon done" title="Done">check_circle</span></span>`;
+  let h = '';
+  if (s.proc) h += `<span class="chip busy" title="Processing"><span class="spin"></span><span class="lbl">Processing</span></span>`;
+  else if (s.q) h += `<span class="chip info" title="${s.q} queued">${ic('schedule')}<span class="lbl">${s.q} queued</span></span>`;
+  const ks = Object.keys(KIND).filter((k) => s[k] > 0);
+  for (const k of ks) h += `<span class="cb ${KIND[k][0]}" title="${s[k]} paragraphs ${KIND[k][2]}">${ic(KIND[k][1])}${s[k]}</span>`;
+  if (ks.length) {
+    const total = ks.reduce((n, k) => n + s[k], 0);
+    const detail = ks.map((k) => `${s[k]} ${KIND[k][2]}`).join(' · ');
+    h += `<span class="summary" title="${detail}"><span class="pips">${ks.map((k) => `<span class="pip" style="--_fg:${COLOR[k]}"></span>`).join('')}</span>${total}</span>`;
+  }
+  return `<span class="badges">${h}</span>`;
+}
+function dot(s) {
+  const k = ['a', 'au', 'r'].find((k) => s[k] > 0);
+  if (s.done) return `<span class="dot" style="--_fg:var(--r2m-status-ok)" title="Done"></span>`;
+  return k ? `<span class="dot" style="--_fg:${COLOR[k]}"></span>` : '';
+}
+function tree(mode) {
+  return `<div class="tree" role="tree">` + ROWS.map((r) => {
+    const s = mode === 'none' ? {} : mode === 'all' ? (r.s.done ? { ...ALL } : { ...ALL, proc: r.current }) : r.s;
+    return `<div class="node ${r.parent ? '' : 'leaf'} ${r.current ? 'current' : ''}" style="--d:${r.d}">
+      <span class="toggle">${r.parent ? ic('expand_more') : ''}</span>
+      <input type="checkbox" class="select" ${r.d === 1 && r.t.includes('II.') ? 'checked' : ''} />
+      <span class="title">${r.t}</span>${dot(s)}${badges(s)}
+      <span class="menu">${ic('more_vert')}</span></div>`;
+  }).join('') + `</div>`;
+}
+const $ = (id) => document.getElementById(id);
+let i = Math.max(0, VARIANTS.findIndex((v) => v[0] === new URLSearchParams(location.search).get('variant')));
+function render() {
+  const [k, name, note] = VARIANTS[i];
+  const mode = document.querySelector('input[name=badges]:checked').value;
+  const cls = `v${k} ${$('savers').checked ? 'savers' : ''} ${$('sel').checked ? 'sel' : ''}`;
+  $('grid').innerHTML = WIDTHS.map((w) => `<div class="col"><h2>${w} px</h2><div class="pane ${cls}" style="width:${w}px">${tree(mode)}</div></div>`).join('');
+  document.querySelectorAll('.select').forEach((c) => (c.hidden = !$('sel').checked));
+  document.querySelectorAll('.title').forEach((t) => { if (t.scrollWidth > t.clientWidth || t.scrollHeight > t.clientHeight + 1) t.title = t.textContent; });
+  $('label').textContent = `${k} (${name})`;
+  $('note').textContent = `${k}: ${note}`;
+  try { history.replaceState(null, '', `?variant=${k}`); } catch {}
+}
+const step = (n) => { i = (i + n + VARIANTS.length) % VARIANTS.length; render(); };
+$('prev').onclick = () => step(-1); $('next').onclick = () => step(1);
+addEventListener('keydown', (e) => { if (e.target.matches('input,textarea,[contenteditable]')) return; if (e.key === 'ArrowLeft') step(-1); if (e.key === 'ArrowRight') step(1); });
+document.querySelectorAll('input').forEach((x) => (x.onchange = render));
+document.fonts?.ready.then(render); render();
+</script>
+</body>
+</html>
