@@ -22,10 +22,12 @@ import {
   type ReviewRow,
   type ReviewRowState,
   ReviewSelection,
+  askAgainBlockedReason,
   effectiveValue,
   isAppliable,
   isUserEdited,
   planErrorMessage,
+  rowSources,
   rowState,
 } from './review-model';
 import { streamDisclosure } from '@app/ui/stream-disclosure';
@@ -391,7 +393,9 @@ export class EditWithAiDialog extends R2mElement {
   private rowDetail(row: ReviewRow, i: number, state: ReviewRowState, view: ReviewView) {
     const retrying = view.retryingRowId === row.proposal.id;
     const retryError = view.retryError;
+    const blocked = askAgainBlockedReason(row);
     return html`<div class="edit__detail">
+      ${this.sourcesList(row)}
       <p class="edit__hint">Current</p>
       <p class="edit__current">${row.proposal.oldValue}</p>
       <label class="edit__hint" for="proposed-${i}">Proposed</label>
@@ -461,7 +465,8 @@ export class EditWithAiDialog extends R2mElement {
                 type="button"
                 class="r2m-button r2m-button--stroked"
                 data-action="retry-row"
-                ?disabled=${view.retryingRowId !== null}
+                ?disabled=${view.retryingRowId !== null || blocked !== null}
+                data-tooltip=${blocked ?? nothing}
                 @click=${() => void this.retry(row)}
               >
                 ${icon('refresh')} Ask AI again
@@ -474,6 +479,22 @@ export class EditWithAiDialog extends R2mElement {
         </button>
       </div>
     </div>`;
+  }
+
+  /** Label, name and value of each source the row read, above Current; nothing for a plan that reads none. */
+  private sourcesList(row: ReviewRow) {
+    const sources = rowSources(row);
+    if (sources.length === 0) return nothing;
+    return html`<p class="edit__hint">Sources</p>
+      <ul class="edit__sources" data-testid="sources">
+        ${sources.map(
+          (s) =>
+            html`<li>
+              <span class="edit__source-label">${s.label} (${s.name})</span>
+              <span class="edit__source-value">${s.value}</span>
+            </li>`,
+        )}
+      </ul>`;
   }
 
   private actions(phase: EditPhase) {

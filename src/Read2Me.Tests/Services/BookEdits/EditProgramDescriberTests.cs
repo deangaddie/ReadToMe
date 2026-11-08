@@ -36,6 +36,40 @@ namespace Read2Me.Tests.Services.BookEdits
             Assert.Equal(expected, EditProgramDescriber.Describe(program));
         }
 
+        private static EditSource Src(string name) => EditSourceCatalog.TryParse(name, out var s) ? s : throw new ArgumentException(name);
+
+        [Fact]
+        public void Describe_SetTemplate_ReadingSources_EndsWithTheLabelsInPlanOrder()
+        {
+            var program = Program(EditTargetSelector.ChapterTitle, new EditTransform(
+                TransformKind.SetTemplate, Template: "Chapter {p1}, {p2}", Sources: [Src("p1"), Src("p2")]));
+
+            Assert.Equal(
+                "Edit chapter titles (whole book) — set to template \"Chapter {p1}, {p2}\" — reads p1 (paragraph 1), p2 (paragraph 2)",
+                EditProgramDescriber.Describe(program));
+        }
+
+        [Fact]
+        public void Describe_Llm_ReadingSources_EndsWithTheLabelsInPlanOrder()
+        {
+            var program = Program(EditTargetSelector.ChapterTitle, new EditTransform(
+                TransformKind.Llm, Instruction: "title it", Sources: [Src("p2"), Src("p_end1"), Src("chapter")]));
+
+            Assert.Equal(
+                "Edit chapter titles (whole book) — AI edit: \"title it\" — reads p2 (paragraph 2), p_end1 (last paragraph), chapter (chapter title)",
+                EditProgramDescriber.Describe(program));
+        }
+
+        [Fact]
+        public void Describe_NoSources_HasNoReadsSuffix()
+        {
+            var program = Program(EditTargetSelector.ChapterTitle, new EditTransform(
+                TransformKind.SetTemplate, Template: "Chapter {n}"));
+
+            Assert.Equal("Edit chapter titles (whole book) — set to template \"Chapter {n}\"",
+                EditProgramDescriber.Describe(program));
+        }
+
         [Fact]
         public void Describe_ChangeCase_ReadyMadePatternWithStraightApostrophes_IsStillNamedInPlainWords()
         {

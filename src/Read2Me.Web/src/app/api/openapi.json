@@ -1149,8 +1149,11 @@
         ]
       },
       "BookEditRowDto": {
-        "description": "ProposedEdit on the wire; enums as member names. Shared with the REST reads of a\r\nproposal run (`BookEditEndpoints`) on purpose: a row a client got pushed and a row it read\r\nback after missing the push have to be the same shape, or a review screen would need two.\r\nNewValue is null on a `Failed` row.",
+        "description": "ProposedEdit on the wire; enums as member names. Shared with the REST reads of a\r\nproposal run (`BookEditEndpoints`) on purpose: a row a client got pushed and a row it read\r\nback after missing the push have to be the same shape, or a review screen would need two.\r\nNewValue is null on a `Failed` row.\r\nSources are in the order the plan names them (empty when it reads none; a missing\r\nsource is left out, the reason names it). CanAskAgain is false on a missing- or\r\nself-source Failed row, where asking again would only return the same failure.",
         "properties": {
+          "canAskAgain": {
+            "type": "boolean"
+          },
           "displayPath": {
             "type": "string"
           },
@@ -1176,6 +1179,12 @@
           "oldValue": {
             "type": "string"
           },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/BookEditSourceDto"
+            },
+            "type": "array"
+          },
           "status": {
             "$ref": "#/components/schemas/ProposalStatus"
           }
@@ -1187,7 +1196,9 @@
           "oldValue",
           "newValue",
           "status",
-          "failureReason"
+          "failureReason",
+          "sources",
+          "canAskAgain"
         ],
         "type": "object"
       },
@@ -1235,6 +1246,26 @@
           "Cancelled",
           "Failed"
         ]
+      },
+      "BookEditSourceDto": {
+        "description": "One Edit source value a row read: its name (`p1`), the plain label (`Paragraph 1`) and the value.",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "value"
+        ],
+        "type": "object"
       },
       "BookEditTargetKind": {
         "enum": [

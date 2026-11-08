@@ -42,6 +42,8 @@ function row(id: string, oldValue: string, newValue: string | null): BookEditRow
     newValue,
     status: newValue === null ? 'Failed' : 'Proposed',
     failureReason: newValue === null ? 'model returned nothing' : null,
+    sources: [],
+    canAskAgain: true,
   };
 }
 
@@ -164,7 +166,7 @@ describe('r2m-edit-with-ai-dialog', () => {
   }
 
   /** Drives instruct → plan → proposing → review with the two rows landed. */
-  async function reachReview(): Promise<void> {
+  async function reachReview(landed: BookEditRowDto[] = ROWS): Promise<void> {
     await instruct();
     await analyze();
     await generate();
@@ -172,10 +174,10 @@ describe('r2m-edit-with-ai-dialog', () => {
       bookEditMessage({
         kind: 'Done',
         program: 'prog-1',
-        done: 2,
-        total: 2,
+        done: landed.length,
+        total: landed.length,
         cancelled: false,
-        rows: ROWS,
+        rows: landed,
       }),
     );
   }
@@ -528,6 +530,70 @@ describe('r2m-edit-with-ai-dialog', () => {
     });
     expect(rows()[0]!.textContent).toContain('Chapter 1');
     expect(text('selected-count')).toBe('2 of 2 selected');
+  });
+
+  describe('sources', () => {
+    const SOURCES = [
+      { name: 'p1', label: 'Paragraph 1', value: '1' },
+      { name: 'p2', label: 'Paragraph 2', value: 'The Period' },
+    ];
+    const sourcesOf = () => dialog.querySelector<HTMLElement>('[data-testid="sources"]');
+    const lines = () =>
+      Array.from(sourcesOf()?.querySelectorAll('li') ?? []).map((li) =>
+        li.textContent!.replace(/\s+/g, ' ').trim(),
+      );
+
+    it('lists the sources above Current in plan order, in the opened row only', async () => {
+      await reachReview([
+        { ...row('c1', 'chapter one', 'Chapter 1, The Period'), sources: SOURCES },
+        ROWS[1]!,
+      ]);
+
+      expect(sourcesOf()).toBeNull(); // collapsed rows are unchanged
+      await openRow(0);
+
+      expect(lines()).toEqual(['Paragraph 1 (p1) 1', 'Paragraph 2 (p2) The Period']);
+      const open = rows()[0]!.querySelector('.edit__detail')!;
+      expect(
+        sourcesOf()!.compareDocumentPosition(open.querySelector('.edit__current')!) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it('adds nothing to a row that reads no sources', async () => {
+      await reachReview();
+      await openRow(0);
+
+      expect(sourcesOf()).toBeNull();
+    });
+
+    it('disables Ask AI again on a row that cannot ask again, with its reason as the tooltip', async () => {
+      const blocked: BookEditRowDto = {
+        ...row('c1', 'chapter one', null),
+        failureReason: 'p1 is missing: the chapter has no paragraphs',
+        canAskAgain: false,
+      };
+      await reachReview([blocked, ROWS[1]!]);
+      await openRow(0);
+
+      expect(button('retry-row').disabled).toBe(true);
+      expect(button('retry-row').getAttribute('data-tooltip')).toBe(
+        'p1 is missing: the chapter has no paragraphs',
+      );
+      // Typing a value by hand still makes the row appliable.
+      type(proposed(), 'Chapter 1');
+      await dialog.rendered();
+      expect(text('selected-count')).toBe('2 of 2 selected');
+      expect(button('retry-row').disabled).toBe(true);
+    });
+
+    it('keeps Ask AI again enabled on an ordinary row', async () => {
+      await reachReview();
+      await openRow(0);
+
+      expect(button('retry-row').disabled).toBe(false);
+      expect(button('retry-row').hasAttribute('data-tooltip')).toBe(false);
+    });
   });
 
   it('keeps the row as it was when a retry never gets an answer', async () => {

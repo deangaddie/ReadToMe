@@ -248,6 +248,51 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     [Fact]
+    public async Task Rows_carry_the_sources_they_read_in_plan_order_and_a_missing_source_row_cannot_ask_again()
+    {
+        var folder = $"api-edit-rowsources-{Guid.NewGuid():N}";
+        await app.SeedChapterHeadingBookAsync(folder);
+        app.FakeAi.LlmReply = _ => TemplatePlan.Replace("\"template\": \"{n}. {old}\"", "\"template\": \"Chapter {p1}, {p2}\"");
+        try
+        {
+            var plan = await PlanAsync(folder, "title each chapter from its first two paragraphs");
+            var program = plan.GetProperty("program").GetString()!;
+
+            await using var hub = new HubConnectionBuilder().WithUrl($"{app.BaseUrl}/hubs/live").Build();
+            var messages = new ConcurrentQueue<JsonElement>();
+            hub.On<JsonElement>("bookEdit", messages.Enqueue);
+            await hub.StartJoinedAsync();
+            var propose = await Http.PostAsJsonAsync(Url(folder, $"/{program}/propose"),
+                new { thinking = false, connectionId = hub.ConnectionId });
+            Assert.Equal(HttpStatusCode.Accepted, propose.StatusCode);
+            await WaitForAsync(() => messages.Any(m => m.GetProperty("kind").GetString() == "Done"));
+
+            static List<(string[] Sources, bool CanAskAgain)> Shape(JsonElement rows) => rows.EnumerateArray()
+                .Select(r => (r.GetProperty("sources").EnumerateArray()
+                        .Select(s => $"{s.GetProperty("name").GetString()}|{s.GetProperty("label").GetString()}|{s.GetProperty("value").GetString()}")
+                        .ToArray(),
+                    r.GetProperty("canAskAgain").GetBoolean()))
+                .ToList();
+
+            var read = Shape((await GetRunAsync(folder, program)).GetProperty("rows"));
+            var pushed = Shape(messages.Single(m => m.GetProperty("kind").GetString() == "Done").GetProperty("rows"));
+
+            Assert.Equal(2, read[0].Sources.Length);
+            Assert.Equal(["p1|Paragraph 1|1", "p2|Paragraph 2|The Period"], read[0].Sources);
+            Assert.Equal(["p1|Paragraph 1|2", "p2|Paragraph 2|The Mail"], read[1].Sources);
+            Assert.True(read[0].CanAskAgain);
+            Assert.Empty(read[2].Sources); // the chapter has no paragraphs: nothing read, the reason names p1
+            Assert.False(read[2].CanAskAgain);
+            Assert.Equal(read.Select(r => (string.Join(";", r.Sources), r.CanAskAgain)),
+                pushed.Select(r => (string.Join(";", r.Sources), r.CanAskAgain)));
+        }
+        finally
+        {
+            app.FakeAi.Reset();
+        }
+    }
+
+    [Fact]
     public async Task An_AI_plan_reading_paragraphs_sends_their_text_and_fails_a_chapter_without_them_before_any_request()
     {
         var folder = $"api-edit-llm-sources-{Guid.NewGuid():N}";

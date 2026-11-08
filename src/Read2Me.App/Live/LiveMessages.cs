@@ -265,13 +265,21 @@ public sealed record HistoryMessage(
 /// proposal run (<c>BookEditEndpoints</c>) on purpose: a row a client got pushed and a row it read
 /// back after missing the push have to be the same shape, or a review screen would need two.
 /// <paramref name="NewValue"/> is null on a <c>Failed</c> row.
+/// <paramref name="Sources"/> are in the order the plan names them (empty when it reads none; a missing
+/// source is left out, the reason names it). <paramref name="CanAskAgain"/> is false on a missing- or
+/// self-source Failed row, where asking again would only return the same failure.
 /// </summary>
 public sealed record BookEditRowDto(
-    BookEditTargetKind Kind, Guid Id, string DisplayPath, string OldValue, string? NewValue, ProposalStatus Status, string? FailureReason)
+    BookEditTargetKind Kind, Guid Id, string DisplayPath, string OldValue, string? NewValue, ProposalStatus Status, string? FailureReason,
+    IReadOnlyList<BookEditSourceDto> Sources, bool CanAskAgain)
 {
     public static BookEditRowDto From(ProposedEdit p) =>
-        new(p.Kind, p.Id, p.DisplayPath, p.OldValue, p.NewValue, p.Status, p.FailureReason);
+        new(p.Kind, p.Id, p.DisplayPath, p.OldValue, p.NewValue, p.Status, p.FailureReason,
+            [.. p.Sources.Select(s => new BookEditSourceDto(s.Name, s.Label, s.Value))], p.CanAskAgain);
 }
+
+/// <summary>One Edit source value a row read: its name (<c>p1</c>), the plain label (<c>Paragraph 1</c>) and the value.</summary>
+public sealed record BookEditSourceDto(string Name, string Label, string Value);
 
 public enum SetupCheckMessageKind { Progress, Done }
 

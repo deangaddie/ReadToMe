@@ -9301,8 +9301,12 @@ export interface components {
          *     proposal run (`BookEditEndpoints`) on purpose: a row a client got pushed and a row it read
          *     back after missing the push have to be the same shape, or a review screen would need two.
          *     NewValue is null on a `Failed` row.
+         *     Sources are in the order the plan names them (empty when it reads none; a missing
+         *     source is left out, the reason names it). CanAskAgain is false on a missing- or
+         *     self-source Failed row, where asking again would only return the same failure.
          */
         BookEditRowDto: {
+            canAskAgain: boolean;
             displayPath: string;
             failureReason: null | string;
             /** Format: uuid */
@@ -9310,6 +9314,7 @@ export interface components {
             kind: components["schemas"]["BookEditTargetKind"];
             newValue: null | string;
             oldValue: string;
+            sources: components["schemas"]["BookEditSourceDto"][];
             status: components["schemas"]["ProposalStatus"];
         };
         /** @description The session's proposal run as a whole — what a client that missed the hub asks for. */
@@ -9324,6 +9329,12 @@ export interface components {
         };
         /** @enum {unknown} */
         BookEditRunStatus: "Idle" | "Running" | "Completed" | "Cancelled" | "Failed";
+        /** @description One Edit source value a row read: its name (`p1`), the plain label (`Paragraph 1`) and the value. */
+        BookEditSourceDto: {
+            label: string;
+            name: string;
+            value: string;
+        };
         /** @enum {unknown} */
         BookEditTargetKind: "VolumeTitle" | "PartTitle" | "ChapterTitle" | "ParagraphItemText";
         /**
@@ -11437,6 +11448,7 @@ export type BookEditMessageKind = components['schemas']['BookEditMessageKind'];
 export type BookEditRowDto = components['schemas']['BookEditRowDto'];
 export type BookEditRunDto = components['schemas']['BookEditRunDto'];
 export type BookEditRunStatus = components['schemas']['BookEditRunStatus'];
+export type BookEditSourceDto = components['schemas']['BookEditSourceDto'];
 export type BookEditTargetKind = components['schemas']['BookEditTargetKind'];
 export type BookFacets = components['schemas']['BookFacets'];
 export type BookFileType = components['schemas']['BookFileType'];

@@ -37,6 +37,22 @@ export function effectiveValue(row: ReviewRow): string | null {
   return row.userValue ?? row.proposal.newValue ?? null;
 }
 
+/** The source values the row read, in the order the plan names them; empty for a plan that reads none. */
+export function rowSources(row: ReviewRow): BookEditRowDto['sources'] {
+  return row.proposal.sources;
+}
+
+/**
+ * Why Ask again is unavailable on this row, or null when it is. A missing- or self-source failure
+ * would only fail the same way, so the server marks it `canAskAgain: false` and the client never
+ * parses reasons; the failure reason is the explanation.
+ */
+export function askAgainBlockedReason(row: ReviewRow): string | null {
+  return row.proposal.canAskAgain
+    ? null
+    : (row.proposal.failureReason ?? 'Asking again would fail the same way.');
+}
+
 export function rowState(row: ReviewRow): ReviewRowState {
   if (row.userValue === null) {
     switch (row.proposal.status) {

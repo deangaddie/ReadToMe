@@ -24,7 +24,12 @@ namespace Read2Me.Services.BookEdits
                 _ => $"AI edit: \"{program.Transform.Instruction}\"",
             };
 
-            return $"Edit {target}{scope} — {transform}";
+            var reads = program.Transform.Sources.Count == 0
+                ? ""
+                : " — reads " + string.Join(", ", program.Transform.Sources.Select(s =>
+                    $"{s.Name} ({EditSourceCatalog.Label(s).ToLowerInvariant()})"));
+
+            return $"Edit {target}{scope} — {transform}{reads}";
         }
 
         /// <summary>

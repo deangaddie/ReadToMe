@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import type { BookEditRowDto, ProposalStatus } from '@app/api';
-import { ReviewSelection, effectiveValue, isUserEdited, rowState } from './review-model';
+import {
+  ReviewSelection,
+  askAgainBlockedReason,
+  effectiveValue,
+  isUserEdited,
+  rowSources,
+  rowState,
+} from './review-model';
 
 /**
  * What "N selected" means in the review, and what Apply sends for it.
@@ -18,6 +25,8 @@ function proposal(
     newValue: status === 'Failed' ? null : newValue,
     status,
     failureReason: status === 'Failed' ? 'model returned nothing' : null,
+    sources: [],
+    canAskAgain: true,
   };
 }
 
@@ -253,5 +262,54 @@ describe('ReviewSelection', () => {
 
     expect(isUserEdited(row(original, p))).toBe(false);
     expect(isUserEdited(row(edited, p))).toBe(true);
+  });
+});
+
+describe('sources', () => {
+  const SOURCES = [
+    { name: 'p1', label: 'Paragraph 1', value: '1' },
+    { name: 'p2', label: 'Paragraph 2', value: 'The Period' },
+  ];
+
+  it('exposes the sources a row read, in order, and none for a plain row', () => {
+    const read = { ...proposal('Proposed'), sources: SOURCES };
+    const plain = proposal('Proposed');
+    const selection = selectionOf(read, plain);
+
+    expect(rowSources(row(selection, read)).map((s) => s.name)).toEqual(['p1', 'p2']);
+    expect(rowSources(row(selection, plain))).toEqual([]);
+  });
+
+  it('blocks Ask again with the failure reason when the wire says it cannot, and not otherwise', () => {
+    const blocked = {
+      ...proposal('Failed'),
+      failureReason: 'p1 is missing: the chapter has no paragraphs',
+      canAskAgain: false,
+    };
+    const ordinary = proposal('Failed');
+    const selection = selectionOf(blocked, ordinary);
+
+    expect(askAgainBlockedReason(row(selection, blocked))).toBe(
+      'p1 is missing: the chapter has no paragraphs',
+    );
+    expect(askAgainBlockedReason(row(selection, ordinary))).toBeNull();
+  });
+
+  it('keeps a hand-typed value appliable on a row that cannot ask again', () => {
+    const blocked = { ...proposal('Failed'), canAskAgain: false };
+    const next = selectionOf(blocked).setValue(row(selectionOf(blocked), blocked), 'Chapter 1');
+
+    expect(next.count).toBe(1);
+  });
+
+  it('takes a retry result’s sources onto the row', () => {
+    const before = proposal('Proposed');
+    const selection = selectionOf(before);
+    const after = selection.replaceProposal(row(selection, before), {
+      ...before,
+      sources: SOURCES,
+    });
+
+    expect(rowSources(row(after, before))).toHaveLength(2);
   });
 });

@@ -8,6 +8,9 @@ namespace Read2Me.Services.BookEdits
 {
     public enum ProposalStatus { Proposed, NoChange, Failed }
 
+    /// <summary>One Edit source value a row read, with the catalogue's plain label.</summary>
+    public sealed record ProposedSource(string Name, string Label, string Value);
+
     public sealed record ProposedEdit(
         BookEditTargetKind Kind,
         Guid Id,
@@ -15,8 +18,13 @@ namespace Read2Me.Services.BookEdits
         string OldValue,
         string? NewValue,
         ProposalStatus Status,
-        string? FailureReason)
+        string? FailureReason,
+        IReadOnlyList<ProposedSource>? Sources = null,
+        bool CanAskAgain = true)
     {
+        /// <summary>The source values this row read, in the plan's order; a missing one is left out (the reason names it).</summary>
+        public IReadOnlyList<ProposedSource> Sources { get; init; } = Sources ?? [];
+
         public BookEditItem ToEditItem() => new(Kind, Id, NewValue!);
     }
 
@@ -275,12 +283,20 @@ namespace Read2Me.Services.BookEdits
 
         private static ProposedEdit Build(EditTarget target, string? newValue, string? failure)
         {
+            // A missing source is left out of the list: the failure reason names it. Asking the AI
+            // again would only return that same failure, so such a row can't ask again.
+            var sources = target.Sources.Where(s => !s.IsMissing && EditSourceCatalog.TryParse(s.Name, out _))
+                .Select(s => new ProposedSource(s.Name, EditSourceCatalog.Label(Parse(s.Name)), s.Value!))
+                .ToList();
+            var canAskAgain = target.SourceFailure == null;
             if (failure != null)
                 return new ProposedEdit(target.Kind, target.Id, target.DisplayPath,
-                    target.CurrentValue, null, ProposalStatus.Failed, failure);
+                    target.CurrentValue, null, ProposalStatus.Failed, failure, sources, canAskAgain);
             var status = newValue == target.CurrentValue ? ProposalStatus.NoChange : ProposalStatus.Proposed;
             return new ProposedEdit(target.Kind, target.Id, target.DisplayPath,
-                target.CurrentValue, newValue, status, null);
+                target.CurrentValue, newValue, status, null, sources, canAskAgain);
         }
+
+        private static EditSource Parse(string name) => EditSourceCatalog.TryParse(name, out var s) ? s : default;
     }
 }

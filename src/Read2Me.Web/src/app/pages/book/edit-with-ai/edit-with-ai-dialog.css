@@ -160,6 +160,22 @@
     overflow-y: auto;
     white-space: pre-wrap;
   }
+  .edit__sources {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--r2m-space-1);
+  }
+  .edit__source-label {
+    color: var(--r2m-text-muted);
+    margin-right: var(--r2m-space-2);
+  }
+  .edit__source-value {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
   .edit__row-actions {
     display: flex;
     align-items: center;
