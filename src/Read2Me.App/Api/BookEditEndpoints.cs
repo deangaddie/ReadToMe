@@ -9,8 +9,8 @@ using Read2Me.Services.History;
 
 namespace Read2Me.App.Api
 {
-    /// <param name="Thinking">Let the model think before planning — slower, better on vague instructions.</param>
-    public sealed record PlanBookEditRequest(string? Instruction, bool Thinking = false);
+    /// <param name="Thinking">Let the model think before planning — slower, better on vague instructions and at choosing between template tokens and an LLM; on unless set false.</param>
+    public sealed record PlanBookEditRequest(string? Instruction, bool Thinking = true);
 
     /// <summary>
     /// <paramref name="Status"/> is the planner's <see cref="EditPlanStatus"/>, or <c>NoTargets</c> when the

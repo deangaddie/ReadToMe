@@ -10150,8 +10150,8 @@ export interface components {
         PlanBookEditRequest: {
             instruction: null | string;
             /**
-             * @description Let the model think before planning — slower, better on vague instructions.
-             * @default false
+             * @description Let the model think before planning — slower, better on vague instructions and at choosing between template tokens and an LLM; on unless set false.
+             * @default true
              */
             thinking: boolean;
         };

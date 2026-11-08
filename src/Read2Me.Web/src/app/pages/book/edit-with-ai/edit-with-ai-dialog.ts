@@ -120,9 +120,10 @@ export class EditWithAiDialog extends R2mElement {
   /**
    * Thinking is chosen per phase because the two calls trade off differently: the plan is one call
    * where thinking is cheap, the fix runs once per batch/row where it dominates the runtime. Both
-   * default off — thinking is opt-in, for when a plain run gets the edit wrong.
+   * default differently: the plan defaults on (the planner chooses between tokens and an LLM from the
+   * sample, which a plain run gets wrong too often), the fix defaults off — thinking is opt-in there.
    */
-  private readonly planThinking = signal(false);
+  private readonly planThinking = signal(true);
   private readonly fixThinking = signal(false);
   private readonly progressDone = signal(0);
   private readonly progressTotal = signal(0);

@@ -457,7 +457,7 @@ namespace Read2Me.Services.Llm
             Book outline:
             {{book_outline}}
 
-            The plan has three parts:
+            The plan has four parts:
 
             1. "target" — what kind of value is edited:
                - "volume_title", "part_title", "chapter_title": rename those nodes.
@@ -499,7 +499,8 @@ namespace Read2Me.Services.Llm
                - "set_template": the whole value is replaced by "template". Tokens: {n} is
                  the 1-based position of the item within the matched scope, {old} is the
                  current value. Example: "Chapter {n}: {old}". Use this for renames with
-                 numbering, prefixes ("X{old}") or suffixes ("{old}X").
+                 numbering, prefixes ("X{old}") or suffixes ("{old}X"). Source names in
+                 braces (part 4) copy other values the same way.
                - "change_case": change letter case. Set "case_mode" to "upper", "lower",
                  "sentence" or "title". "pattern" is a .NET regex selecting the spans to
                  re-case, or null to re-case the whole value. For all-caps words or runs
@@ -517,7 +518,43 @@ namespace Read2Me.Services.Llm
                  instruction describes, the text it means is paragraph text.
                - "llm": the change needs understanding of the text (e.g. "restore the missing
                  first letter", "fix the grammar"). Set "instruction" to a precise, standalone
-                 command that will be applied to each matched text on its own.
+                 command that will be applied to each matched text on its own. If it reads
+                 other values, list them in "sources" and name them in the instruction
+                 (part 4).
+
+            4. Sources — a set_template or llm transform may also read values from nearby
+               parts of the book, beside the value it changes. The outline's "p1:", "p2:"…
+               lines under each chapter are the first paragraphs of that chapter, labelled
+               with the names below. What each target can read:
+               - "chapter_title": p1…p5 (the chapter's paragraphs from the start),
+                 p_end1…p_end5 (from the end; p_end1 is the last), part, volume.
+               - "paragraph_text": p1…p5 and p_end1…p_end5 (the other paragraphs of the
+                 same chapter), prev, next (the paragraph before and after), chapter, part,
+                 volume (the titles of the chapter, part and volume the paragraph is in).
+               - "part_title": ch1…ch5 and ch_end1…ch_end5 (the titles of its chapters,
+                 from the start and from the end), volume.
+               - "volume_title": ch1…ch5 and ch_end1…ch_end5 (chapter titles counted across
+                 the whole volume), pt1…pt5 and pt_end1…pt_end5 (its part titles).
+               Use exactly these names, nothing else (a token such as {title} is unknown).
+               Anything else, or a position past 5: set "supported" to false and say why in
+               "unsupported_reason". regex_replace and change_case read no sources.
+               - In set_template, write each source as a token in braces beside {n} and
+                 {old}: "Chapter {p1}, {p2}". The token is replaced by the value, trimmed
+                 and otherwise unchanged; nothing is stripped, re-cased or converted.
+               - In llm, "sources" lists every source the instruction reads, by name, and no
+                 others. The "instruction" must contain each listed name exactly as written
+                 (p1, ch1, …), because the names are how it points at the values: "… the
+                 number written in p1, as a digit". Only the listed values are sent with
+                 each text.
+               - "sources" is an empty list for every other plan.
+               Examples (instruction → key fields):
+               - "append the first paragraph to each chapter title" → reasoning: p1 is
+                 "Fog", plain text to copy as written, so set_template; target
+                 "chapter_title", template "{old}: {p1}", sources [].
+               - "name each part after its first chapter, without the chapter number" →
+                 reasoning: ch1 is "Chapter 3: The Wine", the number has to be removed, so
+                 llm; target "part_title", sources ["ch1"], instruction "Return the title
+                 of the chapter named in ch1 without its chapter number."
 
             If the instruction asks for anything other than editing titles or paragraph text —
             adding, deleting, splitting, merging or reordering content, changing audio or
@@ -525,8 +562,19 @@ namespace Read2Me.Services.Llm
 
             Rules:
             - First write one short sentence in "reasoning" explaining how you read the instruction.
-            - Use the most deterministic transform that satisfies the instruction: prefer
-              set_template or regex_replace over llm when the change is mechanical.
+            - When the plan reads no sources, use the most deterministic transform that
+              satisfies the instruction: prefer set_template or regex_replace over llm when
+              the change is mechanical.
+            - When the plan reads sources, first look at the sampled values it reads. In
+              "reasoning", quote each one next to the exact form the result needs from it and
+              say whether they are identical (for example: p1 is "Part Two" and the result
+              needs "Part Two", identical). Then use set_template if the instruction asks for
+              an exact copy, or only places the values as written beside fixed text or {old}
+              (a prefix, a suffix, a separator) and every sampled value is identical to what
+              the result needs. Use llm if any value differs from what the result needs and
+              must be understood or changed first (a roman or spelled-out number where the
+              result needs a digit, text to trim or re-case), and also when the sample doesn't
+              show the source.
             - Changing letter case by a rule (sentence, title, upper or lower case, fixing
               all caps) is always change_case, never llm or regex_replace. Replacing named
               literal text with other literal text ("replace X with Y") is regex_replace,

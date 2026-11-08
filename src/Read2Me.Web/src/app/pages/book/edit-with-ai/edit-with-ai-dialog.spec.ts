@@ -301,13 +301,16 @@ describe('r2m-edit-with-ai-dialog', () => {
 
   it('sends the instruction and the thinking flags it was given', async () => {
     await instruct('rename the chapters');
+    expect(
+      dialog.querySelector<HTMLInputElement>('[data-testid="plan-thinking"] input')?.checked,
+    ).toBe(true);
     toggle('plan-thinking');
     await dialog.rendered();
 
     await analyze();
     expect(api.calls('POST', `${BASE}/plan`)[0]?.body).toEqual({
       instruction: 'rename the chapters',
-      thinking: true,
+      thinking: false,
     });
 
     toggle('fix-thinking');

@@ -122,7 +122,7 @@ use; `DELETE` it when you are done. Titles and paragraph text only.
 ```bash
 curl -s -X POST http://localhost:5000/api/projects/{folder}/book-edits/plan \
   -H 'content-type: application/json' \
-  -d '{ "instruction": "rename every chapter to Chapter {n}", "thinking": false }'
+  -d '{ "instruction": "rename every chapter to Chapter {n}", "thinking": true }'  # thinking defaults to true for plan, false for propose
 # status Ok carries the program; NoLlmConfigured | Unsupported | ServiceUnavailable | Failed |
 # NoTargets explain themselves in reason instead. transform Llm packs items into requests of up to 8 items and ~12,000 characters of text plus
 # sources (an item over that goes alone; one over ~60,000 fails alone, "Too long to send to the AI (text and sources)");
