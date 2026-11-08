@@ -4,8 +4,11 @@
     display: block;
     font-size: var(--r2m-text-md);
   }
+  /* Layout C: line 1 is the indent, chevron slot, checkbox, title and menu trigger; line 2, only on
+     a row with something to show, holds the status chip and badges under the title and wraps. */
   .tree__node {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--r2m-space-1);
     min-height: 32px;
@@ -14,6 +17,10 @@
     border-radius: var(--r2m-radius-sm);
     outline: none;
     cursor: default;
+  }
+  .tree__node:has(> .tree__status) {
+    row-gap: 2px;
+    padding-block: var(--r2m-space-1);
   }
   .tree__node:focus-visible {
     box-shadow: inset 0 0 0 2px var(--r2m-accent);
@@ -46,18 +53,26 @@
     accent-color: var(--r2m-accent);
   }
   .tree__title {
-    flex: 1 1 auto;
+    /* A zero basis keeps a long title on line 1 beside the menu trigger: it shrinks, never wraps. */
+    flex: 1 1 0;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     cursor: pointer;
   }
-  .tree__badges {
-    display: inline-flex;
+  .tree__status {
+    --tree-title-start: calc(24px + var(--r2m-space-1));
+    flex: 0 0 100%;
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 2px;
-    flex: 0 0 auto;
+    gap: 3px;
+    padding-left: var(--tree-title-start);
+  }
+  /* Under the title also means past the checkbox: 13px, its 2px margin and the row gap. */
+  .tree__node:has(> .tree__select) > .tree__status {
+    padding-left: calc(var(--tree-title-start) + 15px + var(--r2m-space-1));
   }
   .tree__loading {
     flex: 0 0 auto;
