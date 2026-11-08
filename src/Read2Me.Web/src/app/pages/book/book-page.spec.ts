@@ -324,6 +324,45 @@ describe('r2m-book-page', () => {
     expect(page.querySelector('[aria-label="Show structure"]')).not.toBeNull();
   });
 
+  describe('structure tree layout (#313)', () => {
+    beforeEach(() => localStorage.clear());
+    afterEach(() => localStorage.clear());
+
+    const body = (page: BookPage) => page.querySelector<HTMLElement>('.book__body')!;
+    const treeWidth = (page: BookPage) => body(page).style.getPropertyValue('--book-tree-width');
+
+    it('keeps the tree hidden after a reload', async () => {
+      const first = await start('projects/dracula/book');
+      first.page.querySelector<HTMLButtonElement>('[aria-label="Hide structure"]')!.click();
+      await first.page.rendered();
+      document.body.replaceChildren();
+
+      const { page } = await start('projects/dracula/book');
+      expect(page.querySelector('r2m-structure-tree')).toBeNull();
+      expect(page.querySelector('r2m-splitter')).toBeNull();
+      expect(page.querySelector('[aria-label="Show structure"]')).not.toBeNull();
+    });
+
+    it('sizes the tree column from the remembered width, and the gutter resizes it', async () => {
+      localStorage.setItem('r2m.tree.width', '340');
+      const { page } = await start('projects/dracula/book');
+      expect(treeWidth(page)).toBe('340px');
+
+      const splitter = page.querySelector('r2m-splitter')!;
+      expect(splitter.getAttribute('aria-label')).toBe('Resize structure');
+      expect(splitter.getAttribute('aria-valuenow')).toBe('340');
+      expect(splitter.getAttribute('aria-valuemin')).toBe('220');
+      splitter.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      await page.rendered();
+      expect(treeWidth(page)).toBe('356px');
+      expect(localStorage.getItem('r2m.tree.width')).toBe('356');
+
+      splitter.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      await page.rendered();
+      expect(treeWidth(page)).toBe('280px');
+    });
+  });
+
   it('a receipt re-rendering the tree under an open Node menu keeps it on its trigger, and Escape returns focus to the node', async () => {
     const chapters = (first: string) => ({
       chapters: [

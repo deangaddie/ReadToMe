@@ -4,7 +4,7 @@ Check that parts, chapters and headings came through as the book has them, and f
 
 ## How
 
-1. Choose **Check structure** to open the Book page. The tree on the left lists every volume, part and chapter. Look for a book that came in as one chapter, chapters that are far too long or short, a heading such as “Chapter 12” left as an ordinary paragraph, and missing or wrong titles. An untitled node shows as “Untitled chapter 3”.
+1. Choose **Check structure** to open the Book page. The tree on the left lists every volume, part and chapter. Look for a book that came in as one chapter, chapters that are far too long or short, a heading such as “Chapter 12” left as an ordinary paragraph, and missing or wrong titles. An untitled node shows as “Untitled chapter 3”. Drag the edge between the tree and the text to widen or narrow the tree; double-click it to reset.
 2. Fix a few problems by hand from a node's menu (the ⋮ beside it in the tree or on its heading):
    - **Split chapter** on a paragraph starts a new chapter there. **Split part** and **Split volume** do the same one level up.
    - **Merge with previous** and **Merge with next** fold two neighbours together.

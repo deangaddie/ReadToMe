@@ -64,7 +64,7 @@
     flex: 1 1 auto;
     min-height: 0;
     display: grid;
-    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-columns: var(--book-tree-width, 280px) minmax(0, 1fr);
     gap: var(--r2m-space-4);
     /* The narrow page's floating Pronunciations panel sits against it. */
     position: relative;
@@ -74,7 +74,7 @@
   }
   /* The Pronunciations panel (pronunciation ticket 16): a third column, tree | reader | panel. */
   .book__body--pron {
-    grid-template-columns: 280px minmax(0, 1fr) 320px;
+    grid-template-columns: var(--book-tree-width, 280px) minmax(0, 1fr) 320px;
   }
   .book__body--pron.book__body--tree-hidden {
     grid-template-columns: minmax(0, 1fr) 320px;
@@ -85,7 +85,7 @@
    * query can't read the tree's width.
    */
   .book__body--pron-floating {
-    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-columns: var(--book-tree-width, 280px) minmax(0, 1fr);
   }
   .book__body--pron-floating.book__body--tree-hidden {
     grid-template-columns: minmax(0, 1fr);
@@ -109,6 +109,15 @@
     overflow: auto;
     border-right: 1px solid var(--r2m-outline);
     padding-right: var(--r2m-space-2);
+  }
+  /* The gutter between the tree and the reader resizes the tree (spec #309); out of the grid flow. */
+  .book__splitter {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: calc(
+      var(--book-tree-width, 280px) + (var(--r2m-space-4) - var(--r2m-space-2)) / 2
+    );
+    z-index: 1;
   }
   .book__reader {
     position: relative;
