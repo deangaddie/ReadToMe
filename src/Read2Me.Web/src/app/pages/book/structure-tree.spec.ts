@@ -156,6 +156,66 @@ describe('r2m-structure-tree', () => {
     expect(items().map((i) => i.tabIndex)).toEqual([-1, -1, -1, 0, -1, -1]);
   });
 
+  describe('two-line rows', () => {
+    const line2 = (id: string) => item(id).querySelector<HTMLElement>('.tree__status');
+
+    it('a row with badges puts the chip and badges on a second line after the title and menu', async () => {
+      await mount({
+        statuses: {
+          p1: status({
+            attributionQueued: 2,
+            attributionRemaining: 3,
+            audioRemaining: 5,
+            review: 1,
+          }),
+          Alpha: status({ attributionProcessing: true }),
+          Bravo: status({ isDone: true }),
+        },
+      });
+      const p1 = line2('p1')!;
+      expect(p1.textContent).toContain('2 queued');
+      expect(
+        ['attribution', 'audio', 'review'].map(
+          (kind) =>
+            p1.querySelector(`.r2m-count-badge--${kind} .r2m-count-badge__count`)?.textContent ??
+            null,
+        ),
+      ).toEqual(['3', '5', '1']);
+      // Line 2 follows line 1: the title, then the menu trigger, then the status line.
+      const children = Array.from(item('p1').children);
+      expect(children.indexOf(p1)).toBe(children.length - 1);
+      expect(line2('Alpha')?.textContent).toContain('Processing');
+      expect(line2('Bravo')?.querySelector('[aria-label="Done"]')).not.toBeNull();
+    });
+
+    it('a row with no badges and no chip has no second line', async () => {
+      await mount({ statuses: { p1: status({}), Alpha: status({ audioRemaining: 1 }) } });
+      expect(line2('p1')).toBeNull();
+      expect(line2('p2')).toBeNull();
+      expect(line2('Alpha')).not.toBeNull();
+    });
+
+    it('the title opts into the overflow tooltip with its full title, and the row delegates focus to it', async () => {
+      await mount({
+        nodes: chapters('CHAPTER III. THE LAURISTON GARDENS MYSTERY').concat(
+          node('c2', 'Chapter', [], {
+            title: 'Untitled chapter 2',
+            rawTitle: null,
+            untitled: true,
+          }),
+        ),
+      });
+      const title = (id: string) => item(id).querySelector<HTMLElement>('.tree__title')!;
+      const full = title('CHAPTER III. THE LAURISTON GARDENS MYSTERY');
+      expect(full.dataset['tooltip']).toBe('CHAPTER III. THE LAURISTON GARDENS MYSTERY');
+      expect(full.hasAttribute('data-tooltip-overflow')).toBe(true);
+      expect(title('c2').dataset['tooltip']).toBe('Untitled chapter 2');
+      expect(title('c2').hasAttribute('data-tooltip-overflow')).toBe(true);
+      expect(title('c2').classList.contains('r2m-placeholder-title')).toBe(true);
+      expect(item('c2').dataset['tooltipDelegate']).toBe('.tree__title');
+    });
+  });
+
   it('an expanded node whose children are not loaded yet shows a loading mark', async () => {
     await mount({ expandedIds: new Set(['v2']) });
     expect(item('v2').getAttribute('aria-expanded')).toBe('true');

@@ -185,6 +185,7 @@ export class StructureTree extends R2mElement {
             aria-expanded=${node.expandable ? (isOpen ? 'true' : 'false') : nothing}
             aria-current=${isCurrent ? 'true' : nothing}
             data-node-id=${node.id}
+            data-tooltip-delegate=".tree__title"
             style="--tree-depth: ${row.depth}"
             @click=${() => this.#onNodeClick(node)}
           >
@@ -223,16 +224,21 @@ export class StructureTree extends R2mElement {
                   />`
                 : nothing
             }
-            <span class="tree__title ${placeholderTitleClass(node)}">${node.title}</span>
+            <span
+              class="tree__title ${placeholderTitleClass(node)}"
+              data-tooltip=${node.title}
+              data-tooltip-overflow
+              >${node.title}</span
+            >
             ${
               isOpen && !node.loaded
                 ? html`<span class="tree__loading" aria-busy="true" aria-label="Loading"></span>`
                 : nothing
             }
-            ${status ? badges(status) : nothing}
             <span class="tree__menu">
               ${nodeMenuTrigger(menu.target, { block: menu.block, tabIndex: -1 })}
             </span>
+            ${status && hasBadges(status) ? statusLine(status) : nothing}
           </div>`;
         },
       )}
@@ -364,8 +370,21 @@ export class StructureTree extends R2mElement {
   };
 }
 
-function badges(s: NodeStatusSummaryDto) {
-  return html`<span class="tree__badges">
+/** Whether a node shows anything on its status line: the chip, a count badge or the Done mark. */
+function hasBadges(s: NodeStatusSummaryDto): boolean {
+  return (
+    s.attributionProcessing ||
+    s.attributionQueued > 0 ||
+    s.attributionRemaining > 0 ||
+    s.audioRemaining > 0 ||
+    s.review > 0 ||
+    s.isDone
+  );
+}
+
+/** A row's second line (layout C): the queued/Processing chip, the count badges, the Done mark. */
+function statusLine(s: NodeStatusSummaryDto) {
+  return html`<span class="tree__status">
     ${
       s.attributionProcessing
         ? statusChip({ status: 'busy', label: 'Processing', compact: true })
