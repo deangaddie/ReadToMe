@@ -37,7 +37,7 @@ namespace Read2Me.Services.BookEdits
                     "No active LLM server configured");
 
             var project = await reader.GetProjectAsync(folderId);
-            var outline = await outlineBuilder.BuildAsync(folderId, ct);
+            var outline = await outlineBuilder.BuildForEditAsync(folderId, ct);
 
             var prompt = RenderPrompt(project?.BookTitle, project?.Author, instruction, outline);
 

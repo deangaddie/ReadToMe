@@ -1,4 +1,6 @@
 using System.Globalization;
+using Read2Me.Data;
+using Read2Me.Data.Entities;
 
 namespace Read2Me.Services.BookEdits
 {
@@ -26,6 +28,25 @@ namespace Read2Me.Services.BookEdits
     /// </summary>
     internal static class EditSourceReader
     {
+        /// <summary>A paragraph's text items (pauses and blanks left out) in order.</summary>
+        internal static List<ParagraphItem> ContentItems(Paragraph paragraph) =>
+            paragraph.Items
+                .Where(i => !ParagraphItemKinds.IsPause(i.ItemType)
+                            && !string.IsNullOrWhiteSpace(i.Text))
+                .OrderBy(i => i.Order, StringComparer.Ordinal)
+                .ToList();
+
+        /// <summary>The value a paragraph source reads: its text items joined and trimmed.</summary>
+        internal static string JoinedValue(IEnumerable<ParagraphItem> items) =>
+            string.Join(" ", items.Select(t => t.Text)).Trim();
+
+        /// <summary>A paragraph's value as a source, or null for a pause (no text item).</summary>
+        internal static string? ParagraphValue(Paragraph paragraph)
+        {
+            var items = ContentItems(paragraph);
+            return items.Count == 0 ? null : JoinedValue(items);
+        }
+
         public static IReadOnlyList<EditSourceValue> Read(IReadOnlyList<EditSource> sources, EditSourceScope scope) =>
             sources.Select(s => Read(s, scope)).ToList();
 

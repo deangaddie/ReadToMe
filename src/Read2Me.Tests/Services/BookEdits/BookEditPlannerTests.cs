@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.AppData.Entities;
 using Read2Me.Core.Models;
+using Read2Me.Data.Entities;
+using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.BookEdits;
 using Read2Me.Services.Events;
@@ -69,6 +71,45 @@ namespace Read2Me.Tests.Services.BookEdits
             Assert.Equal(CompletionShape.Object, request.Shape);
             Assert.Equal(EditProgramSchema.JsonSchema, request.JsonSchema);
             Assert.False(request.DisableThinking);
+        }
+
+        [Fact]
+        public async Task Plan_Prompt_CarriesTheEditOutlineWithParagraphSample()
+        {
+            var settings = NewSettings();
+            await RegisterActiveConfigAsync(settings);
+            var runner = new FakeLlmCompletionRunner().Completes(ValidPlanJson);
+            var reader = new OutlineReader();
+            var planner = new BookEditPlanner(runner, settings, reader, new ChapterOutlineBuilder(reader),
+                NullLogger<BookEditPlanner>.Instance);
+
+            await planner.PlanAsync(Folder, "rename chapters", false, CancellationToken.None);
+
+            var prompt = Assert.Single(runner.Requests).Prompt;
+            Assert.Contains("Volume 1: Vol", prompt);
+            Assert.Contains("Part 1: (untitled)", prompt);
+            Assert.Contains("p1: CHAPTER I.", prompt);
+        }
+
+        private sealed class OutlineReader : ProjectReaderFakeBase
+        {
+            private static readonly Guid VolumeId = Guid.NewGuid(), PartId = Guid.NewGuid(), ChapterId = Guid.NewGuid();
+
+            public override Task<int> GetTotalPartCountAsync(ProjectFolderId folderId) => Task.FromResult(1);
+            public override Task<int> GetTotalChapterCountAsync(ProjectFolderId folderId) => Task.FromResult(1);
+            public override Task<List<Volume>> GetVolumesAsync(ProjectFolderId folderId) =>
+                Task.FromResult(new List<Volume> { new() { Id = VolumeId, Title = "Vol" } });
+
+            public override Task<HierarchyChildren> GetChildrenAsync(ProjectFolderId folderId, BookNodeLevel parentLevel, Guid parentId) =>
+                Task.FromResult(parentLevel switch
+                {
+                    BookNodeLevel.Volume => new HierarchyChildren([new Part { Id = PartId }], null, null),
+                    BookNodeLevel.Part => new HierarchyChildren(null, [new Chapter { Id = ChapterId, Title = "One" }], null),
+                    _ => new HierarchyChildren(null, null, [new Paragraph
+                    {
+                        Items = [new ParagraphItem { Order = "a", ItemType = ParagraphItemType.Speech, Text = "CHAPTER I." }],
+                    }]),
+                });
         }
 
         [Fact]

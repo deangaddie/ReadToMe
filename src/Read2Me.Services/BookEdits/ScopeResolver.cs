@@ -221,9 +221,9 @@ namespace Read2Me.Services.BookEdits
         private static List<(Paragraph Paragraph, List<ParagraphItem> Items, int Number, string Value)> ContentParagraphs(
             List<Paragraph> paragraphs) =>
             paragraphs
-                .Select(p => (Paragraph: p, Items: ContentItems(p)))
+                .Select(p => (Paragraph: p, Items: EditSourceReader.ContentItems(p)))
                 .Where(x => x.Items.Count > 0)
-                .Select((x, i) => (x.Paragraph, x.Items, Number: i + 1, Value: string.Join(" ", x.Items.Select(t => t.Text)).Trim()))
+                .Select((x, i) => (x.Paragraph, x.Items, Number: i + 1, Value: EditSourceReader.JoinedValue(x.Items)))
                 .ToList();
 
         private void AddParagraphTargets(
@@ -280,13 +280,6 @@ namespace Read2Me.Services.BookEdits
                 _ => false,
             };
         }
-
-        private static List<ParagraphItem> ContentItems(Paragraph paragraph) =>
-            paragraph.Items
-                .Where(i => !ParagraphItemKinds.IsPause(i.ItemType)
-                            && !string.IsNullOrWhiteSpace(i.Text))
-                .OrderBy(i => i.Order, StringComparer.Ordinal)
-                .ToList();
 
         private bool NodeMatches(NodeFilter filter, Regex? titleRegex, int ordinal, string? title)
         {
