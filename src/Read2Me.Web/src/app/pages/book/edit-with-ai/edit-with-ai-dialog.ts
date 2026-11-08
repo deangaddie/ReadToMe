@@ -16,7 +16,7 @@ import { adoptStyles } from '@app/core/styles';
 import { LiveService, type Unsubscribe } from '@app/live/live.service';
 import { Preflight } from '@app/shared/preflight';
 import { ConfirmService } from '@app/ui/dialogs';
-import { icon, statusChip } from '@app/ui/partials';
+import { callout, icon, statusChip } from '@app/ui/partials';
 import type { BookEditor } from '../book-editor';
 import {
   type ReviewRow,
@@ -68,6 +68,9 @@ const valueOf = (event: Event): string =>
   (event.target as HTMLInputElement | HTMLTextAreaElement).value;
 
 const checkedOf = (event: Event): boolean => (event.target as HTMLInputElement).checked;
+
+/** Shown once above the proposed rows: the user is the only check on what the AI wrote. */
+const REVIEW_WARNING = 'AI makes mistakes. Check every change carefully before you apply it.';
 
 /** The per-row signals, read once per render (see {@link EditWithAiDialog.reviewBody}). */
 interface ReviewView {
@@ -310,6 +313,7 @@ export class EditWithAiDialog extends R2mElement {
       llm: this.isLlmPlan(),
     };
     return html`<p class="edit__hint">${this.plan()?.summary}</p>
+      ${callout({ kind: 'warn', text: REVIEW_WARNING, testId: 'review-warning' })}
       <div class="edit__select">
         <button type="button" class="r2m-button" data-action="select-all" @click=${this.selectAll}>
           Select all

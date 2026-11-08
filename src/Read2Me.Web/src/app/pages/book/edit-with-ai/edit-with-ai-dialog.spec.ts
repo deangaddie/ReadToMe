@@ -347,6 +347,29 @@ describe('r2m-edit-with-ai-dialog', () => {
     expect(text('selected-count')).toBe('2 of 2 selected');
   });
 
+  it('warns once on Review that the AI makes mistakes, and not before', async () => {
+    await instruct();
+    await analyze();
+    expect(text('review-warning')).toBeNull();
+    await generate();
+    await push(
+      bookEditMessage({
+        kind: 'Done',
+        program: 'prog-1',
+        done: 2,
+        total: 2,
+        cancelled: false,
+        rows: ROWS,
+      }),
+    );
+
+    expect(phase()).toBe('review');
+    expect(dialog.querySelectorAll('[data-testid="review-warning"]')).toHaveLength(1);
+    expect(text('review-warning')).toContain(
+      'AI makes mistakes. Check every change carefully before you apply it.',
+    );
+  });
+
   it('ignores a run that belongs to another plan', async () => {
     await instruct();
     await analyze();
