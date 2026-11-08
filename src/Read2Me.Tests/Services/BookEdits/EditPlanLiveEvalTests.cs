@@ -6,7 +6,6 @@ using Read2Me.AppData.Entities;
 using Read2Me.Services.BookEdits;
 using Read2Me.Services.Llm;
 using Xunit;
-using Xunit.Sdk;
 
 namespace Read2Me.Tests.Services.BookEdits
 {
@@ -59,7 +58,7 @@ namespace Read2Me.Tests.Services.BookEdits
         public sealed record EvalCase(
             string Instruction, TransformKind? Kind, EditTargetSelector? Target, CaseMode? Mode,
             ExpectedPattern? Pattern = null, Shape Outline = Shape.Default, ExpectedSources? Sources = null,
-            bool Unsupported = false, bool ChecksFirstParagraphScope = false, string? KnownFailure = null)
+            bool Unsupported = false, bool ChecksFirstParagraphScope = false)
         {
             public override string ToString() => Outline == Shape.Bare ? $"{Instruction} [bare]" : Instruction;
         }
@@ -73,9 +72,9 @@ namespace Read2Me.Tests.Services.BookEdits
         private static readonly EvalCase[] Cases =
         [
             new("make the all-caps words in A Tale of Two Cities sentence case", TransformKind.ChangeCase,
-                EditTargetSelector.ParagraphText, CaseMode.Sentence, AllCaps, KnownFailure: "#300"),
+                EditTargetSelector.ParagraphText, CaseMode.Sentence, AllCaps),
             new("the headings are in ALL CAPS, change them to normal case", TransformKind.ChangeCase,
-                EditTargetSelector.ParagraphText, CaseMode.Sentence, AllCaps, KnownFailure: "#300"),
+                EditTargetSelector.ParagraphText, CaseMode.Sentence, AllCaps),
             new("fix the shouty capitals", TransformKind.ChangeCase,
                 EditTargetSelector.ParagraphText, CaseMode.Sentence, AllCaps),
             new("title case the chapter titles", TransformKind.ChangeCase,
@@ -138,25 +137,6 @@ namespace Read2Me.Tests.Services.BookEdits
             var output = TestContext.Current.TestOutputHelper;
             output?.WriteLine(raw);
 
-            if (evalCase.KnownFailure is not { } issue)
-            {
-                CheckPlan(evalCase, raw, output);
-                return;
-            }
-            // A known flaky case is reported, not gated: it never fails the run, and its scoring is unchanged.
-            try
-            {
-                CheckPlan(evalCase, raw, output);
-                output?.WriteLine($"KNOWN FAILURE {issue}: passed this time");
-            }
-            catch (XunitException e)
-            {
-                output?.WriteLine($"KNOWN FAILURE {issue}: failed as known, excluded from the bar: {e.Message}");
-            }
-        }
-
-        private static void CheckPlan(EvalCase evalCase, string raw, ITestOutputHelper? output)
-        {
             Assert.True(EditProgramParser.TryParse(raw, out var program, out var error), error);
 
             if (evalCase.Unsupported)

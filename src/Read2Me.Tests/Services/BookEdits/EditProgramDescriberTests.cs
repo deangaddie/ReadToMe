@@ -73,8 +73,8 @@ namespace Read2Me.Tests.Services.BookEdits
         [Fact]
         public void Describe_ChangeCase_ReadyMadePatternWithStraightApostrophes_IsStillNamedInPlainWords()
         {
-            // With thinking on, qwen-28b often copies the pattern with ’ turned into '.
-            var copied = EditProgramSchema.AllCapsPattern.Replace('’', '\'');
+            // With thinking on, qwen-28b may copy the escaped ’ as '.
+            var copied = EditProgramSchema.AllCapsPattern.Replace(EditProgramSchema.EscapedTypographicApostrophe, "'");
             var program = Program(EditTargetSelector.ParagraphText,
                 new EditTransform(TransformKind.ChangeCase, Pattern: copied, CaseMode: CaseMode.Upper));
 

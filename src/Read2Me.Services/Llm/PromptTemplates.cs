@@ -462,8 +462,7 @@ namespace Read2Me.Services.Llm
             1. "target" — what kind of value is edited:
                - "volume_title", "part_title", "chapter_title": rename those nodes.
                - "paragraph_text": edit the text of paragraphs, including headings and
-                 headers written inside the text — "headings" means paragraph text unless
-                 the instruction says titles.
+                 headers written inside the text.
 
             2. Scope filters — which nodes are edited:
                - "node_filter" narrows the nodes at the target level (for "paragraph_text"
@@ -512,10 +511,18 @@ namespace Read2Me.Services.Llm
                  caps", "fix the shouting/caps" → "sentence"; "title case", "capitalise each
                  word" → "title"; "uppercase", "all caps" → "upper"; "lowercase" → "lower".
                  When the wording names no case, use "sentence".
-                 When the instruction does not name volume, part or chapter titles, target
-                 "paragraph_text" and note in "reasoning" that titles need a separate run.
-                 Check the outline: if the chapter titles there are not in the case the
-                 instruction describes, the text it means is paragraph text.
+                 Which text: "headings", "headers", "the capitals" and "all-caps words" always
+                 mean "paragraph_text" — a book's headings are paragraphs in its text, which
+                 the outline doesn't list. Target "volume_title", "part_title" or
+                 "chapter_title" only when the instruction says "title" or "titles" for that
+                 kind. This is not ambiguous: never pick a title otherwise, and never set
+                 "supported" to false over it. The all-caps pattern is what picks out the
+                 headings, so they need no paragraph filter: leave "where" empty. Note in
+                 "reasoning" that titles need a separate run.
+                 Example: "the section headers are shouting, make them normal" → reasoning:
+                 no title is named, so the headers are paragraph text, and the all-caps
+                 pattern finds them; target "paragraph_text", "where" [], kind
+                 "change_case", case_mode "sentence", the all-caps pattern above.
                - "llm": the change needs understanding of the text (e.g. "restore the missing
                  first letter", "fix the grammar"). Set "instruction" to a precise, standalone
                  command that will be applied to each matched text on its own. If it reads

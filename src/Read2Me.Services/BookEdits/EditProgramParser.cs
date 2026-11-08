@@ -130,6 +130,12 @@ namespace Read2Me.Services.BookEdits
             if (!TryMapPredicates(dto.ParagraphFilter?.Where, out var where, ref error))
                 return false;
 
+            // A change_case copy of the ready-made all-caps pattern with ’ turned into ' would skip
+            // "HARKER’S"; it's the ready-made one, so apply that exactly.
+            var pattern = kind == TransformKind.ChangeCase && EditProgramSchema.IsAllCapsPattern(dto.Transform.Pattern)
+                ? EditProgramSchema.AllCapsPattern
+                : dto.Transform.Pattern;
+
             var sourcesRejected = TryMapSources(kind, target, dto.Transform, out var sources);
 
             program = new EditProgram(
@@ -138,7 +144,7 @@ namespace Read2Me.Services.BookEdits
                 Target: target,
                 NodeFilter: new NodeFilter(dto.NodeFilter?.OrdinalFrom, dto.NodeFilter?.OrdinalTo, dto.NodeFilter?.TitleRegex),
                 ParagraphFilter: new ParagraphFilter(where),
-                Transform: new EditTransform(kind, dto.Transform.Pattern, dto.Transform.Replacement, dto.Transform.Template, dto.Transform.Instruction, caseMode, sources),
+                Transform: new EditTransform(kind, pattern, dto.Transform.Replacement, dto.Transform.Template, dto.Transform.Instruction, caseMode, sources),
                 Reasoning: dto.Reasoning);
             return true;
         }
