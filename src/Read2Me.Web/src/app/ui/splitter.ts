@@ -66,19 +66,24 @@ export class Splitter extends R2mElement {
   /** The pointer being dragged, where it went down, and the value then. */
   readonly #drag = signal<{ pointerId: number; origin: number; start: number } | null>(null);
 
+  /** The upper bound, never below the lower one. */
+  readonly #upper = computed(() => Math.max(this.#max(), this.#min()));
+
   /** The value shown and announced: always inside [min, max]. */
-  readonly #shown = computed(() => this.#clamp(this.#value()));
+  readonly #clamped = computed(() => this.#clamp(this.#value()));
 
   protected override connected(): void {
     this.classList.add('r2m-splitter');
     this.setAttribute('role', 'separator');
     this.tabIndex = 0;
     this.effect(() => {
-      this.setAttribute('aria-label', this.#label());
+      const label = this.#label();
+      if (label) this.setAttribute('aria-label', label);
+      else this.removeAttribute('aria-label');
       this.setAttribute('aria-orientation', this.#orientation());
-      this.setAttribute('aria-valuenow', String(this.#shown()));
+      this.setAttribute('aria-valuenow', String(this.#clamped()));
       this.setAttribute('aria-valuemin', String(this.#min()));
-      this.setAttribute('aria-valuemax', String(this.#max()));
+      this.setAttribute('aria-valuemax', String(this.#upper()));
     });
     this.effect(() =>
       this.classList.toggle('r2m-splitter--horizontal', this.#orientation() === 'horizontal'),
@@ -105,26 +110,18 @@ export class Splitter extends R2mElement {
   }
 
   readonly #onKeydown = (e: KeyboardEvent): void => {
+    // Alt+arrow is the browser's Back/Forward, Ctrl/Cmd+Home/End its own jumps.
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
     const step = e.shiftKey ? LARGE_STEP : STEP;
+    // Only the arrows along the drag axis resize (WAI-ARIA window splitter); the others still scroll.
+    const [less, more] =
+      this.#orientation() === 'vertical' ? ['ArrowLeft', 'ArrowRight'] : ['ArrowUp', 'ArrowDown'];
     let next: number;
-    switch (e.key) {
-      case 'ArrowRight':
-      case 'ArrowDown':
-        next = this.#shown() + step;
-        break;
-      case 'ArrowLeft':
-      case 'ArrowUp':
-        next = this.#shown() - step;
-        break;
-      case 'Home':
-        next = this.#min();
-        break;
-      case 'End':
-        next = this.#max();
-        break;
-      default:
-        return;
-    }
+    if (e.key === more) next = this.#clamped() + step;
+    else if (e.key === less) next = this.#clamped() - step;
+    else if (e.key === 'Home') next = this.#min();
+    else if (e.key === 'End') next = this.#upper();
+    else return;
     e.preventDefault();
     this.#commit(next);
   };
@@ -133,10 +130,12 @@ export class Splitter extends R2mElement {
 
   readonly #onPointerdown = (e: PointerEvent): void => {
     if (e.button !== 0) return;
-    // No text selection while dragging; the pointer stays ours outside the gutter.
+    // No text selection while dragging; the pointer stays ours outside the gutter. Preventing
+    // the press may also skip its focus, so focus here: the arrow keys then work straight after.
     e.preventDefault();
+    this.focus();
     this.setPointerCapture(e.pointerId);
-    this.#drag.set({ pointerId: e.pointerId, origin: this.#position(e), start: this.#shown() });
+    this.#drag.set({ pointerId: e.pointerId, origin: this.#position(e), start: this.#clamped() });
   };
 
   readonly #onPointermove = (e: PointerEvent): void => {
@@ -155,17 +154,16 @@ export class Splitter extends R2mElement {
     return this.#orientation() === 'vertical' ? e.clientX : e.clientY;
   }
 
-  /** Sets the clamped value and emits `value-change`, only when it actually moved. */
+  /** Sets the clamped value, in whole px, and emits `value-change` only when it actually moved. */
   #commit(next: number): void {
-    const value = this.#clamp(next);
-    if (value === this.#shown()) return;
+    const value = this.#clamp(Math.round(next));
+    if (value === this.#clamped()) return;
     this.#value.set(value);
     this.emit('value-change', value);
   }
 
   #clamp(value: number): number {
-    const min = this.#min();
-    return Math.min(Math.max(value, min), Math.max(this.#max(), min));
+    return Math.min(Math.max(value, this.#min()), this.#upper());
   }
 }
 define('r2m-splitter', Splitter);

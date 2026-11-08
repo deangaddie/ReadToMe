@@ -49,6 +49,40 @@ describe('r2m-splitter', () => {
     expect(el.getAttribute('aria-valuenow')).toBe('344');
   });
 
+  it('leaves the cross-axis arrows and modified keys to the browser', async () => {
+    const { el, changes } = await mount();
+
+    const keys = [
+      press(el, 'ArrowDown'),
+      press(el, 'ArrowUp'),
+      press(el, 'ArrowLeft', { altKey: true }),
+      press(el, 'ArrowRight', { ctrlKey: true }),
+      press(el, 'Home', { metaKey: true }),
+    ];
+    el.orientation = 'horizontal';
+    keys.push(press(el, 'ArrowRight'));
+    const down = press(el, 'ArrowDown');
+
+    expect(keys.every((e) => !e.defaultPrevented)).toBe(true);
+    expect(down.defaultPrevented).toBe(true);
+    expect(changes).toEqual([296]);
+  });
+
+  it('has no accessible name until the consumer gives one', async () => {
+    const el = document.createElement('r2m-splitter');
+    document.body.append(el);
+    await el.rendered();
+    expect(el.hasAttribute('aria-label')).toBe(false);
+  });
+
+  it('never announces a maximum below the minimum', async () => {
+    const { el } = await mount();
+    el.max = 200;
+    await el.rendered();
+    expect(el.getAttribute('aria-valuemax')).toBe('220');
+    expect(el.getAttribute('aria-valuenow')).toBe('220');
+  });
+
   it('clamps key steps to the bounds and stays silent once there', async () => {
     const { el, changes } = await mount(460);
 
@@ -99,6 +133,17 @@ describe('r2m-splitter', () => {
     expect(captured).toEqual([]);
   });
 
+  it('takes focus on press and moves in whole pixels', async () => {
+    const { el, changes } = await mount();
+    stubCapture(el);
+
+    pointer(el, 'pointerdown', { clientX: 300 });
+    pointer(el, 'pointermove', { clientX: 310.6 });
+
+    expect(document.activeElement).toBe(el);
+    expect(changes).toEqual([291]);
+  });
+
   it('drags along the vertical axis when horizontal', async () => {
     const { el, changes } = await mount();
     el.orientation = 'horizontal';
@@ -138,5 +183,7 @@ function pointer(el: HTMLElement, type: string, init: PointerEventInit) {
 }
 
 function press(el: HTMLElement, key: string, init: KeyboardEventInit = {}) {
-  el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }));
+  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init });
+  el.dispatchEvent(event);
+  return event;
 }
