@@ -21,6 +21,10 @@ namespace Read2Me.Services.BookEdits
         public static int Size(EditTarget target) =>
             target.CurrentValue.Length + target.Sources.Sum(s => s.Value?.Length ?? 0);
 
+        /// <summary>Why a target fails before any request (a missing or self source, too long to send), or null.</summary>
+        public static string? PreflightFailure(EditTarget target) =>
+            target.SourceFailure ?? (Size(target) > MaxItemChars ? TooLongMessage : null);
+
         /// <summary>Packs items in order; positions refer to <paramref name="sizes"/>.</summary>
         public static BatchPlan Pack(IReadOnlyList<int> sizes)
         {

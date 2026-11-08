@@ -108,7 +108,7 @@ namespace Read2Me.Services.BookEdits
         {
             var config = await settings.GetActiveConfigAsync();
             if (config == null)
-                return targets.Select(t => Build(t, null, t.SourceFailure ?? NoConfigMessage)).ToList();
+                return targets.Select(t => Build(t, null, BatchPacker.PreflightFailure(t) ?? NoConfigMessage)).ToList();
 
             var project = await catalog.GetProjectAsync(folderId);
             var instruction = program.Transform.Instruction!;
@@ -118,10 +118,8 @@ namespace Read2Me.Services.BookEdits
             var proposals = new ProposedEdit?[targets.Count];
             var plan = BatchPacker.PlanFor(targets);
             for (var i = 0; i < targets.Count; i++)
-                if (targets[i].SourceFailure is { } failure)
+                if (BatchPacker.PreflightFailure(targets[i]) is { } failure)
                     proposals[i] = Build(targets[i], null, failure);
-            foreach (var i in plan.TooLong)
-                proposals[i] = Build(targets[i], null, BatchPacker.TooLongMessage);
 
             IReadOnlyList<ProposedEdit> Answered() => proposals.OfType<ProposedEdit>().ToList();
             var sendable = plan.Batches.Sum(b => b.Count);
@@ -186,10 +184,8 @@ namespace Read2Me.Services.BookEdits
                 return Build(target, null, "Asking the AI again is only available for AI-written plans.");
 
             // The same failures as the run gives the row, without a request.
-            if (target.SourceFailure is { } sourceFailure)
-                return Build(target, null, sourceFailure);
-            if (BatchPacker.Size(target) > BatchPacker.MaxItemChars)
-                return Build(target, null, BatchPacker.TooLongMessage);
+            if (BatchPacker.PreflightFailure(target) is { } preflight)
+                return Build(target, null, preflight);
 
             var config = await settings.GetActiveConfigAsync();
             if (config == null)
