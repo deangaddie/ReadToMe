@@ -15,6 +15,11 @@ Use these terms exactly in code, tests, and discussion.
   _Avoid_: "menu rules", "permissions" — these are domain rules, not UI or access control
 - **Item insertion** — a new **Speech** ParagraphItem placed **Before** or **After** an anchor item, or **At start** / **At end** of an anchor Paragraph, always **within that one Paragraph** (never crossing into a neighbouring one). Born **unattributed** — no speaker, no voice instructions, no audio — so it is not yet a **Generatable item**, and it raises the attribution-remaining badge. Never a Pause, and never anchored on a Pause item. The user's repair for a merged two-speaker item: edit the anchor's text down, insert, paste, assign. Distinct from **Split**, which makes a new parent rather than a new sibling.
 
+## Edit with AI
+
+- **Edit source** (short: *source*) — a value from a related node that an Edit with AI transform reads alongside the target value it rewrites (the chapter number in a chapter's first paragraph, read to build its title). A title reads only what lies under it and the titles above it; paragraph text reads its enclosing titles, its chapter's paragraphs by position and its immediate neighbours. Never across a chapter boundary. A paragraph's value is its text joined; positions count content paragraphs only (pauses skipped, a heading-like paragraph counts) and reach five from the start or end. A source that isn't there — past the chapter's end, or a blank title — is **missing**, and fails that row visibly, never empty or a placeholder.
+  _Avoid_: "context", "reference" (reference audio), "input"
+
 ## Characters
 
 - **Alias** — alternate name for a Character (e.g. "Lizzy" for "Elizabeth Bennet"). Stored in `CharacterAliases`. Injected into the LLM attribution prompt alongside the canonical name and matched case-insensitively when attribution resolves a name (`CharacterResolver`), so an alternate name resolves to the existing canonical Character instead of a duplicate.
