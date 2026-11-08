@@ -56,4 +56,37 @@ public class PronunciationPanelTests(E2eAppFixture app, PlaywrightFixture pw) : 
             new { x = (double)(panel.X + panel.Width / 2), y = (double)(panel.Y + 40) });
         Assert.True(onTop);
     }
+
+    // Needs a real browser: a drag resizing the grid, and the panel floating beside the wider tree, are real layout.
+    [Fact]
+    public async Task Dragging_the_tree_wider_floats_the_panel_keeps_the_reader_readable_and_survives_a_reload()
+    {
+        await App.SeedProjectAsync("pron-panel-resize", "Panel Book", "A. Author");
+        await Page.SetViewportSizeAsync(1280, 800);
+        var (before, _, _) = await OpenPanelAsync("pron-panel-resize");
+
+        var gutter = (await Page.Locator("r2m-splitter").BoundingBoxAsync())!;
+        var (x, y) = (gutter.X + gutter.Width / 2, gutter.Y + gutter.Height / 2);
+        await Page.Mouse.MoveAsync(x, y);
+        await Page.Mouse.DownAsync();
+        await Page.Mouse.MoveAsync(x + 150, y, new() { Steps = 5 });
+        await Page.Mouse.MoveAsync(x + 400, y, new() { Steps = 5 });
+        await Page.Mouse.UpAsync();
+
+        var tree = Page.Locator(".book__tree");
+        var panel = Page.Locator("r2m-pronunciation-panel");
+        await Expect(panel).ToHaveCSSAsync("position", "absolute");
+        var after = (await tree.BoundingBoxAsync())!;
+        var reader = (await Page.Locator(".book__reader").BoundingBoxAsync())!;
+        var floating = (await panel.BoundingBoxAsync())!;
+        Assert.True(after.Width >= before.Width + 100, $"tree {before.Width} -> {after.Width} px");
+        Assert.True(after.Width <= 481, $"tree past its 480 px cap: {after.Width} px");
+        Assert.True(reader.Width >= 450, $"reader squeezed to {reader.Width} px");
+        Assert.True(floating.X < reader.X + reader.Width, $"panel {floating.X} beside reader ending {reader.X + reader.Width}");
+
+        await Page.ReloadAsync();
+        await Expect(Page.Locator(".r2m-item__text").First).ToBeVisibleAsync();
+        var reloaded = (await tree.BoundingBoxAsync())!;
+        Assert.InRange(reloaded.Width, after.Width - 1, after.Width + 1);
+    }
 }

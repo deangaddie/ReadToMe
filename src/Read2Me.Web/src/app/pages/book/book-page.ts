@@ -37,6 +37,7 @@ import { PronunciationMarks } from './pronunciation-marks-store';
 import type { PronunciationPanel } from './pronunciation-panel';
 import { PronunciationPanelState } from './pronunciation-panel-store';
 import { type PronunciationsDock, pronunciationsDock } from './pronunciation-dock';
+import { TREE_DEFAULT_PX, TREE_MIN_PX, TreeLayout } from './tree-layout';
 import { type ReaderGeometry, ReaderWindow, listGeometry } from './reader-window';
 import { addPausesChange } from './permanent-changes';
 import {
@@ -54,6 +55,7 @@ import { buildRoster } from './speaker-roster';
 import { structureNodeMenu } from './structure-node-menu';
 import '@app/ui/measured-list';
 import '@app/ui/speaker-menu';
+import '@app/ui/splitter';
 import './node-menu';
 import './pronunciation-card';
 import './pronunciation-panel';
@@ -119,7 +121,8 @@ export class BookPage extends R2mElement {
   private pronunciations!: PronunciationPanelState;
   /** The loaded items that have audio: the panel rows' with-audio counts. */
   private itemsWithAudio = computed<ReadonlySet<string>>(() => new Set());
-  private readonly treeOpen = signal(true);
+  /** The structure tree's width and Show/Hide, remembered per browser (spec #309). */
+  private readonly treeLayout = new TreeLayout();
   /** Docked or floating, from the measured Book body and tree widths (see {@link observeDock}). */
   private readonly dock = signal<PronunciationsDock>('docked');
   private dockObserver: ResizeObserver | null = null;
@@ -264,7 +267,8 @@ export class BookPage extends R2mElement {
 
   /**
    * Watches the Book body and its tree (spec #309): whenever either is replaced or resized, the
-   * Pronunciations panel docks or floats by {@link pronunciationsDock}.
+   * structure tree's max width follows the body and the Pronunciations panel docks or floats by
+   * {@link pronunciationsDock}.
    */
   private observeDock(): void {
     if (typeof ResizeObserver === 'undefined') return;
@@ -272,7 +276,7 @@ export class BookPage extends R2mElement {
     const tree = body?.querySelector(':scope > .book__tree') ?? null;
     if (body === this.dockBody && tree === this.dockTree) return;
     if (!this.dockObserver) {
-      const observer = (this.dockObserver = new ResizeObserver(() => this.measureDock()));
+      const observer = (this.dockObserver = new ResizeObserver(() => this.measureBody()));
       this.onDisconnect(() => {
         observer.disconnect();
         this.dockObserver = this.dockBody = this.dockTree = null;
@@ -285,18 +289,21 @@ export class BookPage extends R2mElement {
     if (tree) this.dockObserver.observe(tree);
   }
 
-  private measureDock(): void {
+  private measureBody(): void {
     const body = this.dockBody;
     if (!body) return;
+    const bodyWidth = body.getBoundingClientRect().width;
+    // The tree's max follows the body; its column then resizes and the observer measures again.
+    this.treeLayout.setBodyWidth(bodyWidth);
     const tree = this.dockTree?.getBoundingClientRect().width ?? null;
-    this.dock.set(pronunciationsDock(body.getBoundingClientRect().width, tree));
+    this.dock.set(pronunciationsDock(bodyWidth, tree));
   }
 
   protected template() {
     const store = this.store;
     const rows = this.rows();
     const stale = store.stale();
-    const treeOpen = this.treeOpen();
+    const treeOpen = this.treeLayout.open();
     const noContent = this.noContent();
     return html`
       <div class="book__toolbar" role="toolbar" aria-label="Reader">
@@ -305,7 +312,7 @@ export class BookPage extends R2mElement {
           class="r2m-icon-button"
           aria-label=${treeOpen ? 'Hide structure' : 'Show structure'}
           aria-expanded=${treeOpen ? 'true' : 'false'}
-          @click=${() => this.treeOpen.set(!treeOpen)}
+          @click=${() => this.treeLayout.setOpen(!treeOpen)}
         >
           ${icon(treeOpen ? 'left_panel_close' : 'left_panel_open')}
         </button>
@@ -370,24 +377,34 @@ export class BookPage extends R2mElement {
                   ? 'book__body--pron-floating'
                   : ''
               }"
+              style="--book-tree-width: ${this.treeLayout.width()}px"
             >
               ${
                 treeOpen
                   ? html`<nav class="book__tree" aria-label="Structure">
-                      <r2m-structure-tree
-                        .nodes=${store.tree()}
-                        .statuses=${this.project.nodes()}
-                        .currentChapterId=${store.currentChapterId()}
-                        .expandedIds=${store.expanded()}
-                        .selection=${this.workflow.kind()}
-                        .nodeStates=${this.workflow.nodeStates()}
-                        .blocked=${this.editor.blocked()}
-                        @expanded-change=${this.onExpandedChange}
-                        @select-chapter=${this.onSelectChapter}
-                        @toggle-node=${this.onToggleNode}
-                        @node-action=${this.onNodeAction}
-                      ></r2m-structure-tree>
-                    </nav>`
+                        <r2m-structure-tree
+                          .nodes=${store.tree()}
+                          .statuses=${this.project.nodes()}
+                          .currentChapterId=${store.currentChapterId()}
+                          .expandedIds=${store.expanded()}
+                          .selection=${this.workflow.kind()}
+                          .nodeStates=${this.workflow.nodeStates()}
+                          .blocked=${this.editor.blocked()}
+                          @expanded-change=${this.onExpandedChange}
+                          @select-chapter=${this.onSelectChapter}
+                          @toggle-node=${this.onToggleNode}
+                          @node-action=${this.onNodeAction}
+                        ></r2m-structure-tree>
+                      </nav>
+                      <r2m-splitter
+                        class="book__splitter"
+                        .label=${'Resize structure'}
+                        .value=${this.treeLayout.width()}
+                        .min=${TREE_MIN_PX}
+                        .max=${this.treeLayout.max()}
+                        .defaultValue=${TREE_DEFAULT_PX}
+                        @value-change=${this.onTreeResize}
+                      ></r2m-splitter>`
                   : nothing
               }
               <section
@@ -624,6 +641,11 @@ export class BookPage extends R2mElement {
         )}
       </div>`;
   }
+
+  /** The gutter's drag or key press: the user's own width, saved for every book. */
+  private readonly onTreeResize = (e: Event): void => {
+    this.treeLayout.setWidth((e as CustomEvent<number>).detail);
+  };
 
   private readonly onExpandedChange = (e: Event): void => {
     const { node, expanded } = (e as CustomEvent<{ node: TreeNode; expanded: boolean }>).detail;
