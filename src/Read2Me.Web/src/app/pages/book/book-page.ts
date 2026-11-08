@@ -36,6 +36,7 @@ import type { PronunciationEditRequest } from './pronunciation-card';
 import { PronunciationMarks } from './pronunciation-marks-store';
 import type { PronunciationPanel } from './pronunciation-panel';
 import { PronunciationPanelState } from './pronunciation-panel-store';
+import { type PronunciationsDock, pronunciationsDock } from './pronunciation-dock';
 import { type ReaderGeometry, ReaderWindow, listGeometry } from './reader-window';
 import { addPausesChange } from './permanent-changes';
 import {
@@ -119,6 +120,11 @@ export class BookPage extends R2mElement {
   /** The loaded items that have audio: the panel rows' with-audio counts. */
   private itemsWithAudio = computed<ReadonlySet<string>>(() => new Set());
   private readonly treeOpen = signal(true);
+  /** Docked or floating, from the measured Book body and tree widths (see {@link observeDock}). */
+  private readonly dock = signal<PronunciationsDock>('docked');
+  private dockObserver: ResizeObserver | null = null;
+  private dockBody: Element | null = null;
+  private dockTree: Element | null = null;
   /** The bulk-assign menu is open: its speaker menu is rendered fresh per open. */
   private readonly bulkOpen = signal(false);
 
@@ -252,6 +258,40 @@ export class BookPage extends R2mElement {
     this.onDisconnect(() => clearInterval(edges));
   }
 
+  protected override updated(): void {
+    this.observeDock();
+  }
+
+  /**
+   * Watches the Book body and its tree (spec #309): whenever either is replaced or resized, the
+   * Pronunciations panel docks or floats by {@link pronunciationsDock}.
+   */
+  private observeDock(): void {
+    if (typeof ResizeObserver === 'undefined') return;
+    const body = this.querySelector('.book__body');
+    const tree = body?.querySelector(':scope > .book__tree') ?? null;
+    if (body === this.dockBody && tree === this.dockTree) return;
+    if (!this.dockObserver) {
+      const observer = (this.dockObserver = new ResizeObserver(() => this.measureDock()));
+      this.onDisconnect(() => {
+        observer.disconnect();
+        this.dockObserver = this.dockBody = this.dockTree = null;
+      });
+    }
+    this.dockObserver.disconnect();
+    this.dockBody = body;
+    this.dockTree = tree;
+    if (body) this.dockObserver.observe(body);
+    if (tree) this.dockObserver.observe(tree);
+  }
+
+  private measureDock(): void {
+    const body = this.dockBody;
+    if (!body) return;
+    const tree = this.dockTree?.getBoundingClientRect().width ?? null;
+    this.dock.set(pronunciationsDock(body.getBoundingClientRect().width, tree));
+  }
+
   protected template() {
     const store = this.store;
     const rows = this.rows();
@@ -325,6 +365,10 @@ export class BookPage extends R2mElement {
           : html`<div
               class="book__body ${treeOpen ? '' : 'book__body--tree-hidden'} ${
                 this.pronunciations.open() ? 'book__body--pron' : ''
+              } ${
+                this.pronunciations.open() && this.dock() === 'floating'
+                  ? 'book__body--pron-floating'
+                  : ''
               }"
             >
               ${
