@@ -71,13 +71,22 @@ namespace Read2Me.Services.BookEdits
     {
         /// <summary>The ready-made change_case pattern for all-caps words and runs ("FITZWILLIAM DARCY",
         /// "DARCY'S", "PEMBERLEY-BORN"). The planner prompt hands it to the model verbatim and the
-        /// describer names it in plain words.</summary>
-        public const string AllCapsPattern = @"\b\p{Lu}{2,}(?:['’]\p{Lu}+)?(?:[ -]+\p{Lu}+(?:['’]\p{Lu}+)?)*\b";
+        /// describer names it in plain words. The typographic apostrophe is written as a regex escape so
+        /// the pattern is pure ASCII: qwen-28b mangles a literal ’ when it copies the pattern (drops it,
+        /// triples the ', or loses the closing bracket).</summary>
+        public const string AllCapsPattern = @"\b\p{Lu}{2,}(?:['\u2019]\p{Lu}+)?(?:[ -]+\p{Lu}+(?:['\u2019]\p{Lu}+)?)*\b";
+
+        /// <summary>The regex escape for ’ that <see cref="AllCapsPattern"/> uses.</summary>
+        public const string EscapedTypographicApostrophe = @"\" + "u2019";
 
         /// <summary>True for <see cref="AllCapsPattern"/> as the planner returns it. With thinking
-        /// on, qwen-28b often copies it with ’ turned into ', which is counted as the same pattern.</summary>
+        /// on, qwen-28b may copy the escaped ’ as a literal ’ or as ', which is counted as the same
+        /// pattern (the parser then applies the exact one).</summary>
         public static bool IsAllCapsPattern(string? pattern) =>
-            pattern?.Replace('’', '\'') == AllCapsPattern.Replace('’', '\'');
+            pattern != null && WithStraightApostrophes(pattern) == WithStraightApostrophes(AllCapsPattern);
+
+        private static string WithStraightApostrophes(string pattern) =>
+            pattern.Replace(EscapedTypographicApostrophe, "'").Replace('’', '\'');
 
         /// <summary>Injected into the prompt via {{response_format}}.</summary>
         public const string JsonExample =

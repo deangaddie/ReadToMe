@@ -178,6 +178,53 @@ namespace Read2Me.Tests.Services.BookEdits
             Assert.Null(program!.Transform.CaseMode);
         }
 
+        [Theory]
+        [InlineData("'", "'")]
+        [InlineData("’", "’")]
+        [InlineData("'", "’")]
+        public void TryParse_ChangeCase_AllCapsPatternCopiedWithOtherApostrophes_IsTheExactPattern(
+            string first, string second)
+        {
+            // qwen-28b may copy the escaped ’ as ' (which would skip HARKER’S) or as a literal ’.
+            var copied = ReplaceEach(EditProgramSchema.AllCapsPattern, EditProgramSchema.EscapedTypographicApostrophe, first, second);
+            Assert.NotEqual(EditProgramSchema.AllCapsPattern, copied);
+
+            var program = Parsed(Plan("paragraph_text", "change_case", pattern: copied, caseMode: "sentence"));
+
+            Assert.Equal(EditProgramSchema.AllCapsPattern, program.Transform.Pattern);
+        }
+
+        [Fact]
+        public void TryParse_RegexReplace_AllCapsPatternCopiedWithStraightApostrophes_IsKeptAsWritten()
+        {
+            var copied = EditProgramSchema.AllCapsPattern.Replace(EditProgramSchema.EscapedTypographicApostrophe, "'");
+
+            var program = Parsed(Plan("paragraph_text", "regex_replace", pattern: copied));
+
+            Assert.Equal(copied, program.Transform.Pattern);
+        }
+
+        [Fact]
+        public void TryParse_ChangeCase_OtherPattern_IsKeptAsWritten()
+        {
+            const string own = @"\b[A-Z]{2,}\b";
+
+            var program = Parsed(Plan("paragraph_text", "change_case", pattern: own, caseMode: "sentence"));
+
+            Assert.Equal(own, program.Transform.Pattern);
+        }
+
+        /// <summary>Replaces each occurrence of <paramref name="find"/> in turn with the next of
+        /// <paramref name="replacements"/>, cycling through them.</summary>
+        private static string ReplaceEach(string s, string find, params string[] replacements)
+        {
+            var parts = s.Split(find);
+            var sb = new System.Text.StringBuilder(parts[0]);
+            for (var i = 1; i < parts.Length; i++)
+                sb.Append(replacements[(i - 1) % replacements.Length]).Append(parts[i]);
+            return sb.ToString();
+        }
+
         [Fact]
         public void JsonExample_ParsesAsTheSchemaShape()
         {
