@@ -1716,6 +1716,57 @@ progress {
   }
 }
 
+/* ---- splitter (r2m-splitter): a resize gutter, drawn only on hover, focus and drag ---------- */
+.r2m-splitter {
+  position: relative;
+  flex: none;
+  inline-size: var(--r2m-space-2);
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+
+  /* The handle: a thin accent line down the middle of the gutter. */
+  &::before {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 50%;
+    inline-size: 2px;
+    translate: -50% 0;
+    border-radius: 1px;
+    background: var(--r2m-accent);
+    opacity: 0;
+    transition: opacity 100ms;
+  }
+  &:hover::before,
+  &:focus-visible::before,
+  &.r2m-splitter--dragging::before {
+    opacity: 1;
+  }
+  &:focus-visible::before {
+    inline-size: 4px;
+  }
+}
+.r2m-splitter--horizontal {
+  inline-size: auto;
+  block-size: var(--r2m-space-2);
+  cursor: row-resize;
+
+  &::before {
+    inset-block: auto;
+    inset-inline: 0;
+    inset-block-start: 50%;
+    inline-size: auto;
+    block-size: 2px;
+    translate: 0 -50%;
+  }
+  &:focus-visible::before {
+    inline-size: auto;
+    block-size: 4px;
+  }
+}
+
 /* ---- key/value rows ------------------------------------------------------------------------- */
 .r2m-key-value {
   display: grid;
