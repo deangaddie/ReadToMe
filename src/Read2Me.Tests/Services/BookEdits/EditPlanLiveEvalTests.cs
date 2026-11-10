@@ -104,7 +104,7 @@ namespace Read2Me.Tests.Services.BookEdits
             new("name the volume after the book's first paragraph", null, null, null, Unsupported: true),
             new("set each chapter title to its seventh paragraph", null, null, null, Unsupported: true),
             // 6: the wording asks for an exact copy, which beats what the sample would suggest.
-            new("set each chapter title to exactly paragraph 1 and paragraph 2, joined by a colon",
+            new("set each chapter title to exactly paragraph 1 and paragraph 2, joined by a colon and a space",
                 TransformKind.SetTemplate, EditTargetSelector.ChapterTitle, null,
                 Outline: Shape.Roman, Sources: new(["p1", "p2"], new() { ["p1"] = "CHAPTER I.", ["p2"] = "The Period." }, "",
                     s => s == "CHAPTER I.: The Period.")),

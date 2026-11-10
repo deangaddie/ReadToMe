@@ -526,8 +526,8 @@ namespace Read2Me.Services.Llm
                - "llm": the change needs understanding of the text (e.g. "restore the missing
                  first letter", "fix the grammar"). Set "instruction" to a precise, standalone
                  command that will be applied to each matched text on its own. If it reads
-                 other values, list them in "sources" and name them in the instruction
-                 (part 4).
+                 other values, list them in "sources" and write each name in the
+                 instruction (part 4): "p_end1", not "the last paragraph" or "the text".
 
             4. Sources — a set_template or llm transform may also read values from nearby
                parts of the book, beside the value it changes. The outline's "p1:", "p2:"…
@@ -543,16 +543,23 @@ namespace Read2Me.Services.Llm
                - "volume_title": ch1…ch5 and ch_end1…ch_end5 (chapter titles counted across
                  the whole volume), pt1…pt5 and pt_end1…pt_end5 (its part titles).
                Use exactly these names, nothing else (a token such as {title} is unknown).
+               The target names ("chapter_title", "paragraph_text", "part_title",
+               "volume_title") are not sources: never write them as tokens or in "sources".
+               A paragraph reads its chapter's title as "chapter" ({chapter}), its part's
+               as "part" and its volume's as "volume".
                Anything else, or a position past 5: set "supported" to false and say why in
                "unsupported_reason". regex_replace and change_case read no sources.
                - In set_template, write each source as a token in braces beside {n} and
-                 {old}: "Chapter {p1}, {p2}". The token is replaced by the value, trimmed
-                 and otherwise unchanged; nothing is stripped, re-cased or converted.
+                 {old}: "Chapter {p1}, {p2}". The token is replaced by the whole value,
+                 trimmed and otherwise unchanged; nothing is stripped, re-cased or
+                 converted. A token can't take part of a value (the number out of a
+                 heading such as "CHAPTER I.").
                - In llm, "sources" lists every source the instruction reads, by name, and no
                  others. The "instruction" must contain each listed name exactly as written
-                 (p1, ch1, …), because the names are how it points at the values: "… the
-                 number written in p1, as a digit". Only the listed values are sent with
-                 each text.
+                 (p1, p_end1, ch1, …), because the names are how it points at the values:
+                 "… the number written in p1, as a digit". Write the name, not a
+                 description of it: "p_end1", never "the last paragraph". Only the listed
+                 values are sent with each text.
                - "sources" is an empty list for every other plan.
                Examples (instruction → key fields):
                - "append the first paragraph to each chapter title" → reasoning: p1 is
@@ -562,13 +569,23 @@ namespace Read2Me.Services.Llm
                  reasoning: ch1 is "Chapter 3: The Wine", the number has to be removed, so
                  llm; target "part_title", sources ["ch1"], instruction "Return the title
                  of the chapter named in ch1 without its chapter number."
+               - "start each paragraph with its volume title and a colon" → reasoning: the
+                 volume title is the source "volume" (not "volume_title"), copied as
+                 written, so set_template; target "paragraph_text", template
+                 "{volume}: {old}".
+               - "add the date from the closing paragraph to each chapter title" →
+                 reasoning: the closing paragraph is p_end1, which the sample doesn't show,
+                 so llm; target "chapter_title", sources ["p_end1"], instruction "Return
+                 the current title, a dash, then the date written in p_end1."
 
             If the instruction asks for anything other than editing titles or paragraph text —
             adding, deleting, splitting, merging or reordering content, changing audio or
             voices — set "supported" to false and explain in "unsupported_reason".
 
             Rules:
-            - First write one short sentence in "reasoning" explaining how you read the instruction.
+            - First write one short sentence in "reasoning" explaining how you read the
+              instruction. When the plan reads sources, follow it with the quotes the next
+              rule asks for; never pick set_template for a source-reading plan without them.
             - When the plan reads no sources, use the most deterministic transform that
               satisfies the instruction: prefer set_template or regex_replace over llm when
               the change is mechanical.
@@ -580,8 +597,13 @@ namespace Read2Me.Services.Llm
               (a prefix, a suffix, a separator) and every sampled value is identical to what
               the result needs. Use llm if any value differs from what the result needs and
               must be understood or changed first (a roman or spelled-out number where the
-              result needs a digit, text to trim or re-case), and also when the sample doesn't
-              show the source.
+              result needs a digit, text to trim or re-case), when the result needs only part
+              of a value (p1 is "CHAPTER IV." and the result needs "4": not identical, so
+              llm), and also when the sample doesn't show the source.
+            - A placeholder in the instruction such as <number from paragraph 1> or "the name
+              in p2" says what the result needs from that value, not that the value fits as
+              it is: check it against the sampled value like any other before choosing
+              set_template.
             - Changing letter case by a rule (sentence, title, upper or lower case, fixing
               all caps) is always change_case, never llm or regex_replace. Replacing named
               literal text with other literal text ("replace X with Y") is regex_replace,
