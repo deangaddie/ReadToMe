@@ -15,7 +15,7 @@ import { type ReviewRow, ReviewSelection, planErrorMessage } from './review-mode
 
 export type EditPhase = 'instruct' | 'plan' | 'proposing' | 'review';
 
-/** How often the run is polled when there is no hub connection to push to. */
+/** How often the run is polled when the hub is not pushing to this tab, or has stopped. */
 const POLL_MS = 400;
 
 /** How often the run is checked anyway while the hub is pushing, in case the pushes stop. */
@@ -224,7 +224,7 @@ export class EditWithAiWorkflow {
    * started for. A drop or a reconnect (which mints a new id) turns it off for good, since the job
    * never learns another id; re-read on every poll tick.
    */
-  private isPushing(watch: RunWatch): boolean {
+  private stillPushing(watch: RunWatch): boolean {
     if (watch.pushing && this.live.connectionId() !== watch.pushTo) watch.pushing = false;
     return watch.pushing;
   }
@@ -272,7 +272,7 @@ export class EditWithAiWorkflow {
             if (this.currentWatch !== watch) return;
             // While the hub is pushing this is only the backstop: one failed read is not the run
             // failing, so keep watching. Without the hub it is the only signal, so say so.
-            if (!this.isPushing(watch)) {
+            if (!this.stillPushing(watch)) {
               this.failRun(toApiError(e).message);
               return;
             }
@@ -280,7 +280,7 @@ export class EditWithAiWorkflow {
           this.poll(watch);
         })();
       },
-      this.isPushing(watch) ? PUSH_BACKSTOP_MS : POLL_MS,
+      this.stillPushing(watch) ? PUSH_BACKSTOP_MS : POLL_MS,
     );
   }
 
