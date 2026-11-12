@@ -1,12 +1,7 @@
 import type { BookEditMessage } from '@app/api';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { LlmStreamFeed } from '@app/activity/stream-feed';
-import {
-  ApiError,
-  type BookEditRowDto,
-  type BookEditRunDto,
-  type PlanBookEditResponse,
-} from '@app/api';
+import { ApiError, type BookEditRowDto, type PlanBookEditResponse } from '@app/api';
 import { Emitter } from '@app/core/emitter';
 import { override, resetServices } from '@app/core/services';
 import { signal } from '@app/core/signals';
@@ -19,7 +14,10 @@ import { type EditWithAiDialog, openEditWithAiDialog } from './edit-with-ai-dial
 import './edit-with-ai-dialog';
 import { bookEditMessage } from '../../../../testing/live-messages';
 
-/** Ported from the Angular TestBed spec, case for case. */
+/**
+ * Rendering and wiring: the phase bodies, the buttons reaching the workflow, the discard confirm
+ * and the rows. How the run is followed (hub, poll, drops, close) is in edit-with-ai-workflow.spec.
+ */
 const BASE = '/api/projects/dracula/book-edits';
 
 const PLAN: PlanBookEditResponse = {
@@ -207,16 +205,6 @@ describe('r2m-edit-with-ai-dialog', () => {
     expect(text('edit-error')).toContain('No LLM server is configured');
   });
 
-  it('explains a plan that matched nothing', async () => {
-    plan = { ...PLAN, status: 'NoTargets', reason: null, program: null, targetCount: 0 };
-    await instruct();
-
-    await analyze();
-
-    expect(phase()).toBe('instruct');
-    expect(text('edit-error')).toContain('No items in the book match');
-  });
-
   it('keeps the instruction on Instruct when a Restore refuses the plan', async () => {
     api.on('POST', `${BASE}/plan`, () => problem(409, 'Project is restoring'));
     // No session was granted: nothing to discard when the dialog closes.
@@ -231,54 +219,6 @@ describe('r2m-edit-with-ai-dialog', () => {
       'capitalise chapter titles',
     );
     expect(button('analyze').disabled).toBe(false);
-  });
-
-  it('stays on Instruct when a Restore drops the plan before its answer arrives', async () => {
-    // The host granted the session, then a Restore dropped it while the answer was on its way.
-    api.on('POST', `${BASE}/plan`, () => {
-      messages.emit(
-        bookEditMessage({
-          kind: 'Dropped',
-          program: 'prog-1',
-          reason: 'The project was restored — run it again',
-        }),
-      );
-      return PLAN;
-    });
-    await instruct();
-
-    await analyze();
-
-    expect(phase()).toBe('instruct');
-    expect(text('edit-error')).toContain('The project was restored — run it again');
-    expect(button('analyze').disabled).toBe(false);
-    // The session is gone on the host: nothing to discard when the dialog closes.
-    plan = { ...PLAN, program: null };
-  });
-
-  it('stays on Instruct when the drop lands while the earlier plan is being discarded', async () => {
-    await instruct();
-    await analyze();
-    button('back').click();
-    await dialog.rendered();
-    // The second plan is granted; a Restore drops it while the first one's DELETE is in flight.
-    api
-      .on('POST', `${BASE}/plan`, () => ({ ...PLAN, program: 'prog-2' }))
-      .on('DELETE', `${BASE}/prog-1`, () => {
-        messages.emit(
-          bookEditMessage({
-            kind: 'Dropped',
-            program: 'prog-2',
-            reason: 'The project was restored — run it again',
-          }),
-        );
-        return undefined;
-      });
-
-    await analyze();
-
-    expect(phase()).toBe('instruct');
-    expect(text('edit-error')).toContain('The project was restored — run it again');
   });
 
   it('shows what the host understood, and its warnings, on Plan', async () => {
@@ -370,26 +310,7 @@ describe('r2m-edit-with-ai-dialog', () => {
     );
   });
 
-  it('ignores a run that belongs to another plan', async () => {
-    await instruct();
-    await analyze();
-    await generate();
-
-    await push(
-      bookEditMessage({
-        kind: 'Done',
-        program: 'other',
-        done: 1,
-        total: 1,
-        cancelled: false,
-        rows: ROWS,
-      }),
-    );
-
-    expect(phase()).toBe('proposing');
-  });
-
-  it('keeps the rows a cancelled run computed', async () => {
+  it('Cancel on Proposing asks the run to stop, and lands the rows it computed', async () => {
     await instruct();
     await analyze();
     await generate();
@@ -411,73 +332,6 @@ describe('r2m-edit-with-ai-dialog', () => {
     expect(phase()).toBe('review');
     expect(rows()).toHaveLength(1);
     expect(text('selected-count')).toBe('1 of 1 selected');
-  });
-
-  it('reports a failed run and goes back to the plan', async () => {
-    await instruct();
-    await analyze();
-    await generate();
-
-    await push(
-      bookEditMessage({ kind: 'Failed', program: 'prog-1', reason: 'the model went away' }),
-    );
-
-    expect(phase()).toBe('plan');
-    expect(text('edit-error')).toContain('the model went away');
-  });
-
-  it('drops an open proposal when a Restore dropped its session, and says to run it again', async () => {
-    await reachReview();
-
-    await push(
-      bookEditMessage({
-        kind: 'Dropped',
-        program: 'prog-1',
-        reason: 'The project was restored — run it again',
-      }),
-    );
-
-    expect(phase()).toBe('instruct');
-    expect(text('edit-error')).toContain('The project was restored — run it again');
-    expect(rows()).toHaveLength(0);
-    // The session is gone on the host: nothing to discard when the dialog closes.
-    plan = { ...PLAN, program: null };
-  });
-
-  it('polls the run when there is no hub connection to push to', async () => {
-    connectionId = null;
-    const running: BookEditRunDto = {
-      status: 'Running',
-      done: 1,
-      total: 2,
-      rows: [],
-      reason: null,
-    };
-    const done: BookEditRunDto = {
-      status: 'Completed',
-      done: 2,
-      total: 2,
-      rows: ROWS,
-      reason: null,
-    };
-    let reads = 0;
-    api.on('GET', `${BASE}/prog-1`, () => (reads++ === 0 ? running : done));
-    await instruct();
-    await analyze();
-
-    await generate();
-    expect(api.calls('POST', `${BASE}/prog-1/propose`)[0]?.body).toEqual({
-      thinking: false,
-      connectionId: null,
-    });
-    await settle(500);
-    await dialog.rendered();
-    expect(text('progress')).toContain('1 of 2');
-
-    await settle(500);
-    await dialog.rendered();
-    expect(phase()).toBe('review');
-    expect(rows()).toHaveLength(2);
   });
 
   it('applies the ticked rows as one book command, with hand edits included', async () => {
@@ -637,6 +491,19 @@ describe('r2m-edit-with-ai-dialog', () => {
     expect(text('retry-error')).toContain('Asking the AI again failed');
     expect(proposed().value).toBe('Chapter I');
     expect(text('selected-count')).toBe('2 of 2 selected');
+  });
+
+  it('lands a fresh run with every row closed', async () => {
+    await reachReview();
+    await openRow(0);
+    expect(dialog.querySelector('[data-testid="proposed"]')).not.toBeNull();
+
+    button('start-over').click();
+    await settle();
+    await reachReview();
+
+    expect(phase()).toBe('review');
+    expect(dialog.querySelector('[data-testid="proposed"]')).toBeNull();
   });
 
   it('confirms before throwing hand edits away, and drops the session on Start over', async () => {
