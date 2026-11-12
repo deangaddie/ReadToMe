@@ -2,7 +2,13 @@ FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf107
 
 WORKDIR /app
 
-# No apt layer: git was the sole install and no VCS dep remains.
+# One apt layer, upgrades only: zlib1g, which every service process maps, has Debian fixes
+# (CVE-2026-76844, CVE-2026-85091; #324) the base image doesn't carry yet. Drop it once a
+# digest move ships zlib1g 1:1.3.dfsg+really1.3.1-1+deb13u1 or later.
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --only-upgrade zlib1g && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY mpnet-base-v2/requirements.txt .
 # CPU-only service — torch enters the lock as a direct hashed cpu-wheel URL.
 # pip goes once the lock is installed: nothing at runtime calls it, and its vendored
