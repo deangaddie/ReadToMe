@@ -35,8 +35,8 @@ public class NodeMenuTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBas
         await trigger.ClickAsync();
         var menu = Page.GetByRole(AriaRole.Menu, new() { Name = "Actions for Chapter 2" });
         await Expect(menu).ToBeVisibleAsync();
-        var before = (await menu.BoundingBoxAsync())!;
-        AssertAnchored((await trigger.BoundingBoxAsync())!, before);
+        var (beforeTrigger, beforePanel) = await BoxesAsync(trigger, menu);
+        AssertAnchored(beforeTrigger, beforePanel);
 
         // A rename from elsewhere reaches the reader as a receipt and re-renders the tree.
         var rename = await Page.APIRequest.PostAsync($"{App.BaseUrl}/api/projects/native-menu-anchor/commands", new()
@@ -46,12 +46,25 @@ public class NodeMenuTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTestBas
         Assert.True(rename.Ok, await rename.TextAsync());
         await Expect(Page.Locator(".tree__title").First).ToHaveTextAsync("Renamed");
 
-        // The panel is still open, still on its trigger.
+        // The panel is still open, still on its trigger. The rows can move on the page (each row's
+        // badge line lands with the node statuses, after the titles, and makes it taller), so the
+        // panel is held to the same offset from its trigger, not to the same place.
         await Expect(menu).ToBeVisibleAsync();
-        var after = (await menu.BoundingBoxAsync())!;
-        Assert.InRange(after.X, before.X - 1, before.X + 1);
-        Assert.InRange(after.Y, before.Y - 1, before.Y + 1);
-        AssertAnchored((await trigger.BoundingBoxAsync())!, after);
+        var (afterTrigger, afterPanel) = await BoxesAsync(trigger, menu);
+        Assert.InRange(afterPanel.X - afterTrigger.X, beforePanel.X - beforeTrigger.X - 1, beforePanel.X - beforeTrigger.X + 1);
+        Assert.InRange(afterPanel.Y - afterTrigger.Y, beforePanel.Y - beforeTrigger.Y - 1, beforePanel.Y - beforeTrigger.Y + 1);
+        AssertAnchored(afterTrigger, afterPanel);
+    }
+
+    /// <summary>The trigger's and the panel's boxes, read in one script so both come from the same layout.</summary>
+    private static async Task<(LocatorBoundingBoxResult Trigger, LocatorBoundingBoxResult Panel)> BoxesAsync(ILocator trigger, ILocator panel)
+    {
+        var boxes = await trigger.EvaluateAsync<double[]>("""
+            (t, p) => [t, p].flatMap(e => { const r = e.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; })
+            """, await panel.ElementHandleAsync());
+        return (Box(boxes[..4]), Box(boxes[4..]));
+
+        static LocatorBoundingBoxResult Box(double[] b) => new() { X = (float)b[0], Y = (float)b[1], Width = (float)b[2], Height = (float)b[3] };
     }
 
     // Needs a real browser: focus comes back from a real modal dialog, which happy-dom only marks open.
