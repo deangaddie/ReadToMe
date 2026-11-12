@@ -44,7 +44,7 @@ public class SeriesVoiceEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFi
         var holmes = await seed.SeriesAsync(linkWatson: true);
         var voice = await seed.CreateVoiceAsync(holmes.Scarlet, "Army doctor");
         var before = await seed.HeadAsync(holmes.Scarlet);
-        await seed.RunAsync(holmes.Scarlet.Folder, new { type = "UpdateVoice", voiceId = voice, name = "Old campaigner" });
+        await seed.RunAsync(holmes.Scarlet.Folder, new { type = "UpdateVoice", voiceId = voice, name = "Old campaigner", description = (string?)null });
 
         await seed.RestoreAsync(holmes.Scarlet, before);
 
@@ -69,6 +69,7 @@ public class SeriesVoiceEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFi
         await seed.RunAsync(holmes.Four.Folder, new
         {
             type = "CreateVoiceRule", characterId = holmes.Four.Watson, voiceId = first, fromLevel = "Chapter", fromNodeId = holmes.Four.Chapter2,
+            toLevel = (string?)null, toNodeId = (Guid?)null,
         });
 
         var ruled = await seed.CommandAsync(holmes.Adventures.Folder, new { type = "DeleteVoice", voiceId = first });

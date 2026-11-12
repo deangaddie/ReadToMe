@@ -16,7 +16,6 @@
  * labels or order keeps a `Record<Union, string>` or a `readonly Union[]` beside its own code.
  */
 import type {
-  ApiItemType,
   AudioReviewDto,
   components,
   ItemVoiceDto,
@@ -93,8 +92,6 @@ export interface CreateProjectRequest {
 export type SplitRuleMode = 'Prefix' | 'Arabic' | 'Roman';
 
 // ---- Book reads (`BookEndpoints.cs`) ---------------------------------------------------------------
-
-export type PauseKind = Exclude<ApiItemType, 'Narration' | 'Character'>;
 
 /** `GET …/nodes/Chapter/{id}/voices`: keyed by speech item id. */
 export type ChapterVoicesDto = Record<Guid, ItemVoiceDto>;

@@ -2915,7 +2915,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Execute a book command. Body: { "type": "<Name>", ...properties }. Type is the command record name without the Command suffix, e.g. CreateCharacter, SetParagraphCharacter. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. The request is one History step, labelled for the command (e.g. Edit with AI, Split chapter, Assign speaker). */
+        /** Execute a book command. Body: { "type": "<Name>", ...properties }. Type is the command record name without the Command suffix, e.g. CreateCharacter, SetParagraphCharacter. The folder comes from the route; no command takes folderId. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. The request is one History step, labelled for the command (e.g. Edit with AI, Split chapter, Assign speaker). */
         post: {
             parameters: {
                 query?: never;
@@ -2927,7 +2927,7 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["JsonObject"];
+                    "application/json": components["schemas"]["BookCommand"];
                 };
             };
             responses: {
@@ -8938,6 +8938,71 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Wire type: AddBookTitle (the record name minus Command). The folder comes from the route, never the body. */
+        AddBookTitleCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "AddBookTitle";
+        };
+        /** @description Wire type: AddChapterTitles (the record name minus Command). The folder comes from the route, never the body. */
+        AddChapterTitlesCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "AddChapterTitles";
+        };
+        /** @description Wire type: AddCharacterAlias (the record name minus Command). The folder comes from the route, never the body. */
+        AddCharacterAliasCommand: {
+            /** Format: uuid */
+            characterId: string;
+            name: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "AddCharacterAlias";
+        };
+        /** @description Wire type: AddPartTitles (the record name minus Command). The folder comes from the route, never the body. */
+        AddPartTitlesCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "AddPartTitles";
+        };
+        /** @description Wire type: AddPauses (the record name minus Command). The folder comes from the route, never the body. */
+        AddPausesCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "AddPauses";
+        };
+        /**
+         * @description Add titles over several levels in one request: each named level's sweep, as its single-level
+         *     command runs it, always book first and each level once, stopping at the first refusal.
+         *
+         *     Wire type: AddTitles (the record name minus Command). The folder comes from the route, never the body.
+         */
+        AddTitlesCommand: {
+            levels: components["schemas"]["TitleLevel"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "AddTitles";
+        };
+        /** @description Wire type: AddVolumeTitles (the record name minus Command). The folder comes from the route, never the body. */
+        AddVolumeTitlesCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "AddVolumeTitles";
+        };
         AiServiceDto: {
             baseUrl: string;
             containerName: string;
@@ -8976,6 +9041,15 @@ export interface components {
             surface: null | string;
             textPrimary: null | string;
             textSecondary: null | string;
+        };
+        /** @description Wire type: ApplyBookEdits (the record name minus Command). The folder comes from the route, never the body. */
+        ApplyBookEditsCommand: {
+            edits: components["schemas"]["BookEditItem"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "ApplyBookEdits";
         };
         ApplyDiscoveryResponse: {
             /** Format: int32 */
@@ -9048,6 +9122,22 @@ export interface components {
             isRunning: boolean;
             lastError: null | string;
             outputFileName: null | string;
+        };
+        /**
+         * @description Stamps speaker and voice instructions onto existing items of one paragraph. Item boundaries are
+         *     frozen (ADR 0005): this command never creates, deletes, reorders or retypes an item.
+         *
+         *     Wire type: AttributeItems (the record name minus Command). The folder comes from the route, never the body.
+         */
+        AttributeItemsCommand: {
+            items: components["schemas"]["ItemAttribution"][];
+            /** Format: uuid */
+            paragraphId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "AttributeItems";
         };
         AttributionChainRequest: {
             /** @default false */
@@ -9276,6 +9366,15 @@ export interface components {
         };
         /** @enum {unknown} */
         AudioReviewState: "NeedsReview" | "Dismissed";
+        /** @description Any book command: POST /api/projects/{folder}/commands takes one, chosen by its type. */
+        BookCommand: components["schemas"]["AddBookTitleCommand"] | components["schemas"]["AddChapterTitlesCommand"] | components["schemas"]["AddCharacterAliasCommand"] | components["schemas"]["AddPartTitlesCommand"] | components["schemas"]["AddPausesCommand"] | components["schemas"]["AddTitlesCommand"] | components["schemas"]["AddVolumeTitlesCommand"] | components["schemas"]["ApplyBookEditsCommand"] | components["schemas"]["AttributeItemsCommand"] | components["schemas"]["ClearBookContentCommand"] | components["schemas"]["CreateCharacterCommand"] | components["schemas"]["CreateCharacterAndAssignCommand"] | components["schemas"]["CreateVoiceCommand"] | components["schemas"]["CreateVoiceRuleCommand"] | components["schemas"]["DeleteChapterCommand"] | components["schemas"]["DeleteCharacterCommand"] | components["schemas"]["DeleteParagraphCommand"] | components["schemas"]["DeleteParagraphItemCommand"] | components["schemas"]["DeletePartCommand"] | components["schemas"]["DeleteVoiceCommand"] | components["schemas"]["DeleteVoiceRuleCommand"] | components["schemas"]["DeleteVolumeCommand"] | components["schemas"]["DismissAudioReviewCommand"] | components["schemas"]["InsertNodeCommand"] | components["schemas"]["InsertParagraphItemCommand"] | components["schemas"]["InsertPauseParagraphCommand"] | components["schemas"]["MergeChapterCommand"] | components["schemas"]["MergeCharactersCommand"] | components["schemas"]["MergeParagraphCommand"] | components["schemas"]["MergeParagraphItemCommand"] | components["schemas"]["MergePartCommand"] | components["schemas"]["MergeVolumeCommand"] | components["schemas"]["MoveVoiceRuleCommand"] | components["schemas"]["ReleaseNarrationCommand"] | components["schemas"]["RemoveCharacterAliasCommand"] | components["schemas"]["RenameCharacterCommand"] | components["schemas"]["SetAudioReviewCommand"] | components["schemas"]["SetItemCharacterCommand"] | components["schemas"]["SetItemDeliveryCueCommand"] | components["schemas"]["SetNarratorCharacterCommand"] | components["schemas"]["SetParagraphCharacterCommand"] | components["schemas"]["SetParagraphItemAudioCommand"] | components["schemas"]["SetParagraphsCharacterCommand"] | components["schemas"]["SetVoiceAudioCommand"] | components["schemas"]["SetVoiceDefaultCommand"] | components["schemas"]["SetVoiceDesignPromptCommand"] | components["schemas"]["SetVoiceGeneratedCommand"] | components["schemas"]["SetVoiceSettingsOverrideCommand"] | components["schemas"]["SetVoiceSourceCommand"] | components["schemas"]["SetVoiceTranscriptCommand"] | components["schemas"]["SetVoiceTtsSettingsOverrideCommand"] | components["schemas"]["SplitAtChapterCommand"] | components["schemas"]["SplitAtItemCommand"] | components["schemas"]["SplitAtParagraphCommand"] | components["schemas"]["SplitAtPartCommand"] | components["schemas"]["UpdateChapterTitleCommand"] | components["schemas"]["UpdateParagraphItemTextCommand"] | components["schemas"]["UpdatePartTitleCommand"] | components["schemas"]["UpdateVoiceCommand"] | components["schemas"]["UpdateVolumeTitleCommand"];
+        /** @description One AI book edit: the title or item text `Id` names, by `Kind`, set to `NewValue`. */
+        BookEditItem: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["BookEditTargetKind"];
+            newValue: string;
+        };
         /**
          * @description One AI book-edit proposal run (Angular ticket 19), sent to the connection that started it.
          *     `Program` is the session id the run belongs to; `Done` carries every row the run landed
@@ -9477,6 +9576,14 @@ export interface components {
          * @enum {unknown}
          */
         CheckpointState: "Confirmed" | "Skipped";
+        /** @description Wire type: ClearBookContent (the record name minus Command). The folder comes from the route, never the body. */
+        ClearBookContentCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "ClearBookContent";
+        };
         CommandResponse: {
             /** Format: uuid */
             newEntityId: null | string;
@@ -9534,6 +9641,37 @@ export interface components {
         CoverImageResponse: {
             coverImage: string;
         };
+        /**
+         * @description "New character…" from the speaker menu in one request: resolves `Name` as
+         *     CreateCharacterCommand does (an existing name or alias answers with its own id), then
+         *     stamps that character on exactly one target — `ItemId` as SetItemCharacterCommand,
+         *     `ParagraphId` as SetParagraphCharacterCommand, or `ParagraphIds` as
+         *     SetParagraphsCharacterCommand. Answers the character's id.
+         *
+         *     Wire type: CreateCharacterAndAssign (the record name minus Command). The folder comes from the route, never the body.
+         */
+        CreateCharacterAndAssignCommand: {
+            /** Format: uuid */
+            itemId?: null | string;
+            name: string;
+            /** Format: uuid */
+            paragraphId?: null | string;
+            paragraphIds?: null | string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "CreateCharacterAndAssign";
+        };
+        /** @description Wire type: CreateCharacter (the record name minus Command). The folder comes from the route, never the body. */
+        CreateCharacterCommand: {
+            name: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "CreateCharacter";
+        };
         CreateProjectResponse: {
             folderName: string;
         };
@@ -9544,6 +9682,117 @@ export interface components {
         CreateSeriesResponse: {
             /** Format: uuid */
             id: string;
+        };
+        /** @description Wire type: CreateVoice (the record name minus Command). The folder comes from the route, never the body. */
+        CreateVoiceCommand: {
+            /** Format: uuid */
+            characterId: string;
+            /** @default false */
+            isGenerated: boolean;
+            name: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "CreateVoice";
+        };
+        /** @description Wire type: CreateVoiceRule (the record name minus Command). The folder comes from the route, never the body. */
+        CreateVoiceRuleCommand: {
+            /** Format: uuid */
+            characterId: string;
+            fromLevel: null | components["schemas"]["VoiceAnchorLevel"];
+            /** Format: uuid */
+            fromNodeId: null | string;
+            toLevel: null | components["schemas"]["VoiceAnchorLevel"];
+            /** Format: uuid */
+            toNodeId: null | string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "CreateVoiceRule";
+            /** Format: uuid */
+            voiceId: string;
+        };
+        /** @description Wire type: DeleteChapter (the record name minus Command). The folder comes from the route, never the body. */
+        DeleteChapterCommand: {
+            /** Format: uuid */
+            chapterId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "DeleteChapter";
+        };
+        /** @description Wire type: DeleteCharacter (the record name minus Command). The folder comes from the route, never the body. */
+        DeleteCharacterCommand: {
+            /** Format: uuid */
+            characterId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "DeleteCharacter";
+        };
+        /** @description Wire type: DeleteParagraph (the record name minus Command). The folder comes from the route, never the body. */
+        DeleteParagraphCommand: {
+            /** Format: uuid */
+            paragraphId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "DeleteParagraph";
+        };
+        /** @description Wire type: DeleteParagraphItem (the record name minus Command). The folder comes from the route, never the body. */
+        DeleteParagraphItemCommand: {
+            /** Format: uuid */
+            itemId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "DeleteParagraphItem";
+        };
+        /** @description Wire type: DeletePart (the record name minus Command). The folder comes from the route, never the body. */
+        DeletePartCommand: {
+            /** Format: uuid */
+            partId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "DeletePart";
+        };
+        /** @description Wire type: DeleteVoice (the record name minus Command). The folder comes from the route, never the body. */
+        DeleteVoiceCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "DeleteVoice";
+            /** Format: uuid */
+            voiceId: string;
+        };
+        /** @description Wire type: DeleteVoiceRule (the record name minus Command). The folder comes from the route, never the body. */
+        DeleteVoiceRuleCommand: {
+            /** Format: uuid */
+            ruleId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "DeleteVoiceRule";
+        };
+        /** @description Wire type: DeleteVolume (the record name minus Command). The folder comes from the route, never the body. */
+        DeleteVolumeCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "DeleteVolume";
+            /** Format: uuid */
+            volumeId: string;
         };
         /**
          * @description ExistingCharacterId names the roster character the row resolves onto (by its name or
@@ -9571,6 +9820,16 @@ export interface components {
          * @enum {unknown}
          */
         DiscoveryStatus: "Ok" | "NoLlmConfigured" | "Failed" | "ServiceUnavailable";
+        /** @description Wire type: DismissAudioReview (the record name minus Command). The folder comes from the route, never the body. */
+        DismissAudioReviewCommand: {
+            /** Format: uuid */
+            paragraphItemId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "DismissAudioReview";
+        };
         /**
          * @description How planning an AI book edit ended. The planner answers all but EditPlanStatus.NoTargets,
          *     which the caller sets when the plan parsed but its scope matched no items. `Ok` is the only
@@ -9723,6 +9982,79 @@ export interface components {
             /** @default false */
             reread: boolean;
         };
+        /**
+         * @description Creates one node beside or inside the anchor; its kind follows from the anchor and the
+         *     Placement InsertNodeCommand.Placement. A new Paragraph is born holding `Text` as one unattributed Speech
+         *     item — never empty, because an empty Paragraph reads as a pause. A new Speech item at a
+         *     Paragraph's start or end holds `Text` too, born unattributed. `Title` is for a new
+         *     Volume, Part or Chapter.
+         *
+         *     Wire type: InsertNode (the record name minus Command). The folder comes from the route, never the body.
+         */
+        InsertNodeCommand: {
+            /** Format: uuid */
+            anchorId: string;
+            anchorKind: components["schemas"]["NodeKind"];
+            placement: components["schemas"]["Placement"];
+            text?: null | string;
+            title?: null | string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "InsertNode";
+        };
+        /**
+         * @description Creates one Speech ParagraphItem next to `AnchorItemId`, inside the anchor's own Paragraph.
+         *     The new item is born unattributed — no speaker, no voice instructions, no audio: by construction
+         *     the anchor held two speakers, so inheriting its speaker would stamp a confident wrong answer that
+         *     looks attributed and never reaches the attribution queue.
+         *
+         *     Wire type: InsertParagraphItem (the record name minus Command). The folder comes from the route, never the body.
+         */
+        InsertParagraphItemCommand: {
+            /** Format: uuid */
+            anchorItemId: string;
+            position: components["schemas"]["InsertPosition"];
+            text: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "InsertParagraphItem";
+        };
+        /** @description Wire type: InsertPauseParagraph (the record name minus Command). The folder comes from the route, never the body. */
+        InsertPauseParagraphCommand: {
+            /** Format: uuid */
+            anchorItemId: string;
+            pauseKind: components["schemas"]["PauseKind"];
+            position: components["schemas"]["InsertPosition"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "InsertPauseParagraph";
+        };
+        /**
+         * @description Where a new node lands relative to the anchor node it is inserted against.
+         *     Shared by the item and pause insertion commands (InsertNodeCommand takes a
+         *     Placement); the member names are also the JSON wire values.
+         * @enum {unknown}
+         */
+        InsertPosition: "Before" | "After";
+        /**
+         * @description One item's attribution, ready to apply: the item is addressed by id, and the speaker is already
+         *                 resolved to a character id (null = unknown, which never erases an existing stamp).
+         *                 Not to be confused with AttributedItem, the wire answer the LLM sends (index + speaker
+         *     name); this is the resolved apply-side record.
+         */
+        ItemAttribution: {
+            /** Format: uuid */
+            characterId: null | string;
+            /** Format: uuid */
+            itemId: string;
+            voiceInstructions: null | string;
+        };
         ItemCountsDto: {
             /** Format: int32 */
             total: number;
@@ -9774,7 +10106,6 @@ export interface components {
             position: number;
         };
         JsonElement: unknown;
-        JsonObject: Record<string, unknown>;
         LinkSeriesCharacterRequest: {
             /** Format: uuid */
             characterId?: null | string;
@@ -9926,6 +10257,87 @@ export interface components {
             hasMultipleVolumes: boolean;
             part: null | components["schemas"]["SplitRuleRequest"];
             volume: null | components["schemas"]["SplitRuleRequest"];
+        };
+        /** @description Wire type: MergeChapter (the record name minus Command). The folder comes from the route, never the body. */
+        MergeChapterCommand: {
+            /** Format: uuid */
+            chapterId: string;
+            direction: components["schemas"]["MergeDirection"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "MergeChapter";
+        };
+        /** @description Wire type: MergeCharacters (the record name minus Command). The folder comes from the route, never the body. */
+        MergeCharactersCommand: {
+            addNameAsAlias: boolean;
+            /** Format: uuid */
+            mergedId: string;
+            /** Format: uuid */
+            survivorId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "MergeCharacters";
+        };
+        /** @enum {unknown} */
+        MergeDirection: "Previous" | "Next";
+        /** @description Wire type: MergeParagraph (the record name minus Command). The folder comes from the route, never the body. */
+        MergeParagraphCommand: {
+            direction: components["schemas"]["MergeDirection"];
+            /** Format: uuid */
+            paragraphId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "MergeParagraph";
+        };
+        /** @description Wire type: MergeParagraphItem (the record name minus Command). The folder comes from the route, never the body. */
+        MergeParagraphItemCommand: {
+            direction: components["schemas"]["MergeDirection"];
+            /** Format: uuid */
+            itemId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "MergeParagraphItem";
+        };
+        /** @description Wire type: MergePart (the record name minus Command). The folder comes from the route, never the body. */
+        MergePartCommand: {
+            direction: components["schemas"]["MergeDirection"];
+            /** Format: uuid */
+            partId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "MergePart";
+        };
+        /** @description Wire type: MergeVolume (the record name minus Command). The folder comes from the route, never the body. */
+        MergeVolumeCommand: {
+            direction: components["schemas"]["MergeDirection"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "MergeVolume";
+            /** Format: uuid */
+            volumeId: string;
+        };
+        /** @description Wire type: MoveVoiceRule (the record name minus Command). The folder comes from the route, never the body. */
+        MoveVoiceRuleCommand: {
+            direction: components["schemas"]["RuleMoveDirection"];
+            /** Format: uuid */
+            ruleId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "MoveVoiceRule";
         };
         /**
          * @description NarrationReleasePreview on the wire: what a Release narration over the scope would write.
@@ -10140,6 +10552,8 @@ export interface components {
             /** Format: int32 */
             volumeMs: number;
         };
+        /** @enum {unknown} */
+        PauseKind: "Pause" | "ParagraphPause" | "ChapterPause" | "PartPause" | "VolumePause";
         /**
          * @description Where an InsertNodeCommand puts its new node: Placement.Before / Placement.After
          *     name a sibling at the anchor's own level, Placement.AtStart / Placement.AtEnd a first or
@@ -10570,6 +10984,44 @@ export interface components {
             text: string;
             voiceName: null | string;
         };
+        /**
+         * @description Release narration: clears the narrator stamp, and the audio, from every item of the scope's
+         *     narration-only paragraphs (no dialog item at all), leaving them unattributed dialog. A speech tag
+         *     inside a quoted paragraph is not in a narration-only paragraph, so it stays narration.
+         *
+         *     Wire type: ReleaseNarration (the record name minus Command). The folder comes from the route, never the body.
+         */
+        ReleaseNarrationCommand: {
+            /** Format: uuid */
+            nodeId: string;
+            scope: components["schemas"]["NarrationReleaseScope"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "ReleaseNarration";
+        };
+        /** @description Wire type: RemoveCharacterAlias (the record name minus Command). The folder comes from the route, never the body. */
+        RemoveCharacterAliasCommand: {
+            /** Format: uuid */
+            aliasId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "RemoveCharacterAlias";
+        };
+        /** @description Wire type: RenameCharacter (the record name minus Command). The folder comes from the route, never the body. */
+        RenameCharacterCommand: {
+            /** Format: uuid */
+            characterId: string;
+            name: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "RenameCharacter";
+        };
         RenameSeriesRequest: {
             name?: null | string;
         };
@@ -10603,6 +11055,8 @@ export interface components {
             needsAudioCount: number;
             step: null | components["schemas"]["HistoryStep"];
         };
+        /** @enum {unknown} */
+        RuleMoveDirection: "Up" | "Down";
         SemanticSimilarityServiceConfig: {
             /** Format: int32 */
             id: number;
@@ -10825,14 +11279,207 @@ export interface components {
             /** Format: int32 */
             id: number;
         };
+        /** @description Wire type: SetAudioReview (the record name minus Command). The folder comes from the route, never the body. */
+        SetAudioReviewCommand: {
+            normalizeOk: boolean;
+            normalizeReason: null | string;
+            originalTextSnapshot: null | string;
+            /** Format: uuid */
+            paragraphItemId: string;
+            transcript: null | string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SetAudioReview";
+            verifyOk: boolean;
+            verifyReason: null | string;
+            /** Format: double */
+            wer: null | number;
+        };
         /** @description `PUT /api/projects/{folder}/checkpoints/{step}` body: `Open` deletes the row. */
         SetCheckpointRequest: {
             state: null | components["schemas"]["CheckpointRequestState"];
+        };
+        /** @description Wire type: SetItemCharacter (the record name minus Command). The folder comes from the route, never the body. */
+        SetItemCharacterCommand: {
+            /** Format: uuid */
+            characterId: null | string;
+            /** Format: uuid */
+            itemId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SetItemCharacter";
+        };
+        /**
+         * @description Adds, edits or removes one speech item's delivery cue by hand; null or blank removes it. Not
+         *     `AttributeItems`: that is attribution's command, carries a speaker, and keeps the audio. A real
+         *     change discards the item's audio.
+         *
+         *     Wire type: SetItemDeliveryCue (the record name minus Command). The folder comes from the route, never the body.
+         */
+        SetItemDeliveryCueCommand: {
+            cue: null | string;
+            /** Format: uuid */
+            itemId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SetItemDeliveryCue";
+        };
+        /**
+         * @description Points the book's narration at one of its Characters — Sherlock Holmes narrated by
+         *     Dr. Watson. `null` unlinks. The first project-scoped BookCommand:
+         *     every sibling addresses a node, character or voice. Refused (422) for an unknown character or a self-link.
+         *
+         *     Wire type: SetNarratorCharacter (the record name minus Command). The folder comes from the route, never the body.
+         */
+        SetNarratorCharacterCommand: {
+            /** Format: uuid */
+            characterId: null | string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SetNarratorCharacter";
+        };
+        /** @description Wire type: SetParagraphCharacter (the record name minus Command). The folder comes from the route, never the body. */
+        SetParagraphCharacterCommand: {
+            /** Format: uuid */
+            characterId: null | string;
+            /** Format: uuid */
+            paragraphId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SetParagraphCharacter";
+            voiceInstructions?: null | string;
+        };
+        /** @description Wire type: SetParagraphItemAudio (the record name minus Command). The folder comes from the route, never the body. */
+        SetParagraphItemAudioCommand: {
+            audioFileName: string;
+            /** Format: uuid */
+            itemId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SetParagraphItemAudio";
+        };
+        /**
+         * @description Stamps one speaker across every Character item in every listed paragraph — the bulk-assign
+         *     write, and the bulk sibling of SetParagraphCharacterCommand, which is left
+         *     unchanged and keeps its own callers.
+         *
+         *     Wire type: SetParagraphsCharacter (the record name minus Command). The folder comes from the route, never the body.
+         */
+        SetParagraphsCharacterCommand: {
+            /** Format: uuid */
+            characterId: null | string;
+            paragraphIds: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SetParagraphsCharacter";
         };
         /** @description Body of `POST …/pronunciations` and `PUT …/pronunciations/{id}`. */
         SetPronunciationRequest: {
             spokenForm: null | string;
             writtenForm: null | string;
+        };
+        /** @description Wire type: SetVoiceAudio (the record name minus Command). The folder comes from the route, never the body. */
+        SetVoiceAudioCommand: {
+            audioFileName: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SetVoiceAudio";
+            /** Format: uuid */
+            voiceId: string;
+        };
+        /** @description Wire type: SetVoiceDefault (the record name minus Command). The folder comes from the route, never the body. */
+        SetVoiceDefaultCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SetVoiceDefault";
+            /** Format: uuid */
+            voiceId: string;
+        };
+        /** @description Wire type: SetVoiceDesignPrompt (the record name minus Command). The folder comes from the route, never the body. */
+        SetVoiceDesignPromptCommand: {
+            prompt: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SetVoiceDesignPrompt";
+            /** Format: uuid */
+            voiceId: string;
+        };
+        /** @description Wire type: SetVoiceGenerated (the record name minus Command). The folder comes from the route, never the body. */
+        SetVoiceGeneratedCommand: {
+            audioFileName: string;
+            designPrompt: string;
+            transcript: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SetVoiceGenerated";
+            /** Format: uuid */
+            voiceId: string;
+        };
+        /** @description Wire type: SetVoiceSettingsOverride (the record name minus Command). The folder comes from the route, never the body. */
+        SetVoiceSettingsOverrideCommand: {
+            json: null | string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SetVoiceSettingsOverride";
+            /** Format: uuid */
+            voiceId: string;
+        };
+        /** @description Wire type: SetVoiceSource (the record name minus Command). The folder comes from the route, never the body. */
+        SetVoiceSourceCommand: {
+            isGenerated: boolean;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SetVoiceSource";
+            /** Format: uuid */
+            voiceId: string;
+        };
+        /** @description Wire type: SetVoiceTranscript (the record name minus Command). The folder comes from the route, never the body. */
+        SetVoiceTranscriptCommand: {
+            transcript: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SetVoiceTranscript";
+            /** Format: uuid */
+            voiceId: string;
+        };
+        /** @description Wire type: SetVoiceTtsSettingsOverride (the record name minus Command). The folder comes from the route, never the body. */
+        SetVoiceTtsSettingsOverrideCommand: {
+            json: null | string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SetVoiceTtsSettingsOverride";
+            /** Format: uuid */
+            voiceId: string;
         };
         /** @description Which settings area changed, so other clients refresh their list. */
         SettingsChangedMessage: {
@@ -11008,6 +11655,49 @@ export interface components {
             /** Format: int32 */
             paragraphs: number;
         };
+        /** @description Wire type: SplitAtChapter (the record name minus Command). The folder comes from the route, never the body. */
+        SplitAtChapterCommand: {
+            /** Format: uuid */
+            chapterId: string;
+            newPartTitle: null | string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SplitAtChapter";
+        };
+        /** @description Wire type: SplitAtItem (the record name minus Command). The folder comes from the route, never the body. */
+        SplitAtItemCommand: {
+            /** Format: uuid */
+            itemId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SplitAtItem";
+        };
+        /** @description Wire type: SplitAtParagraph (the record name minus Command). The folder comes from the route, never the body. */
+        SplitAtParagraphCommand: {
+            newChapterTitle: null | string;
+            /** Format: uuid */
+            paragraphId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SplitAtParagraph";
+        };
+        /** @description Wire type: SplitAtPart (the record name minus Command). The folder comes from the route, never the body. */
+        SplitAtPartCommand: {
+            newVolumeTitle: null | string;
+            /** Format: uuid */
+            partId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SplitAtPart";
+        };
         /**
          * @description One level's split rule. `mode` is `Prefix`, `Arabic` or `Roman`; `prefix` is
          *     required (non-blank) when `mode` is `Prefix`, ignored otherwise.
@@ -11170,6 +11860,11 @@ export interface components {
              */
             runThroughput: null | number;
         };
+        /**
+         * @description Which sweep an AddTitlesCommand runs. The member names are also the JSON wire values.
+         * @enum {unknown}
+         */
+        TitleLevel: "Book" | "Volume" | "Part" | "Chapter";
         ToSentenceCaseConfig: {
             /** Format: int32 */
             id: number;
@@ -11230,11 +11925,67 @@ export interface components {
             sentenceStart: number;
             voice: null | components["schemas"]["JsonElement"];
         };
+        /** @description Wire type: UpdateChapterTitle (the record name minus Command). The folder comes from the route, never the body. */
+        UpdateChapterTitleCommand: {
+            /** Format: uuid */
+            chapterId: string;
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "UpdateChapterTitle";
+        };
+        /** @description Wire type: UpdateParagraphItemText (the record name minus Command). The folder comes from the route, never the body. */
+        UpdateParagraphItemTextCommand: {
+            /** Format: uuid */
+            itemId: string;
+            text: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "UpdateParagraphItemText";
+        };
+        /** @description Wire type: UpdatePartTitle (the record name minus Command). The folder comes from the route, never the body. */
+        UpdatePartTitleCommand: {
+            /** Format: uuid */
+            partId: string;
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "UpdatePartTitle";
+        };
         /** @description `PATCH /api/projects/{folder}` body: every field optional; an omitted or null field is left as it is. */
         UpdateProjectRequest: {
             author?: null | string;
             bookTitle?: null | string;
             title?: null | string;
+        };
+        /** @description Wire type: UpdateVoice (the record name minus Command). The folder comes from the route, never the body. */
+        UpdateVoiceCommand: {
+            description: null | string;
+            name: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "UpdateVoice";
+            /** Format: uuid */
+            voiceId: string;
+        };
+        /** @description Wire type: UpdateVolumeTitle (the record name minus Command). The folder comes from the route, never the body. */
+        UpdateVolumeTitleCommand: {
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "UpdateVolumeTitle";
+            /** Format: uuid */
+            volumeId: string;
         };
         /** @enum {unknown} */
         VoiceAnchorLevel: "Volume" | "Part" | "Chapter" | "Paragraph" | "ParagraphItem";
@@ -11405,12 +12156,20 @@ export interface components {
     headers: never;
     pathItems: never;
 }
+export type AddBookTitleCommand = components['schemas']['AddBookTitleCommand'];
+export type AddChapterTitlesCommand = components['schemas']['AddChapterTitlesCommand'];
+export type AddCharacterAliasCommand = components['schemas']['AddCharacterAliasCommand'];
+export type AddPartTitlesCommand = components['schemas']['AddPartTitlesCommand'];
+export type AddPausesCommand = components['schemas']['AddPausesCommand'];
+export type AddTitlesCommand = components['schemas']['AddTitlesCommand'];
+export type AddVolumeTitlesCommand = components['schemas']['AddVolumeTitlesCommand'];
 export type AiServiceDto = components['schemas']['AiServiceDto'];
 export type AiServiceOp = components['schemas']['AiServiceOp'];
 export type AiServiceStatus = components['schemas']['AiServiceStatus'];
 export type AiServiceStatusDto = components['schemas']['AiServiceStatusDto'];
 export type ApiItemType = components['schemas']['ApiItemType'];
 export type AppTheme = components['schemas']['AppTheme'];
+export type ApplyBookEditsCommand = components['schemas']['ApplyBookEditsCommand'];
 export type ApplyDiscoveryResponse = components['schemas']['ApplyDiscoveryResponse'];
 export type ApplyDiscoveryRow = components['schemas']['ApplyDiscoveryRow'];
 export type ApplyPreviewRequest = components['schemas']['ApplyPreviewRequest'];
@@ -11421,6 +12180,7 @@ export type AssemblyPhase = components['schemas']['AssemblyPhase'];
 export type AssemblyStartRequest = components['schemas']['AssemblyStartRequest'];
 export type AssemblyState = components['schemas']['AssemblyState'];
 export type AssemblyStatusDto = components['schemas']['AssemblyStatusDto'];
+export type AttributeItemsCommand = components['schemas']['AttributeItemsCommand'];
 export type AttributionChainRequest = components['schemas']['AttributionChainRequest'];
 export type AttributionChainResponse = components['schemas']['AttributionChainResponse'];
 export type AttributionChainStepDto = components['schemas']['AttributionChainStepDto'];
@@ -11443,6 +12203,8 @@ export type AudioProcessingUpdateRequest = components['schemas']['AudioProcessin
 export type AudioQueueSnapshot = components['schemas']['AudioQueueSnapshot'];
 export type AudioReviewDto = components['schemas']['AudioReviewDto'];
 export type AudioReviewState = components['schemas']['AudioReviewState'];
+export type BookCommand = components['schemas']['BookCommand'];
+export type BookEditItem = components['schemas']['BookEditItem'];
 export type BookEditMessage = components['schemas']['BookEditMessage'];
 export type BookEditMessageKind = components['schemas']['BookEditMessageKind'];
 export type BookEditRowDto = components['schemas']['BookEditRowDto'];
@@ -11468,17 +12230,31 @@ export type CharacterSummaryDto = components['schemas']['CharacterSummaryDto'];
 export type CharacterVoicesDto = components['schemas']['CharacterVoicesDto'];
 export type CheckpointRequestState = components['schemas']['CheckpointRequestState'];
 export type CheckpointState = components['schemas']['CheckpointState'];
+export type ClearBookContentCommand = components['schemas']['ClearBookContentCommand'];
 export type CommandResponse = components['schemas']['CommandResponse'];
 export type ConfigThroughput = components['schemas']['ConfigThroughput'];
 export type ContextItemDto = components['schemas']['ContextItemDto'];
 export type ContextParagraphDto = components['schemas']['ContextParagraphDto'];
 export type CoverImageResponse = components['schemas']['CoverImageResponse'];
+export type CreateCharacterAndAssignCommand = components['schemas']['CreateCharacterAndAssignCommand'];
+export type CreateCharacterCommand = components['schemas']['CreateCharacterCommand'];
 export type CreateProjectResponse = components['schemas']['CreateProjectResponse'];
 export type CreateSeriesRequest = components['schemas']['CreateSeriesRequest'];
 export type CreateSeriesResponse = components['schemas']['CreateSeriesResponse'];
+export type CreateVoiceCommand = components['schemas']['CreateVoiceCommand'];
+export type CreateVoiceRuleCommand = components['schemas']['CreateVoiceRuleCommand'];
+export type DeleteChapterCommand = components['schemas']['DeleteChapterCommand'];
+export type DeleteCharacterCommand = components['schemas']['DeleteCharacterCommand'];
+export type DeleteParagraphCommand = components['schemas']['DeleteParagraphCommand'];
+export type DeleteParagraphItemCommand = components['schemas']['DeleteParagraphItemCommand'];
+export type DeletePartCommand = components['schemas']['DeletePartCommand'];
+export type DeleteVoiceCommand = components['schemas']['DeleteVoiceCommand'];
+export type DeleteVoiceRuleCommand = components['schemas']['DeleteVoiceRuleCommand'];
+export type DeleteVolumeCommand = components['schemas']['DeleteVolumeCommand'];
 export type DiscoveredCharacterDto = components['schemas']['DiscoveredCharacterDto'];
 export type DiscoveryOutcomeDto = components['schemas']['DiscoveryOutcomeDto'];
 export type DiscoveryStatus = components['schemas']['DiscoveryStatus'];
+export type DismissAudioReviewCommand = components['schemas']['DismissAudioReviewCommand'];
 export type EditPlanStatus = components['schemas']['EditPlanStatus'];
 export type EnqueueResponse = components['schemas']['EnqueueResponse'];
 export type EscalationState = components['schemas']['EscalationState'];
@@ -11495,6 +12271,11 @@ export type HistoryStep = components['schemas']['HistoryStep'];
 export type HistoryStepDto = components['schemas']['HistoryStepDto'];
 export type HistoryStepKind = components['schemas']['HistoryStepKind'];
 export type ImportRequest = components['schemas']['ImportRequest'];
+export type InsertNodeCommand = components['schemas']['InsertNodeCommand'];
+export type InsertParagraphItemCommand = components['schemas']['InsertParagraphItemCommand'];
+export type InsertPauseParagraphCommand = components['schemas']['InsertPauseParagraphCommand'];
+export type InsertPosition = components['schemas']['InsertPosition'];
+export type ItemAttribution = components['schemas']['ItemAttribution'];
 export type ItemCountsDto = components['schemas']['ItemCountsDto'];
 export type ItemStatusEntry = components['schemas']['ItemStatusEntry'];
 export type ItemStatusMessage = components['schemas']['ItemStatusMessage'];
@@ -11503,7 +12284,6 @@ export type ItemsEnqueueRequest = components['schemas']['ItemsEnqueueRequest'];
 export type JoinSeriesRequest = components['schemas']['JoinSeriesRequest'];
 export type JoinSeriesResponse = components['schemas']['JoinSeriesResponse'];
 export type JsonElement = components['schemas']['JsonElement'];
-export type JsonObject = components['schemas']['JsonObject'];
 export type LinkSeriesCharacterRequest = components['schemas']['LinkSeriesCharacterRequest'];
 export type LiveHubMethod = components['schemas']['LiveHubMethod'];
 export type LiveMessageMap = components['schemas']['LiveMessageMap'];
@@ -11518,6 +12298,14 @@ export type LlmTestMessageKind = components['schemas']['LlmTestMessageKind'];
 export type LlmTestRequest = components['schemas']['LlmTestRequest'];
 export type LlmTestStatusResponse = components['schemas']['LlmTestStatusResponse'];
 export type ManualImportRequest = components['schemas']['ManualImportRequest'];
+export type MergeChapterCommand = components['schemas']['MergeChapterCommand'];
+export type MergeCharactersCommand = components['schemas']['MergeCharactersCommand'];
+export type MergeDirection = components['schemas']['MergeDirection'];
+export type MergeParagraphCommand = components['schemas']['MergeParagraphCommand'];
+export type MergeParagraphItemCommand = components['schemas']['MergeParagraphItemCommand'];
+export type MergePartCommand = components['schemas']['MergePartCommand'];
+export type MergeVolumeCommand = components['schemas']['MergeVolumeCommand'];
+export type MoveVoiceRuleCommand = components['schemas']['MoveVoiceRuleCommand'];
 export type NarrationReleasePreviewDto = components['schemas']['NarrationReleasePreviewDto'];
 export type NarrationReleasePreviewRequest = components['schemas']['NarrationReleasePreviewRequest'];
 export type NarrationReleaseScope = components['schemas']['NarrationReleaseScope'];
@@ -11544,6 +12332,7 @@ export type ParagraphTtsServiceType = components['schemas']['ParagraphTtsService
 export type ParagraphTtsSettingsSchema = components['schemas']['ParagraphTtsSettingsSchema'];
 export type ParagraphsEnqueueRequest = components['schemas']['ParagraphsEnqueueRequest'];
 export type PauseDurationsDto = components['schemas']['PauseDurationsDto'];
+export type PauseKind = components['schemas']['PauseKind'];
 export type Placement = components['schemas']['Placement'];
 export type PlanBookEditRequest = components['schemas']['PlanBookEditRequest'];
 export type PlanBookEditResponse = components['schemas']['PlanBookEditResponse'];
@@ -11587,12 +12376,16 @@ export type QueueMessage = components['schemas']['QueueMessage'];
 export type ReceiptEffects = components['schemas']['ReceiptEffects'];
 export type ReceiptMessage = components['schemas']['ReceiptMessage'];
 export type RecentAudioSampleDto = components['schemas']['RecentAudioSampleDto'];
+export type ReleaseNarrationCommand = components['schemas']['ReleaseNarrationCommand'];
+export type RemoveCharacterAliasCommand = components['schemas']['RemoveCharacterAliasCommand'];
+export type RenameCharacterCommand = components['schemas']['RenameCharacterCommand'];
 export type RenameSeriesRequest = components['schemas']['RenameSeriesRequest'];
 export type RenderedDesignPromptResponse = components['schemas']['RenderedDesignPromptResponse'];
 export type ResolvedChainStepDto = components['schemas']['ResolvedChainStepDto'];
 export type RestoreEventKind = components['schemas']['RestoreEventKind'];
 export type RestorePreviewDto = components['schemas']['RestorePreviewDto'];
 export type RestoreResultDto = components['schemas']['RestoreResultDto'];
+export type RuleMoveDirection = components['schemas']['RuleMoveDirection'];
 export type SemanticSimilarityServiceConfig = components['schemas']['SemanticSimilarityServiceConfig'];
 export type SemanticSimilarityServiceType = components['schemas']['SemanticSimilarityServiceType'];
 export type SemanticSimilaritySettingsSchema = components['schemas']['SemanticSimilaritySettingsSchema'];
@@ -11627,8 +12420,23 @@ export type SeriesVoiceDeleteReason = components['schemas']['SeriesVoiceDeleteRe
 export type SeriesVoiceLossDto = components['schemas']['SeriesVoiceLossDto'];
 export type ServiceStatusMessage = components['schemas']['ServiceStatusMessage'];
 export type SetActiveRequest = components['schemas']['SetActiveRequest'];
+export type SetAudioReviewCommand = components['schemas']['SetAudioReviewCommand'];
 export type SetCheckpointRequest = components['schemas']['SetCheckpointRequest'];
+export type SetItemCharacterCommand = components['schemas']['SetItemCharacterCommand'];
+export type SetItemDeliveryCueCommand = components['schemas']['SetItemDeliveryCueCommand'];
+export type SetNarratorCharacterCommand = components['schemas']['SetNarratorCharacterCommand'];
+export type SetParagraphCharacterCommand = components['schemas']['SetParagraphCharacterCommand'];
+export type SetParagraphItemAudioCommand = components['schemas']['SetParagraphItemAudioCommand'];
+export type SetParagraphsCharacterCommand = components['schemas']['SetParagraphsCharacterCommand'];
 export type SetPronunciationRequest = components['schemas']['SetPronunciationRequest'];
+export type SetVoiceAudioCommand = components['schemas']['SetVoiceAudioCommand'];
+export type SetVoiceDefaultCommand = components['schemas']['SetVoiceDefaultCommand'];
+export type SetVoiceDesignPromptCommand = components['schemas']['SetVoiceDesignPromptCommand'];
+export type SetVoiceGeneratedCommand = components['schemas']['SetVoiceGeneratedCommand'];
+export type SetVoiceSettingsOverrideCommand = components['schemas']['SetVoiceSettingsOverrideCommand'];
+export type SetVoiceSourceCommand = components['schemas']['SetVoiceSourceCommand'];
+export type SetVoiceTranscriptCommand = components['schemas']['SetVoiceTranscriptCommand'];
+export type SetVoiceTtsSettingsOverrideCommand = components['schemas']['SetVoiceTtsSettingsOverrideCommand'];
 export type SettingsChangedMessage = components['schemas']['SettingsChangedMessage'];
 export type SettingsFieldDto = components['schemas']['SettingsFieldDto'];
 export type SettingsOptionDto = components['schemas']['SettingsOptionDto'];
@@ -11649,6 +12457,10 @@ export type ShareSeriesCharacterResponse = components['schemas']['ShareSeriesCha
 export type SimilarityTestRequest = components['schemas']['SimilarityTestRequest'];
 export type SimilarityTestResponse = components['schemas']['SimilarityTestResponse'];
 export type SpeechMarkerCountDto = components['schemas']['SpeechMarkerCountDto'];
+export type SplitAtChapterCommand = components['schemas']['SplitAtChapterCommand'];
+export type SplitAtItemCommand = components['schemas']['SplitAtItemCommand'];
+export type SplitAtParagraphCommand = components['schemas']['SplitAtParagraphCommand'];
+export type SplitAtPartCommand = components['schemas']['SplitAtPartCommand'];
 export type SplitRuleRequest = components['schemas']['SplitRuleRequest'];
 export type StartedResponse = components['schemas']['StartedResponse'];
 export type StepAction = components['schemas']['StepAction'];
@@ -11665,6 +12477,7 @@ export type TextSubstitutionStep = components['schemas']['TextSubstitutionStep']
 export type ThemeSelectionDto = components['schemas']['ThemeSelectionDto'];
 export type ThemeSelectionUpdateRequest = components['schemas']['ThemeSelectionUpdateRequest'];
 export type ThroughputSnapshot = components['schemas']['ThroughputSnapshot'];
+export type TitleLevel = components['schemas']['TitleLevel'];
 export type ToSentenceCaseConfig = components['schemas']['ToSentenceCaseConfig'];
 export type TranscribeVoiceResponse = components['schemas']['TranscribeVoiceResponse'];
 export type TranscriptionServiceConfig = components['schemas']['TranscriptionServiceConfig'];
@@ -11673,7 +12486,12 @@ export type TranscriptionSettingsSchema = components['schemas']['TranscriptionSe
 export type TranscriptionTestResponse = components['schemas']['TranscriptionTestResponse'];
 export type TransformKind = components['schemas']['TransformKind'];
 export type TryPronunciationRequest = components['schemas']['TryPronunciationRequest'];
+export type UpdateChapterTitleCommand = components['schemas']['UpdateChapterTitleCommand'];
+export type UpdateParagraphItemTextCommand = components['schemas']['UpdateParagraphItemTextCommand'];
+export type UpdatePartTitleCommand = components['schemas']['UpdatePartTitleCommand'];
 export type UpdateProjectRequest = components['schemas']['UpdateProjectRequest'];
+export type UpdateVoiceCommand = components['schemas']['UpdateVoiceCommand'];
+export type UpdateVolumeTitleCommand = components['schemas']['UpdateVolumeTitleCommand'];
 export type VoiceAnchorLevel = components['schemas']['VoiceAnchorLevel'];
 export type VoiceBatchMessage = components['schemas']['VoiceBatchMessage'];
 export type VoiceBatchMessageKind = components['schemas']['VoiceBatchMessageKind'];

@@ -1,6 +1,5 @@
 import { use } from '@app/core/services';
 import { ApiClient } from './api-client';
-import type { BookCommand } from './book-commands';
 import type {
   AudioItemRefDto,
   BookOverviewDto,
@@ -10,6 +9,7 @@ import type {
   NarrationReleasePreviewDto,
   NarrationReleaseScope,
   NodeChildrenDto,
+  BookCommand,
   BookNodeLevel,
   ParagraphRefDto,
 } from './schema';
@@ -102,14 +102,11 @@ export class BookApi {
     });
   }
 
-  /**
-   * The host binds the body as a raw `JsonObject`, so the document types it as an open object; the
-   * {@link BookCommand} union stays hand-written. Spreading it makes an object type that fits one.
-   */
+  /** The body is the generated {@link BookCommand} union; the route, not the body, names the folder. */
   execute(folder: string, command: BookCommand): Promise<CommandResponse> {
     return this.api.post('/api/projects/{folder}/commands', {
       path: { folder },
-      body: { ...command },
+      body: command,
     });
   }
 }

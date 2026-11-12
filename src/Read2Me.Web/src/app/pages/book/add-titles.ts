@@ -1,4 +1,4 @@
-import type { BookCommand, TitleLevelName } from '@app/api';
+import type { BookCommand, TitleLevel as WireTitleLevel } from '@app/api';
 
 /**
  * The pure side of Add titles (guidance-primitives spec §5): which levels add navigation, what an
@@ -17,7 +17,7 @@ export interface BookShape {
 export const TITLE_LEVELS: readonly {
   level: TitleLevel;
   label: string;
-  wire: TitleLevelName;
+  wire: WireTitleLevel;
   /** What listeners lose when the level is unticked. */
   lost: string;
   /** Why the level is absent when the book has nothing at it; the book title always applies. */

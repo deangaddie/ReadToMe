@@ -1,7 +1,7 @@
 import { html, nothing } from 'lit-html';
 import {
   BookApi,
-  type CreateVoiceRule,
+  type CreateVoiceRuleCommand,
   type Guid,
   type NodeDto,
   type ParagraphDto,
@@ -258,17 +258,17 @@ export class AddVoiceRuleDialog extends R2mElement {
       this.mode(),
       this.selection(),
     );
-    if (command) this.emit<CreateVoiceRule>('r2m-close', command);
+    if (command) this.emit<CreateVoiceRuleCommand>('r2m-close', command);
   }
 }
 define('r2m-add-voice-rule-dialog', AddVoiceRuleDialog);
 
 export async function openAddVoiceRuleDialog(
   data: AddVoiceRuleDialogData,
-): Promise<CreateVoiceRule | null> {
+): Promise<CreateVoiceRuleCommand | null> {
   const dialog = document.createElement('r2m-add-voice-rule-dialog');
   dialog.data = data;
-  return (await openDialog<CreateVoiceRule | null>(dialog)) ?? null;
+  return (await openDialog<CreateVoiceRuleCommand | null>(dialog)) ?? null;
 }
 
 declare global {

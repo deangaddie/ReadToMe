@@ -1,4 +1,4 @@
-import type { CreateVoiceRule, Guid, VoiceAnchorLevel, VoiceRuleDto } from '@app/api';
+import type { CreateVoiceRuleCommand, Guid, VoiceAnchorLevel, VoiceRuleDto } from '@app/api';
 
 // ---- Rule list ---------------------------------------------------------------------------------------
 
@@ -147,7 +147,7 @@ export function ruleCommand(
   voiceId: Guid | null,
   mode: RuleMode,
   selection: AnchorSelection,
-): CreateVoiceRule | null {
+): CreateVoiceRuleCommand | null {
   const anchor = deepestAnchor(selection);
   if (voiceId === null || anchor === null) return null;
   const closed = mode === 'justThisNode';

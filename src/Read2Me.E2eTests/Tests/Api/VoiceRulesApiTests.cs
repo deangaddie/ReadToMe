@@ -57,7 +57,7 @@ public class VoiceRulesApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture
         var onward = await RunAsync(folder, new
         {
             type = "CreateVoiceRule", characterId = alice, voiceId = voiceB,
-            fromLevel = "Chapter", fromNodeId = chapter3,
+            fromLevel = "Chapter", fromNodeId = chapter3, toLevel = (string?)null, toNodeId = (Guid?)null,
         });
 
         var rule = (await RulesAsync(folder, alice)).Single(r => r.GetProperty("ruleId").GetGuid() == onward);

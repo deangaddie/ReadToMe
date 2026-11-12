@@ -1,11 +1,10 @@
-using System.Globalization;
 using System.Reflection;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.OpenApi;
+using Read2Me.App.Api;
 
 namespace Read2Me.App.Live;
 
@@ -52,7 +51,7 @@ public sealed class LiveContractTransformer : IOpenApiDocumentTransformer
             .Concat(HubMethods.Select(Answer).OfType<Type>())
             .Distinct();
         foreach (var type in roots)
-            await AddAsync(document, context, type, cancellationToken);
+            await ComponentSchemas.AddAsync(document, context, type, cancellationToken);
 
         var map = new OpenApiSchema
         {
@@ -76,87 +75,6 @@ public sealed class LiveContractTransformer : IOpenApiDocumentTransformer
         };
         document.AddComponent(HubMethod, methods);
     }
-
-    /// <summary>
-    /// <c>GetOrCreateSchemaAsync</c> answers with every type it reaches inlined, keeping each one's
-    /// <c>x-schema-id</c> only as metadata, so this does what the document does for an endpoint's types:
-    /// each identified schema becomes a component (an existing one, such as an HTTP record the hub shares,
-    /// is kept) and its uses become references, wrapped as <c>oneOf [null, $ref]</c> where nullable. A
-    /// nullable reference-type dictionary value (<c>NodeStatusSummaryDto?</c>, "this node no longer rolls
-    /// up") isn't in the metadata, so it is read from the CLR property.
-    /// </summary>
-    private static async Task AddAsync(OpenApiDocument document, OpenApiDocumentTransformerContext context, Type type, CancellationToken ct)
-    {
-        if (document.Components?.Schemas?.ContainsKey(type.Name) == true)
-            return;
-        Resolve(document, await context.GetOrCreateSchemaAsync(type, null, ct), type);
-    }
-
-    private static readonly NullabilityInfoContext Nullability = new();
-
-    private static IOpenApiSchema Resolve(OpenApiDocument document, IOpenApiSchema schema, Type? clr)
-    {
-        if (schema is not OpenApiSchema inline)
-            return schema;
-
-        var id = Meta(inline, "x-schema-id") as string;
-        if (!string.IsNullOrEmpty(id) && document.Components?.Schemas?.ContainsKey(id) == true)
-            return Reference(document, id, inline);
-
-        if (clr is { IsEnum: true } && clr.IsDefined(typeof(FlagsAttribute)) && inline.Enum is not { Count: > 0 })
-            inline.Enum = [.. SingleMembers(clr).Select(n => (JsonNode)n)];
-
-        if (inline.Properties is { Count: > 0 } properties)
-        {
-            foreach (var name in properties.Keys.ToList())
-            {
-                var property = clr?.GetProperties().FirstOrDefault(p => JsonName(p) == name);
-                var resolved = Resolve(document, properties[name], property?.PropertyType);
-                if (property is not null && resolved is OpenApiSchema { AdditionalProperties: { } values } map
-                    && Nullability.Create(property).GenericTypeArguments is [.., { ReadState: NullabilityState.Nullable }])
-                {
-                    map.AdditionalProperties = OrNull(values);
-                }
-                properties[name] = resolved;
-            }
-        }
-        if (inline.Items is { } items)
-            inline.Items = Resolve(document, items, Element(clr));
-        if (inline.AdditionalProperties is { } additional)
-            inline.AdditionalProperties = Resolve(document, additional, clr?.GetGenericArguments().LastOrDefault());
-
-        if (string.IsNullOrEmpty(id))
-            return inline;
-        document.AddComponent(id, inline);
-        return Reference(document, id, inline);
-    }
-
-    private static IOpenApiSchema Reference(OpenApiDocument document, string id, OpenApiSchema inline)
-    {
-        var reference = new OpenApiSchemaReference(id, document);
-        return Meta(inline, "x-is-nullable-property") is true ? OrNull(reference) : reference;
-    }
-
-    /// <summary>
-    /// A <c>[Flags]</c> enum's one-bit members. The document writes such an enum as a bare string, since a
-    /// value can combine them; the hub sends a list of single members instead (<see cref="ReceiptEffects"/>).
-    /// </summary>
-    private static IEnumerable<string> SingleMembers(Type flags) =>
-        Enum.GetValues(flags).Cast<Enum>()
-            .Where(v => Convert.ToUInt64(v, CultureInfo.InvariantCulture) is var bits && bits != 0 && (bits & (bits - 1)) == 0)
-            .Select(v => v.ToString());
-
-    private static object? Meta(OpenApiSchema schema, string key) =>
-        schema.Metadata is { } metadata && metadata.TryGetValue(key, out var value) ? value : null;
-
-    private static OpenApiSchema OrNull(IOpenApiSchema schema) =>
-        new() { OneOf = [new OpenApiSchema { Type = JsonSchemaType.Null }, schema] };
-
-    private static string JsonName(PropertyInfo property) =>
-        JsonNamingPolicy.CamelCase.ConvertName(property.Name);
-
-    private static Type? Element(Type? clr) =>
-        clr is null ? null : clr.IsArray ? clr.GetElementType() : clr.GetGenericArguments().FirstOrDefault();
 }
 
 /// <summary>

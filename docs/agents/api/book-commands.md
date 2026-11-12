@@ -11,8 +11,16 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/commands \
 `type` is the command record name without the `Command` suffix (`CreateCharacter`,
 `UpdateChapterTitle`, `AddPauses`, `InsertPauseParagraph`, `DeleteVoice`, …); the
 error for an unknown type lists every valid one. The project folder always comes
-from the URL — a `folderId` in the body is ignored. Split/create commands return
-`{ "newEntityId": "<guid>" }`.
+from the URL — no command schema has `folderId`, and one sent in the body is ignored.
+Split/create commands return `{ "newEntityId": "<guid>" }`.
+
+Every command is in the OpenAPI document (#328): the operation's body is `BookCommand`, a
+`oneOf` over one component per record (`DeleteVolumeCommand`, `InsertNodeCommand`, …)
+discriminated on `type`, and the web client's union is generated from it into `schema.d.ts`.
+A parameter without a default is required, nullable or not: send `"characterId": null` to
+unlink, don't leave it out. A missing required field is a **400** `Invalid properties for
+command …`; only a defaulted one (`voiceInstructions` on `SetParagraphCharacter`, `isGenerated`
+on `CreateVoice`, `title` / `text` on `InsertNode`, …) may be left out.
 
 `InsertNode` creates one node beside or inside an anchor (**Node insertion**):
 
