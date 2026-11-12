@@ -724,6 +724,54 @@ describe('EditWithAiWorkflow', () => {
       expect(timers.pending).toBe(0);
     });
 
+    it('while the plan is on its way: discards the plan it grants and stays on Instruct', async () => {
+      let answer!: (plan: PlanBookEditResponse) => void;
+      api.plan = () => new Promise((resolve) => (answer = resolve));
+
+      const analyzing = workflow.analyze('capitalise chapter titles', true);
+      await settleMicrotasks();
+      workflow.dispose();
+      answer(PLAN);
+      await analyzing;
+
+      expect(api.called('discard')).toEqual([['prog-1']]);
+      expect(workflow.phase()).toBe('instruct');
+      expect(workflow.plan()).toBeNull();
+    });
+
+    it('while the earlier session is being discarded for a fresh plan: discards both', async () => {
+      await workflow.analyze('capitalise chapter titles', true);
+      workflow.back();
+      api.plan = async () => ({ ...PLAN, program: 'prog-2' });
+      let discarded!: () => void;
+      api.discard = (program) =>
+        program === 'prog-1' ? new Promise((resolve) => (discarded = resolve)) : Promise.resolve();
+
+      const analyzing = workflow.analyze('rename the chapters', true);
+      await settleMicrotasks();
+      workflow.dispose();
+      discarded();
+      await analyzing;
+
+      expect(api.called('discard')).toEqual([['prog-1'], ['prog-2']]);
+      expect(workflow.phase()).toBe('instruct');
+      expect(workflow.plan()).toEqual(PLAN);
+    });
+
+    it('while Analyze is being gated: plans nothing', async () => {
+      let gate!: (ok: boolean) => void;
+      ensureReady = () => new Promise((resolve) => (gate = resolve));
+
+      const analyzing = workflow.analyze('capitalise chapter titles', true);
+      await settleMicrotasks();
+      workflow.dispose();
+      gate(true);
+      await analyzing;
+
+      expect(api.calls).toEqual([]);
+      expect(workflow.busy()).toBe(false);
+    });
+
     it('discards nothing when no session was granted', () => {
       workflow.dispose();
 
