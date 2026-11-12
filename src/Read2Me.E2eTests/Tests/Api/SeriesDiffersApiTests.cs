@@ -38,7 +38,7 @@ public class SeriesDiffersApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         var holmes = await seed.SeriesAsync(linkWatson: true);
         var voice = await seed.CreateVoiceAsync(holmes.Scarlet, "Army doctor");
         var before = await seed.HeadAsync(holmes.Scarlet);
-        await seed.RunAsync(holmes.Four.Folder, new { type = "UpdateVoice", voiceId = voice, name = "Old campaigner" });
+        await seed.RunAsync(holmes.Four.Folder, new { type = "UpdateVoice", voiceId = voice, name = "Old campaigner", description = (string?)null });
         await seed.RestoreAsync(holmes.Scarlet, before);
         return (holmes, voice);
     }

@@ -1,6 +1,127 @@
 {
   "components": {
     "schemas": {
+      "AddBookTitleCommand": {
+        "description": "Wire type: AddBookTitle (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "type": {
+            "enum": [
+              "AddBookTitle"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "AddChapterTitlesCommand": {
+        "description": "Wire type: AddChapterTitles (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "type": {
+            "enum": [
+              "AddChapterTitles"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "AddCharacterAliasCommand": {
+        "description": "Wire type: AddCharacterAlias (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "AddCharacterAlias"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "characterId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "AddPartTitlesCommand": {
+        "description": "Wire type: AddPartTitles (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "type": {
+            "enum": [
+              "AddPartTitles"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "AddPausesCommand": {
+        "description": "Wire type: AddPauses (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "type": {
+            "enum": [
+              "AddPauses"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "AddTitlesCommand": {
+        "description": "Add titles over several levels in one request: each named level's sweep, as its single-level\r\ncommand runs it, always book first and each level once, stopping at the first refusal.\n\nWire type: AddTitles (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "levels": {
+            "items": {
+              "$ref": "#/components/schemas/TitleLevel"
+            },
+            "type": "array"
+          },
+          "type": {
+            "enum": [
+              "AddTitles"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "levels"
+        ],
+        "type": "object"
+      },
+      "AddVolumeTitlesCommand": {
+        "description": "Wire type: AddVolumeTitles (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "type": {
+            "enum": [
+              "AddVolumeTitles"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
       "AiServiceDto": {
         "properties": {
           "baseUrl": {
@@ -142,6 +263,28 @@
           "drawerBackground",
           "textPrimary",
           "textSecondary"
+        ],
+        "type": "object"
+      },
+      "ApplyBookEditsCommand": {
+        "description": "Wire type: ApplyBookEdits (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "edits": {
+            "items": {
+              "$ref": "#/components/schemas/BookEditItem"
+            },
+            "type": "array"
+          },
+          "type": {
+            "enum": [
+              "ApplyBookEdits"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "edits"
         ],
         "type": "object"
       },
@@ -402,6 +545,33 @@
           "audioRemainingCount",
           "folder",
           "outputFileName"
+        ],
+        "type": "object"
+      },
+      "AttributeItemsCommand": {
+        "description": "Stamps speaker and voice instructions onto existing items of one paragraph. Item boundaries are\r\nfrozen (ADR 0005): this command never creates, deletes, reorders or retypes an item.\n\nWire type: AttributeItems (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ItemAttribution"
+            },
+            "type": "array"
+          },
+          "paragraphId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "AttributeItems"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "paragraphId",
+          "items"
         ],
         "type": "object"
       },
@@ -1084,6 +1254,277 @@
           "Dismissed"
         ]
       },
+      "BookCommand": {
+        "description": "Any book command: POST /api/projects/{folder}/commands takes one, chosen by its type.",
+        "discriminator": {
+          "mapping": {
+            "AddBookTitle": "#/components/schemas/AddBookTitleCommand",
+            "AddChapterTitles": "#/components/schemas/AddChapterTitlesCommand",
+            "AddCharacterAlias": "#/components/schemas/AddCharacterAliasCommand",
+            "AddPartTitles": "#/components/schemas/AddPartTitlesCommand",
+            "AddPauses": "#/components/schemas/AddPausesCommand",
+            "AddTitles": "#/components/schemas/AddTitlesCommand",
+            "AddVolumeTitles": "#/components/schemas/AddVolumeTitlesCommand",
+            "ApplyBookEdits": "#/components/schemas/ApplyBookEditsCommand",
+            "AttributeItems": "#/components/schemas/AttributeItemsCommand",
+            "ClearBookContent": "#/components/schemas/ClearBookContentCommand",
+            "CreateCharacter": "#/components/schemas/CreateCharacterCommand",
+            "CreateCharacterAndAssign": "#/components/schemas/CreateCharacterAndAssignCommand",
+            "CreateVoice": "#/components/schemas/CreateVoiceCommand",
+            "CreateVoiceRule": "#/components/schemas/CreateVoiceRuleCommand",
+            "DeleteChapter": "#/components/schemas/DeleteChapterCommand",
+            "DeleteCharacter": "#/components/schemas/DeleteCharacterCommand",
+            "DeleteParagraph": "#/components/schemas/DeleteParagraphCommand",
+            "DeleteParagraphItem": "#/components/schemas/DeleteParagraphItemCommand",
+            "DeletePart": "#/components/schemas/DeletePartCommand",
+            "DeleteVoice": "#/components/schemas/DeleteVoiceCommand",
+            "DeleteVoiceRule": "#/components/schemas/DeleteVoiceRuleCommand",
+            "DeleteVolume": "#/components/schemas/DeleteVolumeCommand",
+            "DismissAudioReview": "#/components/schemas/DismissAudioReviewCommand",
+            "InsertNode": "#/components/schemas/InsertNodeCommand",
+            "InsertParagraphItem": "#/components/schemas/InsertParagraphItemCommand",
+            "InsertPauseParagraph": "#/components/schemas/InsertPauseParagraphCommand",
+            "MergeChapter": "#/components/schemas/MergeChapterCommand",
+            "MergeCharacters": "#/components/schemas/MergeCharactersCommand",
+            "MergeParagraph": "#/components/schemas/MergeParagraphCommand",
+            "MergeParagraphItem": "#/components/schemas/MergeParagraphItemCommand",
+            "MergePart": "#/components/schemas/MergePartCommand",
+            "MergeVolume": "#/components/schemas/MergeVolumeCommand",
+            "MoveVoiceRule": "#/components/schemas/MoveVoiceRuleCommand",
+            "ReleaseNarration": "#/components/schemas/ReleaseNarrationCommand",
+            "RemoveCharacterAlias": "#/components/schemas/RemoveCharacterAliasCommand",
+            "RenameCharacter": "#/components/schemas/RenameCharacterCommand",
+            "SetAudioReview": "#/components/schemas/SetAudioReviewCommand",
+            "SetItemCharacter": "#/components/schemas/SetItemCharacterCommand",
+            "SetItemDeliveryCue": "#/components/schemas/SetItemDeliveryCueCommand",
+            "SetNarratorCharacter": "#/components/schemas/SetNarratorCharacterCommand",
+            "SetParagraphCharacter": "#/components/schemas/SetParagraphCharacterCommand",
+            "SetParagraphItemAudio": "#/components/schemas/SetParagraphItemAudioCommand",
+            "SetParagraphsCharacter": "#/components/schemas/SetParagraphsCharacterCommand",
+            "SetVoiceAudio": "#/components/schemas/SetVoiceAudioCommand",
+            "SetVoiceDefault": "#/components/schemas/SetVoiceDefaultCommand",
+            "SetVoiceDesignPrompt": "#/components/schemas/SetVoiceDesignPromptCommand",
+            "SetVoiceGenerated": "#/components/schemas/SetVoiceGeneratedCommand",
+            "SetVoiceSettingsOverride": "#/components/schemas/SetVoiceSettingsOverrideCommand",
+            "SetVoiceSource": "#/components/schemas/SetVoiceSourceCommand",
+            "SetVoiceTranscript": "#/components/schemas/SetVoiceTranscriptCommand",
+            "SetVoiceTtsSettingsOverride": "#/components/schemas/SetVoiceTtsSettingsOverrideCommand",
+            "SplitAtChapter": "#/components/schemas/SplitAtChapterCommand",
+            "SplitAtItem": "#/components/schemas/SplitAtItemCommand",
+            "SplitAtParagraph": "#/components/schemas/SplitAtParagraphCommand",
+            "SplitAtPart": "#/components/schemas/SplitAtPartCommand",
+            "UpdateChapterTitle": "#/components/schemas/UpdateChapterTitleCommand",
+            "UpdateParagraphItemText": "#/components/schemas/UpdateParagraphItemTextCommand",
+            "UpdatePartTitle": "#/components/schemas/UpdatePartTitleCommand",
+            "UpdateVoice": "#/components/schemas/UpdateVoiceCommand",
+            "UpdateVolumeTitle": "#/components/schemas/UpdateVolumeTitleCommand"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AddBookTitleCommand"
+          },
+          {
+            "$ref": "#/components/schemas/AddChapterTitlesCommand"
+          },
+          {
+            "$ref": "#/components/schemas/AddCharacterAliasCommand"
+          },
+          {
+            "$ref": "#/components/schemas/AddPartTitlesCommand"
+          },
+          {
+            "$ref": "#/components/schemas/AddPausesCommand"
+          },
+          {
+            "$ref": "#/components/schemas/AddTitlesCommand"
+          },
+          {
+            "$ref": "#/components/schemas/AddVolumeTitlesCommand"
+          },
+          {
+            "$ref": "#/components/schemas/ApplyBookEditsCommand"
+          },
+          {
+            "$ref": "#/components/schemas/AttributeItemsCommand"
+          },
+          {
+            "$ref": "#/components/schemas/ClearBookContentCommand"
+          },
+          {
+            "$ref": "#/components/schemas/CreateCharacterCommand"
+          },
+          {
+            "$ref": "#/components/schemas/CreateCharacterAndAssignCommand"
+          },
+          {
+            "$ref": "#/components/schemas/CreateVoiceCommand"
+          },
+          {
+            "$ref": "#/components/schemas/CreateVoiceRuleCommand"
+          },
+          {
+            "$ref": "#/components/schemas/DeleteChapterCommand"
+          },
+          {
+            "$ref": "#/components/schemas/DeleteCharacterCommand"
+          },
+          {
+            "$ref": "#/components/schemas/DeleteParagraphCommand"
+          },
+          {
+            "$ref": "#/components/schemas/DeleteParagraphItemCommand"
+          },
+          {
+            "$ref": "#/components/schemas/DeletePartCommand"
+          },
+          {
+            "$ref": "#/components/schemas/DeleteVoiceCommand"
+          },
+          {
+            "$ref": "#/components/schemas/DeleteVoiceRuleCommand"
+          },
+          {
+            "$ref": "#/components/schemas/DeleteVolumeCommand"
+          },
+          {
+            "$ref": "#/components/schemas/DismissAudioReviewCommand"
+          },
+          {
+            "$ref": "#/components/schemas/InsertNodeCommand"
+          },
+          {
+            "$ref": "#/components/schemas/InsertParagraphItemCommand"
+          },
+          {
+            "$ref": "#/components/schemas/InsertPauseParagraphCommand"
+          },
+          {
+            "$ref": "#/components/schemas/MergeChapterCommand"
+          },
+          {
+            "$ref": "#/components/schemas/MergeCharactersCommand"
+          },
+          {
+            "$ref": "#/components/schemas/MergeParagraphCommand"
+          },
+          {
+            "$ref": "#/components/schemas/MergeParagraphItemCommand"
+          },
+          {
+            "$ref": "#/components/schemas/MergePartCommand"
+          },
+          {
+            "$ref": "#/components/schemas/MergeVolumeCommand"
+          },
+          {
+            "$ref": "#/components/schemas/MoveVoiceRuleCommand"
+          },
+          {
+            "$ref": "#/components/schemas/ReleaseNarrationCommand"
+          },
+          {
+            "$ref": "#/components/schemas/RemoveCharacterAliasCommand"
+          },
+          {
+            "$ref": "#/components/schemas/RenameCharacterCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SetAudioReviewCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SetItemCharacterCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SetItemDeliveryCueCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SetNarratorCharacterCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SetParagraphCharacterCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SetParagraphItemAudioCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SetParagraphsCharacterCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SetVoiceAudioCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SetVoiceDefaultCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SetVoiceDesignPromptCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SetVoiceGeneratedCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SetVoiceSettingsOverrideCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SetVoiceSourceCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SetVoiceTranscriptCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SetVoiceTtsSettingsOverrideCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SplitAtChapterCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SplitAtItemCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SplitAtParagraphCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SplitAtPartCommand"
+          },
+          {
+            "$ref": "#/components/schemas/UpdateChapterTitleCommand"
+          },
+          {
+            "$ref": "#/components/schemas/UpdateParagraphItemTextCommand"
+          },
+          {
+            "$ref": "#/components/schemas/UpdatePartTitleCommand"
+          },
+          {
+            "$ref": "#/components/schemas/UpdateVoiceCommand"
+          },
+          {
+            "$ref": "#/components/schemas/UpdateVolumeTitleCommand"
+          }
+        ]
+      },
+      "BookEditItem": {
+        "description": "One AI book edit: the title or item text `Id` names, by `Kind`, set to `NewValue`.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/BookEditTargetKind"
+          },
+          "newValue": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "newValue"
+        ],
+        "type": "object"
+      },
       "BookEditMessage": {
         "description": "One AI book-edit proposal run (Angular ticket 19), sent to the connection that started it.\r\n`Program` is the session id the run belongs to; `Done` carries every row the run landed\r\n(all of them, or the partial set a cancel kept). `Dropped`: a Restore of the project dropped\r\nthe session, with the `Reason` to show; sent to the project group, since the session outlives\r\nits runs.",
         "properties": {
@@ -1640,6 +2081,21 @@
           "Skipped"
         ]
       },
+      "ClearBookContentCommand": {
+        "description": "Wire type: ClearBookContent (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "type": {
+            "enum": [
+              "ClearBookContent"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
       "CommandResponse": {
         "properties": {
           "newEntityId": {
@@ -1764,6 +2220,68 @@
         ],
         "type": "object"
       },
+      "CreateCharacterAndAssignCommand": {
+        "description": "\"New character…\" from the speaker menu in one request: resolves `Name` as\r\nCreateCharacterCommand does (an existing name or alias answers with its own id), then\r\nstamps that character on exactly one target — `ItemId` as SetItemCharacterCommand,\r\n`ParagraphId` as SetParagraphCharacterCommand, or `ParagraphIds` as\r\nSetParagraphsCharacterCommand. Answers the character's id.\n\nWire type: CreateCharacterAndAssign (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "itemId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "paragraphId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paragraphIds": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "type": {
+            "enum": [
+              "CreateCharacterAndAssign"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "name"
+        ],
+        "type": "object"
+      },
+      "CreateCharacterCommand": {
+        "description": "Wire type: CreateCharacter (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "CreateCharacter"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "name"
+        ],
+        "type": "object"
+      },
       "CreateProjectResponse": {
         "properties": {
           "folderName": {
@@ -1801,6 +2319,257 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "CreateVoiceCommand": {
+        "description": "Wire type: CreateVoice (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "isGenerated": {
+            "default": false,
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "CreateVoice"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "characterId",
+          "name"
+        ],
+        "type": "object"
+      },
+      "CreateVoiceRuleCommand": {
+        "description": "Wire type: CreateVoiceRule (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "fromLevel": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/VoiceAnchorLevel"
+              }
+            ]
+          },
+          "fromNodeId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "toLevel": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/VoiceAnchorLevel"
+              }
+            ]
+          },
+          "toNodeId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "enum": [
+              "CreateVoiceRule"
+            ],
+            "type": "string"
+          },
+          "voiceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "characterId",
+          "voiceId",
+          "fromLevel",
+          "fromNodeId",
+          "toLevel",
+          "toNodeId"
+        ],
+        "type": "object"
+      },
+      "DeleteChapterCommand": {
+        "description": "Wire type: DeleteChapter (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "chapterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "DeleteChapter"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "chapterId"
+        ],
+        "type": "object"
+      },
+      "DeleteCharacterCommand": {
+        "description": "Wire type: DeleteCharacter (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "DeleteCharacter"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "characterId"
+        ],
+        "type": "object"
+      },
+      "DeleteParagraphCommand": {
+        "description": "Wire type: DeleteParagraph (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "paragraphId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "DeleteParagraph"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "paragraphId"
+        ],
+        "type": "object"
+      },
+      "DeleteParagraphItemCommand": {
+        "description": "Wire type: DeleteParagraphItem (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "itemId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "DeleteParagraphItem"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "itemId"
+        ],
+        "type": "object"
+      },
+      "DeletePartCommand": {
+        "description": "Wire type: DeletePart (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "partId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "DeletePart"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "partId"
+        ],
+        "type": "object"
+      },
+      "DeleteVoiceCommand": {
+        "description": "Wire type: DeleteVoice (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "type": {
+            "enum": [
+              "DeleteVoice"
+            ],
+            "type": "string"
+          },
+          "voiceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "voiceId"
+        ],
+        "type": "object"
+      },
+      "DeleteVoiceRuleCommand": {
+        "description": "Wire type: DeleteVoiceRule (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "ruleId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "DeleteVoiceRule"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "ruleId"
+        ],
+        "type": "object"
+      },
+      "DeleteVolumeCommand": {
+        "description": "Wire type: DeleteVolume (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "type": {
+            "enum": [
+              "DeleteVolume"
+            ],
+            "type": "string"
+          },
+          "volumeId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "volumeId"
         ],
         "type": "object"
       },
@@ -1872,6 +2641,26 @@
           "Failed",
           "ServiceUnavailable"
         ]
+      },
+      "DismissAudioReviewCommand": {
+        "description": "Wire type: DismissAudioReview (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "paragraphItemId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "DismissAudioReview"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "paragraphItemId"
+        ],
+        "type": "object"
       },
       "EditPlanStatus": {
         "description": "How planning an AI book edit ended. The planner answers all but EditPlanStatus.NoTargets,\r\nwhich the caller sets when the plan parsed but its scope matched no items. `Ok` is the only\r\nstatus that carries a program; the rest explain why there is nothing to do.",
@@ -2320,6 +3109,137 @@
         },
         "type": "object"
       },
+      "InsertNodeCommand": {
+        "description": "Creates one node beside or inside the anchor; its kind follows from the anchor and the\r\nPlacement InsertNodeCommand.Placement. A new Paragraph is born holding `Text` as one unattributed Speech\r\nitem — never empty, because an empty Paragraph reads as a pause. A new Speech item at a\r\nParagraph's start or end holds `Text` too, born unattributed. `Title` is for a new\r\nVolume, Part or Chapter.\n\nWire type: InsertNode (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "anchorId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "anchorKind": {
+            "$ref": "#/components/schemas/NodeKind"
+          },
+          "placement": {
+            "$ref": "#/components/schemas/Placement"
+          },
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "enum": [
+              "InsertNode"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "anchorKind",
+          "anchorId",
+          "placement"
+        ],
+        "type": "object"
+      },
+      "InsertParagraphItemCommand": {
+        "description": "Creates one Speech ParagraphItem next to `AnchorItemId`, inside the anchor's own Paragraph.\r\nThe new item is born unattributed — no speaker, no voice instructions, no audio: by construction\r\nthe anchor held two speakers, so inheriting its speaker would stamp a confident wrong answer that\r\nlooks attributed and never reaches the attribution queue.\n\nWire type: InsertParagraphItem (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "anchorItemId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "position": {
+            "$ref": "#/components/schemas/InsertPosition"
+          },
+          "text": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "InsertParagraphItem"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "anchorItemId",
+          "position",
+          "text"
+        ],
+        "type": "object"
+      },
+      "InsertPauseParagraphCommand": {
+        "description": "Wire type: InsertPauseParagraph (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "anchorItemId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "pauseKind": {
+            "$ref": "#/components/schemas/PauseKind"
+          },
+          "position": {
+            "$ref": "#/components/schemas/InsertPosition"
+          },
+          "type": {
+            "enum": [
+              "InsertPauseParagraph"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "anchorItemId",
+          "position",
+          "pauseKind"
+        ],
+        "type": "object"
+      },
+      "InsertPosition": {
+        "description": "Where a new node lands relative to the anchor node it is inserted against.\r\nShared by the item and pause insertion commands (InsertNodeCommand takes a\r\nPlacement); the member names are also the JSON wire values.",
+        "enum": [
+          "Before",
+          "After"
+        ]
+      },
+      "ItemAttribution": {
+        "description": "            One item's attribution, ready to apply: the item is addressed by id, and the speaker is already\r\n            resolved to a character id (null = unknown, which never erases an existing stamp).\r\n            Not to be confused with AttributedItem, the wire answer the LLM sends (index + speaker\r\nname); this is the resolved apply-side record.",
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "itemId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "voiceInstructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "itemId",
+          "characterId",
+          "voiceInstructions"
+        ],
+        "type": "object"
+      },
       "ItemCountsDto": {
         "properties": {
           "total": {
@@ -2491,9 +3411,6 @@
         "type": "object"
       },
       "JsonElement": {},
-      "JsonObject": {
-        "type": "object"
-      },
       "LinkSeriesCharacterRequest": {
         "properties": {
           "characterId": {
@@ -2995,6 +3912,185 @@
           "volume",
           "part",
           "chapter"
+        ],
+        "type": "object"
+      },
+      "MergeChapterCommand": {
+        "description": "Wire type: MergeChapter (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "chapterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/MergeDirection"
+          },
+          "type": {
+            "enum": [
+              "MergeChapter"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "chapterId",
+          "direction"
+        ],
+        "type": "object"
+      },
+      "MergeCharactersCommand": {
+        "description": "Wire type: MergeCharacters (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "addNameAsAlias": {
+            "type": "boolean"
+          },
+          "mergedId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "survivorId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "MergeCharacters"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "survivorId",
+          "mergedId",
+          "addNameAsAlias"
+        ],
+        "type": "object"
+      },
+      "MergeDirection": {
+        "enum": [
+          "Previous",
+          "Next"
+        ]
+      },
+      "MergeParagraphCommand": {
+        "description": "Wire type: MergeParagraph (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "direction": {
+            "$ref": "#/components/schemas/MergeDirection"
+          },
+          "paragraphId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "MergeParagraph"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "paragraphId",
+          "direction"
+        ],
+        "type": "object"
+      },
+      "MergeParagraphItemCommand": {
+        "description": "Wire type: MergeParagraphItem (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "direction": {
+            "$ref": "#/components/schemas/MergeDirection"
+          },
+          "itemId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "MergeParagraphItem"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "itemId",
+          "direction"
+        ],
+        "type": "object"
+      },
+      "MergePartCommand": {
+        "description": "Wire type: MergePart (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "direction": {
+            "$ref": "#/components/schemas/MergeDirection"
+          },
+          "partId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "MergePart"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "partId",
+          "direction"
+        ],
+        "type": "object"
+      },
+      "MergeVolumeCommand": {
+        "description": "Wire type: MergeVolume (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "direction": {
+            "$ref": "#/components/schemas/MergeDirection"
+          },
+          "type": {
+            "enum": [
+              "MergeVolume"
+            ],
+            "type": "string"
+          },
+          "volumeId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "volumeId",
+          "direction"
+        ],
+        "type": "object"
+      },
+      "MoveVoiceRuleCommand": {
+        "description": "Wire type: MoveVoiceRule (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "direction": {
+            "$ref": "#/components/schemas/RuleMoveDirection"
+          },
+          "ruleId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "MoveVoiceRule"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "ruleId",
+          "direction"
         ],
         "type": "object"
       },
@@ -3617,6 +4713,15 @@
           "pauseMs"
         ],
         "type": "object"
+      },
+      "PauseKind": {
+        "enum": [
+          "Pause",
+          "ParagraphPause",
+          "ChapterPause",
+          "PartPause",
+          "VolumePause"
+        ]
       },
       "Placement": {
         "description": "Where an InsertNodeCommand puts its new node: Placement.Before / Placement.After\r\nname a sibling at the anchor's own level, Placement.AtStart / Placement.AtEnd a first or\r\nlast child one level down — never two levels down. The member names are also the JSON wire values.",
@@ -4953,6 +6058,74 @@
         ],
         "type": "object"
       },
+      "ReleaseNarrationCommand": {
+        "description": "Release narration: clears the narrator stamp, and the audio, from every item of the scope's\r\nnarration-only paragraphs (no dialog item at all), leaving them unattributed dialog. A speech tag\r\ninside a quoted paragraph is not in a narration-only paragraph, so it stays narration.\n\nWire type: ReleaseNarration (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "nodeId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/NarrationReleaseScope"
+          },
+          "type": {
+            "enum": [
+              "ReleaseNarration"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "scope",
+          "nodeId"
+        ],
+        "type": "object"
+      },
+      "RemoveCharacterAliasCommand": {
+        "description": "Wire type: RemoveCharacterAlias (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "aliasId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "RemoveCharacterAlias"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "aliasId"
+        ],
+        "type": "object"
+      },
+      "RenameCharacterCommand": {
+        "description": "Wire type: RenameCharacter (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "RenameCharacter"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "characterId",
+          "name"
+        ],
+        "type": "object"
+      },
       "RenameSeriesRequest": {
         "properties": {
           "name": {
@@ -5043,6 +6216,12 @@
           "needsAudioCount"
         ],
         "type": "object"
+      },
+      "RuleMoveDirection": {
+        "enum": [
+          "Up",
+          "Down"
+        ]
       },
       "SemanticSimilarityServiceConfig": {
         "properties": {
@@ -5759,6 +6938,70 @@
         ],
         "type": "object"
       },
+      "SetAudioReviewCommand": {
+        "description": "Wire type: SetAudioReview (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "normalizeOk": {
+            "type": "boolean"
+          },
+          "normalizeReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "originalTextSnapshot": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paragraphItemId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "transcript": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "enum": [
+              "SetAudioReview"
+            ],
+            "type": "string"
+          },
+          "verifyOk": {
+            "type": "boolean"
+          },
+          "verifyReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "wer": {
+            "format": "double",
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "paragraphItemId",
+          "normalizeOk",
+          "normalizeReason",
+          "verifyOk",
+          "wer",
+          "verifyReason",
+          "transcript",
+          "originalTextSnapshot"
+        ],
+        "type": "object"
+      },
       "SetCheckpointRequest": {
         "description": "`PUT /api/projects/{folder}/checkpoints/{step}` body: `Open` deletes the row.",
         "properties": {
@@ -5775,6 +7018,173 @@
         },
         "required": [
           "state"
+        ],
+        "type": "object"
+      },
+      "SetItemCharacterCommand": {
+        "description": "Wire type: SetItemCharacter (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "itemId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "SetItemCharacter"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "itemId",
+          "characterId"
+        ],
+        "type": "object"
+      },
+      "SetItemDeliveryCueCommand": {
+        "description": "Adds, edits or removes one speech item's delivery cue by hand; null or blank removes it. Not\r\n`AttributeItems`: that is attribution's command, carries a speaker, and keeps the audio. A real\r\nchange discards the item's audio.\n\nWire type: SetItemDeliveryCue (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "cue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "itemId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "SetItemDeliveryCue"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "itemId",
+          "cue"
+        ],
+        "type": "object"
+      },
+      "SetNarratorCharacterCommand": {
+        "description": "Points the book's narration at one of its Characters — Sherlock Holmes narrated by\r\nDr. Watson. `null` unlinks. The first project-scoped BookCommand:\r\nevery sibling addresses a node, character or voice. Refused (422) for an unknown character or a self-link.\n\nWire type: SetNarratorCharacter (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "enum": [
+              "SetNarratorCharacter"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "characterId"
+        ],
+        "type": "object"
+      },
+      "SetParagraphCharacterCommand": {
+        "description": "Wire type: SetParagraphCharacter (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paragraphId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "SetParagraphCharacter"
+            ],
+            "type": "string"
+          },
+          "voiceInstructions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "paragraphId",
+          "characterId"
+        ],
+        "type": "object"
+      },
+      "SetParagraphItemAudioCommand": {
+        "description": "Wire type: SetParagraphItemAudio (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "audioFileName": {
+            "type": "string"
+          },
+          "itemId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "SetParagraphItemAudio"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "itemId",
+          "audioFileName"
+        ],
+        "type": "object"
+      },
+      "SetParagraphsCharacterCommand": {
+        "description": "Stamps one speaker across every Character item in every listed paragraph — the bulk-assign\r\nwrite, and the bulk sibling of SetParagraphCharacterCommand, which is left\r\nunchanged and keeps its own callers.\n\nWire type: SetParagraphsCharacter (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "characterId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paragraphIds": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": {
+            "enum": [
+              "SetParagraphsCharacter"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "paragraphIds",
+          "characterId"
         ],
         "type": "object"
       },
@@ -5797,6 +7207,208 @@
         "required": [
           "writtenForm",
           "spokenForm"
+        ],
+        "type": "object"
+      },
+      "SetVoiceAudioCommand": {
+        "description": "Wire type: SetVoiceAudio (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "audioFileName": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "SetVoiceAudio"
+            ],
+            "type": "string"
+          },
+          "voiceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "voiceId",
+          "audioFileName"
+        ],
+        "type": "object"
+      },
+      "SetVoiceDefaultCommand": {
+        "description": "Wire type: SetVoiceDefault (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "type": {
+            "enum": [
+              "SetVoiceDefault"
+            ],
+            "type": "string"
+          },
+          "voiceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "voiceId"
+        ],
+        "type": "object"
+      },
+      "SetVoiceDesignPromptCommand": {
+        "description": "Wire type: SetVoiceDesignPrompt (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "SetVoiceDesignPrompt"
+            ],
+            "type": "string"
+          },
+          "voiceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "voiceId",
+          "prompt"
+        ],
+        "type": "object"
+      },
+      "SetVoiceGeneratedCommand": {
+        "description": "Wire type: SetVoiceGenerated (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "audioFileName": {
+            "type": "string"
+          },
+          "designPrompt": {
+            "type": "string"
+          },
+          "transcript": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "SetVoiceGenerated"
+            ],
+            "type": "string"
+          },
+          "voiceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "voiceId",
+          "audioFileName",
+          "transcript",
+          "designPrompt"
+        ],
+        "type": "object"
+      },
+      "SetVoiceSettingsOverrideCommand": {
+        "description": "Wire type: SetVoiceSettingsOverride (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "json": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "enum": [
+              "SetVoiceSettingsOverride"
+            ],
+            "type": "string"
+          },
+          "voiceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "voiceId",
+          "json"
+        ],
+        "type": "object"
+      },
+      "SetVoiceSourceCommand": {
+        "description": "Wire type: SetVoiceSource (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "isGenerated": {
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "SetVoiceSource"
+            ],
+            "type": "string"
+          },
+          "voiceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "voiceId",
+          "isGenerated"
+        ],
+        "type": "object"
+      },
+      "SetVoiceTranscriptCommand": {
+        "description": "Wire type: SetVoiceTranscript (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "transcript": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "SetVoiceTranscript"
+            ],
+            "type": "string"
+          },
+          "voiceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "voiceId",
+          "transcript"
+        ],
+        "type": "object"
+      },
+      "SetVoiceTtsSettingsOverrideCommand": {
+        "description": "Wire type: SetVoiceTtsSettingsOverride (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "json": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "enum": [
+              "SetVoiceTtsSettingsOverride"
+            ],
+            "type": "string"
+          },
+          "voiceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "voiceId",
+          "json"
         ],
         "type": "object"
       },
@@ -6257,6 +7869,107 @@
         ],
         "type": "object"
       },
+      "SplitAtChapterCommand": {
+        "description": "Wire type: SplitAtChapter (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "chapterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "newPartTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "enum": [
+              "SplitAtChapter"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "chapterId",
+          "newPartTitle"
+        ],
+        "type": "object"
+      },
+      "SplitAtItemCommand": {
+        "description": "Wire type: SplitAtItem (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "itemId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "SplitAtItem"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "itemId"
+        ],
+        "type": "object"
+      },
+      "SplitAtParagraphCommand": {
+        "description": "Wire type: SplitAtParagraph (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "newChapterTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "paragraphId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "SplitAtParagraph"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "paragraphId",
+          "newChapterTitle"
+        ],
+        "type": "object"
+      },
+      "SplitAtPartCommand": {
+        "description": "Wire type: SplitAtPart (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "newVolumeTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "partId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "SplitAtPart"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "partId",
+          "newVolumeTitle"
+        ],
+        "type": "object"
+      },
       "SplitRuleRequest": {
         "description": "One level's split rule. `mode` is `Prefix`, `Arabic` or `Roman`; `prefix` is\r\nrequired (non-blank) when `mode` is `Prefix`, ignored otherwise.",
         "properties": {
@@ -6648,6 +8361,15 @@
         ],
         "type": "object"
       },
+      "TitleLevel": {
+        "description": "Which sweep an AddTitlesCommand runs. The member names are also the JSON wire values.",
+        "enum": [
+          "Book",
+          "Volume",
+          "Part",
+          "Chapter"
+        ]
+      },
       "ToSentenceCaseConfig": {
         "properties": {
           "id": {
@@ -6805,6 +8527,78 @@
         ],
         "type": "object"
       },
+      "UpdateChapterTitleCommand": {
+        "description": "Wire type: UpdateChapterTitle (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "chapterId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "UpdateChapterTitle"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "chapterId",
+          "title"
+        ],
+        "type": "object"
+      },
+      "UpdateParagraphItemTextCommand": {
+        "description": "Wire type: UpdateParagraphItemText (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "itemId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "UpdateParagraphItemText"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "itemId",
+          "text"
+        ],
+        "type": "object"
+      },
+      "UpdatePartTitleCommand": {
+        "description": "Wire type: UpdatePartTitle (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "partId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "UpdatePartTitle"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "partId",
+          "title"
+        ],
+        "type": "object"
+      },
       "UpdateProjectRequest": {
         "description": "`PATCH /api/projects/{folder}` body: every field optional; an omitted or null field is left as it is.",
         "properties": {
@@ -6827,6 +8621,61 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "UpdateVoiceCommand": {
+        "description": "Wire type: UpdateVoice (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "UpdateVoice"
+            ],
+            "type": "string"
+          },
+          "voiceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "voiceId",
+          "name",
+          "description"
+        ],
+        "type": "object"
+      },
+      "UpdateVolumeTitleCommand": {
+        "description": "Wire type: UpdateVolumeTitle (the record name minus Command). The folder comes from the route, never the body.",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "UpdateVolumeTitle"
+            ],
+            "type": "string"
+          },
+          "volumeId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "volumeId",
+          "title"
+        ],
         "type": "object"
       },
       "VoiceAnchorLevel": {
@@ -10051,7 +11900,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonObject"
+                "$ref": "#/components/schemas/BookCommand"
               }
             }
           },
@@ -10082,7 +11931,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Execute a book command. Body: { \"type\": \"<Name>\", ...properties }. Type is the command record name without the Command suffix, e.g. CreateCharacter, SetParagraphCharacter. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. The request is one History step, labelled for the command (e.g. Edit with AI, Split chapter, Assign speaker).",
+        "summary": "Execute a book command. Body: { \"type\": \"<Name>\", ...properties }. Type is the command record name without the Command suffix, e.g. CreateCharacter, SetParagraphCharacter. The folder comes from the route; no command takes folderId. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. The request is one History step, labelled for the command (e.g. Edit with AI, Split chapter, Assign speaker).",
         "tags": [
           "CommandEndpoints"
         ]

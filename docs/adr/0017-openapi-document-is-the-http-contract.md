@@ -64,6 +64,13 @@ it.** Five decisions make it up; each issue's resolution comment holds the detai
   a list of single members, and a hub record with exactly an HTTP record's fields sends that record. The hub's
   message types are generated like the HTTP ones; `live-messages.ts` keeps only the hand-written rest, and its
   C#-parsing spec is deleted.
+- **[Book commands are in the same document](https://github.com/deangaddie/ReadToMe/issues/328).** The commands
+  endpoint binds a raw `JsonObject`, so a document transformer (`BookCommandContractTransformer`) reads the map
+  `BookCommandJson` binds from and adds each command record as a component under its C# name, with `type` as a
+  required one-value enum and no `folderId` (the route owns it). `BookCommand` is a `oneOf` over them, discriminated on
+  `type`, and is the operation's request body. A parameter without a default is required, nullable or not, and the
+  binder enforces it (`RespectRequiredConstructorParameters`). The hand-written `book-commands.ts` and its live-host
+  spec are deleted.
 
 ## Considered options
 
@@ -91,5 +98,5 @@ it.** Five decisions make it up; each issue's resolution comment holds the detai
 - An enum sent as a `.ToString()` string can't be caught by a test; review guards it.
 - A hub record is required in full in `schema.d.ts`, defaults or not, since every field is sent; a spec builds one with
   `src/Read2Me.Web/src/testing/live-messages.ts`, which fills the unset fields with null.
-- Out of scope: request bodies beyond their enum and number form, stored JSON, and
-  files served outside mapped endpoints (`StepFileReads`, `/workspace`).
+- Out of scope: request bodies beyond their enum and number form, except book commands, whose required fields
+  the binder enforces; stored JSON; and files served outside mapped endpoints (`StepFileReads`, `/workspace`).

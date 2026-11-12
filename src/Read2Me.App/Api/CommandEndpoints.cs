@@ -19,6 +19,7 @@ namespace Read2Me.App.Api
             endpoints.MapPost("/api/projects/{folder}/commands", ExecuteAsync)
                 .WithSummary("Execute a book command. Body: { \"type\": \"<Name>\", ...properties }. " +
                              "Type is the command record name without the Command suffix, e.g. CreateCharacter, SetParagraphCharacter. " +
+                             "The folder comes from the route; no command takes folderId. " +
                              "An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. " +
                              "The request is one History step, labelled for the command (e.g. Edit with AI, Split chapter, Assign speaker).")
                 .RecordsOwnStep();

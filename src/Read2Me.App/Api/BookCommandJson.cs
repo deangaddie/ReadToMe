@@ -16,10 +16,18 @@ namespace Read2Me.App.Api
     {
         private static readonly JsonSerializerOptions Options = CreateOptions();
 
-        /// <summary>The wire form (<see cref="ApiJson"/>) plus the folder id as a plain string.</summary>
+        /// <summary>
+        /// The wire form (<see cref="ApiJson"/>) plus the folder id as a plain string. A constructor
+        /// parameter without a default is required, nullable or not (#328), as the document says it is:
+        /// leaving one out is a 400, not a <see cref="Guid.Empty"/>.
+        /// </summary>
         private static JsonSerializerOptions CreateOptions()
         {
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+                RespectRequiredConstructorParameters = true,
+            };
             ApiJson.Configure(options);
             options.Converters.Add(new ProjectFolderIdJsonConverter());
             return options;
@@ -33,6 +41,9 @@ namespace Read2Me.App.Api
                         ? t.Name[..^"Command".Length]
                         : t.Name,
                     t => t);
+
+        /// <summary>Each wire <c>type</c> with the record it binds; the document describes the same map (<see cref="BookCommandContractTransformer"/>).</summary>
+        public static IReadOnlyDictionary<string, Type> Commands => Map;
 
         public static IReadOnlyCollection<string> Names => Map.Keys;
 

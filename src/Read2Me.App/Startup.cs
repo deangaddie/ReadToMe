@@ -46,7 +46,8 @@ namespace Read2Me.App
                 .AddSchemaTransformer<AlwaysWrittenPropertySchemaTransformer>()
                 .AddSchemaTransformer<LiveRecordSchemaTransformer>()
                 .AddDocumentTransformer<ProblemResponseTransformer>()
-                .AddDocumentTransformer<LiveContractTransformer>());
+                .AddDocumentTransformer<LiveContractTransformer>()
+                .AddDocumentTransformer<BookCommandContractTransformer>());
             services.AddLiveHub();
 
             services.AddHttpClient();

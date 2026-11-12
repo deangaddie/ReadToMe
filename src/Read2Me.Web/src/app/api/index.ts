@@ -13,7 +13,6 @@ export * from './dtos';
 export type { PromptCatalogEntry, TryPronunciationRequest } from './dtos';
 export * from './api-client';
 export * from './api-error';
-export * from './book-commands';
 export * from './themes-api';
 export * from './projects-api';
 export * from './attribution-api';

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
+using Read2Me.App.Api;
 using Read2Me.App.Live;
 using Read2Me.E2eTests.Infrastructure;
 
@@ -198,6 +199,59 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
         Assert.Equal(["GetSnapshot", "JoinProject", "JoinStream", "LeaveProject", "LeaveStream"], methods.Order(StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// Every book command is in the document (#328): the commands operation's body is <c>BookCommand</c>,
+    /// a <c>oneOf</c> over exactly the names <see cref="BookCommandJson"/> binds, each member carrying its
+    /// own <c>type</c> as a single-value enum and no <c>folderId</c> (the route owns it).
+    /// </summary>
+    [Fact]
+    public async Task The_book_command_union_lists_exactly_the_bound_commands()
+    {
+        var document = await DocumentAsync();
+        var schemas = document["components"]!["schemas"]!.AsObject();
+
+        var body = document["paths"]!["/api/projects/{folder}/commands"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!;
+        Assert.Equal("#/components/schemas/BookCommand", body["$ref"]!.GetValue<string>());
+
+        var union = schemas["BookCommand"]!;
+        Assert.Equal("type", union["discriminator"]!["propertyName"]!.GetValue<string>());
+        var members = union["oneOf"]!.AsArray().Select(m => m!["$ref"]!.GetValue<string>()["#/components/schemas/".Length..]).ToList();
+        var mapping = union["discriminator"]!["mapping"]!.AsObject()
+            .ToDictionary(m => m.Key, m => m.Value!.GetValue<string>()["#/components/schemas/".Length..]);
+
+        Assert.Equal(BookCommandJson.Names.Order(StringComparer.Ordinal), mapping.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(members.Order(StringComparer.Ordinal), mapping.Values.Order(StringComparer.Ordinal));
+
+        foreach (var (name, component) in mapping)
+        {
+            var member = schemas[component]!;
+            Assert.Equal([name], member["properties"]!["type"]!["enum"]!.AsArray().Select(v => v!.GetValue<string>()));
+            Assert.Contains("type", member["required"]!.AsArray().Select(r => r!.GetValue<string>()));
+            Assert.Null(member["properties"]!["folderId"]);
+        }
+    }
+
+    /// <summary>
+    /// A command parameter without a default is required, nullable or not; one with a default is optional
+    /// (#328), as <see cref="BookCommandJson"/> binds them.
+    /// </summary>
+    [Theory]
+    [InlineData("SetItemCharacterCommand", "characterId", true)]
+    [InlineData("SetParagraphCharacterCommand", "characterId", true)]
+    [InlineData("SetParagraphCharacterCommand", "voiceInstructions", false)]
+    [InlineData("ItemAttribution", "voiceInstructions", true)]
+    [InlineData("CreateVoiceCommand", "isGenerated", false)]
+    [InlineData("InsertNodeCommand", "title", false)]
+    [InlineData("SplitAtPartCommand", "newVolumeTitle", true)]
+    public async Task A_command_field_is_required_unless_it_has_a_default(string component, string property, bool required)
+    {
+        var schema = (await DocumentAsync())["components"]!["schemas"]![component]!;
+
+        Assert.NotNull(schema["properties"]?[property]);
+        var names = schema["required"]?.AsArray().Select(r => r!.GetValue<string>()) ?? [];
+        Assert.Equal(required, names.Contains(property));
+    }
+
     private static IEnumerable<Type> HubPayloads() =>
         typeof(ILiveClient).GetMethods().Select(m => m.GetParameters().Single().ParameterType);
 
@@ -209,7 +263,7 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
             .Where(t => t != typeof(Task) && t != typeof(void));
 
     /// <summary>
-    /// The request and response types the endpoints declare, the hub's payloads and answers, and every type
+    /// The request and response types the endpoints declare, the hub's payloads and answers, the book commands, and every type
     /// they reach, have distinct short names (#168, #238): the document names its components by the short CLR name, so two types sharing one would
     /// share one component. The fix is to rename the type that goes on the wire.
     /// </summary>
@@ -223,7 +277,8 @@ public class OpenApiDocumentTests(E2eAppFixture app) : IClassFixture<E2eAppFixtu
                 .Concat(e.Metadata.OfType<IAcceptsMetadata>().Select(m => m.RequestType)))
             .OfType<Type>()
             .Concat(HubPayloads())
-            .Concat(HubAnswers());
+            .Concat(HubAnswers())
+            .Concat(BookCommandJson.Commands.Values);
 
         var seen = new HashSet<Type>();
         foreach (var root in roots)

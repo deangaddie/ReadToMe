@@ -193,6 +193,37 @@ namespace Read2Me.Tests.Api
             Assert.Contains("NotACommand", error);
         }
 
+        /// <summary>
+        /// A parameter without a default is required, nullable or not (#328): leaving one out is the
+        /// binding error, not a <see cref="Guid.Empty"/> or a silent null.
+        /// </summary>
+        [Theory]
+        [InlineData("DeleteVolume", "{}", "volumeId")]
+        [InlineData("SetItemCharacter", """{ "itemId": "8b0d3c52-6f0e-4b8a-9a43-0d6c1f1f2a10" }""", "characterId")]
+        [InlineData("AttributeItems",
+            """{ "paragraphId": "8b0d3c52-6f0e-4b8a-9a43-0d6c1f1f2a10", "items": [{ "itemId": "8b0d3c52-6f0e-4b8a-9a43-0d6c1f1f2a11", "characterId": null }] }""",
+            "voiceInstructions")]
+        public void A_missing_required_field_is_the_binding_error(string type, string json, string missing)
+        {
+            var body = JsonNode.Parse(json)!.AsObject();
+
+            var ok = BookCommandJson.TryDeserialize(type, body, Folder, out var command, out var error);
+
+            Assert.False(ok);
+            Assert.Null(command);
+            Assert.StartsWith($"Invalid properties for command '{type}'", error);
+            Assert.Contains(missing, error, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void A_defaulted_field_can_still_be_left_out()
+        {
+            var command = (CreateVoiceCommand)Deserialize(
+                "CreateVoice", $$"""{ "characterId": "{{Guid.NewGuid()}}", "name": "Warm" }""");
+
+            Assert.False(command.IsGenerated);
+        }
+
         [Fact]
         public void Malformed_props_fail_with_error()
         {

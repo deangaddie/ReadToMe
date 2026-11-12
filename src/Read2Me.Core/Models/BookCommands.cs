@@ -36,7 +36,8 @@ public record UpdateParagraphItemTextCommand(ProjectFolderId FolderId, Guid Item
 
 /// <summary>
 /// Adds, edits or removes one speech item's delivery cue by hand; null or blank removes it. Not
-/// <c>AttributeItems</c>: that is attribution's command, carries a speaker, and keeps the audio.
+/// <c>AttributeItems</c>: that is attribution's command, carries a speaker, and keeps the audio. A real
+/// change discards the item's audio.
 /// </summary>
 public record SetItemDeliveryCueCommand(ProjectFolderId FolderId, Guid ItemId, string? Cue) : BookCommand(FolderId);
 
@@ -121,7 +122,7 @@ public record RenameCharacterCommand(ProjectFolderId FolderId, Guid CharacterId,
 /// <summary>
 /// Points the book's narration at one of its Characters — Sherlock Holmes narrated by
 /// Dr. Watson. <c>null</c> unlinks. The first project-scoped <see cref="BookCommand"/>:
-/// every sibling addresses a node, character or voice.
+/// every sibling addresses a node, character or voice. Refused (422) for an unknown character or a self-link.
 /// </summary>
 public record SetNarratorCharacterCommand(ProjectFolderId FolderId, Guid? CharacterId) : BookCommand(FolderId);
 
@@ -202,6 +203,7 @@ public record ClearBookContentCommand(ProjectFolderId FolderId) : BookCommand(Fo
 
 // AI book edits
 public enum BookEditTargetKind { VolumeTitle, PartTitle, ChapterTitle, ParagraphItemText }
+/// <summary>One AI book edit: the title or item text <c>Id</c> names, by <c>Kind</c>, set to <c>NewValue</c>.</summary>
 public sealed record BookEditItem(BookEditTargetKind Kind, Guid Id, string NewValue);
 public record ApplyBookEditsCommand(ProjectFolderId FolderId, IReadOnlyList<BookEditItem> Edits) : BookCommand(FolderId);
 
