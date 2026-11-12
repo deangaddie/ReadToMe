@@ -58,6 +58,23 @@ vulnerabilities:
       - pkg:deb/debian/perl-base
     statement: *debian-no-fix
 
+  # Similarity images: Debian has no fix, and the uvicorn process never maps libsqlite3
+  # (checked against /proc/1/maps on both services, #324). Only Python's sqlite3 module
+  # loads it, and neither app.py nor its locked dependencies import that module.
+  - id: CVE-2026-119373
+    purls: &sqlite
+      - pkg:deb/debian/libsqlite3-0
+    statement: &sqlite-unloaded >-
+      Debian 13 has no fix; the similarity services never load libsqlite3 (no sqlite3 import
+      at runtime). Review at each python:3.13-slim digest move, and whenever a lock bump
+      adds a dependency; delete once Debian ships a fix.
+  - id: CVE-2026-119374
+    purls: *sqlite
+    statement: *sqlite-unloaded
+  - id: CVE-2026-119379
+    purls: *sqlite
+    statement: *sqlite-unloaded
+
   # audio.cpp: a third-party image, so only its digest can move. Versioned purls, so the
   # entries stop matching once the image ships a newer openssl.
   - id: CVE-2026-45447
