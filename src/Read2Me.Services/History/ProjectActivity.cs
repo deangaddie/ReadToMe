@@ -13,7 +13,7 @@ public sealed record ActivityRefusal(ActivityRefusalKind Kind, string Reason);
 /// Opaque: a project and how many of its Restores had begun when <see cref="ProjectActivity.Mark"/>
 /// took it, so <see cref="ProjectActivity.MayPlanEdit"/> can tell whether one began since.
 /// </summary>
-public readonly record struct RestoreMark
+internal readonly record struct RestoreMark
 {
     internal RestoreMark(ProjectFolderId folder, long begun) => (Folder, Begun) = (folder, begun);
 
@@ -97,10 +97,10 @@ public sealed class ProjectActivity
     public Task WhenRestoreEnded(ProjectFolderId folder) =>
         _restoring.TryGetValue(folder.Value, out var running) ? running.Task : Task.CompletedTask;
 
-    public RestoreMark Mark(ProjectFolderId folder) => new(folder, RestoresBegun(folder));
+    internal RestoreMark Mark(ProjectFolderId folder) => new(folder, RestoresBegun(folder));
 
     /// <summary>Refused while restoring, and when a Restore began since <paramref name="since"/>, even one that has ended.</summary>
-    public ActivityRefusal? MayPlanEdit(RestoreMark since) =>
+    internal ActivityRefusal? MayPlanEdit(RestoreMark since) =>
         RestoringRefusal(since.Folder) ?? (RestoresBegun(since.Folder) != since.Begun ? Restoring : null);
 
     /// <summary>State for the History list's <c>restoring</c> field and the hub, not policy.</summary>

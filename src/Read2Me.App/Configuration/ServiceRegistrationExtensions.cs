@@ -236,6 +236,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<Read2Me.Services.BookEdits.ScopeResolver>();
         services.AddScoped<Read2Me.Services.BookEdits.BookEditPlanner>();
         services.AddScoped<Read2Me.Services.BookEdits.BookEditProposalService>();
+        services.AddScoped<Read2Me.Services.BookEdits.BookEditPlanService>();
         services.AddSingleton<Read2Me.App.Live.BookEditRunCoordinator>();
         services.AddSingleton<Read2Me.App.Live.LlmTestRunCoordinator>();
 

@@ -15,10 +15,10 @@ namespace Read2Me.E2eTests.Tests.Api;
 /// <summary>
 /// The AI book-edit flow over HTTP (Angular ticket 19): plan, propose with hub progress, retry one
 /// row, apply through the ordinary command endpoint, cancel and drop. These pin the routes, the
-/// statuses, the hub messages' kind and program, and the Restore 409s; what a plan targets, how
-/// many requests it takes, the rows a proposal writes and what an apply leaves are
-/// BookEditPlannerTests, ScopeResolverTests, BookEditProposalServiceTests and
-/// BookEditSessionStoreTests.
+/// statuses, the hub messages' kind and program, and the Restore 409 on the wire; the Restore race
+/// as a whole, what a plan targets, how many requests it takes, the rows a proposal writes and what
+/// an apply leaves are BookEditPlanServiceTests, BookEditPlannerTests, ScopeResolverTests,
+/// BookEditProposalServiceTests and BookEditSessionStoreTests.
 /// </summary>
 public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 {
@@ -389,38 +389,6 @@ public class BookEditApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             var plan = Http.PostAsJsonAsync(Url(folder, "/plan"), new { instruction = "number the chapters" });
             await WaitForAsync(() => { lock (app.FakeAi.LlmPromptsSeen) return app.FakeAi.LlmPromptsSeen.Count > 0; });
             Assert.Null(activity.TryBeginRestore(folderId));
-            app.FakeAi.ReleaseLlm();
-
-            var response = await plan;
-            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-            Assert.Equal(ProjectActivity.RestoringReason,
-                JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
-            Assert.Empty(app.Services.GetRequiredService<IBookEditSessionStore>().RemoveAll(folderId));
-        }
-        finally
-        {
-            activity.EndRestore(folderId);
-            app.FakeAi.Reset();
-        }
-    }
-
-    [Fact]
-    public async Task A_plan_overtaken_by_a_whole_Restore_while_thinking_answers_409_and_keeps_no_session()
-    {
-        var folder = $"api-edit-restored-{Guid.NewGuid():N}";
-        await app.SeedMultiChapterProjectAsync(folder, "Restored Book", "Author", chapters: 2);
-        var folderId = new Read2Me.Core.Models.ProjectFolderId(folder);
-        var activity = app.Services.GetRequiredService<ProjectActivity>();
-        app.FakeAi.LlmReply = _ => TemplatePlan;
-        app.FakeAi.HoldLlmAfter(0);
-        try
-        {
-            // The Restore begins and ends while the LLM thinks: the flag is down again by the check,
-            // but the plan's targets would come from the book as it was before.
-            var plan = Http.PostAsJsonAsync(Url(folder, "/plan"), new { instruction = "number the chapters" });
-            await WaitForAsync(() => { lock (app.FakeAi.LlmPromptsSeen) return app.FakeAi.LlmPromptsSeen.Count > 0; });
-            Assert.Null(activity.TryBeginRestore(folderId));
-            activity.EndRestore(folderId);
             app.FakeAi.ReleaseLlm();
 
             var response = await plan;
