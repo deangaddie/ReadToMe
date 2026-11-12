@@ -42,31 +42,33 @@ namespace Read2Me.App.Services.SetupCheck
     {
         private static readonly TimeSpan ProcessTimeout = TimeSpan.FromSeconds(10);
 
-        private readonly TimeProvider _clock = clock ?? TimeProvider.System;
         private readonly SemaphoreSlim _quick = new(1, 1);
-        private readonly DateTimeOffset _startedAt = (clock ?? TimeProvider.System).GetUtcNow();
-        private volatile SetupCheckReport _report = SetupCheckReport.Empty;
 
-        /// <summary>The first-run and no-Workspace flags and the start time are this start's, read as the report is.</summary>
-        public SetupCheckReport Report => _report with
-        {
-            FirstRun = workspaceStart.CreatedDatabase,
-            StartedAt = _startedAt,
-            NoWorkspace = !workspaceStart.Usable,
-        };
+        /// <summary>The report's state. The first-run and no-Workspace flags and the start time are this start's, stamped on as it's read.</summary>
+        private readonly SetupCheckLedger _ledger = new(full.Changes, clock ?? TimeProvider.System, Stamp(
+            workspaceStart, (clock ?? TimeProvider.System).GetUtcNow()));
+
+        private static Func<SetupCheckReport, SetupCheckReport> Stamp(WorkspaceStart workspaceStart, DateTimeOffset startedAt) =>
+            report => report with
+            {
+                FirstRun = workspaceStart.CreatedDatabase,
+                StartedAt = startedAt,
+                NoWorkspace = !workspaceStart.Usable,
+            };
+
+        public SetupCheckReport Report => _ledger.Report;
 
         public async Task<SetupCheckReport> RunQuickCheckAsync(CancellationToken ct)
         {
             // The run owns the rows until it ends.
-            if (FullCheckRunning)
+            if (_ledger.Running)
                 return Report;
             await _quick.WaitAsync(ct);
             try
             {
                 if (!workspaceStart.Usable)
                 {
-                    lock (_lock)
-                        _report = NoWorkspaceReport();
+                    _ledger.QuickChecked(NoWorkspaceRows(), _ => null, estimateSeconds: null);
                     return Report;
                 }
 
@@ -86,16 +88,7 @@ namespace Read2Me.App.Services.SetupCheck
                 rows.AddRange(await new AiServicesCheck(aiServices).RunAsync(configs, statuses, docker.OnPath, ct));
                 var plan = Plan(new FullContext(configs));
                 var estimate = EstimateSeconds(configs, plan, statuses);
-                lock (_lock)
-                {
-                    if (_run is null)
-                        _report = _report with
-                        {
-                            Rows = WithRerun(WithFullVerdicts(rows), plan),
-                            QuickCheckedAt = _clock.GetUtcNow(),
-                            FullCheckEstimateSeconds = estimate,
-                        };
-                }
+                _ledger.QuickChecked(rows, row => Rerun(row, plan), estimate);
                 return Report;
             }
             finally
@@ -116,7 +109,7 @@ namespace Read2Me.App.Services.SetupCheck
         /// With no usable Workspace at start, the Workspace row is the start's verdict and every
         /// other row is Not run: nothing reads app.db, and only a restart leaves the mode.
         /// </summary>
-        private SetupCheckReport NoWorkspaceReport()
+        private IReadOnlyList<SetupCheckRow> NoWorkspaceRows()
         {
             var fix = new SetupFixHint("Fix the Workspace row first, then restart the app.", null, null);
             var rows = new List<SetupCheckRow>
@@ -126,7 +119,7 @@ namespace Read2Me.App.Services.SetupCheck
                 SetupChecks.Docker.NotRun(NeedsWorkspace, fix),
             };
             rows.AddRange(new AiServicesCheck(aiServices).NotRun(NeedsWorkspace, fix));
-            return _report with { Rows = rows, QuickCheckedAt = _clock.GetUtcNow() };
+            return rows;
         }
 
         /// <summary>A folder removed since start is created again, as start-up would have.</summary>

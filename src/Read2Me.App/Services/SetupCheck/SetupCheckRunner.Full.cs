@@ -8,28 +8,11 @@ namespace Read2Me.App.Services.SetupCheck
     /// and the watchdog holds off the services the steps drive. Each step marks its rows
     /// Checking, runs on its own (a throw fails only its rows) and replaces them; every change goes
     /// to every client as a <c>setupCheck</c> message. A cancel lets the current step finish; the
-    /// steps after it read Not run. Results live in memory only.
+    /// steps after it read Not run. Results live in memory only; the report's state is the
+    /// <see cref="SetupCheckLedger"/>'s.
     /// </summary>
     public sealed partial class SetupCheckRunner
     {
-        private const string Cancelled = "Full check cancelled";
-
-        private readonly object _lock = new();
-        // Guarded by _lock.
-        private FullRun? _run;
-        private readonly Dictionary<string, SetupCheckRow> _fullVerdicts = new(StringComparer.Ordinal);
-
-        /// <summary>
-        /// The run going; its cancel stops it after the current step. <see cref="Rerun"/>: the one
-        /// check it re-runs, null for a whole Full check.
-        /// </summary>
-        private sealed class FullRun(string? rerun)
-        {
-            public string? Rerun { get; } = rerun;
-            public CancellationTokenSource Cancel { get; } = new();
-            public TaskCompletionSource<SetupCheckReport> Finished { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        }
-
         /// <summary>
         /// One Full check step: where it runs, what the progress strip says, the rows it judges, the
         /// managed services it drives (held off the watchdog for the run), a rough duration for the
@@ -42,11 +25,6 @@ namespace Read2Me.App.Services.SetupCheck
             IReadOnlyList<string> Services,
             int EstimateSeconds,
             Func<Task<IReadOnlyList<SetupCheckRow>>> RunAsync);
-
-        private bool FullCheckRunning
-        {
-            get { lock (_lock) return _run is not null; }
-        }
 
         /// <summary>
         /// The steps, in run order: local first, then CPU services (whisper, then similarity), then GPU
@@ -72,77 +50,48 @@ namespace Read2Me.App.Services.SetupCheck
 
         /// <summary>
         /// Starts a whole Full check (<paramref name="rerun"/> null), which joins a whole one going, or
-        /// a re-run of one check: only the steps that judge that row. Anything else going refuses it:
-        /// a whole check can't join a re-run, which checks one row.
+        /// a re-run of one check: only the steps that judge that row. The ledger admits and claims the
+        /// run; between the two, the work in flight and the plan can still refuse it.
         /// </summary>
         private async Task<FullCheckStart> StartRunAsync(string? rerun)
         {
             await _starting.WaitAsync();
             try
             {
-                lock (_lock)
-                {
-                    if (rerun is not null && _report.QuickCheckedAt is null)
-                        return Refused("The start-up Quick check hasn't ended: re-run the check once it has.");
-                    if (rerun is not null && RowOrNull(rerun) is not { Tier: SetupCheckTier.Full })
-                        return Refused($"There's no Full-tier check \"{rerun}\" to re-run.", unknownCheck: true);
-                    if (_run is { } going)
-                        return (going.Rerun, rerun) switch
-                        {
-                            (null, null) => new FullCheckStart(Report, Joined: true, Refusal: null, going.Finished.Task),
-                            (null, _) => Refused("A Full check is running: re-run the check once it ends."),
-                            (_, null) => Refused("A check is re-running: run the Full check once it ends."),
-                            _ => Refused("A check is re-running: re-run this one once it ends."),
-                        };
-                    if (FullRefusal() is { } refusal)
-                        return Refused(refusal);
-                }
+                if (_ledger.Admit(rerun) is { } admitted)
+                    return admitted;
+                if (FullRefusal() is { } busy)
+                    return _ledger.Refused(busy);
 
                 // Read fresh: the configs may have changed since the Quick check.
                 var context = new FullContext(await ActiveAiConfigs.ReadAsync(aiServices));
 
-                FullRun run;
-                IReadOnlyList<FullStep> steps;
-                SetupCheckReport started;
-                lock (_lock)
-                {
-                    // Work may have arrived while the configs were read.
-                    if (FullRefusal() is { } refusal)
-                        return Refused(refusal);
-                    steps = rerun is null ? Plan(context) : StepsFor(Plan(context), rerun);
-                    if (steps.Count == 0)
-                        return Refused($"{RowOrNull(rerun!)?.Name ?? rerun} has nothing for the Full check to send: it has no active config.");
-                    // The web app confirms a GPU re-run on the report's rerun.gpu, which the last Quick
-                    // check set: a config moved onto a GPU container since must not skip that confirm.
-                    if (rerun is not null && RowOrNull(rerun) is { Rerun: not { Gpu: true } } stale && DrivesGpu(steps))
-                        return Refused($"{stale.Name} now drives a GPU container: run the Quick check, then re-run it.");
+                // Work may have arrived while the configs were read.
+                if (FullRefusal() is { } refusal)
+                    return _ledger.Refused(refusal);
+                var steps = rerun is null ? Plan(context) : StepsFor(Plan(context), rerun);
+                if (steps.Count == 0)
+                    return _ledger.Refused($"{_ledger.Row(rerun!)?.Name ?? rerun} has nothing for the Full check to send: it has no active config.");
+                // The web app confirms a GPU re-run on the report's rerun.gpu, which the last Quick
+                // check set: a config moved onto a GPU container since must not skip that confirm.
+                if (rerun is not null && _ledger.Row(rerun) is { Rerun: not { Gpu: true } } stale && DrivesGpu(steps))
+                    return _ledger.Refused($"{stale.Name} now drives a GPU container: run the Quick check, then re-run it.");
 
-                    context.Before = _report.Rows.ToDictionary(r => r.Id, StringComparer.Ordinal);
-                    run = _run = new FullRun(rerun);
-                    full.Busy.Set(true);
-                    full.CharacterGate.Close(GateOwners.SetupCheck, SetupCheckBusy.Reason);
-                    full.AudioGate.Close(GateOwners.SetupCheck, SetupCheckBusy.Reason);
-                    _report = _report with
-                    {
-                        FullRun = new SetupFullRun(1, steps.Count, steps[0].Lane, steps[0].Label, Cancelling: false),
-                        PutBack = null,
-                    };
-                    started = Report;
-                    Publish(SetupCheckChangeKind.Progress);
-                }
+                var run = _ledger.Claim(rerun, [.. steps.SelectMany(s => s.RowIds)],
+                    new SetupFullRun(1, steps.Count, steps[0].Lane, steps[0].Label, Cancelling: false));
+                context.Before = run.Before;
+                full.Busy.Set(true);
+                full.CharacterGate.Close(GateOwners.SetupCheck, SetupCheckBusy.Reason);
+                full.AudioGate.Close(GateOwners.SetupCheck, SetupCheckBusy.Reason);
 
                 _ = Task.Run(() => RunFullAsync(run, steps, context));
-                return new FullCheckStart(started, Joined: false, Refusal: null, run.Finished.Task);
+                return new FullCheckStart(run.Started, Joined: false, Refusal: null, run.Finished);
             }
             finally
             {
                 _starting.Release();
             }
         }
-
-        // Caller holds _lock.
-        private FullCheckStart Refused(string refusal, bool unknownCheck = false) =>
-            new(Report, Joined: false, refusal, Task.FromResult(Report), unknownCheck);
 
         /// <summary>
         /// The steps a re-run of one row takes, in run order: those that judge it, and before them
@@ -163,39 +112,26 @@ namespace Read2Me.App.Services.SetupCheck
         }
 
         /// <summary>
-        /// Each Full-tier row with what re-running it takes: null when no step judges it (no active
+        /// What re-running a row takes: null when it isn't Full-tier or no step judges it (no active
         /// config), and whether a step drives a GPU container, which the web app confirms first.
         /// </summary>
-        private IReadOnlyList<SetupCheckRow> WithRerun(IReadOnlyList<SetupCheckRow> rows, IReadOnlyList<FullStep> plan) =>
-            [.. rows.Select(row => row with
-            {
-                Rerun = row.Tier == SetupCheckTier.Full && StepsFor(plan, row.Id) is { Count: > 0 } steps
-                    ? new SetupRerun(Gpu: DrivesGpu(steps))
-                    : null,
-            })];
+        private SetupRerun? Rerun(SetupCheckRow row, IReadOnlyList<FullStep> plan) =>
+            row.Tier == SetupCheckTier.Full && StepsFor(plan, row.Id) is { Count: > 0 } steps
+                ? new SetupRerun(Gpu: DrivesGpu(steps))
+                : null;
 
-        // Caller holds _lock.
         private string? FullRefusal() => workspaceStart.Usable
             ? full.Work.Refusal()
             : "The Full check needs the Workspace: fix the Workspace row, then restart the app.";
 
-        public SetupCheckReport? CancelFullCheck()
-        {
-            lock (_lock)
-            {
-                if (_run is null)
-                    return null;
-                _run.Cancel.Cancel();
-                if (_report.FullRun is { } going)
-                    _report = _report with { FullRun = going with { Cancelling = true } };
-                Publish(SetupCheckChangeKind.Progress);
-                return Report;
-            }
-        }
+        public SetupCheckReport? CancelFullCheck() => _ledger.Cancel();
 
-        private async Task RunFullAsync(FullRun run, IReadOnlyList<FullStep> steps, FullContext context)
+        /// <summary>
+        /// Runs the steps, then puts back; then opens the gates and clears Busy, and only then has the
+        /// ledger end the run, so a start that lands in between joins a run that is all but done.
+        /// </summary>
+        private async Task RunFullAsync(SetupCheckLedger.Run run, IReadOnlyList<FullStep> steps, FullContext context)
         {
-            var next = 0;
             string? putBack = null;
             try
             {
@@ -205,8 +141,8 @@ namespace Read2Me.App.Services.SetupCheck
                     [.. steps.SelectMany(s => s.Services).Distinct(StringComparer.OrdinalIgnoreCase)]);
                 try
                 {
-                    for (; next < steps.Count && !run.Cancel.IsCancellationRequested; next++)
-                        await RunStepAsync(steps[next], next + 1, steps.Count, run.Cancel.Token);
+                    for (var next = 0; next < steps.Count && !run.Cancelled.IsCancellationRequested; next++)
+                        await RunStepAsync(run, steps[next], next + 1, steps.Count);
                 }
                 finally
                 {
@@ -215,103 +151,27 @@ namespace Read2Me.App.Services.SetupCheck
             }
             finally
             {
-                lock (_lock)
-                {
-                    // Rows a step that ran already judged (a container or chain row several steps share) keep that verdict.
-                    var judged = steps.Take(next).SelectMany(s => s.RowIds).ToHashSet(StringComparer.Ordinal);
-                    SetRows([.. steps.Skip(next).SelectMany(s => s.RowIds).Where(id => !judged.Contains(id))],
-                        row => row with { Result = SetupCheckResult.NotRun, Found = Cancelled, Note = null });
-                    // A re-run judges one check: the time stays the last whole Full check's.
-                    _report = _report with
-                    {
-                        FullRun = null,
-                        FullCheckedAt = run.Rerun is null ? _clock.GetUtcNow() : _report.FullCheckedAt,
-                        PutBack = putBack,
-                    };
-                    _run = null;
-                    full.CharacterGate.Open(GateOwners.SetupCheck);
-                    full.AudioGate.Open(GateOwners.SetupCheck);
-                    full.Busy.Set(false);
-                    Publish(SetupCheckChangeKind.Done);
-                    run.Finished.TrySetResult(Report);
-                }
-                run.Cancel.Dispose();
+                full.CharacterGate.Open(GateOwners.SetupCheck);
+                full.AudioGate.Open(GateOwners.SetupCheck);
+                full.Busy.Set(false);
+                _ledger.Finish(run, putBack);
             }
         }
 
         /// <summary>One step: its rows read Checking, then its verdicts replace them.</summary>
-        private async Task RunStepAsync(FullStep step, int number, int total, CancellationToken cancel)
+        private async Task RunStepAsync(SetupCheckLedger.Run run, FullStep step, int number, int total)
         {
-            lock (_lock)
-            {
-                // A cancel that lands after the loop's check still shows; the step still runs.
-                _report = _report with
-                {
-                    FullRun = new SetupFullRun(number, total, step.Lane, step.Label, cancel.IsCancellationRequested),
-                };
-                SetRows(step.RowIds, row => row with { Result = SetupCheckResult.Checking });
-                Publish(SetupCheckChangeKind.Progress);
-            }
-
-            IReadOnlyList<SetupCheckRow> rows;
+            _ledger.StepStarted(run, new SetupFullRun(number, total, step.Lane, step.Label, Cancelling: false), step.RowIds);
             try
             {
-                rows = await step.RunAsync();
+                _ledger.Judged(await step.RunAsync());
             }
             catch (Exception ex)
             {
                 // Each step stands alone: a throw fails its own rows and the run goes on.
-                lock (_lock)
-                    rows = [.. step.RowIds.Select(RowOrNull).OfType<SetupCheckRow>()
-                        .Select(row => row with { Result = SetupCheckResult.Failed, Found = ex.Message })];
-            }
-
-            lock (_lock)
-            {
-                foreach (var row in rows)
-                {
-                    _fullVerdicts[row.Id] = row;
-                    SetRows([row.Id], _ => row);
-                }
+                _ledger.StepFailed(step.RowIds, ex.Message);
             }
         }
-
-        /// <summary>
-        /// A Quick check's rows with the last Full check's verdicts laid over them. A Full pass is the
-        /// stronger proof, so it stands unless the Quick check now fails the row. A Full failure the
-        /// Quick check no longer finds is dropped: the fix may have worked, and the next Full check proves it.
-        /// Caller holds _lock.
-        /// </summary>
-        private IReadOnlyList<SetupCheckRow> WithFullVerdicts(IReadOnlyList<SetupCheckRow> rows)
-        {
-            var merged = new List<SetupCheckRow>(rows.Count);
-            foreach (var row in rows)
-            {
-                if (row.Result == SetupCheckResult.Failed || !_fullVerdicts.TryGetValue(row.Id, out var verdict))
-                    merged.Add(row);
-                else if (verdict.Result != SetupCheckResult.Failed)
-                    merged.Add(verdict);
-                else
-                {
-                    _fullVerdicts.Remove(row.Id);
-                    merged.Add(row);
-                }
-            }
-            return merged;
-        }
-
-        // Caller holds _lock.
-        private SetupCheckRow? RowOrNull(string id) => _report.Rows.FirstOrDefault(r => r.Id == id);
-
-        // Caller holds _lock.
-        private void SetRows(IReadOnlyList<string> ids, Func<SetupCheckRow, SetupCheckRow> change) =>
-            _report = _report with { Rows = [.. _report.Rows.Select(r => ids.Contains(r.Id) ? change(r) : r)] };
-
-        /// <summary>
-        /// Publishes the report as it stands. Caller holds _lock, so the changes go out in the order
-        /// the report changed; a client that misses one reads the report on reconnect.
-        /// </summary>
-        private void Publish(SetupCheckChangeKind kind) => full.Changes.Publish(new SetupCheckChanged(kind, Report));
 
         // ── ffmpeg ───────────────────────────────────────────────────────────
 

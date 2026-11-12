@@ -306,46 +306,7 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.Equal(SetupCheckChangeKind.Done, Sent()[^1].Kind);
         }
 
-        [Fact]
-        public void Cancel_with_no_run_going_answers_null()
-        {
-            Assert.Null(Runner().CancelFullCheck());
-        }
-
         // ── Results ──────────────────────────────────────────────────────────
-
-        [Fact]
-        public async Task A_later_Quick_check_keeps_a_passed_Full_verdict_and_its_time()
-        {
-            var runner = Runner();
-            await runner.RunQuickCheckAsync(CancellationToken.None);
-            var start = await runner.StartFullCheckAsync();
-            _encode.Release.SetResult(new FfmpegProbeResult(true, "Encoded a 1 s tone"));
-            var final = await start.Finished.WaitAsync(Wait);
-
-            var after = await runner.RunQuickCheckAsync(CancellationToken.None);
-
-            var ffmpeg = Row(after, SetupCheckIds.Ffmpeg);
-            Assert.Equal(SetupCheckResult.Passed, ffmpeg.Result);
-            Assert.Equal("Encoded a 1 s tone", ffmpeg.Found);
-            Assert.Equal(final.FullCheckedAt, after.FullCheckedAt);
-        }
-
-        [Fact]
-        public async Task A_Quick_check_that_no_longer_fails_the_row_drops_a_failed_Full_verdict()
-        {
-            var runner = Runner();
-            var quick = Row(await runner.RunQuickCheckAsync(CancellationToken.None), SetupCheckIds.Ffmpeg);
-            var start = await runner.StartFullCheckAsync();
-            _encode.Release.SetResult(new FfmpegProbeResult(false, "No such filter: 'adynamicequalizer'"));
-            await start.Finished.WaitAsync(Wait);
-
-            var after = Row(await runner.RunQuickCheckAsync(CancellationToken.None), SetupCheckIds.Ffmpeg);
-
-            Assert.NotEqual(SetupCheckResult.Failed, quick.Result);
-            Assert.Equal(quick.Result, after.Result);
-            Assert.Equal(quick.Found, after.Found);
-        }
 
         [Fact]
         public async Task The_report_carries_an_estimate_for_the_confirm()

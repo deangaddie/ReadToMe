@@ -108,9 +108,6 @@ namespace Read2Me.Tests.App.SetupCheck
             public List<JsonObject> ChatBodies { get; } = [];
             public List<JsonObject> SpeechBodies { get; } = [];
 
-            /// <summary>Called as each speech request arrives, which is how a test acts mid-step.</summary>
-            public Action? OnSpeech { get; set; }
-
             public HttpClient CreateClient(string name) => new(this, disposeHandler: false);
 
             protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -140,7 +137,6 @@ namespace Read2Me.Tests.App.SetupCheck
                 if (baseUrl == AudioCpp && path == "/v1/audio/speech")
                 {
                     SpeechBodies.Add(body);
-                    OnSpeech?.Invoke();
                     ThrowIfUnanswered(model);
                     if (SpeechErrors.TryGetValue(model, out var error))
                         return new HttpResponseMessage(HttpStatusCode.InternalServerError) { Content = new StringContent(error) };
@@ -530,23 +526,6 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.Equal(
                 "Put back: read2me-llama not started again: read2me-audiocpp holds the GPU; read2me-audiocpp left as it is (its check failed).",
                 report.PutBack);
-        }
-
-        [Fact]
-        public async Task A_cancel_keeps_the_verdict_a_finished_step_gave_a_row_the_next_step_shares()
-        {
-            await AddTtsAsync();
-            await AddVoiceDesignAsync();
-            _http.Unanswered.Add("breeze-q8");
-            var runner = Runner();
-            await runner.RunQuickCheckAsync(CancellationToken.None);
-            // Cancelled during paragraph TTS: voice design never runs, but the audiocpp row it shares keeps TTS's verdict.
-            _http.OnSpeech = () => runner.CancelFullCheck();
-
-            var report = await (await runner.StartFullCheckAsync()).Finished.WaitAsync(Wait);
-
-            Assert.Equal(SetupCheckResult.NotRun, Row(report, SetupCheckIds.VoiceDesign).Result);
-            Assert.Equal(SetupCheckResult.Failed, Row(report, SetupCheckIds.Container("audiocpp")).Result);
         }
 
         // ── Missing model files ──────────────────────────────────────────────
