@@ -125,18 +125,21 @@ export class EditWithAiWorkflow {
   /** Plans the instruction; on a grant, replaces any session held and moves to Plan. */
   async analyze(instruction: string, thinking: boolean): Promise<void> {
     this._error.set(null);
-    if (!(await this.preflight.ensureReady('bookEdit'))) return;
+    // A close while the preflight was out: nothing to plan for.
+    if (!(await this.preflight.ensureReady('bookEdit')) || this.closed) return;
 
     this._busy.set(true);
     this.droppedWhilePlanning = new Map();
     try {
       const plan = await this.api.plan(this.folder, instruction.trim(), thinking);
+      if (this.discardIfClosed(plan.program)) return;
       if (plan.status !== 'Ok' || !plan.program) {
         this._error.set(planErrorMessage(plan.status, plan.reason));
         return;
       }
       // Checked after the old session is dropped: a drop for the new one can land during that too.
       await this.dropSession();
+      if (this.discardIfClosed(plan.program)) return;
       const droppedReason = this.droppedWhilePlanning.get(plan.program);
       if (droppedReason) {
         this._error.set(droppedReason);
@@ -146,7 +149,7 @@ export class EditWithAiWorkflow {
       this.program = plan.program;
       this._phase.set('plan');
     } catch (e) {
-      this._error.set(toApiError(e).message);
+      if (!this.closed) this._error.set(toApiError(e).message);
     } finally {
       this.droppedWhilePlanning = null;
       this._busy.set(false);
@@ -391,6 +394,17 @@ export class EditWithAiWorkflow {
     this.stopWatching();
     // The host keeps the plan until it expires; say we are done with it so it goes now.
     if (this.program) void this.api.discard(this.folder, this.program).catch(() => undefined);
+  }
+
+  /**
+   * A plan that comes back after {@link dispose} has no dialog to land in, and dispose had no
+   * program to discard yet: hand the session back now rather than leave it until it expires, and
+   * change no state. Answers whether the workflow is closed.
+   */
+  private discardIfClosed(program: string | null | undefined): boolean {
+    if (!this.closed) return false;
+    if (program) void this.api.discard(this.folder, program).catch(() => undefined);
+    return true;
   }
 
   private async dropSession(): Promise<void> {
