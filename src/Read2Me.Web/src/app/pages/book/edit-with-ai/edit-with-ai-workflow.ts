@@ -149,7 +149,7 @@ export class EditWithAiWorkflow {
       this.program = plan.program;
       this._phase.set('plan');
     } catch (e) {
-      this._error.set(toApiError(e).message);
+      if (!this.closed) this._error.set(toApiError(e).message);
     } finally {
       this.droppedWhilePlanning = null;
       this._busy.set(false);

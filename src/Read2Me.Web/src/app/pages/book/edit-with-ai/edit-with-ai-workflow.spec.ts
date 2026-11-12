@@ -755,7 +755,22 @@ describe('EditWithAiWorkflow', () => {
 
       expect(api.called('discard')).toEqual([['prog-1'], ['prog-2']]);
       expect(workflow.phase()).toBe('instruct');
-      expect(workflow.plan()).toEqual(PLAN);
+      // Still the first Analyze's plan: the discarded prog-2 never landed.
+      expect(workflow.plan()?.program).toBe('prog-1');
+    });
+
+    it('while the plan is on its way, then it fails: no error on the closed dialog', async () => {
+      let fail!: (e: unknown) => void;
+      api.plan = () => new Promise((_, reject) => (fail = reject));
+
+      const analyzing = workflow.analyze('capitalise chapter titles', true);
+      await settleMicrotasks();
+      workflow.dispose();
+      fail(new ApiError(502, 'Bad Gateway'));
+      await analyzing;
+
+      expect(workflow.error()).toBeNull();
+      expect(workflow.busy()).toBe(false);
     });
 
     it('while Analyze is being gated: plans nothing', async () => {
