@@ -1,7 +1,21 @@
+using Read2Me.Services.Health;
 using Read2Me.Services.Queueing;
 
 namespace Read2Me.App.Services.SetupCheck
 {
+    /// <summary>
+    /// What the Full check reads and drives: the Quick check's services, the gates, work, busy flag,
+    /// watchdog and encode of <see cref="FullCheckServices"/>, the Workspace this start runs on, and
+    /// the ledger it reports into.
+    /// </summary>
+    internal sealed record FullCheckDeps(
+        SetupCheckServices AiServices, FullCheckServices Full, WorkspaceStart WorkspaceStart, SetupCheckLedger Ledger);
+
+    /// <summary>
+    /// What a Quick check takes from the plan: each row's rerun, and how long a Full check is likely to take.
+    /// </summary>
+    internal sealed record FullCheckPreview(Func<SetupCheckRow, SetupRerun?> Rerun, int EstimateSeconds);
+
     /// <summary>
     /// The Full check: one run per host, in the background, as a list of steps. While it runs every
     /// queue gate is closed and Preflight refuses new AI tasks (both with "Setup check running"),
@@ -11,8 +25,15 @@ namespace Read2Me.App.Services.SetupCheck
     /// steps after it read Not run. Results live in memory only; the report's state is the
     /// <see cref="SetupCheckLedger"/>'s.
     /// </summary>
-    public sealed partial class SetupCheckRunner
+    internal sealed partial class FullCheck(FullCheckDeps deps)
     {
+        /// <summary>The plan for these configs, as a Quick check shows it: each row's rerun and the estimate.</summary>
+        public FullCheckPreview Preview(ActiveAiConfigs configs, IReadOnlyDictionary<string, AiServiceStatus> statuses)
+        {
+            var plan = Plan(new FullContext(configs));
+            return new FullCheckPreview(row => Rerun(row, plan), EstimateSeconds(configs, plan, statuses));
+        }
+
         /// <summary>
         /// One Full check step: where it runs, what the progress strip says, the rows it judges, the
         /// managed services it drives (held off the watchdog for the run), a rough duration for the
@@ -44,45 +65,41 @@ namespace Read2Me.App.Services.SetupCheck
         /// <summary>Serializes starts, so the configs one reads are the ones its run uses.</summary>
         private readonly SemaphoreSlim _starting = new(1, 1);
 
-        public Task<FullCheckStart> StartFullCheckAsync() => StartRunAsync(rerun: null);
-
-        public Task<FullCheckStart> RerunCheckAsync(string checkId) => StartRunAsync(checkId);
-
         /// <summary>
         /// Starts a whole Full check (<paramref name="rerun"/> null), which joins a whole one going, or
         /// a re-run of one check: only the steps that judge that row. The ledger admits and claims the
         /// run; between the two, the work in flight and the plan can still refuse it.
         /// </summary>
-        private async Task<FullCheckStart> StartRunAsync(string? rerun)
+        public async Task<FullCheckStart> StartAsync(string? rerun)
         {
             await _starting.WaitAsync();
             try
             {
-                if (_ledger.Admit(rerun) is { } admitted)
+                if (deps.Ledger.Admit(rerun) is { } admitted)
                     return admitted;
                 if (FullRefusal() is { } busy)
-                    return _ledger.Refused(busy);
+                    return deps.Ledger.Refused(busy);
 
                 // Read fresh: the configs may have changed since the Quick check.
-                var context = new FullContext(await ActiveAiConfigs.ReadAsync(aiServices));
+                var context = new FullContext(await ActiveAiConfigs.ReadAsync(deps.AiServices));
 
                 // Work may have arrived while the configs were read.
                 if (FullRefusal() is { } refusal)
-                    return _ledger.Refused(refusal);
+                    return deps.Ledger.Refused(refusal);
                 var steps = rerun is null ? Plan(context) : StepsFor(Plan(context), rerun);
                 if (steps.Count == 0)
-                    return _ledger.Refused($"{_ledger.Row(rerun!)?.Name ?? rerun} has nothing for the Full check to send: it has no active config.");
+                    return deps.Ledger.Refused($"{deps.Ledger.Row(rerun!)?.Name ?? rerun} has nothing for the Full check to send: it has no active config.");
                 // The web app confirms a GPU re-run on the report's rerun.gpu, which the last Quick
                 // check set: a config moved onto a GPU container since must not skip that confirm.
-                if (rerun is not null && _ledger.Row(rerun) is { Rerun: not { Gpu: true } } stale && DrivesGpu(steps))
-                    return _ledger.Refused($"{stale.Name} now drives a GPU container: run the Quick check, then re-run it.");
+                if (rerun is not null && deps.Ledger.Row(rerun) is { Rerun: not { Gpu: true } } stale && DrivesGpu(steps))
+                    return deps.Ledger.Refused($"{stale.Name} now drives a GPU container: run the Quick check, then re-run it.");
 
-                var run = _ledger.Claim(rerun, [.. steps.SelectMany(s => s.RowIds)],
+                var run = deps.Ledger.Claim(rerun, [.. steps.SelectMany(s => s.RowIds)],
                     new SetupFullRun(1, steps.Count, steps[0].Lane, steps[0].Label, Cancelling: false));
                 context.Before = run.Before;
-                full.Busy.Set(true);
-                full.CharacterGate.Close(GateOwners.SetupCheck, SetupCheckBusy.Reason);
-                full.AudioGate.Close(GateOwners.SetupCheck, SetupCheckBusy.Reason);
+                deps.Full.Busy.Set(true);
+                deps.Full.CharacterGate.Close(GateOwners.SetupCheck, SetupCheckBusy.Reason);
+                deps.Full.AudioGate.Close(GateOwners.SetupCheck, SetupCheckBusy.Reason);
 
                 _ = Task.Run(() => RunFullAsync(run, steps, context));
                 return new FullCheckStart(run.Started, Joined: false, Refusal: null, run.Finished);
@@ -107,7 +124,7 @@ namespace Read2Me.App.Services.SetupCheck
 
         private bool DrivesGpu(IReadOnlyList<FullStep> steps)
         {
-            var gpu = aiServices.Registry.All.Where(s => s.UsesGpu).Select(s => s.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var gpu = deps.AiServices.Registry.All.Where(s => s.UsesGpu).Select(s => s.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
             return steps.Any(s => s.Services.Any(gpu.Contains));
         }
 
@@ -120,11 +137,9 @@ namespace Read2Me.App.Services.SetupCheck
                 ? new SetupRerun(Gpu: DrivesGpu(steps))
                 : null;
 
-        private string? FullRefusal() => workspaceStart.Usable
-            ? full.Work.Refusal()
+        private string? FullRefusal() => deps.WorkspaceStart.Usable
+            ? deps.Full.Work.Refusal()
             : "The Full check needs the Workspace: fix the Workspace row, then restart the app.";
-
-        public SetupCheckReport? CancelFullCheck() => _ledger.Cancel();
 
         /// <summary>
         /// Runs the steps, then puts back; then opens the gates and clears Busy, and only then has the
@@ -137,7 +152,7 @@ namespace Read2Me.App.Services.SetupCheck
             {
                 // Held for the whole run, putting back included: a service one step stops for another
                 // must not trip the watchdog.
-                using var hold = full.Watchdog.HoldOff(
+                using var hold = deps.Full.Watchdog.HoldOff(
                     [.. steps.SelectMany(s => s.Services).Distinct(StringComparer.OrdinalIgnoreCase)]);
                 try
                 {
@@ -151,25 +166,25 @@ namespace Read2Me.App.Services.SetupCheck
             }
             finally
             {
-                full.CharacterGate.Open(GateOwners.SetupCheck);
-                full.AudioGate.Open(GateOwners.SetupCheck);
-                full.Busy.Set(false);
-                _ledger.Finish(run, putBack);
+                deps.Full.CharacterGate.Open(GateOwners.SetupCheck);
+                deps.Full.AudioGate.Open(GateOwners.SetupCheck);
+                deps.Full.Busy.Set(false);
+                deps.Ledger.Finish(run, putBack);
             }
         }
 
         /// <summary>One step: its rows read Checking, then its verdicts replace them.</summary>
         private async Task RunStepAsync(SetupCheckLedger.Run run, FullStep step, int number, int total)
         {
-            _ledger.StepStarted(run, new SetupFullRun(number, total, step.Lane, step.Label, Cancelling: false), step.RowIds);
+            deps.Ledger.StepStarted(run, new SetupFullRun(number, total, step.Lane, step.Label, Cancelling: false), step.RowIds);
             try
             {
-                _ledger.Judged(await step.RunAsync());
+                deps.Ledger.Judged(await step.RunAsync());
             }
             catch (Exception ex)
             {
                 // Each step stands alone: a throw fails its own rows and the run goes on.
-                _ledger.StepFailed(step.RowIds, ex.Message);
+                deps.Ledger.StepFailed(step.RowIds, ex.Message);
             }
         }
 
@@ -178,12 +193,12 @@ namespace Read2Me.App.Services.SetupCheck
         /// <summary>The live ffmpeg, as audio generation runs it, puts a 1 s tone through the post-process filters into an AAC .m4b.</summary>
         private async Task<IReadOnlyList<SetupCheckRow>> FullFfmpegAsync()
         {
-            var paths = await ReadFfmpegPathsAsync(CancellationToken.None);
-            var encode = await full.Encode.EncodeToneAsync(paths.Live, CancellationToken.None);
+            var paths = await FfmpegPaths.ReadAsync(deps.AiServices.Scopes, CancellationToken.None);
+            var encode = await deps.Full.Encode.EncodeToneAsync(paths.Live, CancellationToken.None);
             // As in the Quick check: an appsettings ffmpeg that would do the job is the fix to offer.
             SetupFixHint? fix = null;
             if (!encode.Success && paths.Note is not null
-                && (await full.Encode.EncodeToneAsync(paths.Configured, CancellationToken.None)).Success)
+                && (await deps.Full.Encode.EncodeToneAsync(paths.Configured, CancellationToken.None)).Success)
                 fix = new SetupFixHint("The appsettings path encodes: use it as the ffmpeg path.", SetupSettingsLink.AudioProcessing, paths.Configured);
             return
             [

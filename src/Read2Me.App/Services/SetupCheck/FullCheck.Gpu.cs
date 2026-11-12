@@ -20,7 +20,7 @@ namespace Read2Me.App.Services.SetupCheck
     /// to a GPU container first goes through the Preflight conflict sweep, which stops the rival GPU
     /// container; putting back starts it again, and llama reloads the model it had.
     /// </summary>
-    public sealed partial class SetupCheckRunner
+    internal sealed partial class FullCheck
     {
         /// <summary>audio.cpp and llama load a model on the first request naming it: 9–31 s.</summary>
         private const int ModelSwitchSeconds = 30;
@@ -74,7 +74,7 @@ namespace Read2Me.App.Services.SetupCheck
         private IReadOnlyList<string> Driven(DockerAiService? service) => service switch
         {
             null => [],
-            { UsesGpu: true } => [.. aiServices.Registry.All.Where(s => s.UsesGpu).Select(s => s.Name)],
+            { UsesGpu: true } => [.. deps.AiServices.Registry.All.Where(s => s.UsesGpu).Select(s => s.Name)],
             _ => [service.Name],
         };
 
@@ -101,7 +101,7 @@ namespace Read2Me.App.Services.SetupCheck
             };
             return await RequestCheckAsync(context, ttsService, row, SetupSettingsLink.Tts, SpeechUrl(ServiceConfigBaseUrls.For(config)), async () =>
             {
-                await using var scope = aiServices.Scopes.CreateAsyncScope();
+                await using var scope = deps.AiServices.Scopes.CreateAsyncScope();
                 var client = scope.ServiceProvider.GetKeyedService<IParagraphTtsClient>(config.Type)
                     ?? throw new NotSupportedException($"No paragraph TTS client for {config.Type}");
                 await using var clip = SampleClip.OpenWav();
@@ -119,7 +119,7 @@ namespace Read2Me.App.Services.SetupCheck
             };
             return await RequestCheckAsync(context, designService, row, SetupSettingsLink.VoiceDesign, SpeechUrl(ServiceConfigBaseUrls.For(config)), async () =>
             {
-                await using var scope = aiServices.Scopes.CreateAsyncScope();
+                await using var scope = deps.AiServices.Scopes.CreateAsyncScope();
                 var client = scope.ServiceProvider.GetKeyedService<IVoiceDesignClient>(config.Type)
                     ?? throw new NotSupportedException($"No voice design client for {config.Type}");
                 await using var audio = await client.DesignVoiceAsync(config, DesignPrompt, SampleClip.Text, null);
@@ -132,8 +132,8 @@ namespace Read2Me.App.Services.SetupCheck
         /// <summary>The audio passes when the live ffmpeg's ffprobe reads a duration above zero from it.</summary>
         private async Task<CheckAnswer> AudioAnswerAsync(Stream audio, string verb, SetupSettingsLink settings)
         {
-            var paths = await ReadFfmpegPathsAsync(CancellationToken.None);
-            var measured = await full.Encode.MeasureAudioAsync(audio, paths.Live, CancellationToken.None);
+            var paths = await FfmpegPaths.ReadAsync(deps.AiServices.Scopes, CancellationToken.None);
+            var measured = await deps.Full.Encode.MeasureAudioAsync(audio, paths.Live, CancellationToken.None);
             return measured switch
             {
                 { Duration: { } d } when d > TimeSpan.Zero =>
@@ -201,7 +201,7 @@ namespace Read2Me.App.Services.SetupCheck
             if (!string.IsNullOrWhiteSpace(config.ApiKey))
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.ApiKey);
 
-            using var response = await aiServices.Http.CreateClient().SendAsync(request);
+            using var response = await deps.AiServices.Http.CreateClient().SendAsync(request);
             var text = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
                 throw new HttpRequestException($"{(int)response.StatusCode} {response.ReasonPhrase}: {text}", null, response.StatusCode);
@@ -221,7 +221,7 @@ namespace Read2Me.App.Services.SetupCheck
             try
             {
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                using var response = await aiServices.Http.CreateClient()
+                using var response = await deps.AiServices.Http.CreateClient()
                     .GetAsync($"{service.BaseUrl.TrimEnd('/')}/v1/models", timeout.Token);
                 if (!response.IsSuccessStatusCode)
                     return null;
@@ -239,10 +239,10 @@ namespace Read2Me.App.Services.SetupCheck
         /// <summary>The Preflight conflict sweep before a GPU visit: every other GPU container running is stopped.</summary>
         private async Task SweepAsync(FullContext context, DockerAiService service)
         {
-            foreach (var rival in await GpuConflictSweep.FindAsync(aiServices.Control, aiServices.Registry, [service], CancellationToken.None))
+            foreach (var rival in await GpuConflictSweep.FindAsync(deps.AiServices.Control, deps.AiServices.Registry, [service], CancellationToken.None))
             {
                 var use = await TrackAsync(context, rival, running: true);
-                if ((await aiServices.Control.ShutdownAsync(rival, CancellationToken.None)).Succeeded)
+                if ((await deps.AiServices.Control.ShutdownAsync(rival, CancellationToken.None)).Succeeded)
                 {
                     use.Running = false;
                     use.Swept = true;

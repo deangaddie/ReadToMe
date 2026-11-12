@@ -14,7 +14,7 @@ namespace Read2Me.App.Services.SetupCheck
     /// sample clip, and the similarity service scores that transcript against the clip's text. Each
     /// stands alone: with no transcript, the clip's text is scored against itself.
     /// </summary>
-    public sealed partial class SetupCheckRunner
+    internal sealed partial class FullCheck
     {
         private const string TranscriptionExpected = "The bundled sample clip transcribes to non-empty text";
 
@@ -51,7 +51,7 @@ namespace Read2Me.App.Services.SetupCheck
             return await RequestCheckAsync(context, whisper, row, settings, url, async () =>
             {
                 await using var clip = SampleClip.OpenWav();
-                await using var scope = aiServices.Scopes.CreateAsyncScope();
+                await using var scope = deps.AiServices.Scopes.CreateAsyncScope();
                 var transcript = (await scope.ServiceProvider.GetRequiredService<ITranscriptionClientResolver>()
                     .Resolve(config.Type).TranscribeAsync(config, clip, SampleClip.FileName)).Trim();
                 if (transcript.Length == 0)
@@ -82,7 +82,7 @@ namespace Read2Me.App.Services.SetupCheck
 
             return await RequestCheckAsync(context, service, row, settings, url, async () =>
             {
-                await using var scope = aiServices.Scopes.CreateAsyncScope();
+                await using var scope = deps.AiServices.Scopes.CreateAsyncScope();
                 var score = await scope.ServiceProvider.GetRequiredService<ISemanticSimilarityClientResolver>()
                     .Resolve(config.Type).ComputeAsync(config, SampleClip.Text, transcript ?? SampleClip.Text);
                 return score >= threshold
