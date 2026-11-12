@@ -95,9 +95,8 @@ namespace Read2Me.App.Services.SetupCheck
         private async Task<IReadOnlyList<SetupCheckRow>> FullParagraphTtsAsync(FullContext context)
         {
             var (config, ttsService) = context.Configs.ParagraphTts!;
-            var row = context.Row(SetupCheckIds.ParagraphTts, SetupCheckGroup.AiConfigs, "Paragraph TTS") with
+            var row = context.Row(SetupChecks.ParagraphTts) with
             {
-                Tier = SetupCheckTier.Full,
                 Expected = "A short sentence spoken with the sample clip as the reference voice, which ffprobe reads a duration from",
             };
             return await RequestCheckAsync(context, ttsService, row, SetupSettingsLink.Tts, SpeechUrl(ServiceConfigBaseUrls.For(config)), async () =>
@@ -114,9 +113,8 @@ namespace Read2Me.App.Services.SetupCheck
         private async Task<IReadOnlyList<SetupCheckRow>> FullVoiceDesignAsync(FullContext context)
         {
             var (config, designService) = context.Configs.VoiceDesign!;
-            var row = context.Row(SetupCheckIds.VoiceDesign, SetupCheckGroup.AiConfigs, "Voice design") with
+            var row = context.Row(SetupChecks.VoiceDesign) with
             {
-                Tier = SetupCheckTier.Full,
                 Expected = "A voice designed from a fixed prompt, speaking the sample text, which ffprobe reads a duration from",
             };
             return await RequestCheckAsync(context, designService, row, SetupSettingsLink.VoiceDesign, SpeechUrl(ServiceConfigBaseUrls.For(config)), async () =>
@@ -142,7 +140,7 @@ namespace Read2Me.App.Services.SetupCheck
                     new CheckAnswer(true, $"{verb} {d.TotalSeconds:0.0} s of audio"),
                 { Duration: not null } => new CheckAnswer(false, $"{verb} audio that ffprobe reads as 0 s long",
                     new SetupFixHint($"It answered with no sound: check the config's model in {settings.Label}.", settings, null)),
-                _ => new CheckAnswer(false, $"ffprobe couldn't read the audio: {measured.Error}", FfmpegFix),
+                _ => new CheckAnswer(false, $"ffprobe couldn't read the audio: {measured.Error}", SetupChecks.Ffmpeg.Fix),
             };
         }
 
@@ -163,23 +161,22 @@ namespace Read2Me.App.Services.SetupCheck
 
             var rows = new List<SetupCheckRow>();
             if (target.Active)
-                rows.Add(LlmRow(context, SetupCheckIds.Llm, "LLM", context.Llm.Where(t => t.Active)));
+                rows.Add(LlmRow(context, SetupChecks.Llm, context.Llm.Where(t => t.Active)));
             if (target.InChain)
-                rows.Add(LlmRow(context, SetupCheckIds.AttributionChain, "Attribution chain", context.Llm.Where(t => t.InChain)));
+                rows.Add(LlmRow(context, SetupChecks.AttributionChain, context.Llm.Where(t => t.InChain)));
             if (container is not null)
                 rows.Add(container);
             return rows;
         }
 
         /// <summary>A row a model answers for, judged on every one of its models answered so far: one failure fails it.</summary>
-        private static SetupCheckRow LlmRow(FullContext context, string id, string name, IEnumerable<LlmTarget> targets)
+        private static SetupCheckRow LlmRow(FullContext context, SetupCheckDefinition check, IEnumerable<LlmTarget> targets)
         {
             var all = targets.ToList();
             var answered = all.Where(t => t.Answer is not null).ToList();
             var failed = answered.FirstOrDefault(t => !t.Answer!.Passed);
-            return context.Row(id, SetupCheckGroup.AiConfigs, name) with
+            return context.Row(check) with
             {
-                Tier = SetupCheckTier.Full,
                 Expected = $"A 1-token chat completion with thinking off answers with text from {string.Join(", ", all.Select(t => t.Label))}",
                 Result = failed is null ? SetupCheckResult.Passed : SetupCheckResult.Failed,
                 Found = string.Join("; ", answered.Select(t => $"{t.Label} {t.Answer!.Found}")),

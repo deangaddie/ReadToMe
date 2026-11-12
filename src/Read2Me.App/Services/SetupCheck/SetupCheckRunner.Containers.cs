@@ -25,10 +25,9 @@ namespace Read2Me.App.Services.SetupCheck
 
             public IReadOnlyDictionary<string, SetupCheckRow> Before { get; set; } = new Dictionary<string, SetupCheckRow>();
 
-            /// <summary>A row as the run found it; a bare one when no Quick check had made it yet.</summary>
-            public SetupCheckRow Row(string id, SetupCheckGroup group, string name) =>
-                Before.TryGetValue(id, out var row) ? row
-                : new(id, group, name, SetupCheckTier.Full, SetupCheckResult.NotRun, "", "", null, new SetupFixHint("", null, null), Managed: false, Rerun: null);
+            /// <summary>A check's row as the run found it; a bare one when no Quick check had made it yet.</summary>
+            public SetupCheckRow Row(SetupCheckDefinition check) =>
+                Before.TryGetValue(check.Id, out var row) ? row : check.Row(SetupCheckResult.NotRun, "");
 
             /// <summary>The sample clip's transcript, once the transcription check has one.</summary>
             public string? Transcript { get; set; }
@@ -111,7 +110,7 @@ namespace Read2Me.App.Services.SetupCheck
             var use = await TrackAsync(context, service,
                 running: status is AiServiceStatus.Ready or AiServiceStatus.Starting or AiServiceStatus.Recovering);
 
-            var row = context.Row(SetupCheckIds.Container(service.Name), SetupCheckGroup.DockerServices, service.ContainerName);
+            var row = context.Row(SetupChecks.Container(service));
             SetupCheckRow Verdict(SetupCheckResult result, string found, SetupFixHint fix) =>
                 row with { Result = result, Found = found, Fix = fix };
             (SetupCheckRow, bool, ContainerUse) Failed(string found, SetupFixHint fix)

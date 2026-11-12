@@ -237,6 +237,8 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.True(report.NoWorkspace);
             Assert.Equal(usable.Rows.Select(r => r.Id), report.Rows.Select(r => r.Id));
             Assert.Equal(usable.Rows.Select(r => r.Group), report.Rows.Select(r => r.Group));
+            Assert.Equal(usable.Rows.Select(r => r.Name), report.Rows.Select(r => r.Name));
+            Assert.Equal(usable.Rows.Select(r => r.Tier), report.Rows.Select(r => r.Tier));
             var workspace = report.Rows[0];
             Assert.Equal(SetupCheckResult.Failed, workspace.Result);
             Assert.Equal("ws is a relative path", workspace.Found);

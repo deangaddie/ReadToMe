@@ -321,17 +321,16 @@ namespace Read2Me.App.Services.SetupCheck
             var paths = await ReadFfmpegPathsAsync(CancellationToken.None);
             var encode = await full.Encode.EncodeToneAsync(paths.Live, CancellationToken.None);
             // As in the Quick check: an appsettings ffmpeg that would do the job is the fix to offer.
-            var fix = FfmpegFix;
+            SetupFixHint? fix = null;
             if (!encode.Success && paths.Note is not null
                 && (await full.Encode.EncodeToneAsync(paths.Configured, CancellationToken.None)).Success)
-                fix = new SetupFixHint("The appsettings path encodes: use it as the ffmpeg path.", AudioProcessing, paths.Configured);
+                fix = new SetupFixHint("The appsettings path encodes: use it as the ffmpeg path.", SetupSettingsLink.AudioProcessing, paths.Configured);
             return
             [
-                new SetupCheckRow(
-                    SetupCheckIds.Ffmpeg, SetupCheckGroup.WorkspaceAndTools, "ffmpeg", SetupCheckTier.Full,
-                    encode.Success ? SetupCheckResult.Passed : SetupCheckResult.Failed,
-                    $"A 1 s tone through adynamicequalizer and alimiter, encoded to AAC .m4b by ffmpeg from {paths.Shown}",
-                    encode.Message, paths.Note, fix, Managed: false, Rerun: null),
+                SetupChecks.Ffmpeg.Row(encode.Success ? SetupCheckResult.Passed : SetupCheckResult.Failed, encode.Message, paths.Note, fix) with
+                {
+                    Expected = $"A 1 s tone through adynamicequalizer and alimiter, encoded to AAC .m4b by ffmpeg from {paths.Shown}",
+                },
             ];
         }
     }

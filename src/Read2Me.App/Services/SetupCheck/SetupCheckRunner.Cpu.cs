@@ -44,8 +44,7 @@ namespace Read2Me.App.Services.SetupCheck
         private async Task<IReadOnlyList<SetupCheckRow>> FullTranscriptionAsync(FullContext context)
         {
             var (config, whisper) = context.Configs.Transcription!;
-            var row = context.Row(SetupCheckIds.Transcription, SetupCheckGroup.AiConfigs, "Transcription")
-                with { Tier = SetupCheckTier.Full, Expected = TranscriptionExpected };
+            var row = context.Row(SetupChecks.Transcription) with { Expected = TranscriptionExpected };
             var url = $"{ServiceConfigBaseUrls.For(config)?.TrimEnd('/')}/inference";
             var settings = SetupSettingsLink.Transcription;
 
@@ -72,10 +71,9 @@ namespace Read2Me.App.Services.SetupCheck
             var (config, service) = context.Configs.Similarity!;
             var threshold = ProviderSettingsJson.ReadSimilarity(config).PassThreshold;
             var transcript = context.Transcript;
-            var row = context.Row(SetupCheckIds.Similarity, SetupCheckGroup.AiConfigs, "Similarity");
+            var row = context.Row(SetupChecks.Similarity);
             row = row with
             {
-                Tier = SetupCheckTier.Full,
                 Expected = $"The transcript scores at least the config's pass threshold ({Score(threshold)}) against the clip's text",
                 Note = transcript is not null ? row.Note : row.Note is null ? NoTranscript : $"{row.Note}. {NoTranscript}",
             };

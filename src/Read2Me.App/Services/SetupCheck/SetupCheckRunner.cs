@@ -122,10 +122,8 @@ namespace Read2Me.App.Services.SetupCheck
             var rows = new List<SetupCheckRow>
             {
                 WorkspaceRow(workspaceStart.AtStart),
-                new(SetupCheckIds.Ffmpeg, SetupCheckGroup.WorkspaceAndTools, "ffmpeg", SetupCheckTier.Quick,
-                    SetupCheckResult.NotRun, "ffmpeg -version and ffprobe -version", NeedsWorkspace, null, fix, Managed: false, Rerun: null),
-                new(SetupCheckIds.Docker, SetupCheckGroup.WorkspaceAndTools, "docker CLI", SetupCheckTier.Quick,
-                    SetupCheckResult.NotRun, "docker on PATH", NeedsWorkspace, null, fix, Managed: false, Rerun: null),
+                SetupChecks.Ffmpeg.NotRun(NeedsWorkspace, fix),
+                SetupChecks.Docker.NotRun(NeedsWorkspace, fix),
             };
             rows.AddRange(new AiServicesCheck(aiServices).NotRun(NeedsWorkspace, fix));
             return _report with { Rows = rows, QuickCheckedAt = _clock.GetUtcNow() };
@@ -134,12 +132,9 @@ namespace Read2Me.App.Services.SetupCheck
         /// <summary>A folder removed since start is created again, as start-up would have.</summary>
         private SetupCheckRow CheckWorkspace() => WorkspaceRow(workspaceStart.Judge(configuration[WorkspaceStart.Key]));
 
-        private SetupCheckRow WorkspaceRow(WorkspaceVerdict verdict) => new(
-            SetupCheckIds.Workspace, SetupCheckGroup.WorkspaceAndTools, "Workspace", SetupCheckTier.Quick,
-            verdict.Usable ? SetupCheckResult.Passed : SetupCheckResult.Failed,
-            $"An absolute, writable folder ({WorkspaceStart.Key})", verdict.Found,
-            verdict.Usable && workspaceStart.CreatedFolder ? CreatedNote : null,
-            WorkspaceFix(), Managed: false, Rerun: null);
+        private SetupCheckRow WorkspaceRow(WorkspaceVerdict verdict) => SetupChecks.Workspace.Row(
+            verdict.Usable ? SetupCheckResult.Passed : SetupCheckResult.Failed, verdict.Found,
+            verdict.Usable && workspaceStart.CreatedFolder ? CreatedNote : null, WorkspaceFix());
 
         /// <summary>
         /// Names the key, the absolute path of appsettings.Local.json and the source whose value
@@ -174,8 +169,6 @@ namespace Read2Me.App.Services.SetupCheck
 
         // ── ffmpeg ───────────────────────────────────────────────────────────
 
-        private static readonly SetupSettingsLink AudioProcessing = new("settings/audio", "Settings → Audio processing");
-
         /// <summary>
         /// The live path is the one audio generation runs: the Settings value, else config's
         /// <c>Ffmpeg:Path</c>, else PATH. A saved path hides a different config one, so that earns
@@ -185,19 +178,13 @@ namespace Read2Me.App.Services.SetupCheck
         {
             var paths = await ReadFfmpegPathsAsync(ct);
             var (ok, found) = await ProbeFfmpegAsync(paths.Live, ct);
-            var fix = FfmpegFix;
+            SetupFixHint? fix = null;
             if (!ok && paths.Note is not null && (await ProbeFfmpegAsync(paths.Configured, ct)).Ok)
-                fix = new SetupFixHint("The appsettings path answers: use it as the ffmpeg path.", AudioProcessing, paths.Configured);
+                fix = new SetupFixHint("The appsettings path answers: use it as the ffmpeg path.", SetupSettingsLink.AudioProcessing, paths.Configured);
 
-            // A Full-tier row: the Quick check judges -version, the Full check the encode.
-            return new SetupCheckRow(
-                SetupCheckIds.Ffmpeg, SetupCheckGroup.WorkspaceAndTools, "ffmpeg", SetupCheckTier.Full,
-                ok ? SetupCheckResult.Passed : SetupCheckResult.Failed,
-                $"ffmpeg -version and ffprobe -version from {paths.Shown}", found, paths.Note, fix, Managed: false, Rerun: null);
+            return SetupChecks.Ffmpeg.Row(ok ? SetupCheckResult.Passed : SetupCheckResult.Failed, found, paths.Note, fix)
+                with { Expected = $"{SetupChecks.Ffmpeg.Expected} from {paths.Shown}" };
         }
-
-        private static readonly SetupFixHint FfmpegFix =
-            new("Set the ffmpeg path to an ffmpeg with ffprobe beside it.", AudioProcessing, null);
 
         /// <summary>
         /// <see cref="Live"/>: what the app runs, the Settings value else <see cref="Configured"/>
@@ -216,7 +203,7 @@ namespace Read2Me.App.Services.SetupCheck
             var configured = settings.ConfiguredFfmpegPath;
             var shown = live ?? "PATH";
             var note = configured is not null && !SamePath(configured, live)
-                ? $"appsettings says {configured}; the app uses {shown} — change it in {AudioProcessing.Label}"
+                ? $"appsettings says {configured}; the app uses {shown} — change it in {SetupSettingsLink.AudioProcessing.Label}"
                 : null;
             return new FfmpegPaths(live, configured, shown, note);
         }
@@ -254,15 +241,10 @@ namespace Read2Me.App.Services.SetupCheck
         /// <summary>The docker CLI row, and whether docker is on PATH for the container rows.</summary>
         private async Task<(SetupCheckRow Row, bool OnPath)> CheckDockerAsync(CancellationToken ct)
         {
-            var fix = new SetupFixHint(
-                "Install Docker Desktop so docker is on PATH, then restart the app.", null, "docker --version");
             var run = await VersionAsync("docker", "--version", ct);
-            return (new SetupCheckRow(
-                SetupCheckIds.Docker, SetupCheckGroup.WorkspaceAndTools, "docker CLI", SetupCheckTier.Quick,
+            return (SetupChecks.Docker.Row(
                 run.Ok ? SetupCheckResult.Passed : SetupCheckResult.Failed,
-                "docker on PATH",
-                run.Launched ? run.Banner : "docker isn't on PATH",
-                null, fix, Managed: false, Rerun: null), run.Launched);
+                run.Launched ? run.Banner : "docker isn't on PATH"), run.Launched);
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────
