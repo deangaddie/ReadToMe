@@ -11,7 +11,7 @@ namespace Read2Me.App.Services.SetupCheck
     /// the model listing); the Full check also proceeds on Stopped (it starts the container). Verdicts
     /// that come from probing or acting stay with the code that probes or acts.
     /// <para>
-    /// A Full verdict is Passed or Failed. <c>WithFullVerdicts</c> lets any Full verdict that isn't
+    /// A Full verdict is Passed or Failed. <see cref="SetupCheckLedger.QuickChecked"/> lets any Full verdict that isn't
     /// Failed stand over later Quick checks, and Failed keeps the container as it is during put back,
     /// so a status the Full check can't act on (Unknown, Recovering) fails rather than being Not run or
     /// Not confirmed.

@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Read2Me.App.Configuration;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
@@ -25,53 +24,78 @@ namespace Read2Me.App.Services.SetupCheck
     }
 
     /// <summary>
-    /// The host's one <see cref="ISetupCheckRunner"/>. The Quick check covers the Workspace, ffmpeg,
-    /// the docker CLI, the active AI configs and the docker AI services; one Quick check runs at a
-    /// time and each replaces the whole report but for the verdicts the last Full check left (see
-    /// <c>SetupCheckRunner.Full.cs</c>), which a Quick check overrides only by failing.
+    /// The host's one <see cref="ISetupCheckRunner"/>: the Quick check, composed with the
+    /// <see cref="FullCheck"/> and the <see cref="SetupCheckLedger"/> both report into. The Quick check
+    /// covers the Workspace, ffmpeg, the docker CLI, the active AI configs and the docker AI services;
+    /// one runs at a time and each replaces the whole report but for the verdicts the last Full check
+    /// left, which a Quick check overrides only by failing.
     /// </summary>
-    public sealed partial class SetupCheckRunner(
-        IConfiguration configuration,
-        string contentRoot,
-        IFfmpegProber ffmpegProber,
-        IProcessRunner processes,
-        WorkspaceStart workspaceStart,
-        SetupCheckServices aiServices,
-        FullCheckServices full,
-        TimeProvider? clock = null) : ISetupCheckRunner
+    public sealed class SetupCheckRunner : ISetupCheckRunner
     {
         private static readonly TimeSpan ProcessTimeout = TimeSpan.FromSeconds(10);
 
-        private readonly TimeProvider _clock = clock ?? TimeProvider.System;
+        private readonly IConfiguration _configuration;
+        private readonly string _contentRoot;
+        private readonly IFfmpegProber _ffmpegProber;
+        private readonly IProcessRunner _processes;
+        private readonly WorkspaceStart _workspaceStart;
+        private readonly SetupCheckServices _aiServices;
         private readonly SemaphoreSlim _quick = new(1, 1);
-        private readonly DateTimeOffset _startedAt = (clock ?? TimeProvider.System).GetUtcNow();
-        private volatile SetupCheckReport _report = SetupCheckReport.Empty;
+        private readonly SetupCheckLedger _ledger;
+        private readonly FullCheck _full;
 
-        /// <summary>The first-run and no-Workspace flags and the start time are this start's, read as the report is.</summary>
-        public SetupCheckReport Report => _report with
+        public SetupCheckRunner(
+            IConfiguration configuration,
+            string contentRoot,
+            IFfmpegProber ffmpegProber,
+            IProcessRunner processes,
+            WorkspaceStart workspaceStart,
+            SetupCheckServices aiServices,
+            FullCheckServices full,
+            TimeProvider? clock = null)
         {
-            FirstRun = workspaceStart.CreatedDatabase,
-            StartedAt = _startedAt,
-            NoWorkspace = !workspaceStart.Usable,
-        };
+            _configuration = configuration;
+            _contentRoot = contentRoot;
+            _ffmpegProber = ffmpegProber;
+            _processes = processes;
+            _workspaceStart = workspaceStart;
+            _aiServices = aiServices;
+            clock ??= TimeProvider.System;
+            var startedAt = clock.GetUtcNow();
+            // The first-run and no-Workspace flags and the start time are this start's, stamped on as the report is read.
+            _ledger = new SetupCheckLedger(full.Changes, clock, report => report with
+            {
+                FirstRun = _workspaceStart.CreatedDatabase,
+                StartedAt = startedAt,
+                NoWorkspace = !_workspaceStart.Usable,
+            });
+            _full = new FullCheck(new FullCheckDeps(_aiServices, full, _workspaceStart, _ledger));
+        }
+
+        public SetupCheckReport Report => _ledger.Report;
+
+        public Task<FullCheckStart> StartFullCheckAsync() => _full.StartAsync(rerun: null);
+
+        public Task<FullCheckStart> RerunCheckAsync(string checkId) => _full.StartAsync(checkId);
+
+        public SetupCheckReport? CancelFullCheck() => _ledger.Cancel();
 
         public async Task<SetupCheckReport> RunQuickCheckAsync(CancellationToken ct)
         {
             // The run owns the rows until it ends.
-            if (FullCheckRunning)
+            if (_ledger.Running)
                 return Report;
             await _quick.WaitAsync(ct);
             try
             {
-                if (!workspaceStart.Usable)
+                if (!_workspaceStart.Usable)
                 {
-                    lock (_lock)
-                        _report = NoWorkspaceReport();
+                    _ledger.QuickChecked(NoWorkspaceRows(), _ => null, estimateSeconds: null);
                     return Report;
                 }
 
                 // One read for every row, the plan, the re-run flags and the estimate.
-                var configs = await ActiveAiConfigs.ReadAsync(aiServices);
+                var configs = await ActiveAiConfigs.ReadAsync(_aiServices);
                 var docker = await CheckDockerAsync(ct);
                 var rows = new List<SetupCheckRow>
                 {
@@ -81,21 +105,11 @@ namespace Read2Me.App.Services.SetupCheck
                 };
                 // One status read for every container row and the estimate; none without the docker CLI.
                 var statuses = docker.OnPath
-                    ? await configs.ReadStatusesAsync(aiServices.Control, aiServices.Registry, ct)
+                    ? await configs.ReadStatusesAsync(_aiServices.Control, _aiServices.Registry, ct)
                     : new Dictionary<string, AiServiceStatus>();
-                rows.AddRange(await new AiServicesCheck(aiServices).RunAsync(configs, statuses, docker.OnPath, ct));
-                var plan = Plan(new FullContext(configs));
-                var estimate = EstimateSeconds(configs, plan, statuses);
-                lock (_lock)
-                {
-                    if (_run is null)
-                        _report = _report with
-                        {
-                            Rows = WithRerun(WithFullVerdicts(rows), plan),
-                            QuickCheckedAt = _clock.GetUtcNow(),
-                            FullCheckEstimateSeconds = estimate,
-                        };
-                }
+                rows.AddRange(await new AiServicesCheck(_aiServices).RunAsync(configs, statuses, docker.OnPath, ct));
+                var preview = _full.Preview(configs, statuses);
+                _ledger.QuickChecked(rows, preview.Rerun, preview.EstimateSeconds);
                 return Report;
             }
             finally
@@ -116,30 +130,25 @@ namespace Read2Me.App.Services.SetupCheck
         /// With no usable Workspace at start, the Workspace row is the start's verdict and every
         /// other row is Not run: nothing reads app.db, and only a restart leaves the mode.
         /// </summary>
-        private SetupCheckReport NoWorkspaceReport()
+        private IReadOnlyList<SetupCheckRow> NoWorkspaceRows()
         {
             var fix = new SetupFixHint("Fix the Workspace row first, then restart the app.", null, null);
             var rows = new List<SetupCheckRow>
             {
-                WorkspaceRow(workspaceStart.AtStart),
-                new(SetupCheckIds.Ffmpeg, SetupCheckGroup.WorkspaceAndTools, "ffmpeg", SetupCheckTier.Quick,
-                    SetupCheckResult.NotRun, "ffmpeg -version and ffprobe -version", NeedsWorkspace, null, fix, Managed: false, Rerun: null),
-                new(SetupCheckIds.Docker, SetupCheckGroup.WorkspaceAndTools, "docker CLI", SetupCheckTier.Quick,
-                    SetupCheckResult.NotRun, "docker on PATH", NeedsWorkspace, null, fix, Managed: false, Rerun: null),
+                WorkspaceRow(_workspaceStart.AtStart),
+                SetupChecks.Ffmpeg.NotRun(NeedsWorkspace, fix),
+                SetupChecks.Docker.NotRun(NeedsWorkspace, fix),
             };
-            rows.AddRange(new AiServicesCheck(aiServices).NotRun(NeedsWorkspace, fix));
-            return _report with { Rows = rows, QuickCheckedAt = _clock.GetUtcNow() };
+            rows.AddRange(new AiServicesCheck(_aiServices).NotRun(NeedsWorkspace, fix));
+            return rows;
         }
 
         /// <summary>A folder removed since start is created again, as start-up would have.</summary>
-        private SetupCheckRow CheckWorkspace() => WorkspaceRow(workspaceStart.Judge(configuration[WorkspaceStart.Key]));
+        private SetupCheckRow CheckWorkspace() => WorkspaceRow(_workspaceStart.Judge(_configuration[WorkspaceStart.Key]));
 
-        private SetupCheckRow WorkspaceRow(WorkspaceVerdict verdict) => new(
-            SetupCheckIds.Workspace, SetupCheckGroup.WorkspaceAndTools, "Workspace", SetupCheckTier.Quick,
-            verdict.Usable ? SetupCheckResult.Passed : SetupCheckResult.Failed,
-            $"An absolute, writable folder ({WorkspaceStart.Key})", verdict.Found,
-            verdict.Usable && workspaceStart.CreatedFolder ? CreatedNote : null,
-            WorkspaceFix(), Managed: false, Rerun: null);
+        private SetupCheckRow WorkspaceRow(WorkspaceVerdict verdict) => SetupChecks.Workspace.Row(
+            verdict.Usable ? SetupCheckResult.Passed : SetupCheckResult.Failed, verdict.Found,
+            verdict.Usable && _workspaceStart.CreatedFolder ? CreatedNote : null, WorkspaceFix());
 
         /// <summary>
         /// Names the key, the absolute path of appsettings.Local.json and the source whose value
@@ -147,11 +156,11 @@ namespace Read2Me.App.Services.SetupCheck
         /// </summary>
         private SetupFixHint WorkspaceFix()
         {
-            var localPath = Path.Combine(contentRoot, LocalSettings.FileName);
+            var localPath = Path.Combine(_contentRoot, LocalSettings.FileName);
             var local = File.Exists(localPath)
                 ? $"in {localPath}"
                 : $"in {localPath} (it doesn't exist yet: copy it from appsettings.Local.example.json beside it)";
-            var source = ConfigSources.Winning(configuration, WorkspaceStart.Key);
+            var source = ConfigSources.Winning(_configuration, WorkspaceStart.Key);
             var text = source switch
             {
                 { Kind: ConfigSourceKind.EnvironmentVariable } =>
@@ -174,8 +183,6 @@ namespace Read2Me.App.Services.SetupCheck
 
         // ── ffmpeg ───────────────────────────────────────────────────────────
 
-        private static readonly SetupSettingsLink AudioProcessing = new("settings/audio", "Settings → Audio processing");
-
         /// <summary>
         /// The live path is the one audio generation runs: the Settings value, else config's
         /// <c>Ffmpeg:Path</c>, else PATH. A saved path hides a different config one, so that earns
@@ -183,69 +190,23 @@ namespace Read2Me.App.Services.SetupCheck
         /// </summary>
         private async Task<SetupCheckRow> CheckFfmpegAsync(CancellationToken ct)
         {
-            var paths = await ReadFfmpegPathsAsync(ct);
+            var paths = await FfmpegPaths.ReadAsync(_aiServices.Scopes, ct);
             var (ok, found) = await ProbeFfmpegAsync(paths.Live, ct);
-            var fix = FfmpegFix;
+            SetupFixHint? fix = null;
             if (!ok && paths.Note is not null && (await ProbeFfmpegAsync(paths.Configured, ct)).Ok)
-                fix = new SetupFixHint("The appsettings path answers: use it as the ffmpeg path.", AudioProcessing, paths.Configured);
+                fix = new SetupFixHint("The appsettings path answers: use it as the ffmpeg path.", SetupSettingsLink.AudioProcessing, paths.Configured);
 
-            // A Full-tier row: the Quick check judges -version, the Full check the encode.
-            return new SetupCheckRow(
-                SetupCheckIds.Ffmpeg, SetupCheckGroup.WorkspaceAndTools, "ffmpeg", SetupCheckTier.Full,
-                ok ? SetupCheckResult.Passed : SetupCheckResult.Failed,
-                $"ffmpeg -version and ffprobe -version from {paths.Shown}", found, paths.Note, fix, Managed: false, Rerun: null);
-        }
-
-        private static readonly SetupFixHint FfmpegFix =
-            new("Set the ffmpeg path to an ffmpeg with ffprobe beside it.", AudioProcessing, null);
-
-        /// <summary>
-        /// <see cref="Live"/>: what the app runs, the Settings value else <see cref="Configured"/>
-        /// (null: PATH). <see cref="Configured"/>: config's <c>Ffmpeg:Path</c>. <see cref="Note"/>:
-        /// set when a saved value hides a different configured one.
-        /// </summary>
-        private sealed record FfmpegPaths(string? Live, string? Configured, string Shown, string? Note);
-
-        private async Task<FfmpegPaths> ReadFfmpegPathsAsync(CancellationToken ct)
-        {
-            // The settings audio generation reads, so the check probes the ffmpeg the app runs.
-            ct.ThrowIfCancellationRequested();
-            await using var scope = aiServices.Scopes.CreateAsyncScope();
-            var settings = await scope.ServiceProvider.GetRequiredService<AudioProcessingSettingsService>().GetAsync();
-            var live = settings.FfmpegPath;
-            var configured = settings.ConfiguredFfmpegPath;
-            var shown = live ?? "PATH";
-            var note = configured is not null && !SamePath(configured, live)
-                ? $"appsettings says {configured}; the app uses {shown} — change it in {AudioProcessing.Label}"
-                : null;
-            return new FfmpegPaths(live, configured, shown, note);
-        }
-
-        /// <summary>Paths that name one file however they're written (case, / or \, ..) are the same.</summary>
-        private static bool SamePath(string a, string? b)
-        {
-            if (b is null)
-                return false;
-            if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase))
-                return true;
-            try
-            {
-                return Path.IsPathFullyQualified(a) && Path.IsPathFullyQualified(b)
-                    && string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
-            }
-            catch (ArgumentException)
-            {
-                return false;
-            }
+            return SetupChecks.Ffmpeg.Row(ok ? SetupCheckResult.Passed : SetupCheckResult.Failed, found, paths.Note, fix)
+                with { Expected = $"{SetupChecks.Ffmpeg.Expected} from {paths.Shown}" };
         }
 
         /// <summary>Both tools must answer; found is ffmpeg's banner, or which one failed and why.</summary>
         private async Task<(bool Ok, string Found)> ProbeFfmpegAsync(string? ffmpegPath, CancellationToken ct)
         {
-            var ffmpeg = await ffmpegProber.ProbeAsync(ffmpegPath, ct);
+            var ffmpeg = await _ffmpegProber.ProbeAsync(ffmpegPath, ct);
             if (!ffmpeg.Success)
                 return (false, $"ffmpeg: {ffmpeg.Message}");
-            var ffprobe = await ffmpegProber.ProbeFfprobeAsync(ffmpegPath, ct);
+            var ffprobe = await _ffmpegProber.ProbeFfprobeAsync(ffmpegPath, ct);
             return ffprobe.Success ? (true, ffmpeg.Message) : (false, $"ffprobe: {ffprobe.Message}");
         }
 
@@ -254,15 +215,10 @@ namespace Read2Me.App.Services.SetupCheck
         /// <summary>The docker CLI row, and whether docker is on PATH for the container rows.</summary>
         private async Task<(SetupCheckRow Row, bool OnPath)> CheckDockerAsync(CancellationToken ct)
         {
-            var fix = new SetupFixHint(
-                "Install Docker Desktop so docker is on PATH, then restart the app.", null, "docker --version");
             var run = await VersionAsync("docker", "--version", ct);
-            return (new SetupCheckRow(
-                SetupCheckIds.Docker, SetupCheckGroup.WorkspaceAndTools, "docker CLI", SetupCheckTier.Quick,
+            return (SetupChecks.Docker.Row(
                 run.Ok ? SetupCheckResult.Passed : SetupCheckResult.Failed,
-                "docker on PATH",
-                run.Launched ? run.Banner : "docker isn't on PATH",
-                null, fix, Managed: false, Rerun: null), run.Launched);
+                run.Launched ? run.Banner : "docker isn't on PATH"), run.Launched);
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────
@@ -275,7 +231,7 @@ namespace Read2Me.App.Services.SetupCheck
         {
             try
             {
-                var (exitCode, output) = await processes.RunAsync(exe, arguments, ProcessTimeout, ct);
+                var (exitCode, output) = await _processes.RunAsync(exe, arguments, ProcessTimeout, ct);
                 var banner = FirstLine(output);
                 return exitCode == 0
                     ? new VersionRun(true, true, banner)

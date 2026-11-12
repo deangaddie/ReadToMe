@@ -57,6 +57,7 @@ namespace Read2Me.App.Services.SetupCheck
         internal static readonly SetupSettingsLink VoiceDesign = new("settings/voice-design", "Settings → Voice design");
         internal static readonly SetupSettingsLink Transcription = new("settings/transcription", "Settings → Transcription");
         internal static readonly SetupSettingsLink Similarity = new("settings/similarity", "Settings → Similarity");
+        internal static readonly SetupSettingsLink AudioProcessing = new("settings/audio", "Settings → Audio processing");
     }
 
     /// <summary>

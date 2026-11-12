@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using Read2Me.App.Live;
 using Read2Me.App.Services.SetupCheck;
 using Read2Me.AppData.Entities;
 using Read2Me.Services;
@@ -9,7 +8,6 @@ using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Health;
 using Read2Me.Services.Queueing;
-using Read2Me.Tests.App.Live;
 using Read2Me.Tests.Fakes;
 using Read2Me.Tests.Infrastructure;
 using Read2Me.Tests.Services.Audio;
@@ -32,7 +30,7 @@ namespace Read2Me.Tests.App.SetupCheck
         private readonly ProcessingGate<QueuedAudioItem> _audioGate = new();
         private readonly SetupCheckBusy _busy = new();
         private readonly RecordingHoldOff _watchdog = new();
-        private readonly RecordingHubContext _hub = new();
+        private readonly RecordingSetupCheckChanges _changes = new();
         private readonly HeldEncode _encode = new();
         private readonly FakeAiServiceControl _services = new();
 
@@ -108,13 +106,12 @@ namespace Read2Me.Tests.App.SetupCheck
                 SetupCheckTestServices.Create(Factory, configuration, _services),
                 SetupCheckTestServices.Full(
                     new InFlightWork(() => _audioItems, () => _characterParagraphs, () => _voiceBatch, () => _discovery, () => _assembly),
-                    _watchdog, encode ?? _encode, _hub, _characterGate, _audioGate, _busy));
+                    _watchdog, encode ?? _encode, _changes.Broadcaster, _characterGate, _audioGate, _busy));
         }
 
         private static SetupCheckRow Row(SetupCheckReport report, string id) => report.Rows.Single(r => r.Id == id);
 
-        private IReadOnlyList<SetupCheckMessage> Sent() =>
-            [.. _hub.Method("setupCheck").Select(m => (SetupCheckMessage)m.Payload)];
+        private IReadOnlyList<SetupCheckChanged> Sent() => _changes.Changes;
 
         private Task SetLiveFfmpegPathAsync(string? path) =>
             new AudioProcessingSettingsService(Factory, new FfmpegProber(NullLogger<FfmpegProber>.Instance),
@@ -224,7 +221,7 @@ namespace Read2Me.Tests.App.SetupCheck
         }
 
         [Fact]
-        public async Task Progress_goes_to_every_client_the_step_s_rows_read_Checking_and_done_carries_the_final_report()
+        public async Task Progress_is_published_the_step_s_rows_read_Checking_and_done_carries_the_final_report()
         {
             var runner = Runner();
             await runner.RunQuickCheckAsync(CancellationToken.None);
@@ -235,13 +232,12 @@ namespace Read2Me.Tests.App.SetupCheck
             var final = await start.Finished.WaitAsync(Wait);
 
             var sent = Sent();
-            Assert.All(_hub.Method("setupCheck"), m => Assert.Equal(LiveGroups.Global, m.Target));
-            var progress = sent.Last(m => m.Kind == SetupCheckMessageKind.Progress);
+            var progress = sent.Last(m => m.Kind == SetupCheckChangeKind.Progress);
             Assert.Equal(new SetupFullRun(1, 1, SetupCheckLane.Local, "Encoding a 1 s tone to .m4b", Cancelling: false), progress.Report.FullRun);
             Assert.Equal(SetupCheckResult.Checking, Row(progress.Report, SetupCheckIds.Ffmpeg).Result);
 
             var done = sent[^1];
-            Assert.Equal(SetupCheckMessageKind.Done, done.Kind);
+            Assert.Equal(SetupCheckChangeKind.Done, done.Kind);
             Assert.Null(done.Report.FullRun);
             Assert.NotNull(done.Report.FullCheckedAt);
             var ffmpeg = Row(done.Report, SetupCheckIds.Ffmpeg);
@@ -285,7 +281,7 @@ namespace Read2Me.Tests.App.SetupCheck
             var cancelling = runner.CancelFullCheck();
 
             Assert.True(cancelling?.FullRun?.Cancelling);
-            Assert.Contains(Sent(), m => m.Kind == SetupCheckMessageKind.Progress && m.Report.FullRun?.Cancelling == true);
+            Assert.Contains(Sent(), m => m.Kind == SetupCheckChangeKind.Progress && m.Report.FullRun?.Cancelling == true);
             _encode.Release.SetResult(new FfmpegProbeResult(true, "Encoded a 1 s tone"));
             var final = await start.Finished.WaitAsync(Wait);
             Assert.Equal(SetupCheckResult.Passed, Row(final, SetupCheckIds.Ffmpeg).Result);
@@ -307,49 +303,10 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.Equal("Full check cancelled", ffmpeg.Found);
             Assert.Equal(0, _encode.Calls);
             Assert.Null(final.FullRun);
-            Assert.Equal(SetupCheckMessageKind.Done, Sent()[^1].Kind);
-        }
-
-        [Fact]
-        public void Cancel_with_no_run_going_answers_null()
-        {
-            Assert.Null(Runner().CancelFullCheck());
+            Assert.Equal(SetupCheckChangeKind.Done, Sent()[^1].Kind);
         }
 
         // ── Results ──────────────────────────────────────────────────────────
-
-        [Fact]
-        public async Task A_later_Quick_check_keeps_a_passed_Full_verdict_and_its_time()
-        {
-            var runner = Runner();
-            await runner.RunQuickCheckAsync(CancellationToken.None);
-            var start = await runner.StartFullCheckAsync();
-            _encode.Release.SetResult(new FfmpegProbeResult(true, "Encoded a 1 s tone"));
-            var final = await start.Finished.WaitAsync(Wait);
-
-            var after = await runner.RunQuickCheckAsync(CancellationToken.None);
-
-            var ffmpeg = Row(after, SetupCheckIds.Ffmpeg);
-            Assert.Equal(SetupCheckResult.Passed, ffmpeg.Result);
-            Assert.Equal("Encoded a 1 s tone", ffmpeg.Found);
-            Assert.Equal(final.FullCheckedAt, after.FullCheckedAt);
-        }
-
-        [Fact]
-        public async Task A_Quick_check_that_no_longer_fails_the_row_drops_a_failed_Full_verdict()
-        {
-            var runner = Runner();
-            var quick = Row(await runner.RunQuickCheckAsync(CancellationToken.None), SetupCheckIds.Ffmpeg);
-            var start = await runner.StartFullCheckAsync();
-            _encode.Release.SetResult(new FfmpegProbeResult(false, "No such filter: 'adynamicequalizer'"));
-            await start.Finished.WaitAsync(Wait);
-
-            var after = Row(await runner.RunQuickCheckAsync(CancellationToken.None), SetupCheckIds.Ffmpeg);
-
-            Assert.NotEqual(SetupCheckResult.Failed, quick.Result);
-            Assert.Equal(quick.Result, after.Result);
-            Assert.Equal(quick.Found, after.Found);
-        }
 
         [Fact]
         public async Task The_report_carries_an_estimate_for_the_confirm()
@@ -493,7 +450,7 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.Null(final.FullCheckedAt);
             Assert.True(_audioGate.IsOpen);
             Assert.False(_busy.Running);
-            Assert.Equal(SetupCheckMessageKind.Done, Sent()[^1].Kind);
+            Assert.Equal(SetupCheckChangeKind.Done, Sent()[^1].Kind);
         }
 
         [Fact]

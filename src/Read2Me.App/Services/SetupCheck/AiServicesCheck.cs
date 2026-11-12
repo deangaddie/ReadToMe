@@ -43,12 +43,12 @@ namespace Read2Me.App.Services.SetupCheck
 
             var rows = new List<SetupCheckRow>
             {
-                await ConfigRowAsync(SetupCheckIds.Llm, "LLM", ConfigExpected, SetupSettingsLink.Llm, llm, required: true, Reach.ModelList, Describe, ct),
+                await ConfigRowAsync(SetupChecks.Llm, llm, required: true, Reach.ModelList, Describe, ct),
                 await ChainRowAsync(chain, ct),
-                await ConfigRowAsync(SetupCheckIds.ParagraphTts, "Paragraph TTS", ConfigExpected, SetupSettingsLink.Tts, tts, required: true, Reach.ModelList, Describe, ct),
-                await ConfigRowAsync(SetupCheckIds.VoiceDesign, "Voice design", ConfigExpected, SetupSettingsLink.VoiceDesign, design, required: true, Reach.ModelList, Describe, ct),
-                await ConfigRowAsync(SetupCheckIds.Transcription, "Transcription", ConfigExpected, SetupSettingsLink.Transcription, transcription, required: false, Reach.AnyAnswer, Describe, ct),
-                await ConfigRowAsync(SetupCheckIds.Similarity, "Similarity", ConfigExpected, SetupSettingsLink.Similarity, similarity, required: false, Reach.AnyAnswer, Describe, ct),
+                await ConfigRowAsync(SetupChecks.ParagraphTts, tts, required: true, Reach.ModelList, Describe, ct),
+                await ConfigRowAsync(SetupChecks.VoiceDesign, design, required: true, Reach.ModelList, Describe, ct),
+                await ConfigRowAsync(SetupChecks.Transcription, transcription, required: false, Reach.AnyAnswer, Describe, ct),
+                await ConfigRowAsync(SetupChecks.Similarity, similarity, required: false, Reach.AnyAnswer, Describe, ct),
             };
             var all = llm.Concat(tts).Concat(design).Concat(transcription).Concat(similarity).Concat(chain).ToList();
             foreach (var service in deps.Registry.All)
@@ -57,27 +57,11 @@ namespace Read2Me.App.Services.SetupCheck
         }
 
         /// <summary>The same rows, each Not run for one reason; nothing is read or probed.</summary>
-        public IReadOnlyList<SetupCheckRow> NotRun(string found, SetupFixHint fix)
-        {
-            SetupCheckRow Config(string id, string name, string expected) =>
-                new(id, SetupCheckGroup.AiConfigs, name, SetupCheckTier.Full, SetupCheckResult.NotRun,
-                    expected, found, null, fix, Managed: false, Rerun: null);
-
-            var rows = new List<SetupCheckRow>
-            {
-                Config(SetupCheckIds.Llm, "LLM", ConfigExpected),
-                Config(SetupCheckIds.AttributionChain, "Attribution chain", ChainExpected),
-                Config(SetupCheckIds.ParagraphTts, "Paragraph TTS", ConfigExpected),
-                Config(SetupCheckIds.VoiceDesign, "Voice design", ConfigExpected),
-                Config(SetupCheckIds.Transcription, "Transcription", ConfigExpected),
-                Config(SetupCheckIds.Similarity, "Similarity", ConfigExpected),
-            };
-            rows.AddRange(deps.Registry.All.Select(service => new SetupCheckRow(
-                SetupCheckIds.Container(service.Name), SetupCheckGroup.DockerServices, service.ContainerName,
-                SetupCheckTier.Quick, SetupCheckResult.NotRun,
-                $"{service.ContainerName} running and answering at {service.BaseUrl}", found, null, fix, Managed: true, Rerun: null)));
-            return rows;
-        }
+        public IReadOnlyList<SetupCheckRow> NotRun(string found, SetupFixHint fix) =>
+        [
+            .. SetupChecks.AiConfigs.Select(check => check.NotRun(found, fix)),
+            .. deps.Registry.All.Select(service => SetupChecks.Container(service).NotRun(found, fix)),
+        ];
 
         // ── AI configs ───────────────────────────────────────────────────────
 
@@ -109,30 +93,25 @@ namespace Read2Me.App.Services.SetupCheck
         private async Task<SetupCheckRow> ChainRowAsync(IReadOnlyList<ConfigView> chain, CancellationToken ct)
         {
             if (chain.Count == 0)
-                return new SetupCheckRow(
-                    SetupCheckIds.AttributionChain, SetupCheckGroup.AiConfigs, "Attribution chain", SetupCheckTier.Full,
-                    SetupCheckResult.NotRun, ChainExpected, "Needs an active LLM config", null,
-                    new SetupFixHint($"no active config — choose one in {SetupSettingsLink.Llm.Label}", SetupSettingsLink.Llm, null), Managed: false, Rerun: null);
-            return await ConfigRowAsync(SetupCheckIds.AttributionChain, "Attribution chain", ChainExpected, SetupSettingsLink.Llm, chain,
+                return SetupChecks.AttributionChain.NotRun("Needs an active LLM config",
+                    new SetupFixHint($"no active config — choose one in {SetupSettingsLink.Llm.Label}", SetupSettingsLink.Llm, null));
+            return await ConfigRowAsync(SetupChecks.AttributionChain, chain,
                 required: true, Reach.ModelList, DescribeChain, ct);
         }
-
-        private const string ChainExpected = "Every config in the attribution chain has a parseable base URL";
-        private const string ConfigExpected = "An active config with a parseable base URL";
 
         /// <summary>
         /// Every config the step uses has a parseable base URL; one the app doesn't manage must also
         /// answer a reachability probe. A managed URL is judged on its Docker services row instead.
         /// </summary>
         private async Task<SetupCheckRow> ConfigRowAsync(
-            string id, string name, string expected, SetupSettingsLink settings, IReadOnlyList<ConfigView> configs, bool required,
+            SetupCheckDefinition check, IReadOnlyList<ConfigView> configs, bool required,
             Reach reach, Func<IReadOnlyList<ConfigView>, string> describe, CancellationToken ct)
         {
+            var settings = check.Settings!;
             // Managed once every config the step uses is on a URL the app manages.
             var managed = false;
-            // Full-tier: the Quick check judges the config, the Full check sends it a real request.
             SetupCheckRow Row(SetupCheckResult result, string found, string? note, SetupFixHint fix) =>
-                new(id, SetupCheckGroup.AiConfigs, name, SetupCheckTier.Full, result, expected, found, note, fix, managed, Rerun: null);
+                check.Row(result, found, note, fix) with { Managed = managed };
 
             if (configs.Count == 0)
             {
@@ -202,12 +181,12 @@ namespace Read2Me.App.Services.SetupCheck
             var models = users.Select(c => c.Model).OfType<string>()
                 .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
 
-            var expected = $"{service.ContainerName} running and answering at {service.BaseUrl}"
+            var check = SetupChecks.Container(service);
+            var expected = check.Expected
                 + (models.Count > 0 ? $"; GET /v1/models lists {string.Join(", ", models)}" : "");
             var note = deps.Watchdog.Value.Enabled ? null : WatchdogOff;
             SetupCheckRow Row(SetupCheckResult result, string found, SetupFixHint fix) =>
-                new(SetupCheckIds.Container(service.Name), SetupCheckGroup.DockerServices, service.ContainerName,
-                    SetupCheckTier.Quick, result, expected, found, note, fix, Managed: true, Rerun: null);
+                check.Row(result, found, note, fix) with { Expected = expected };
 
             if (!dockerOnPath)
                 return Row(SetupCheckResult.NotRun, "Needs the docker CLI",

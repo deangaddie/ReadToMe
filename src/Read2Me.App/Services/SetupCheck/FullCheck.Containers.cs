@@ -10,7 +10,7 @@ namespace Read2Me.App.Services.SetupCheck
     /// as it was found, llama with the model it had, except one whose check failed, which is left as
     /// it is for its logs. A URL the app doesn't manage is never started, stopped or put back.
     /// </summary>
-    public sealed partial class SetupCheckRunner
+    internal sealed partial class FullCheck
     {
         /// <summary>
         /// The active configs the steps use, each with its managed service, and the run's state: the
@@ -25,10 +25,9 @@ namespace Read2Me.App.Services.SetupCheck
 
             public IReadOnlyDictionary<string, SetupCheckRow> Before { get; set; } = new Dictionary<string, SetupCheckRow>();
 
-            /// <summary>A row as the run found it; a bare one when no Quick check had made it yet.</summary>
-            public SetupCheckRow Row(string id, SetupCheckGroup group, string name) =>
-                Before.TryGetValue(id, out var row) ? row
-                : new(id, group, name, SetupCheckTier.Full, SetupCheckResult.NotRun, "", "", null, new SetupFixHint("", null, null), Managed: false, Rerun: null);
+            /// <summary>A check's row as the run found it; a bare one when no Quick check had made it yet.</summary>
+            public SetupCheckRow Row(SetupCheckDefinition check) =>
+                Before.TryGetValue(check.Id, out var row) ? row : check.Row(SetupCheckResult.NotRun, "");
 
             /// <summary>The sample clip's transcript, once the transcription check has one.</summary>
             public string? Transcript { get; set; }
@@ -107,11 +106,11 @@ namespace Read2Me.App.Services.SetupCheck
         private async Task<(SetupCheckRow Row, bool Ready, ContainerUse Use)> ReadyContainerAsync(
             FullContext context, DockerAiService service)
         {
-            var status = await aiServices.Control.GetStatusAsync(service, CancellationToken.None);
+            var status = await deps.AiServices.Control.GetStatusAsync(service, CancellationToken.None);
             var use = await TrackAsync(context, service,
                 running: status is AiServiceStatus.Ready or AiServiceStatus.Starting or AiServiceStatus.Recovering);
 
-            var row = context.Row(SetupCheckIds.Container(service.Name), SetupCheckGroup.DockerServices, service.ContainerName);
+            var row = context.Row(SetupChecks.Container(service));
             SetupCheckRow Verdict(SetupCheckResult result, string found, SetupFixHint fix) =>
                 row with { Result = result, Found = found, Fix = fix };
             (SetupCheckRow, bool, ContainerUse) Failed(string found, SetupFixHint fix)
@@ -128,7 +127,7 @@ namespace Read2Me.App.Services.SetupCheck
             switch (status)
             {
                 case AiServiceStatus.Stopped:
-                    var start = await aiServices.Control.StartAsync(service, CancellationToken.None);
+                    var start = await deps.AiServices.Control.StartAsync(service, CancellationToken.None);
                     use.Started = true;
                     if (!start.Succeeded)
                         return Failed($"Didn't start: {start.Error}", ContainerVerdicts.RestartFix(service));
@@ -137,7 +136,7 @@ namespace Read2Me.App.Services.SetupCheck
                 case AiServiceStatus.Starting:
                     // Running but not answering yet: start waits for its health and warm-up, and
                     // leaves a running container running, so it was never the run's to stop.
-                    var ready = await aiServices.Control.StartAsync(service, CancellationToken.None);
+                    var ready = await deps.AiServices.Control.StartAsync(service, CancellationToken.None);
                     if (!ready.Succeeded)
                         return Failed($"Never became ready: {ready.Error}", ContainerVerdicts.RestartFix(service));
                     break;
@@ -168,7 +167,7 @@ namespace Read2Me.App.Services.SetupCheck
                     parts[use] = $"{name} stopped again";
                     continue;
                 }
-                var stop = await aiServices.Control.ShutdownAsync(use.Service, CancellationToken.None);
+                var stop = await deps.AiServices.Control.ShutdownAsync(use.Service, CancellationToken.None);
                 parts[use] = stop.Succeeded ? $"{name} stopped again" : $"{name} couldn't be stopped again: {stop.Error}";
             }
             foreach (var use in context.Containers.Where(u => !u.Failed && u.WasRunning))
@@ -186,7 +185,7 @@ namespace Read2Me.App.Services.SetupCheck
                 }
                 else
                 {
-                    var start = await aiServices.Control.StartAsync(use.Service, CancellationToken.None);
+                    var start = await deps.AiServices.Control.StartAsync(use.Service, CancellationToken.None);
                     if (!start.Succeeded)
                     {
                         parts[use] = $"{name} couldn't be started again: {start.Error}";
@@ -223,7 +222,7 @@ namespace Read2Me.App.Services.SetupCheck
             var seconds = plan.Sum(s => s.EstimateSeconds);
             var used = configs.UsedServices;
             var usedGpu = used.Where(s => s.UsesGpu).ToList();
-            foreach (var service in aiServices.Registry.All)
+            foreach (var service in deps.AiServices.Registry.All)
             {
                 if (!statuses.TryGetValue(service.Name, out var status))
                     continue;
