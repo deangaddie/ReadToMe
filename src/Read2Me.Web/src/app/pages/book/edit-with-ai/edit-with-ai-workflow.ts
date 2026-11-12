@@ -15,7 +15,7 @@ import { type ReviewRow, ReviewSelection, planErrorMessage } from './review-mode
 
 export type EditPhase = 'instruct' | 'plan' | 'proposing' | 'review';
 
-/** How often the run is polled when there is no hub connection to push to. */
+/** How often the run is polled when the hub is not pushing to this tab, or has stopped. */
 const POLL_MS = 400;
 
 /** How often the run is checked anyway while the hub is pushing, in case the pushes stop. */
@@ -26,6 +26,10 @@ const DROPPED_REASON = 'The project was restored — run it again';
 /** One run being followed; compared by identity, so a fresh run never matches an old one. */
 interface RunWatch {
   readonly program: string;
+  /** The hub connection the run was started for, the only one its job pushes to. */
+  readonly pushTo: string | null;
+  /** The hub is still reaching this tab; once off it stays off for the run. */
+  pushing: boolean;
 }
 
 /**
@@ -172,9 +176,10 @@ export class EditWithAiWorkflow {
 
     this._progress.set({ done: 0, total: this.targetCount() });
     this._phase.set('proposing');
-    const watch = this.watchRun(program);
+    const connectionId = this.live.connectionId();
+    const watch = this.watchRun(program, connectionId);
     try {
-      await this.api.propose(this.folder, program, thinking, this.live.connectionId());
+      await this.api.propose(this.folder, program, thinking, connectionId);
     } catch (e) {
       if (this.currentWatch === watch) this.failRun(toApiError(e).message);
     }
@@ -202,16 +207,26 @@ export class EditWithAiWorkflow {
    * Follows the run to its end: the host pushes `bookEdit` messages to this tab's connection, and
    * the session is polled behind that as the answer of record.
    */
-  private watchRun(program: string): RunWatch {
+  private watchRun(program: string, pushTo: string | null): RunWatch {
     this.stopWatching();
-    const watch: RunWatch = { program };
+    const watch: RunWatch = { program, pushTo, pushing: pushTo !== null };
     this.currentWatch = watch;
-    if (this.live.connectionId() !== null) this.subscribe(watch);
+    if (watch.pushing) this.subscribe(watch);
     // The poll runs either way. The hub is the fast path, but a reconnect mints a new connection
     // id that the running job never learns, so its pushes would go nowhere and the run would sit
     // in Proposing for ever; the session is the one place the run's state is certain.
     this.poll(watch);
     return watch;
+  }
+
+  /**
+   * Whether the job's pushes still reach this tab: the hub connection is still the one the run was
+   * started for. A drop or a reconnect (which mints a new id) turns it off for good, since the job
+   * never learns another id; re-read on every poll tick.
+   */
+  private stillPushing(watch: RunWatch): boolean {
+    if (watch.pushing && this.live.connectionId() !== watch.pushTo) watch.pushing = false;
+    return watch.pushing;
   }
 
   private subscribe(watch: RunWatch): void {
@@ -235,7 +250,6 @@ export class EditWithAiWorkflow {
   }
 
   private poll(watch: RunWatch): void {
-    const pushing = this.runSubscription !== null;
     this.pollTimer = setTimeout(
       () => {
         this.pollTimer = null;
@@ -258,7 +272,7 @@ export class EditWithAiWorkflow {
             if (this.currentWatch !== watch) return;
             // While the hub is pushing this is only the backstop: one failed read is not the run
             // failing, so keep watching. Without the hub it is the only signal, so say so.
-            if (!pushing) {
+            if (!this.stillPushing(watch)) {
               this.failRun(toApiError(e).message);
               return;
             }
@@ -266,7 +280,7 @@ export class EditWithAiWorkflow {
           this.poll(watch);
         })();
       },
-      pushing ? PUSH_BACKSTOP_MS : POLL_MS,
+      this.stillPushing(watch) ? PUSH_BACKSTOP_MS : POLL_MS,
     );
   }
 
