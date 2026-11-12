@@ -5,6 +5,7 @@ using NSubstitute;
 using Read2Me.App.Characters;
 using Read2Me.App.Live;
 using Read2Me.App.Queueing;
+using Read2Me.App.Services.SetupCheck;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
@@ -41,6 +42,7 @@ public class LiveRelayTests : IAsyncLifetime
     private readonly EventBroadcaster<RestoreEvent> _restores = new();
     private readonly EventBroadcaster<SettingsChanged> _settings = new();
     private readonly EventBroadcaster<SeriesChanged> _series = new();
+    private readonly EventBroadcaster<SetupCheckChanged> _setupCheck = new();
     private readonly ProjectActivity _activity = NeverBusy.Activity();
     private readonly CharacterQueueService _attribution;
     private readonly AudioQueueService _audio;
@@ -66,7 +68,7 @@ public class LiveRelayTests : IAsyncLifetime
         var status = new ProjectStatusSource(_nodes, _attribution, _audio, _reviews, new BookRevisionSequence());
 
         _relay = new LiveRelay(_hub, _registry, status, _llm, _audioGen, _assembly, _voiceBatch, _watchdog, _serviceStatus, _receipts, _history, _restores,
-            _settings, _series, _attribution, _audio, _nodes, _reviews, progress, assemblyService, batchRunner, throughput,
+            _settings, _series, _setupCheck, _attribution, _audio, _nodes, _reviews, progress, assemblyService, batchRunner, throughput,
             new ProjectBusyAnswer(_attribution, _audio, batchRunner, assemblyService), NullLogger<LiveRelay>.Instance);
         await _relay.StartAsync(CancellationToken.None);
     }
@@ -308,6 +310,23 @@ public class LiveRelayTests : IAsyncLifetime
         Assert.Equal(WatchdogKind.RecoveryStarted, snapshot.Watchdog["llama"]);
         Assert.False(snapshot.Assembly.IsRunning);
         Assert.Empty(snapshot.Projects);
+    }
+
+    [Fact]
+    public async Task Setup_check_changes_pass_through_to_the_global_group_in_the_order_published()
+    {
+        var running = SetupCheckReport.Empty with { FullRun = new SetupFullRun(1, 2, SetupCheckLane.Local, "Encoding", Cancelling: false) };
+        var ended = SetupCheckReport.Empty with { FullCheckedAt = DateTimeOffset.UnixEpoch };
+        _setupCheck.Publish(new SetupCheckChanged(SetupCheckChangeKind.Progress, running));
+        _setupCheck.Publish(new SetupCheckChanged(SetupCheckChangeKind.Done, ended));
+
+        await WaitForAsync(() => _hub.Method("setupCheck").Count == 2);
+
+        var sent = _hub.Method("setupCheck");
+        Assert.All(sent, s => Assert.Equal("global", s.Target));
+        Assert.Equal(
+            new[] { new SetupCheckMessage(SetupCheckMessageKind.Progress, running), new SetupCheckMessage(SetupCheckMessageKind.Done, ended) },
+            sent.Select(s => (SetupCheckMessage)s.Payload));
     }
 
     /// <summary>

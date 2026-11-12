@@ -2,7 +2,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 using Read2Me.App.Api;
 using Read2Me.App.Audio;
@@ -291,6 +290,7 @@ public static class ServiceRegistrationExtensions
     public static IServiceCollection AddSetupCheck(this IServiceCollection services)
     {
         services.AddSingleton<SetupCheckBusy>();
+        services.AddSingleton<EventBroadcaster<SetupCheckChanged>>();
         services.AddSingleton<DiscoveryRuns>();
         services.AddSingleton<IFfmpegEncodeCheck, FfmpegEncodeCheck>();
         services.AddSingleton<IWatchdogHoldOff>(sp => sp.GetRequiredService<AiServiceHealthMonitor>());
@@ -328,7 +328,7 @@ public static class ServiceRegistrationExtensions
                 sp.GetRequiredService<SetupCheckBusy>(),
                 sp.GetRequiredService<IWatchdogHoldOff>(),
                 sp.GetRequiredService<IFfmpegEncodeCheck>(),
-                sp.GetRequiredService<IHubContext<LiveHub, ILiveClient>>())));
+                sp.GetRequiredService<EventBroadcaster<SetupCheckChanged>>())));
         services.AddHostedService<SetupCheckAtStart>();
         return services;
     }

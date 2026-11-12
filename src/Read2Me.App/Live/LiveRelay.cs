@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.SignalR;
 using Read2Me.App.Api;
 using Read2Me.App.Characters;
 using Read2Me.App.Queueing;
+using Read2Me.App.Services.SetupCheck;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Assembly;
@@ -24,7 +25,7 @@ namespace Read2Me.App.Live;
 /// drain loop applies the relay policy (research/live-events.md §8) and performs the sends.
 /// <list type="bullet">
 /// <item>Pass-through: receipts, History steps and Restores (project group), watchdog, assembly phases, voice batch control,
-/// LLM control events and every audio-gen phase (stream groups), settings changes.</item>
+/// LLM control events and every audio-gen phase (stream groups), settings changes, Setup check changes.</item>
 /// <item><see cref="Debouncer"/> per series: the <c>series</c> re-read signal, 250 ms.</item>
 /// <item><see cref="DeltaBatcher"/>: LLM thinking/content text, one message per 100 ms.</item>
 /// <item><see cref="Debouncer"/>: queue roll-ups and per-project node/item status, 250 ms.</item>
@@ -48,6 +49,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private sealed record RestoreItem(RestoreEvent Event) : Item;
     private sealed record SettingsItem(SettingsChanged Change) : Item;
     private sealed record SeriesItem(SeriesChanged Change) : Item;
+    private sealed record SetupCheckItem(SetupCheckChanged Change) : Item;
     private sealed record QueuePulse : Item;
     private sealed record StatusPulse : Item;
 
@@ -74,6 +76,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private readonly EventBroadcaster<RestoreEvent> _restores;
     private readonly EventBroadcaster<SettingsChanged> _settings;
     private readonly EventBroadcaster<SeriesChanged> _series;
+    private readonly EventBroadcaster<SetupCheckChanged> _setupCheck;
     private readonly CharacterQueueService _attributionQueue;
     private readonly AudioQueueService _audioQueue;
     private readonly NodeStatusService _nodeStatus;
@@ -126,6 +129,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         EventBroadcaster<RestoreEvent> restores,
         EventBroadcaster<SettingsChanged> settings,
         EventBroadcaster<SeriesChanged> series,
+        EventBroadcaster<SetupCheckChanged> setupCheck,
         CharacterQueueService attributionQueue,
         AudioQueueService audioQueue,
         NodeStatusService nodeStatus,
@@ -152,6 +156,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         _restores = restores;
         _settings = settings;
         _series = series;
+        _setupCheck = setupCheck;
         _attributionQueue = attributionQueue;
         _audioQueue = audioQueue;
         _nodeStatus = nodeStatus;
@@ -175,6 +180,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         _restores.Event += OnRestore;
         _settings.Event += OnSettings;
         _series.Event += OnSeries;
+        _setupCheck.Event += OnSetupCheck;
         _attributionQueue.Changed += OnQueueChanged;
         _audioQueue.Changed += OnQueueChanged;
         _nodeStatus.Changed += OnStatusChanged;
@@ -211,6 +217,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private void OnRestore(RestoreEvent e) => Post(new RestoreItem(e));
     private void OnSettings(SettingsChanged c) => Post(new SettingsItem(c));
     private void OnSeries(SeriesChanged c) => Post(new SeriesItem(c));
+    private void OnSetupCheck(SetupCheckChanged c) => Post(new SetupCheckItem(c));
     private void OnProgressChanged() => Post(new QueuePulse());
 
     // A queue moving changes both the roll-up and per-item status.
@@ -270,6 +277,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         _restores.Event -= OnRestore;
         _settings.Event -= OnSettings;
         _series.Event -= OnSeries;
+        _setupCheck.Event -= OnSetupCheck;
         _attributionQueue.Changed -= OnQueueChanged;
         _audioQueue.Changed -= OnQueueChanged;
         _nodeStatus.Changed -= OnStatusChanged;
@@ -412,6 +420,13 @@ public sealed class LiveRelay : IHostedService, IDisposable
 
             case SettingsItem { Change: var c }:
                 await SendAsync(() => _hub.Clients.Group(LiveGroups.Global).SettingsChanged(new SettingsChangedMessage(c.Area)));
+                break;
+
+            case SetupCheckItem { Change: var c }:
+                var setupCheck = c.Kind == SetupCheckChangeKind.Done
+                    ? LiveMessageMapper.SetupCheckDone(c.Report)
+                    : LiveMessageMapper.SetupCheckProgress(c.Report);
+                await SendAsync(() => _hub.Clients.Group(LiveGroups.Global).SetupCheck(setupCheck));
                 break;
 
             case SeriesItem { Change: var c }:

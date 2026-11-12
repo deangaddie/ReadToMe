@@ -18,7 +18,6 @@ using Read2Me.Services.Characters;
 using Read2Me.Services.Events;
 using Read2Me.Services.Health;
 using Read2Me.Services.Queueing;
-using Read2Me.Tests.App.Live;
 using Read2Me.Tests.Fakes;
 
 namespace Read2Me.Tests.App.SetupCheck
@@ -83,7 +82,7 @@ namespace Read2Me.Tests.App.SetupCheck
             InFlightWork? work = null,
             IWatchdogHoldOff? watchdog = null,
             IFfmpegEncodeCheck? encode = null,
-            RecordingHubContext? hub = null,
+            EventBroadcaster<SetupCheckChanged>? changes = null,
             IProcessingGate<QueuedParagraph>? characterGate = null,
             IProcessingGate<QueuedAudioItem>? audioGate = null,
             SetupCheckBusy? busy = null) => new(
@@ -93,7 +92,25 @@ namespace Read2Me.Tests.App.SetupCheck
             busy ?? new SetupCheckBusy(),
             watchdog ?? new RecordingHoldOff(),
             encode ?? new FfmpegEncodeCheck(NullLogger<FfmpegEncodeCheck>.Instance),
-            hub ?? new RecordingHubContext());
+            changes ?? new EventBroadcaster<SetupCheckChanged>());
+    }
+
+    /// <summary>Every Setup check change published on the broadcaster, in order.</summary>
+    internal sealed class RecordingSetupCheckChanges
+    {
+        private readonly List<SetupCheckChanged> _changes = [];
+
+        public RecordingSetupCheckChanges() => Broadcaster.Event += change =>
+        {
+            lock (_changes) _changes.Add(change);
+        };
+
+        public EventBroadcaster<SetupCheckChanged> Broadcaster { get; } = new();
+
+        public IReadOnlyList<SetupCheckChanged> Changes
+        {
+            get { lock (_changes) return [.. _changes]; }
+        }
     }
 
     /// <summary>Records which services are held off now, and every set ever held.</summary>

@@ -1,4 +1,3 @@
-using Read2Me.App.Live;
 using Read2Me.Services.Queueing;
 
 namespace Read2Me.App.Services.SetupCheck
@@ -129,7 +128,7 @@ namespace Read2Me.App.Services.SetupCheck
                         PutBack = null,
                     };
                     started = Report;
-                    Publish("progress");
+                    Publish(SetupCheckChangeKind.Progress);
                 }
 
                 _ = Task.Run(() => RunFullAsync(run, steps, context));
@@ -189,7 +188,7 @@ namespace Read2Me.App.Services.SetupCheck
                 _run.Cancel.Cancel();
                 if (_report.FullRun is { } going)
                     _report = _report with { FullRun = going with { Cancelling = true } };
-                Publish("progress");
+                Publish(SetupCheckChangeKind.Progress);
                 return Report;
             }
         }
@@ -233,7 +232,7 @@ namespace Read2Me.App.Services.SetupCheck
                     full.CharacterGate.Open(GateOwners.SetupCheck);
                     full.AudioGate.Open(GateOwners.SetupCheck);
                     full.Busy.Set(false);
-                    Publish("done");
+                    Publish(SetupCheckChangeKind.Done);
                     run.Finished.TrySetResult(Report);
                 }
                 run.Cancel.Dispose();
@@ -251,7 +250,7 @@ namespace Read2Me.App.Services.SetupCheck
                     FullRun = new SetupFullRun(number, total, step.Lane, step.Label, cancel.IsCancellationRequested),
                 };
                 SetRows(step.RowIds, row => row with { Result = SetupCheckResult.Checking });
-                Publish("progress");
+                Publish(SetupCheckChangeKind.Progress);
             }
 
             IReadOnlyList<SetupCheckRow> rows;
@@ -309,23 +308,10 @@ namespace Read2Me.App.Services.SetupCheck
             _report = _report with { Rows = [.. _report.Rows.Select(r => ids.Contains(r.Id) ? change(r) : r)] };
 
         /// <summary>
-        /// Sends the report as it stands to every client. Caller holds _lock, so the sends go out in
-        /// the order the report changed; a client that misses one reads the report on reconnect.
+        /// Publishes the report as it stands. Caller holds _lock, so the changes go out in the order
+        /// the report changed; a client that misses one reads the report on reconnect.
         /// </summary>
-        private void Publish(string kind)
-        {
-            var report = Report;
-            var message = kind == "done" ? LiveMessageMapper.SetupCheckDone(report) : LiveMessageMapper.SetupCheckProgress(report);
-            try
-            {
-                _ = full.Hub.Clients.Group(LiveGroups.Global).SetupCheck(message)
-                    .ContinueWith(static t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
-            }
-            catch
-            {
-                // The hub not delivering is not the run's problem.
-            }
-        }
+        private void Publish(SetupCheckChangeKind kind) => full.Changes.Publish(new SetupCheckChanged(kind, Report));
 
         // ── ffmpeg ───────────────────────────────────────────────────────────
 
