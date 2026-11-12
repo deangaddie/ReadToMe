@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Routing;
 using Read2Me.App.Live;
 using Read2Me.Core.IO;
 using Read2Me.Services.BookEdits;
-using Read2Me.Services.History;
 
 namespace Read2Me.App.Api
 {
@@ -44,9 +43,6 @@ namespace Read2Me.App.Api
     /// </summary>
     public static class BookEditEndpoints
     {
-        /// <summary>Above this many LLM-edited items the plan warns that the job is large.</summary>
-        public const int LlmTargetWarnThreshold = 300;
-
         public static void MapBookEditEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapPost("/api/projects/{folder}/book-edits/plan", PlanAsync).RefusedWhileSetupCheckRuns()
@@ -70,48 +66,23 @@ namespace Read2Me.App.Api
         }
 
         private static async Task<Results<Ok<PlanBookEditResponse>, NotFound, ProblemHttpResult>> PlanAsync(
-            string folder, PlanBookEditRequest? body, IFileSystem fs, BookEditPlanner planner,
-            ScopeResolver resolver, IBookEditSessionStore sessions, ProjectActivity activity, CancellationToken ct)
+            string folder, PlanBookEditRequest? body, IFileSystem fs, BookEditPlanService plans, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return TypedResults.NotFound();
             if (string.IsNullOrWhiteSpace(body?.Instruction))
                 return TypedResults.Problem("An instruction is required.", statusCode: StatusCodes.Status400BadRequest);
 
-            var mark = activity.Mark(folderId);
-            // A Restore already running is counted in the mark, so only its flag shows it: refuse it
-            // here, or the check below would pass once it ended and leave targets read while it ran.
-            if (activity.MayPlanEdit(mark) is { } refusal)
-                return StepReads.Refused(refusal);
-            var outcome = await planner.PlanAsync(folderId, body.Instruction, !body.Thinking, ct);
-            if (outcome.Status != EditPlanStatus.Ok)
-                return TypedResults.Ok(NotPlanned(outcome.Status, outcome.Reason));
-
-            var program = outcome.Program!;
-            var targets = await resolver.ResolveAsync(folderId, program, ct);
-            if (targets.Count == 0)
-                return TypedResults.Ok(NotPlanned(EditPlanStatus.NoTargets, "No items in the book match this instruction's scope."));
-
-            var session = sessions.Create(folderId, program, targets, EditProgramDescriber.Describe(program));
-            // A Restore that began while the LLM was thinking or the scope resolved drops the project's
-            // sessions as it ends, or has ended and left targets read from the book before it; the
-            // dialog, holding no program yet, would miss either: refuse as the Restore would have.
-            if (activity.MayPlanEdit(mark) is { } overtaken)
+            return await plans.PlanAsync(folderId, body.Instruction, body.Thinking, ct) switch
             {
-                sessions.Remove(folderId, session.Id);
-                return StepReads.Refused(overtaken);
-            }
-            // The run packs with the same function, so the count cannot drift from the job.
-            var requestCount = session.IsLlmTransform ? BatchPacker.RequestCount(targets) : 0;
-            var warnings = new List<string>();
-            if (session.IsLlmTransform && targets.Count > LlmTargetWarnThreshold)
-                warnings.Add($"This is a large AI job ({targets.Count} items). It may take a long time.");
-            if (EditProgramDescriber.TitlesAlsoMatch(await resolver.CountTitlesAlsoMatchingAsync(folderId, program, ct)) is { } titles)
-                warnings.Add(titles);
-
-            return TypedResults.Ok(new PlanBookEditResponse(
-                EditPlanStatus.Ok, null, session.Summary, session.Id, program.Transform.Kind,
-                targets.Count, requestCount, warnings));
+                EditPlanResult.Refused refused => StepReads.Refused(refused.Refusal),
+                EditPlanResult.NotPlanned notPlanned => TypedResults.Ok(NotPlanned(notPlanned.Status, notPlanned.Reason)),
+                EditPlanResult.Planned planned => TypedResults.Ok(new PlanBookEditResponse(
+                    EditPlanStatus.Ok, null, planned.Session.Summary, planned.Session.Id,
+                    planned.Session.Program.Transform.Kind, planned.Session.Targets.Count,
+                    planned.RequestCount, planned.Warnings)),
+                _ => throw new InvalidOperationException("Unknown plan result."),
+            };
         }
 
         private static PlanBookEditResponse NotPlanned(EditPlanStatus status, string? reason) =>

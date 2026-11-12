@@ -17,6 +17,9 @@ Use these terms exactly in code, tests, and discussion.
 
 ## Edit with AI
 
+- **Edit plan** — the first step of an Edit with AI: one plain-language instruction becomes a program (what to match and how to rewrite it) and the items in the book it matches. A plan that matches nothing is **no targets**, not a plan. Planning is refused while a Restore runs, and also when a Restore began after planning started, even one that has already ended, because its targets would predate the Restore.
+  _Avoid_: "edit program" for the whole plan (the program is only the plan's rules, without its targets)
+- **Edit session** — a successful Edit plan held server-side until it is applied, dropped, or expires: the program, its targets, and the proposal run over them. Nothing in the book changes until the rows the user keeps are applied. A Restore drops every Edit session of its project.
 - **Edit source** (short: *source*) — a value from a related node that an Edit with AI transform reads alongside the target value it rewrites (the chapter number in a chapter's first paragraph, read to build its title). A title reads only what lies under it and the titles above it; paragraph text reads its enclosing titles, its chapter's paragraphs by position and its immediate neighbours. Never across a chapter boundary. A paragraph's value is its text joined; positions count content paragraphs only (pauses skipped, a heading-like paragraph counts) and reach five from the start or end. A source that isn't there — past the chapter's end, or a blank title — is **missing**, and fails that row visibly, never empty or a placeholder.
   _Avoid_: "context", "reference" (reference audio), "input"
 
