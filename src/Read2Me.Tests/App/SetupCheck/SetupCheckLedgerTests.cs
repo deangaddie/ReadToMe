@@ -204,6 +204,35 @@ namespace Read2Me.Tests.App.SetupCheck
             Assert.True(ledger.Report.NoWorkspace);
         }
 
+        // ── Row factories ────────────────────────────────────────────────────
+
+        [Fact]
+        public void A_Not_run_row_is_the_check_s_own_row_with_the_reason_and_the_way_on()
+        {
+            var fix = new SetupFixHint("Fix the Workspace row first, then restart the app.", null, null);
+
+            var ffmpeg = SetupChecks.Ffmpeg.NotRun("needs the Workspace", fix);
+
+            // The Quick check's ffmpeg row is Full-tier: it judges -version, the Full check the encode.
+            Assert.Equal(
+                new SetupCheckRow("ffmpeg", SetupCheckGroup.WorkspaceAndTools, "ffmpeg", SetupCheckTier.Full, SetupCheckResult.NotRun,
+                    "ffmpeg -version and ffprobe -version", "needs the Workspace", null, fix, Managed: false, Rerun: null),
+                ffmpeg);
+        }
+
+        [Fact]
+        public void A_container_s_row_is_managed_Quick_tier_and_named_for_the_container()
+        {
+            var whisper = new Read2Me.Services.Health.DockerAiServiceRegistry().All.Single(s => s.Name == "whisper");
+
+            var row = SetupChecks.Container(whisper).Passed("Running and answering");
+
+            Assert.Equal(("container-whisper", SetupCheckGroup.DockerServices, "read2me-whisper", SetupCheckTier.Quick, true),
+                (row.Id, row.Group, row.Name, row.Tier, row.Managed));
+            Assert.Equal($"read2me-whisper running and answering at {whisper.BaseUrl}", row.Expected);
+            Assert.Equal("docker logs -f read2me-whisper", row.Fix.Copy);
+        }
+
         // ── Publishing ───────────────────────────────────────────────────────
 
         [Fact]

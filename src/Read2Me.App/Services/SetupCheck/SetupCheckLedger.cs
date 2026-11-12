@@ -14,7 +14,7 @@ namespace Read2Me.App.Services.SetupCheck
         TimeProvider clock,
         Func<SetupCheckReport, SetupCheckReport>? stamp = null)
     {
-        private const string Cancelled = "Full check cancelled";
+        private const string CancelledFound = "Full check cancelled";
 
         private readonly object _lock = new();
         // Guarded by _lock.
@@ -40,9 +40,13 @@ namespace Read2Me.App.Services.SetupCheck
             /// <summary>The report as the run started, progress strip on.</summary>
             public SetupCheckReport Started { get; internal set; } = SetupCheckReport.Empty;
 
-            /// <summary>Every row the run's steps judge, and those of the steps begun so far.</summary>
-            internal IReadOnlyCollection<string> RowIds { get; } = rowIds;
-            internal HashSet<string> Begun { get; } = new(StringComparer.Ordinal);
+            private readonly HashSet<string> _begun = new(StringComparer.Ordinal);
+
+            /// <summary>A step begins: its rows are judged by this run, whatever comes after.</summary>
+            internal void Began(IEnumerable<string> rowIds) => _begun.UnionWith(rowIds);
+
+            /// <summary>The rows the run's steps judge that no begun step does.</summary>
+            internal IReadOnlyList<string> NotBegun() => [.. rowIds.Where(id => !_begun.Contains(id))];
 
             internal void Cancel() => _cancel.Cancel();
 
@@ -146,7 +150,7 @@ namespace Read2Me.App.Services.SetupCheck
         {
             lock (_lock)
             {
-                run.Begun.UnionWith(rowIds);
+                run.Began(rowIds);
                 // A cancel that lands after the run's check still shows; the step still runs.
                 _report = _report with { FullRun = step with { Cancelling = run.Cancelled.IsCancellationRequested } };
                 SetRows(rowIds, row => row with { Result = SetupCheckResult.Checking });
@@ -193,8 +197,8 @@ namespace Read2Me.App.Services.SetupCheck
         {
             lock (_lock)
             {
-                SetRows([.. run.RowIds.Where(id => !run.Begun.Contains(id))],
-                    row => row with { Result = SetupCheckResult.NotRun, Found = Cancelled, Note = null });
+                SetRows(run.NotBegun(),
+                    row => row with { Result = SetupCheckResult.NotRun, Found = CancelledFound, Note = null });
                 _report = _report with
                 {
                     FullRun = null,
@@ -202,8 +206,15 @@ namespace Read2Me.App.Services.SetupCheck
                     PutBack = putBack,
                 };
                 _run = null;
-                Publish(SetupCheckChangeKind.Done);
-                run.End(Stamped());
+                try
+                {
+                    Publish(SetupCheckChangeKind.Done);
+                }
+                finally
+                {
+                    // A subscriber that throws must not strand the run's callers.
+                    run.End(Stamped());
+                }
             }
         }
 
