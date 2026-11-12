@@ -454,6 +454,66 @@ describe('EditWithAiWorkflow', () => {
     });
   });
 
+  describe('when the hub stops reaching the run mid-run', () => {
+    it('drops the check to every 400 ms once the hub drops', async () => {
+      await reachProposing();
+      await timers.advance(2000);
+      expect(api.called('run')).toHaveLength(1);
+
+      connectionId = null;
+      await timers.advance(2000);
+      expect(api.called('run')).toHaveLength(2);
+      await timers.advance(400);
+      expect(api.called('run')).toHaveLength(3);
+    });
+
+    it('drops the check to every 400 ms once the hub reconnects with a new id', async () => {
+      await reachProposing();
+      connectionId = 'conn-2';
+
+      await timers.advance(2000);
+      expect(api.called('run')).toHaveLength(1);
+      await timers.advance(400);
+      expect(api.called('run')).toHaveLength(2);
+    });
+
+    it('fails the run on one failed read after the switch', async () => {
+      await reachProposing();
+      connectionId = null;
+      api.run = async () => {
+        throw new ApiError(502, 'Bad Gateway');
+      };
+
+      await timers.advance(2000);
+
+      expect(workflow.phase()).toBe('plan');
+      expect(workflow.error()).toContain('Bad Gateway');
+    });
+
+    it('stays on 400 ms when the old id comes back', async () => {
+      await reachProposing();
+      connectionId = null;
+      await timers.advance(2000);
+      connectionId = 'conn-1';
+
+      await timers.advance(400);
+      expect(api.called('run')).toHaveLength(2);
+      await timers.advance(400);
+      expect(api.called('run')).toHaveLength(3);
+    });
+
+    it('keeps 400 ms when a hub connects mid-run with none at propose', async () => {
+      connectionId = null;
+      await reachProposing();
+      await timers.advance(400);
+      expect(api.called('run')).toHaveLength(1);
+
+      connectionId = 'conn-1';
+      await timers.advance(400);
+      expect(api.called('run')).toHaveLength(2);
+    });
+  });
+
   describe('a Restore drops the session', () => {
     it('in Review: back to Instruct with no rows, and nothing to discard', async () => {
       await reachReview();
