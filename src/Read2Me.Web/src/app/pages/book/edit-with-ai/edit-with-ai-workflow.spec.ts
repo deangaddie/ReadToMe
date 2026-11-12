@@ -117,6 +117,8 @@ describe('EditWithAiWorkflow', () => {
   let messages: Emitter<BookEditMessage>;
   let connectionId: string | null;
   let ready: boolean;
+  /** The preflight's answer; defaults to {@link ready}, a case can hold it open. */
+  let ensureReady: () => Promise<boolean>;
   let applyError: ApiError | null;
   let applied: BookEditItem[][];
   let timers: FakeTimers;
@@ -136,7 +138,8 @@ describe('EditWithAiWorkflow', () => {
       connectionId: () => connectionId,
       on: (_family: string, listener: (m: BookEditMessage) => void) => messages.subscribe(listener),
     } as unknown as LiveService);
-    override(Preflight, { ensureReady: async () => ready } as unknown as Preflight);
+    ensureReady = async () => ready;
+    override(Preflight, { ensureReady: () => ensureReady() } as unknown as Preflight);
     workflow = new EditWithAiWorkflow('dracula', async (edits) => {
       applied.push(edits);
       return applyError;
@@ -277,23 +280,44 @@ describe('EditWithAiWorkflow', () => {
       expect(workflow.selection().count).toBe(2);
     });
 
-    it('lands the rows once when the hub Done arrives while a poll is in flight', async () => {
-      await reachProposing();
-      let answer!: (run: BookEditRunDto) => void;
-      api.run = () => new Promise((resolve) => (answer = resolve));
-      await timers.advance(2000);
-      expect(api.called('run')).toHaveLength(1);
+    describe('a poll in flight when the hub says Done', () => {
+      let answer: (run: BookEditRunDto) => void;
 
-      await push(done());
-      expect(workflow.phase()).toBe('review');
-      answer(COMPLETED);
-      await settleMicrotasks();
+      beforeEach(async () => {
+        await reachProposing();
+        api.run = () => new Promise((resolve) => (answer = resolve));
+        await timers.advance(2000);
+        expect(api.called('run')).toHaveLength(1);
+        await push(done());
+        expect(workflow.phase()).toBe('review');
+      });
 
-      expect(workflow.phase()).toBe('review');
-      expect(workflow.selection().rows).toHaveLength(2);
-      // Nothing is left watching the run.
-      await timers.advance(10_000);
-      expect(api.called('run')).toHaveLength(1);
+      it('resolving Completed leaves the rows and their hand edits alone', async () => {
+        workflow.setValue(workflow.selection().rows[0]!, 'Chapter I');
+        workflow.select(workflow.selection().rows[1]!, false);
+        const selection = workflow.selection();
+
+        answer(COMPLETED);
+        await settleMicrotasks();
+
+        expect(workflow.selection()).toBe(selection);
+        expect(workflow.selection().rows[0]!.userValue).toBe('Chapter I');
+        expect(workflow.selection().count).toBe(1);
+        expect(workflow.phase()).toBe('review');
+        expect(timers.pending).toBe(0);
+      });
+
+      it('resolving Running arms no further poll', async () => {
+        const progress = workflow.progress();
+
+        answer(RUNNING);
+        await settleMicrotasks();
+
+        expect(timers.pending).toBe(0);
+        expect(workflow.progress()).toBe(progress);
+        await timers.advance(10_000);
+        expect(api.called('run')).toHaveLength(1);
+      });
     });
 
     it('only checks the run behind the hub every two seconds, and rides out a failed check', async () => {
@@ -453,6 +477,50 @@ describe('EditWithAiWorkflow', () => {
       expect(api.called('run')).toEqual([]);
     });
 
+    it('while a poll is in flight: its late answer changes nothing', async () => {
+      await reachProposing();
+      let answer!: (run: BookEditRunDto) => void;
+      api.run = () => new Promise((resolve) => (answer = resolve));
+      await timers.advance(2000);
+      await push(dropped());
+
+      answer(COMPLETED);
+      await settleMicrotasks();
+
+      expect(workflow.phase()).toBe('instruct');
+      expect(workflow.selection().rows).toEqual([]);
+      expect(workflow.error()).toBe('The project was restored — run it again');
+      expect(timers.pending).toBe(0);
+    });
+
+    it('while a poll is in flight that then fails without the hub: the reason stays', async () => {
+      connectionId = null;
+      await reachProposing();
+      let fail!: (e: unknown) => void;
+      api.run = () => new Promise((_, reject) => (fail = reject));
+      await timers.advance(400);
+      await push(dropped());
+
+      fail(new ApiError(502, 'Bad Gateway'));
+      await settleMicrotasks();
+
+      expect(workflow.phase()).toBe('instruct');
+      expect(workflow.error()).toBe('The project was restored — run it again');
+    });
+
+    it('while the run is starting, then the start fails: stays on Instruct', async () => {
+      await workflow.analyze('capitalise chapter titles', true);
+      api.propose = async () => {
+        messages.emit(dropped());
+        throw new ApiError(409, 'Project is restoring');
+      };
+
+      await workflow.generate(false);
+
+      expect(workflow.phase()).toBe('instruct');
+      expect(workflow.error()).toBe('The project was restored — run it again');
+    });
+
     it('of another session: ignored', async () => {
       await reachReview();
 
@@ -579,6 +647,21 @@ describe('EditWithAiWorkflow', () => {
       expect(api.called('run')).toEqual([]);
       await push(done());
       expect(workflow.phase()).toBe('proposing');
+    });
+
+    it('while the run is being gated: starts no run and watches nothing', async () => {
+      await workflow.analyze('capitalise chapter titles', true);
+      let gate!: (ok: boolean) => void;
+      ensureReady = () => new Promise((resolve) => (gate = resolve));
+
+      const generating = workflow.generate(false);
+      await settleMicrotasks();
+      workflow.dispose();
+      gate(true);
+      await generating;
+
+      expect(api.called('propose')).toEqual([]);
+      expect(timers.pending).toBe(0);
     });
 
     it('discards nothing when no session was granted', () => {

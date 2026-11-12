@@ -23,6 +23,11 @@ const PUSH_BACKSTOP_MS = 2000;
 
 const DROPPED_REASON = 'The project was restored — run it again';
 
+/** One run being followed; compared by identity, so a fresh run never matches an old one. */
+interface RunWatch {
+  readonly program: string;
+}
+
 /**
  * One Edit with AI run, from Instruct to Review, for one open dialog: Instruct (what to change)
  * → Plan (what the host understood) → Proposing (the run, cancellable) → Review (hand-editable
@@ -79,6 +84,12 @@ export class EditWithAiWorkflow {
   private readonly droppedSubscription: Unsubscribe;
   private runSubscription: Unsubscribe | null = null;
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * The run watch in force, replaced by the next run and cleared by an end, a drop, a discard or
+   * {@link dispose}. A poll answer or hub message whose token is no longer this one belongs to a
+   * watch that is over, and does nothing: the run's end has already been decided.
+   */
+  private currentWatch: RunWatch | null = null;
   private closed = false;
 
   /**
@@ -140,6 +151,7 @@ export class EditWithAiWorkflow {
 
   /** Back to Instruct, clearing the error and any rows. The session is kept for the next Analyze. */
   readonly back = (): void => {
+    this.stopWatching();
     this._phase.set('instruct');
     this._error.set(null);
     this._selection.set(ReviewSelection.empty());
@@ -155,14 +167,16 @@ export class EditWithAiWorkflow {
     // Re-gate: the plan phase may have been minutes ago, and a GPU sweep for another task can have
     // stopped the LLM since. Deterministic transforms need no LLM at all.
     if (this.isLlmPlan() && !(await this.preflight.ensureReady('bookEdit'))) return;
+    // A drop or a close while the preflight was out: there is no session to run any more.
+    if (this.closed || this.program !== program) return;
 
     this._progress.set({ done: 0, total: this.targetCount() });
     this._phase.set('proposing');
-    this.watchRun(program);
+    const watch = this.watchRun(program);
     try {
       await this.api.propose(this.folder, program, thinking, this.live.connectionId());
     } catch (e) {
-      this.failRun(toApiError(e).message);
+      if (this.currentWatch === watch) this.failRun(toApiError(e).message);
     }
   }
 
@@ -188,18 +202,21 @@ export class EditWithAiWorkflow {
    * Follows the run to its end: the host pushes `bookEdit` messages to this tab's connection, and
    * the session is polled behind that as the answer of record.
    */
-  private watchRun(program: string): void {
+  private watchRun(program: string): RunWatch {
     this.stopWatching();
-    if (this.live.connectionId() !== null) this.subscribe(program);
+    const watch: RunWatch = { program };
+    this.currentWatch = watch;
+    if (this.live.connectionId() !== null) this.subscribe(watch);
     // The poll runs either way. The hub is the fast path, but a reconnect mints a new connection
     // id that the running job never learns, so its pushes would go nowhere and the run would sit
     // in Proposing for ever; the session is the one place the run's state is certain.
-    this.poll(program);
+    this.poll(watch);
+    return watch;
   }
 
-  private subscribe(program: string): void {
+  private subscribe(watch: RunWatch): void {
     this.runSubscription = this.live.on('bookEdit', (message) => {
-      if (message.program !== program) return;
+      if (this.currentWatch !== watch || message.program !== watch.program) return;
       switch (message.kind) {
         case 'Progress':
           this._progress.set({
@@ -217,14 +234,17 @@ export class EditWithAiWorkflow {
     });
   }
 
-  private poll(program: string): void {
+  private poll(watch: RunWatch): void {
     const pushing = this.runSubscription !== null;
     this.pollTimer = setTimeout(
       () => {
+        this.pollTimer = null;
         void (async () => {
-          if (this.closed || this._phase() !== 'proposing') return;
+          if (this.currentWatch !== watch) return;
           try {
-            const run = await this.api.run(this.folder, program);
+            const run = await this.api.run(this.folder, watch.program);
+            // The hub, a drop or a close can have ended the watch while the read was out.
+            if (this.currentWatch !== watch) return;
             this._progress.set({ done: run.done, total: run.total });
             if (run.status === 'Completed' || run.status === 'Cancelled') {
               this.finishRun(run.rows);
@@ -235,6 +255,7 @@ export class EditWithAiWorkflow {
               return;
             }
           } catch (e) {
+            if (this.currentWatch !== watch) return;
             // While the hub is pushing this is only the backstop: one failed read is not the run
             // failing, so keep watching. Without the hub it is the only signal, so say so.
             if (!pushing) {
@@ -242,7 +263,7 @@ export class EditWithAiWorkflow {
               return;
             }
           }
-          this.poll(program);
+          this.poll(watch);
         })();
       },
       pushing ? PUSH_BACKSTOP_MS : POLL_MS,
@@ -257,6 +278,7 @@ export class EditWithAiWorkflow {
   }
 
   private stopWatching(): void {
+    this.currentWatch = null;
     this.runSubscription?.();
     this.runSubscription = null;
     if (this.pollTimer !== null) clearTimeout(this.pollTimer);
