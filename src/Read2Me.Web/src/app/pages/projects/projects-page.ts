@@ -1,6 +1,6 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
-import { type ProjectSummary, SeriesApi, toApiError } from '@app/api';
+import { type ProjectSummary, toApiError } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
@@ -11,7 +11,7 @@ import { menuItem } from '@app/ui/menu';
 import { emptyState, icon, statusChip } from '@app/ui/partials';
 import { projectCard } from '@app/ui/project-card';
 import { ToastService } from '@app/ui/toast';
-import { LiveService } from '@app/live/live.service';
+import { SeriesStore, rereads } from '@app/series/series-store';
 import { openNewProjectDialog } from './new-project-dialog';
 import {
   type DraftRow,
@@ -67,7 +67,7 @@ function readView(): ProjectsView {
  * puts series cards among the books in no series, sorted by name; clicking one opens its panel
  * full width after the last card in its row, where the book numbers are edited as one set. The
  * New project dialog, delete with a destructive confirm, and the series flows in
- * {@link SeriesActions}. Both views read again on the hub's `series` signal.
+ * {@link SeriesActions}. Both views read again on each {@link SeriesStore} change.
  */
 export class ProjectsPage extends R2mElement {
   private readonly store = use(ProjectsStore);
@@ -75,8 +75,7 @@ export class ProjectsPage extends R2mElement {
   private readonly router = use(Router);
   private readonly confirm = use(ConfirmService);
   private readonly toast = use(ToastService);
-  private readonly seriesApi = use(SeriesApi);
-  private readonly live = use(LiveService);
+  private readonly seriesStore = use(SeriesStore);
 
   /** Folder of the project whose delete is in flight; its card is disabled meanwhile. */
   private readonly deleting = signal<string | null>(null);
@@ -96,16 +95,17 @@ export class ProjectsPage extends R2mElement {
   protected override connected(): void {
     this.classList.add('projects');
     this.onDisconnect(this.store.follow());
-    // The Characters tab's count: read again on the hub's series signal while the board, which
-    // reports its own reads, isn't showing.
+    // The Characters tab's count: read again on a change to the open series while the board,
+    // which reports its own reads, isn't showing.
     this.onDisconnect(
-      this.live.on('series', (m) => {
+      this.seriesStore.changes((change) => {
         const open = this.openSeries();
-        if (m.seriesId === open && m.kind === 'Changed' && this.panelTab() === 'books')
-          void this.readSuggestions(open);
+        if (open && rereads(change, open) && this.panelTab() === 'books')
+          return this.readSuggestions(open);
+        return undefined;
       }),
     );
-    // A re-read (this tab's write or the hub's series signal) rebases an open number draft, so it
+    // A re-read (a Series change from this tab, the hub or a reconnect) rebases an open number draft, so it
     // never saves a stale set; a deleted series drops it.
     this.effect(() => {
       const series = this.store.series();
@@ -419,15 +419,14 @@ export class ProjectsPage extends R2mElement {
     if (opening) void this.readSuggestions(id);
   }
 
-  /** Reads the series cast board for its suggestion count; a failed read just shows no count. */
+  /**
+   * Reads the series cast board for its suggestion count; a failed read just shows no count (the
+   * Characters tab reads the board itself and shows why it failed).
+   */
   private async readSuggestions(seriesId: string): Promise<void> {
-    try {
-      const cast = await this.seriesApi.cast(seriesId);
-      if (this.openSeries() === seriesId)
-        this.suggestions.set({ seriesId, count: cast.suggestionCount });
-    } catch {
-      // The Characters tab reads the board itself and shows why it failed.
-    }
+    const cast = await this.seriesStore.castOrNull(seriesId);
+    if (cast && this.openSeries() === seriesId)
+      this.suggestions.set({ seriesId, count: cast.suggestionCount });
   }
 
   private suggestionCount(seriesId: string): number {
@@ -449,7 +448,7 @@ export class ProjectsPage extends R2mElement {
     if (draft?.seriesId !== series.id || saveBlockedReason(draft.rows) !== null) return;
     this.saving.set(true);
     try {
-      await this.store.savePositions(series.id, draftPositions(draft.rows));
+      await this.seriesStore.savePositions(series.id, draftPositions(draft.rows));
       this.draft.set(null);
     } catch (error) {
       this.toast.problem(toApiError(error).toProblem());

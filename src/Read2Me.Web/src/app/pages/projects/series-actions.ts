@@ -5,13 +5,13 @@ import {
   type SeriesCastDto,
   type SeriesCastRowDto,
   type SeriesSuggestedRowDto,
-  SeriesApi,
   toApiError,
 } from '@app/api';
 import { openDialog } from '@app/core/dialog';
 import { use } from '@app/core/services';
 import { ConfirmService, PromptService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
+import { SeriesStore } from '@app/series/series-store';
 import { ProjectsStore } from './projects-store';
 import {
   deleteSeriesConfirm,
@@ -30,13 +30,14 @@ import './series-pickers';
 
 /**
  * The Projects page's series flows (Series lifecycle, #206; #207 7): the pickers, the name prompt,
- * the confirms, then the write through {@link ProjectsStore}. Creating, renaming and joining ask
- * nothing; Leave and Move to ask Leave's confirm; deleting a series asks in red. A refusal from the
- * host is a toast; a taken name asks for the name again.
+ * the confirms, then every write through {@link SeriesStore}, so each refreshes the shelf and the
+ * board by the same rule (#332); {@link ProjectsStore} only lends its lists. Creating, renaming and
+ * joining ask nothing; Leave and Move to ask Leave's confirm; deleting a series asks in red. A
+ * refusal from the host is a toast; a taken name asks for the name again.
  */
 export class SeriesActions {
   private readonly store = use(ProjectsStore);
-  private readonly seriesApi = use(SeriesApi);
+  private readonly seriesStore = use(SeriesStore);
   private readonly confirm = use(ConfirmService);
   private readonly prompt = use(PromptService);
   private readonly toast = use(ToastService);
@@ -75,7 +76,7 @@ export class SeriesActions {
   /** New series from the header: name only, it starts empty. */
   async newSeries(): Promise<void> {
     await this.withName({ title: 'New series', confirmLabel: 'Create series' }, async (name) => {
-      await this.store.createSeries(name);
+      await this.seriesStore.create(name);
       this.toast.success(`Created series ${name}`);
     });
   }
@@ -84,13 +85,13 @@ export class SeriesActions {
     await this.withName(
       { title: `Rename ${series.name}`, initial: series.name, confirmLabel: 'Rename' },
       async (name) => {
-        if (name !== series.name) await this.store.renameSeries(series.id, name);
+        if (name !== series.name) await this.seriesStore.rename(series.id, name);
       },
     );
   }
 
   async deleteSeries(series: SeriesView): Promise<boolean> {
-    const cast = await this.castOf(series.id);
+    const cast = await this.seriesStore.castOrNull(series.id);
     const ok = await this.confirm.confirm(
       deleteSeriesConfirm({
         name: series.name,
@@ -101,7 +102,7 @@ export class SeriesActions {
     );
     if (!ok) return false;
     return this.run(async () => {
-      await this.store.deleteSeries(series.id);
+      await this.seriesStore.delete(series.id);
       this.toast.success(`Deleted series ${series.name}`);
     });
   }
@@ -120,7 +121,7 @@ export class SeriesActions {
       this.toast.warn('Poster image must be 10 MB or smaller.');
       return;
     }
-    await this.run(() => this.store.uploadPoster(series.id, file));
+    await this.run(() => this.seriesStore.uploadPoster(series.id, file));
   }
 
   /** Remove poster, behind its red confirm: the uploaded image has no History. */
@@ -133,7 +134,7 @@ export class SeriesActions {
       }),
     );
     if (!ok) return;
-    await this.run(() => this.store.clearPoster(series.id));
+    await this.run(() => this.seriesStore.clearPoster(series.id));
   }
 
   /** Remove from <series>, behind Leave's confirm. */
@@ -146,7 +147,7 @@ export class SeriesActions {
     );
     if (!ok) return;
     await this.run(async () => {
-      await this.store.leave(current.seriesId, project.folderName);
+      await this.seriesStore.leave(current.seriesId, project.folderName);
       this.toast.success(`Removed ${project.title} from ${current.name}`);
     });
   }
@@ -191,7 +192,11 @@ export class SeriesActions {
     if (current?.seriesId === target.id) return;
     if (current && !(await this.confirmMove(project, current, target.name))) return;
     await this.run(async () => {
-      const position = await this.store.join(target.id, project.folderName, current !== undefined);
+      const position = await this.seriesStore.join(
+        target.id,
+        project.folderName,
+        current !== undefined,
+      );
       this.joinedToast(project, position, target.name);
     });
   }
@@ -213,9 +218,9 @@ export class SeriesActions {
         hint: `${project.title} becomes Book 1.`,
       },
       async (name) => {
-        if (current) created.series = { id: await this.store.createSeries(name), name };
+        if (current) created.series = { id: await this.seriesStore.create(name), name };
         else {
-          await this.store.createSeries(name, project.folderName);
+          await this.seriesStore.create(name, project.folderName);
           this.joinedToast(project, 1, name);
         }
       },
@@ -223,7 +228,7 @@ export class SeriesActions {
     const target = created.series;
     if (!target) return;
     await this.run(async () => {
-      const position = await this.store.join(target.id, project.folderName, true);
+      const position = await this.seriesStore.join(target.id, project.folderName, true);
       this.joinedToast(project, position, target.name);
     });
   }
@@ -239,21 +244,9 @@ export class SeriesActions {
     );
   }
 
-  /**
-   * The series cast board, read for a confirm. A failed read (an unreadable registry, say) resolves
-   * null and the confirm names no Characters, so Leave, Move to and Delete series still run.
-   */
-  private async castOf(seriesId: string): Promise<SeriesCastDto | null> {
-    try {
-      return await this.seriesApi.cast(seriesId);
-    } catch {
-      return null;
-    }
-  }
-
   /** The book's series-linked Characters, which Leave and Move to name. */
   private async linkedIn(seriesId: string, folder: string): Promise<string[] | null> {
-    const cast = await this.castOf(seriesId);
+    const cast = await this.seriesStore.castOrNull(seriesId);
     return cast ? linkedNames(cast, folder) : null;
   }
 
@@ -271,7 +264,7 @@ export class SeriesActions {
     if (!book) return false;
     let gains;
     try {
-      gains = await this.seriesApi.previewLink(
+      gains = await this.seriesStore.previewLink(
         series.id,
         row.seriesCharacterId,
         folder,
@@ -293,7 +286,7 @@ export class SeriesActions {
     );
     if (!ok) return false;
     return this.run(async () => {
-      await this.seriesApi.link(series.id, row.seriesCharacterId, folder, character.characterId);
+      await this.seriesStore.link(series.id, row.seriesCharacterId, folder, character.characterId);
       this.toast.success(`${character.name} is linked to ${row.label}`);
     });
   }
@@ -317,7 +310,7 @@ export class SeriesActions {
       }),
     );
     if (!ok) return false;
-    return this.run(() => this.seriesApi.unlink(series.id, row.seriesCharacterId, folder));
+    return this.run(() => this.seriesStore.unlink(series.id, row.seriesCharacterId, folder));
   }
 
   /** Share as new, behind its confirm: a Series character made from this Character's Voices. */
@@ -334,7 +327,7 @@ export class SeriesActions {
     );
     if (!ok) return false;
     return this.run(async () => {
-      await this.seriesApi.share(series.id, folder, character.characterId);
+      await this.seriesStore.share(series.id, folder, character.characterId);
       this.toast.success(`${character.name} is shared across ${series.name}`);
     });
   }
@@ -350,7 +343,7 @@ export class SeriesActions {
     const members = memberRefs(row);
     let preview;
     try {
-      preview = await this.seriesApi.previewShareAndLink(series.id, members);
+      preview = await this.seriesStore.previewShareAndLink(series.id, members);
     } catch (error) {
       this.toast.problem(toApiError(error).toProblem());
       return false;
@@ -368,7 +361,7 @@ export class SeriesActions {
     );
     if (!ok) return false;
     return this.run(async () => {
-      await this.seriesApi.shareAndLink(series.id, members);
+      await this.seriesStore.shareAndLink(series.id, members);
       this.toast.success(`${row.label} is shared and linked across ${series.name}`);
     });
   }
@@ -381,13 +374,13 @@ export class SeriesActions {
     characterId: string,
   ): Promise<boolean> {
     return this.run(() =>
-      this.seriesApi.notTheSame(series.id, row.seriesCharacterId, folder, characterId),
+      this.seriesStore.notTheSame(series.id, row.seriesCharacterId, folder, characterId),
     );
   }
 
   /** Not the same on a suggested row: each pair of its Characters. */
   notTheSameRow(series: { id: string }, row: SeriesSuggestedRowDto): Promise<boolean> {
-    return this.run(() => this.seriesApi.notTheSameRow(series.id, memberRefs(row)));
+    return this.run(() => this.seriesStore.notTheSameRow(series.id, memberRefs(row)));
   }
 
   private joinedToast(project: ProjectSummary, position: number, seriesName: string): void {

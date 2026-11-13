@@ -7,14 +7,13 @@ import {
   type Guid,
   type BookCommand,
   type SeriesCharacterDto,
-  SeriesApi,
   type VoiceDto,
   toApiError,
 } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { provide, use } from '@app/core/services';
 import { signal } from '@app/core/signals';
-import { LiveService } from '@app/live/live.service';
+import { SeriesStore, rereads } from '@app/series/series-store';
 import { ConfirmService, PromptService } from '@app/ui/dialogs';
 import { blockable, callout, icon, statusChip } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
@@ -55,12 +54,12 @@ interface RowView {
  * with its note while another book's rules use the Voice or it is the last — and one "Default in
  * Book N" column per linked book, each that book's own default. Every write goes to the series
  * copy's per-book routes (or, for a default, to that book's); the host copies each Voice edit into
- * the other linked books. Read again on the hub's `series` signal for this series.
+ * the other linked books. Read again on each {@link SeriesStore} change naming this series, and on
+ * `Resynced`.
  */
 export class SeriesVoiceEditor extends R2mElement {
-  private readonly api = use(SeriesApi);
+  private readonly seriesStore = use(SeriesStore);
   private readonly book = use(BookApi);
-  private readonly live = use(LiveService);
   private readonly confirm = use(ConfirmService);
   private readonly prompt = use(PromptService);
   private readonly toast = use(ToastService);
@@ -83,9 +82,9 @@ export class SeriesVoiceEditor extends R2mElement {
     this.classList.add('series-voices');
     this.cast.seriesEditor = true;
     this.onDisconnect(
-      this.live.on('series', (m) => {
-        if (m.seriesId === this.seriesId && m.kind === 'Changed') void this.load();
-      }),
+      this.seriesStore.changes((change) =>
+        rereads(change, this.seriesId) ? this.load() : undefined,
+      ),
     );
     this.onDisconnect(() => this.cast.close());
     void this.load();
@@ -96,7 +95,7 @@ export class SeriesVoiceEditor extends R2mElement {
     if (!this.seriesId || !this.seriesCharacterId) return;
     const seq = ++this.seq;
     try {
-      const detail = await this.api.character(this.seriesId, this.seriesCharacterId);
+      const detail = await this.seriesStore.character(this.seriesId, this.seriesCharacterId);
       if (seq !== this.seq) return;
       this.detail.set(detail);
       this.error.set(null);
@@ -119,14 +118,19 @@ export class SeriesVoiceEditor extends R2mElement {
 
   /** Runs one command in `folder`, then reads again; toasts "Saved in N books" from that read (or the refusal). */
   private run(folder: string, command: BookCommand, saved = true): Promise<boolean> {
-    return this.write(() => this.book.execute(folder, command), saved);
+    return this.write(() => this.book.execute(folder, command), saved, true);
   }
 
   /**
    * One write, then a fresh read. "Saved in N books" counts from the read after it, since an edit
    * here brings a differing book back in line, and a copy that failed leaves its book differing.
    */
-  private async write(send: () => Promise<unknown>, saved: boolean): Promise<boolean> {
+  private async write(
+    send: () => Promise<unknown>,
+    saved: boolean,
+    /** False for a Series write: `SeriesStore` has read this editor again before it resolves. */
+    reread: boolean,
+  ): Promise<boolean> {
     if (!this.detail() || this.busy()) return false;
     this.busy.set(true);
     let ok = false;
@@ -137,7 +141,7 @@ export class SeriesVoiceEditor extends R2mElement {
       this.toast.problem(toApiError(error).toProblem());
     } finally {
       this.busy.set(false);
-      await this.load();
+      if (reread) await this.load();
     }
     const after = this.detail();
     if (ok && saved && after) this.toast.success(savedInLabel(after));
@@ -148,7 +152,7 @@ export class SeriesVoiceEditor extends R2mElement {
   async push(callout: DiffersCallout): Promise<void> {
     let losses;
     try {
-      ({ losses } = await this.api.previewPush(
+      ({ losses } = await this.seriesStore.previewPush(
         this.seriesId,
         this.seriesCharacterId,
         callout.book.folder,
@@ -167,8 +171,9 @@ export class SeriesVoiceEditor extends R2mElement {
     );
     if (!ok) return;
     await this.write(
-      () => this.api.push(this.seriesId, this.seriesCharacterId, callout.book.folder),
+      () => this.seriesStore.push(this.seriesId, this.seriesCharacterId, callout.book.folder),
       true,
+      false,
     );
   }
 
