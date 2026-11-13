@@ -26,6 +26,11 @@ const check = (el: Element, name: string, on: boolean) => {
 };
 
 describe('r2m-manual-reread-dialog', () => {
+  it('is titled "Reread with split rules"', async () => {
+    const { dialog } = await open();
+    expect(text(dialog.querySelector('.r2m-dialog__title'))).toBe('Reread with split rules');
+  });
+
   it('starts chapters-only, adds levels with the switches and relabels the parts switch', async () => {
     const { dialog } = await open();
     const headings = () => Array.from(dialog.querySelectorAll('.manual__heading'), text);

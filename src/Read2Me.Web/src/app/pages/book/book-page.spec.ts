@@ -1383,57 +1383,23 @@ describe('r2m-book-page', () => {
     }
   });
 
-  describe('?action= deep links (guidance-primitives 18)', () => {
+  // The policy (wait, drop, or drop and open) is `decideActionDeepLink`'s table in
+  // action-deep-link.spec.ts; these
+  // mount cases hold the page acting on it.
+  describe('Action deep links, ?action= (guidance-primitives 18)', () => {
     /** The last navigation the page made, if it replaced the entry. */
     const lastReplace = () => navigation.calls.filter((c) => c.history === 'replace').at(-1)?.url;
 
-    for (const [value, tag] of [
-      ['titles', 'r2m-add-titles-dialog'],
-      ['edit-ai', 'r2m-edit-with-ai-dialog'],
-      ['manual-reread', 'r2m-manual-reread-dialog'],
-    ] as const) {
-      it(`?action=${value} drops the param and opens the overflow entry's dialog`, async () => {
-        await start(`projects/dracula/book?mode=speakers&action=${value}`);
-        for (let i = 0; i < 4; i++) await settle();
-        expect(document.querySelectorAll(tag)).toHaveLength(1);
-        const url = new URL(lastReplace()!);
-        expect(url.searchParams.has('action')).toBe(false);
-        expect(url.searchParams.get('mode')).toBe('speakers');
-      });
-    }
-
-    it('the manual reread dialog is titled "Reread with split rules"', async () => {
-      await start('projects/dracula/book?action=manual-reread');
+    it("drops the param, keeping the rest of the query, and opens the overflow entry's dialog", async () => {
+      await start('projects/dracula/book?mode=speakers&action=titles');
       for (let i = 0; i < 4; i++) await settle();
-      const dialog = document.querySelector('r2m-manual-reread-dialog')!;
-      await dialog.rendered();
-      expect(text(dialog.querySelector('.r2m-dialog__title'))).toBe('Reread with split rules');
+      expect(document.querySelectorAll('r2m-add-titles-dialog')).toHaveLength(1);
+      const url = new URL(lastReplace()!);
+      expect(url.searchParams.has('action')).toBe(false);
+      expect(url.searchParams.get('mode')).toBe('speakers');
     });
 
-    it('an unknown value only drops the param', async () => {
-      await start('projects/dracula/book?action=pauses');
-      for (let i = 0; i < 4; i++) await settle();
-      expect(document.querySelector('dialog')).toBeNull();
-      expect(new URL(lastReplace()!).searchParams.has('action')).toBe(false);
-    });
-
-    it('while a History step is viewed it only drops the param (ticket 32)', async () => {
-      use(StepView).view('dracula', 's8');
-      await start('projects/dracula/book?action=titles');
-      for (let i = 0; i < 4; i++) await settle();
-      expect(document.querySelector('r2m-add-titles-dialog')).toBeNull();
-      expect(new URL(lastReplace()!).searchParams.has('action')).toBe(false);
-    });
-
-    it('with no content it only drops the param', async () => {
-      api.on('GET', `${BASE}/book`, { ...OVERVIEW, hasContent: false, volumes: [] });
-      await start('projects/dracula/book?action=titles');
-      for (let i = 0; i < 4; i++) await settle();
-      expect(document.querySelector('dialog')).toBeNull();
-      expect(new URL(lastReplace()!).searchParams.has('action')).toBe(false);
-    });
-
-    it('waits while the editor is locked, then opens', async () => {
+    it('waits while the editor is locked, then opens exactly once', async () => {
       const reply = Promise.withResolvers<unknown>();
       echoOwnReceipts(() => reply.promise);
       const { page, router } = await start('projects/dracula/book');
@@ -1447,6 +1413,12 @@ describe('r2m-book-page', () => {
 
       reply.resolve({ newEntityId: null });
       for (let i = 0; i < 6; i++) await settle();
+      expect(document.querySelectorAll('r2m-add-titles-dialog')).toHaveLength(1);
+      expect(router.query().get('action')).toBeNull();
+
+      // The effect runs again on a new query: the dropped link doesn't open a second dialog.
+      router.navigate(router.path(), { query: { mode: 'audio' } });
+      for (let i = 0; i < 4; i++) await settle();
       expect(document.querySelectorAll('r2m-add-titles-dialog')).toHaveLength(1);
     });
   });
