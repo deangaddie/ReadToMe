@@ -13,6 +13,7 @@ import {
 import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { ToastService } from '@app/ui/toast';
+import { rereadAction } from './book-actions';
 import type { BookStore } from './book-store';
 
 /** How long a committed write may take to come back as this tab's own receipt before we reload. */
@@ -92,7 +93,9 @@ export class BookEditor {
 
   /** Rereads the source file from scratch (the caller has already confirmed). */
   async reread(): Promise<boolean> {
-    return (await this.settle((folder) => this.projects.import(folder, true)))?.error === null;
+    return (
+      (await this.settle((folder) => rereadAction.command(this.projects, folder)))?.error === null
+    );
   }
 
   async rereadManually(request: ManualImportRequest): Promise<boolean> {

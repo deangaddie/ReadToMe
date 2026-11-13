@@ -2,7 +2,6 @@ import { describe, expect, it } from 'bun:test';
 import type { ParagraphDto, ParagraphItemDto } from '@app/api';
 import type { NodeMenuTarget } from './node-menu-entries';
 import {
-  addPausesChange,
   attributeSelectionChange,
   generateAudioChange,
   mergeChange,
@@ -44,21 +43,6 @@ function target(overrides: Partial<NodeMenuTarget> = {}): NodeMenuTarget {
     ...overrides,
   };
 }
-
-describe('addPausesChange', () => {
-  it.each([
-    [3, 'Inserts a pause between paragraphs and at the end of every chapter (3 chapters).'],
-    [1, 'Inserts a pause between paragraphs and at the end of every chapter (1 chapter).'],
-    [0, 'Inserts a pause between paragraphs and at the end of every chapter (0 chapters).'],
-  ])('always asks, neutral, counting %i chapters', (chapters, scope) => {
-    expect(addPausesChange(chapters)).toEqual({
-      action: 'Add pauses',
-      scope,
-      cost: 'Removing them later means deleting each one.',
-      destructive: false,
-    });
-  });
-});
 
 describe('mergeChange', () => {
   it('Previous folds this node into the one before it; neutral', () => {

@@ -13,12 +13,12 @@ import { menuHeading, menuItem } from '@app/ui/menu';
 import { adviceLine, blockable, emptyState, icon, statusChip } from '@app/ui/partials';
 import type { SpeakerMenu } from '@app/ui/speaker-menu';
 import { ToastService } from '@app/ui/toast';
-import { rereadConfirm } from '../project/permanent-changes';
 import { type StepActionId, adviceFor } from '../project/pipeline-steps';
 import { ProjectStore } from '../project/project-store';
 import { addTitlesCommand, addedTitlesMessage } from './add-titles';
 import { openAddTitlesDialog } from './add-titles-dialog';
 import { AudioGenerator } from './audio-generator';
+import { addPausesAction, rereadAction } from './book-actions';
 import { BookEditor } from './book-editor';
 import { BookStore } from './book-store';
 import { type HeadingRef, type TreeNode, placeholderTitleClass } from './book-tree';
@@ -39,7 +39,6 @@ import { PronunciationPanelState } from './pronunciation-panel-store';
 import { type PronunciationsDock, pronunciationsDock } from './pronunciation-dock';
 import { TREE_DEFAULT_PX, TREE_MIN_PX, TreeLayout } from './tree-layout';
 import { type ReaderGeometry, ReaderWindow, listGeometry } from './reader-window';
-import { addPausesChange } from './permanent-changes';
 import {
   READER_MODES,
   type ReaderMode,
@@ -858,12 +857,14 @@ export class BookPage extends R2mElement {
   /** Add pauses always asks (guidance-primitives spec §7): each pause is a delete to undo. */
   private async addPauses(): Promise<void> {
     const chapters = this.store.overview()?.totalChapters ?? 0;
-    if (!(await confirmPermanent(addPausesChange(chapters)))) return;
-    await this.editor.run({ type: 'AddPauses' });
+    if (!(await confirmPermanent(addPausesAction.confirm(chapters)))) return;
+    await this.editor.run(addPausesAction.command);
   }
 
   private async reread(): Promise<void> {
-    const ok = await this.confirm.confirm(rereadConfirm(this.project.status()?.checkpoints ?? {}));
+    const ok = await this.confirm.confirm(
+      rereadAction.confirm(this.project.status()?.checkpoints ?? {}),
+    );
     if (ok) await this.editor.reread();
   }
 

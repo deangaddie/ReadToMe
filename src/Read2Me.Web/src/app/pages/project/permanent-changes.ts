@@ -1,23 +1,4 @@
-import type { ProjectStatusDto } from '@app/api';
-import type { ConfirmOptions, PermanentChange } from '@app/ui/dialogs';
-
-/**
- * Reread's confirm, shared by the Overview row and the Book overflow: it keeps its own title and
- * body, and names the confirmed and skipped steps it clears when any checkpoint row exists
- * (guidance-primitives spec §7). Always red: everything the user made on the Book goes.
- */
-export function rereadConfirm(checkpoints: ProjectStatusDto['checkpoints']): ConfirmOptions {
-  const steps =
-    Object.keys(checkpoints).length > 0 ? ' Clears your confirmed and skipped steps.' : '';
-  return {
-    title: 'Reread the book?',
-    message:
-      'This deletes all book data — attribution, generated audio, and edits — and ' +
-      `reprocesses the source file from scratch.${steps} This cannot be undone.`,
-    destructive: true,
-    confirmLabel: 'Delete and reread',
-  };
-}
+import type { PermanentChange } from '@app/ui/dialogs';
 
 /**
  * The project card's permanent-change confirm (guidance-primitives spec §7): Remove cover always
