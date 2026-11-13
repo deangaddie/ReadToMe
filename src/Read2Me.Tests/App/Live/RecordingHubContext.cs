@@ -9,7 +9,8 @@ namespace Read2Me.Tests.App.Live;
 /// <summary>
 /// An <see cref="IHubContext{THub,T}"/> that records every send as (target group, method, payload).
 /// Setting <see cref="Gate"/> makes every send await it, which is how a test pins the relay's drain
-/// loop to prove publishers never wait on it.
+/// loop to prove publishers never wait on it. <see cref="Disconnect"/> makes sends to one connection fail,
+/// as they would to a caller that went away mid-run; those sends are not recorded.
 /// </summary>
 public sealed class RecordingHubContext : IHubContext<LiveHub, ILiveClient>
 {
@@ -20,6 +21,11 @@ public sealed class RecordingHubContext : IHubContext<LiveHub, ILiveClient>
 
     public IHubClients<ILiveClient> Clients => new RecordingClients(this);
     public IGroupManager Groups { get; } = Substitute.For<IGroupManager>();
+
+    private readonly ConcurrentDictionary<string, bool> _disconnected = new();
+
+    /// <summary>From now on every send to <paramref name="connectionId"/> faults instead of being recorded.</summary>
+    public void Disconnect(string connectionId) => _disconnected[$"client:{connectionId}"] = true;
 
     public IReadOnlyList<Sent> To(string target) => Messages.Where(m => m.Target == target).ToList();
     public IReadOnlyList<Sent> Method(string method) => Messages.Where(m => m.Method == method).ToList();
@@ -41,6 +47,8 @@ public sealed class RecordingHubContext : IHubContext<LiveHub, ILiveClient>
     {
         private Task Record(string method, object payload)
         {
+            if (owner._disconnected.ContainsKey(target))
+                return Task.FromException(new IOException($"{target} is disconnected"));
             owner.Messages.Enqueue(new Sent(target, method, payload));
             return owner.Gate?.Task ?? Task.CompletedTask;
         }

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.App.Live;
 using Read2Me.App.Services.Preflight;
@@ -68,15 +68,30 @@ public class PreflightRunCoordinatorTests
         Assert.Contains("health check timed out", done.Reason);
     }
 
+    [Fact]
+    public async Task A_caller_that_disconnects_mid_run_still_lets_every_op_happen()
+    {
+        _hub.Disconnect("conn-1");
+        var logger = new CollectingLogger<PreflightRunCoordinator>();
+        var coordinator = new PreflightRunCoordinator(
+            new ObservedAiServiceControl(_control, new EventBroadcaster<ServiceStatusChanged>()), _hub, logger);
+
+        var run = coordinator.Start(Plan([Llama], [Audiocpp]), "conn-1");
+
+        // The done send is the run's last act; the debug line says its failure was swallowed.
+        await Eventually.TrueAsync(
+            () => logger.At(LogLevel.Debug).ToList().Contains($"preflight Done for run {run} not delivered"),
+            "the run's done to fail");
+        Assert.Equal(["shutdown:audiocpp", "start:llama"], _control.OpLog);
+        Assert.Empty(_hub.Messages);
+    }
+
     /// <summary>Waits for the run's <c>done</c>, then returns every preflight message in send order.</summary>
     private async Task<List<PreflightMessage>> RunMessagesAsync()
     {
-        var sw = Stopwatch.StartNew();
-        while (!_hub.Method("preflight").Any(m => ((PreflightMessage)m.Payload).Kind == PreflightMessageKind.Done))
-        {
-            Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10), "timed out waiting for the run's done");
-            await Task.Delay(10, TestContext.Current.CancellationToken);
-        }
+        await Eventually.TrueAsync(
+            () => _hub.Method("preflight").Any(m => ((PreflightMessage)m.Payload).Kind == PreflightMessageKind.Done),
+            "the run's done");
         return [.. _hub.Method("preflight").Select(m => (PreflightMessage)m.Payload)];
     }
 }
