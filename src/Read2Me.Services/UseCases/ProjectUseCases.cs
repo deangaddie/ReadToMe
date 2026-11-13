@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Read2Me.Core.Exceptions;
 using Read2Me.Core.Models;
 using Read2Me.Data.Enums;
 using Read2Me.Services.History;
@@ -19,7 +21,11 @@ namespace Read2Me.Services.UseCases
         /// <summary>The refusal of a create with a blank title; the API also answers it for a missing file.</summary>
         public const string TitleAndFileRequired = "Fields 'title' and 'file' are required.";
 
-        /// <summary>Creates a project from a book file. Title, book title and author are stored trimmed; a blank title is refused.</summary>
+        /// <summary>
+        /// Creates a project from a book file. Title, book title and author are stored trimmed; a
+        /// blank title, or one with no folder name in it, is refused, and a title whose folder
+        /// already exists is a conflict.
+        /// </summary>
         public async Task<ProjectOutcome> CreateAsync(
             string title, string bookTitle, string author,
             string originalFileName, Stream fileStream, BookFileType fileType)
@@ -33,10 +39,18 @@ namespace Read2Me.Services.UseCases
                     title, bookTitle.Trim(), author.Trim(), originalFileName, fileStream, fileType);
                 return new ProjectOutcome.Created(folderName);
             }
-            catch (ArgumentException ex) { return new ProjectOutcome.Failed(ex.Message); }
-            catch (InvalidOperationException ex) { return new ProjectOutcome.Failed(ex.Message); }
-            catch (IOException) { return new ProjectOutcome.Failed("Failed to save book file. Please try again."); }
-            catch (Exception) { return new ProjectOutcome.Failed("Failed to create project. Please try again."); }
+            catch (ProjectAlreadyExistsException ex) { return new ProjectOutcome.Conflict(ex.Message); }
+            catch (ArgumentException ex) { return new ProjectOutcome.Refused(ex.Message); }
+            catch (IOException ex)
+            {
+                logger.LogError(ex, "Failed to save the book file of new project '{Title}'", title);
+                return new ProjectOutcome.Failed("Failed to save book file. Please try again.");
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Failed to create project '{Title}'", title);
+                return new ProjectOutcome.Failed("Failed to create project. Please try again.");
+            }
         }
 
         public async Task<Result<IReadOnlyList<ProjectSummary>>> GetSummariesAsync()
@@ -46,7 +60,11 @@ namespace Read2Me.Services.UseCases
                 var summaries = await reader.GetProjectSummariesAsync();
                 return Result<IReadOnlyList<ProjectSummary>>.Ok(summaries);
             }
-            catch (Exception) { return Result<IReadOnlyList<ProjectSummary>>.Fail("Failed to load projects."); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Failed to load the project summaries");
+                return Result<IReadOnlyList<ProjectSummary>>.Fail("Failed to load projects.");
+            }
         }
 
         /// <summary>
@@ -130,33 +148,15 @@ namespace Read2Me.Services.UseCases
             if (title is "") return new ProjectOutcome.Refused("Title cannot be blank.");
             if (bookTitle is "") return new ProjectOutcome.Refused("Book title cannot be blank.");
 
-            try
-            {
-                await writer.UpdateMetadataAsync(folderId, title, bookTitle, author);
-                return new ProjectOutcome.Done();
-            }
-            catch (Exception) { return new ProjectOutcome.Failed("Failed to save project details."); }
+            return await WriteAsync(folderId, "Failed to save project details.",
+                () => writer.UpdateMetadataAsync(folderId, title, bookTitle, author));
         }
 
-        public async Task<Result> SaveCoverImageAsync(string folderName, string filename, Stream stream)
-        {
-            try
-            {
-                await writer.SaveCoverImageAsync(folderName, filename, stream);
-                return Result.Ok();
-            }
-            catch (Exception) { return Result.Fail("Failed to save cover image."); }
-        }
+        public Task<ProjectOutcome> SaveCoverImageAsync(ProjectFolderId folderId, string filename, Stream stream) =>
+            WriteAsync(folderId, "Failed to save cover image.", () => writer.SaveCoverImageAsync(folderId, filename, stream));
 
-        public async Task<Result> DeleteCoverImageAsync(string folderName)
-        {
-            try
-            {
-                await writer.DeleteCoverImageAsync(folderName);
-                return Result.Ok();
-            }
-            catch (Exception) { return Result.Fail("Failed to delete cover image."); }
-        }
+        public Task<ProjectOutcome> DeleteCoverImageAsync(ProjectFolderId folderId) =>
+            WriteAsync(folderId, "Failed to delete cover image.", () => writer.DeleteCoverImageAsync(folderId));
 
         /// <summary>
         /// Flips the Book-wide narrator-only policy through <see cref="BookMutations"/>, so
@@ -167,19 +167,44 @@ namespace Read2Me.Services.UseCases
         /// what the switch in front of the user is already showing.
         /// </para>
         /// </summary>
-        public async Task<Result> SetNarratorOnlyModeAsync(string folderName, bool value)
+        public Task<ProjectOutcome> SetNarratorOnlyModeAsync(ProjectFolderId folderId, bool value) =>
+            WriteAsync(folderId, "Failed to save narrator-only setting.",
+                () => mutations.CommitAsync(new SetNarratorOnlyModeMutation(folderId, value)));
+
+        /// <summary>
+        /// One Book write, its outcome mapped for the reader. A fault nobody foresaw is logged with the
+        /// folder and answered with <paramref name="failure"/>; a cancellation propagates unlogged.
+        /// </summary>
+        private async Task<ProjectOutcome> WriteAsync(
+            ProjectFolderId folderId, string failure, Func<Task<BookMutationOutcome>> write)
         {
+            BookMutationOutcome outcome;
             try
             {
-                var outcome = await mutations.CommitAsync(
-                    new SetNarratorOnlyModeMutation(new ProjectFolderId(folderName), value));
-
-                return outcome is BookMutationOutcome.Rejected rejected
-                    ? Result.Fail(rejected.Message)
-                    : Result.Ok();
+                outcome = await write();
             }
-            catch (Exception) { return Result.Fail("Failed to save narrator-only setting."); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "{Failure} Project '{Folder}'", failure, folderId);
+                return new ProjectOutcome.Failed(failure);
+            }
+            return Outcome(outcome);
         }
+
+        /// <summary>A rejection is an expected answer with the mutation's own reason; a cancellation is rethrown.</summary>
+        private static ProjectOutcome Outcome(BookMutationOutcome outcome) => outcome switch
+        {
+            BookMutationOutcome.Committed or BookMutationOutcome.NoChange => new ProjectOutcome.Done(),
+            BookMutationOutcome.Rejected
+            {
+                Reason: BookMutationRejection.Conflict or BookMutationRejection.Stale
+                    or BookMutationRejection.Restoring or BookMutationRejection.Blocked,
+            } rejected => new ProjectOutcome.Conflict(rejected.Message),
+            BookMutationOutcome.Rejected { Reason: BookMutationRejection.NotFound } rejected => new ProjectOutcome.NotFound(rejected.Message),
+            BookMutationOutcome.Rejected { Reason: BookMutationRejection.Validation } rejected => new ProjectOutcome.Refused(rejected.Message),
+            BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } rejected => throw new OperationCanceledException(rejected.Message),
+            _ => throw new UnreachableException($"A project write answered {outcome}."),
+        };
 
         /// <summary>
         /// Confirms, skips or (with a null state) reopens a Pipeline step through

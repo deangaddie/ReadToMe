@@ -108,14 +108,14 @@ public class ProjectApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     [Fact]
-    public async Task Create_duplicate_title_is_422()
+    public async Task Create_duplicate_title_is_409()
     {
         var title = $"api-dup-{Guid.NewGuid():N}";
         var first = await Http.PostAsync($"{app.BaseUrl}/api/projects", CreateForm(title));
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
 
         var second = await Http.PostAsync($"{app.BaseUrl}/api/projects", CreateForm(title));
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, second.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
         Assert.Equal("application/problem+json",
             second.Content.Headers.ContentType?.MediaType);
     }

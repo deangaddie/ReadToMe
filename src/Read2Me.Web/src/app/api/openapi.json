@@ -9967,7 +9967,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Create a project from an uploaded book file (multipart: title, bookTitle, author, file).",
+        "summary": "Create a project from an uploaded book file (multipart: title, bookTitle, author, file). 400 for a title with no folder name in it; 409 when a project of that name exists; 422 when the write fails.",
         "tags": [
           "ProjectEndpoints"
         ]
@@ -10110,7 +10110,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Update title, book title and/or author. Omitted fields are unchanged; the folder name never changes.",
+        "summary": "Update title, book title and/or author. Omitted fields are unchanged; the folder name never changes. 409 while the project is restoring or another writer holds it; 404 when the Book has no project row; 422 when the write fails.",
         "tags": [
           "ProjectEndpoints"
         ]
@@ -11967,7 +11967,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Remove the cover image; a project without one still answers 204.",
+        "summary": "Remove the cover image; a project without one still answers 204. 409 while the project is restoring or another writer holds it; 404 when the Book has no project row; 422 when the write fails.",
         "tags": [
           "ProjectEndpoints"
         ]
@@ -12008,7 +12008,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Replace the cover image (multipart 'file': jpg/jpeg/png/webp, at most 10 MB). Served from /workspace/{folder}/{coverImage}.",
+        "summary": "Replace the cover image (multipart 'file': jpg/jpeg/png/webp, at most 10 MB). Served from /workspace/{folder}/{coverImage}. 409 while the project is restoring or another writer holds it; 404 when the Book has no project row; 422 when the write fails.",
         "tags": [
           "ProjectEndpoints"
         ]
@@ -12364,7 +12364,7 @@
             "description": "A problem: any non-2xx answer."
           }
         },
-        "summary": "Set the Book-wide narrator-only policy: only narration items get audio.",
+        "summary": "Set the Book-wide narrator-only policy: only narration items get audio. 409 while the project is restoring or another writer holds it; 404 when the Book has no project row; 422 when the write fails.",
         "tags": [
           "ProjectEndpoints"
         ]

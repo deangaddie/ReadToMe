@@ -950,7 +950,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** Create a project from an uploaded book file (multipart: title, bookTitle, author, file). */
+        /** Create a project from an uploaded book file (multipart: title, bookTitle, author, file). 400 for a title with no folder name in it; 409 when a project of that name exists; 422 when the write fails. */
         post: {
             parameters: {
                 query?: never;
@@ -1076,7 +1076,7 @@ export interface paths {
         };
         options?: never;
         head?: never;
-        /** Update title, book title and/or author. Omitted fields are unchanged; the folder name never changes. */
+        /** Update title, book title and/or author. Omitted fields are unchanged; the folder name never changes. 409 while the project is restoring or another writer holds it; 404 when the Book has no project row; 422 when the write fails. */
         patch: {
             parameters: {
                 query?: never;
@@ -2972,7 +2972,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Replace the cover image (multipart 'file': jpg/jpeg/png/webp, at most 10 MB). Served from /workspace/{folder}/{coverImage}. */
+        /** Replace the cover image (multipart 'file': jpg/jpeg/png/webp, at most 10 MB). Served from /workspace/{folder}/{coverImage}. 409 while the project is restoring or another writer holds it; 404 when the Book has no project row; 422 when the write fails. */
         put: {
             parameters: {
                 query?: never;
@@ -3012,7 +3012,7 @@ export interface paths {
             };
         };
         post?: never;
-        /** Remove the cover image; a project without one still answers 204. */
+        /** Remove the cover image; a project without one still answers 204. 409 while the project is restoring or another writer holds it; 404 when the Book has no project row; 422 when the write fails. */
         delete: {
             parameters: {
                 query?: never;
@@ -3396,7 +3396,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Set the Book-wide narrator-only policy: only narration items get audio. */
+        /** Set the Book-wide narrator-only policy: only narration items get audio. 409 while the project is restoring or another writer holds it; 404 when the Book has no project row; 422 when the write fails. */
         put: {
             parameters: {
                 query?: never;
