@@ -76,18 +76,20 @@ namespace Read2Me.App.Api
             var author = form["author"].ToString();
             var file = form.Files.GetFile("file");
 
-            if (string.IsNullOrWhiteSpace(title) || file is null)
-                return TypedResults.Problem("Fields 'title' and 'file' are required.", statusCode: StatusCodes.Status400BadRequest);
+            if (file is null)
+                return TypedResults.Problem(ProjectUseCases.TitleAndFileRequired, statusCode: StatusCodes.Status400BadRequest);
 
             var fileType = Path.GetExtension(file.FileName).Equals(".epub", StringComparison.OrdinalIgnoreCase)
                 ? BookFileType.Epub
                 : BookFileType.Text;
 
             await using var stream = file.OpenReadStream();
-            var result = await useCases.CreateAsync(title, bookTitle, author, file.FileName, stream, fileType);
-            return result.IsSuccess
-                ? TypedResults.Created($"/api/projects/{result.Value}", new CreateProjectResponse(result.Value))
-                : TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+            return await useCases.CreateAsync(title, bookTitle, author, file.FileName, stream, fileType) switch
+            {
+                ProjectOutcome.Created created => TypedResults.Created(
+                    $"/api/projects/{created.FolderName}", new CreateProjectResponse(created.FolderName)),
+                var other => Problem(other),
+            };
         }
 
         private static async Task<Results<Ok<ProjectDetailDto>, NotFound, ProblemHttpResult>> GetAsync(
@@ -102,21 +104,16 @@ namespace Read2Me.App.Api
         }
 
         private static async Task<Results<NoContent, NotFound, ProblemHttpResult>> DeleteAsync(
-            string folder, IFileSystem fs, IProjectCatalogReader reader, ProjectUseCases useCases, SeriesRegistry registry, CancellationToken ct)
+            string folder, IFileSystem fs, ProjectUseCases useCases, CancellationToken ct)
         {
             if (!TryResolve(folder, fs, out var folderId))
                 return TypedResults.NotFound();
 
-            // Its series entry goes at once (#206), by the Id read while the folder is still there.
-            var projectId = (await reader.GetProjectAsync(folderId))?.Id;
-
-            var result = useCases.DeleteProject(folderId.Value);
-            if (!result.IsSuccess)
-                return TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
-
-            if (projectId is { } id)
-                await registry.ForgetProjectAsync(id, ct);
-            return TypedResults.NoContent();
+            return await useCases.DeleteAsync(folderId, ct) switch
+            {
+                ProjectOutcome.Done => TypedResults.NoContent(),
+                var other => Problem(other),
+            };
         }
 
         private static async Task<Results<Ok<ProjectDetailDto>, NotFound, ProblemHttpResult>> UpdateAsync(
@@ -128,20 +125,11 @@ namespace Read2Me.App.Api
             if (body is null)
                 return TypedResults.Problem("Expected a JSON body.", statusCode: StatusCodes.Status400BadRequest);
 
-            // A provided-but-blank title or book title is a mistake, not a clear; author may be blank.
-            var title = body.Title?.Trim();
-            var bookTitle = body.BookTitle?.Trim();
-            var author = body.Author?.Trim();
-            if (title is not null && title.Length == 0)
-                return TypedResults.Problem("Title cannot be blank.", statusCode: StatusCodes.Status400BadRequest);
-            if (bookTitle is not null && bookTitle.Length == 0)
-                return TypedResults.Problem("Book title cannot be blank.", statusCode: StatusCodes.Status400BadRequest);
-
-            var result = await useCases.UpdateMetadataAsync(folderId.Value, title, bookTitle, author);
-            if (!result.IsSuccess)
-                return TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
-
-            return await DetailAsync(folderId, reader, reads, ct);
+            return await useCases.UpdateMetadataAsync(folderId, body.Title, body.BookTitle, body.Author) switch
+            {
+                ProjectOutcome.Done => await DetailAsync(folderId, reader, reads, ct),
+                var other => Problem(other),
+            };
         }
 
         private static async Task<Results<NoContent, NotFound, ProblemHttpResult>> SetNarratorOnlyModeAsync(
@@ -233,6 +221,14 @@ namespace Read2Me.App.Api
             outcome is BookImportOutcome.Failed failed
                 ? TypedResults.Problem(failed.Message, statusCode: StatusCodes.Status422UnprocessableEntity)
                 : TypedResults.NoContent();
+
+        /// <summary>A lifecycle write that did not happen: refused input is a 400, a failed write a 422.</summary>
+        private static ProblemHttpResult Problem(ProjectOutcome outcome) => outcome switch
+        {
+            ProjectOutcome.Refused refused => TypedResults.Problem(refused.Message, statusCode: StatusCodes.Status400BadRequest),
+            ProjectOutcome.Failed failed => TypedResults.Problem(failed.Message, statusCode: StatusCodes.Status422UnprocessableEntity),
+            _ => throw new InvalidOperationException($"{outcome} is a success, not a problem."),
+        };
 
         /// Both gates in one place: the name must parse as a single path segment
         /// (traversal guard) and must exist on disk — anything else is a 404.
