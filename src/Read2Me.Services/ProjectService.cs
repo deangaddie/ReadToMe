@@ -84,19 +84,20 @@ namespace Read2Me.Services
             }
         }
 
-        public async Task UpdateMetadataAsync(ProjectFolderId folderId, string? title, string? bookTitle, string? author)
+        public async Task<BookMutationOutcome> UpdateMetadataAsync(ProjectFolderId folderId, string? title, string? bookTitle, string? author)
         {
             var outcome = await _mutations.CommitAsync(
                 new UpdateProjectMetadataMutation(folderId, title, bookTitle, author));
-            ThrowIfRejected(outcome, folderId);
-            _logger.LogInformation("Metadata updated for project '{Folder}'", folderId);
+            if (outcome is BookMutationOutcome.Committed)
+                _logger.LogInformation("Metadata updated for project '{Folder}'", folderId);
+            return outcome;
         }
 
         /// <summary>
         /// The image arrives before the mutation that names it, and the one it replaces leaves after
         /// (ADR 0007), so the project never names a cover that is not on disk.
         /// </summary>
-        public async Task SaveCoverImageAsync(ProjectFolderId folderId, string filename, Stream stream)
+        public async Task<BookMutationOutcome> SaveCoverImageAsync(ProjectFolderId folderId, string filename, Stream stream)
         {
             _logger.LogInformation("Saving cover image '{File}' for project '{Folder}'", filename, folderId);
             var previous = await CurrentCoverAsync(folderId);
@@ -111,7 +112,7 @@ namespace Read2Me.Services
                 if (previous is not null && previous != filename)
                     DeleteCoverFile(folderId, previous);
                 _logger.LogInformation("Cover image saved for project '{Folder}'", folderId);
-                return;
+                return outcome;
             }
 
             // The project still names the previous cover: a file it never came to name goes again,
@@ -120,26 +121,28 @@ namespace Read2Me.Services
                 await _fs.WriteFileAsync(CoverPath(folderId, filename), new MemoryStream(overwritten));
             else if (filename != previous)
                 DeleteCoverFile(folderId, filename);
-            ThrowIfRejected(outcome, folderId);
+            return outcome;
         }
 
-        public async Task DeleteCoverImageAsync(ProjectFolderId folderId)
+        public async Task<BookMutationOutcome> DeleteCoverImageAsync(ProjectFolderId folderId)
         {
             _logger.LogInformation("Deleting cover image for project '{Folder}'", folderId);
             var previous = await CurrentCoverAsync(folderId);
             if (previous is null)
             {
                 _logger.LogDebug("DeleteCoverImageAsync: no cover image set for '{Folder}'", folderId);
-                return;
+                return new BookMutationOutcome.NoChange();
             }
 
             // The row goes first and the file only once that commits: a cover the project still
             // names must still be there.
             var outcome = await _mutations.CommitAsync(new SetCoverImageMutation(folderId, null));
-            ThrowIfRejected(outcome, folderId);
             if (outcome is BookMutationOutcome.Committed)
+            {
                 DeleteCoverFile(folderId, previous);
-            _logger.LogInformation("Cover image removed for project '{Folder}'", folderId);
+                _logger.LogInformation("Cover image removed for project '{Folder}'", folderId);
+            }
+            return outcome;
         }
 
         public void DeleteProject(ProjectFolderId folderId)
@@ -190,20 +193,6 @@ namespace Read2Me.Services
 
             _fs.DeleteFile(path);
             _logger.LogDebug("Deleted cover image file: {File}", path);
-        }
-
-        /// <summary>A committed or no-change outcome returns; a rejection throws what this writer always threw.</summary>
-        private static void ThrowIfRejected(BookMutationOutcome outcome, ProjectFolderId folderId)
-        {
-            switch (outcome)
-            {
-                case BookMutationOutcome.Rejected { Reason: BookMutationRejection.NotFound }:
-                    throw new ProjectNotFoundException(folderId.Value);
-                case BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } rejected:
-                    throw new OperationCanceledException(rejected.Message);
-                case BookMutationOutcome.Rejected rejected:
-                    throw new InvalidOperationException(rejected.Message);
-            }
         }
     }
 }

@@ -18,12 +18,16 @@ namespace Read2Me.App.Api
 {
     public static class ProjectEndpoints
     {
+        /// <summary>What a project write answers besides success, for the summaries of the PATCH, narrator-only and cover routes.</summary>
+        private const string WriteStatuses =
+            " 409 while the project is restoring or another writer holds it; 404 when the Book has no project row; 422 when the write fails.";
+
         public static void MapProjectEndpoints(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapGet("/api/projects", ListAsync)
                 .WithSummary("List all projects with audio progress counters.");
             endpoints.MapPost("/api/projects", CreateAsync)
-                .WithSummary("Create a project from an uploaded book file (multipart: title, bookTitle, author, file).");
+                .WithSummary("Create a project from an uploaded book file (multipart: title, bookTitle, author, file). 400 for a title with no folder name in it; 409 when a project of that name exists; 422 when the write fails.");
             endpoints.MapGet("/api/projects/{folder}", GetAsync)
                 .ReadsAt()
                 .WithSummary("Project metadata for one folder.");
@@ -41,16 +45,16 @@ namespace Read2Me.App.Api
                              "An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes.");
             endpoints.MapPatch("/api/projects/{folder}", UpdateAsync)
                 .RecordsStep("Edit project details", StepAction.Edit)
-                .WithSummary("Update title, book title and/or author. Omitted fields are unchanged; the folder name never changes.");
+                .WithSummary("Update title, book title and/or author. Omitted fields are unchanged; the folder name never changes." + WriteStatuses);
             endpoints.MapPut("/api/projects/{folder}/narrator-only-mode", SetNarratorOnlyModeAsync)
                 .RecordsStep("Narrator-only mode", StepAction.Character)
-                .WithSummary("Set the Book-wide narrator-only policy: only narration items get audio.");
+                .WithSummary("Set the Book-wide narrator-only policy: only narration items get audio." + WriteStatuses);
             endpoints.MapPut("/api/projects/{folder}/cover", SaveCoverAsync)
                 .RecordsStep("Change cover", StepAction.Edit)
-                .WithSummary("Replace the cover image (multipart 'file': jpg/jpeg/png/webp, at most 10 MB). Served from /workspace/{folder}/{coverImage}.");
+                .WithSummary("Replace the cover image (multipart 'file': jpg/jpeg/png/webp, at most 10 MB). Served from /workspace/{folder}/{coverImage}." + WriteStatuses);
             endpoints.MapDelete("/api/projects/{folder}/cover", DeleteCoverAsync)
                 .RecordsStep("Remove cover", StepAction.Delete)
-                .WithSummary("Remove the cover image; a project without one still answers 204.");
+                .WithSummary("Remove the cover image; a project without one still answers 204." + WriteStatuses);
         }
 
         private static async Task<Results<Ok<IReadOnlyList<ProjectSummary>>, ProblemHttpResult>> ListAsync(
@@ -139,10 +143,9 @@ namespace Read2Me.App.Api
             if (body is null)
                 return TypedResults.Problem("Expected a JSON body with 'enabled'.", statusCode: StatusCodes.Status400BadRequest);
 
-            var result = await useCases.SetNarratorOnlyModeAsync(folderId.Value, body.Enabled);
-            return result.IsSuccess
-                ? TypedResults.NoContent()
-                : TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+            return await useCases.SetNarratorOnlyModeAsync(folderId, body.Enabled) is ProjectOutcome.NotDone problem
+                ? Problem(problem)
+                : TypedResults.NoContent();
         }
 
         private static async Task<Results<Ok<CoverImageResponse>, NotFound, ProblemHttpResult>> SaveCoverAsync(
@@ -159,10 +162,9 @@ namespace Read2Me.App.Api
                 return refusal!;
 
             await using var stream = upload.File.OpenReadStream();
-            var result = await useCases.SaveCoverImageAsync(folderId.Value, upload.FileName, stream);
-            return result.IsSuccess
-                ? TypedResults.Ok(new CoverImageResponse(upload.FileName))
-                : TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+            return await useCases.SaveCoverImageAsync(folderId, upload.FileName, stream) is ProjectOutcome.NotDone problem
+                ? Problem(problem)
+                : TypedResults.Ok(new CoverImageResponse(upload.FileName));
         }
 
         private static async Task<Results<NoContent, NotFound, ProblemHttpResult>> DeleteCoverAsync(string folder, IFileSystem fs, ProjectUseCases useCases)
@@ -170,10 +172,9 @@ namespace Read2Me.App.Api
             if (!TryResolve(folder, fs, out var folderId))
                 return TypedResults.NotFound();
 
-            var result = await useCases.DeleteCoverImageAsync(folderId.Value);
-            return result.IsSuccess
-                ? TypedResults.NoContent()
-                : TypedResults.Problem(result.Error, statusCode: StatusCodes.Status422UnprocessableEntity);
+            return await useCases.DeleteCoverImageAsync(folderId) is ProjectOutcome.NotDone problem
+                ? Problem(problem)
+                : TypedResults.NoContent();
         }
 
         private static async Task<Results<Ok<ProjectDetailDto>, NotFound, ProblemHttpResult>> DetailAsync(
@@ -221,12 +222,18 @@ namespace Read2Me.App.Api
                 ? TypedResults.Problem(failed.Message, statusCode: StatusCodes.Status422UnprocessableEntity)
                 : TypedResults.NoContent();
 
-        /// <summary>A lifecycle write that did not happen: refused input is a 400, a gate refusal the gate's 409, a failed write a 422.</summary>
+        /// <summary>
+        /// A lifecycle write that did not happen: refused input is a 400, a gate refusal the gate's
+        /// 409, the project's state a 409, a project the Book lacks a 404, an unforeseen failure a 422.
+        /// </summary>
         private static ProblemHttpResult Problem(ProjectOutcome.NotDone outcome) => outcome switch
         {
             ProjectOutcome.ActivityRefused refused => StepReads.Refused(refused.Refusal),
             ProjectOutcome.Refused => TypedResults.Problem(outcome.Message, statusCode: StatusCodes.Status400BadRequest),
-            _ => TypedResults.Problem(outcome.Message, statusCode: StatusCodes.Status422UnprocessableEntity),
+            ProjectOutcome.Conflict => TypedResults.Problem(outcome.Message, statusCode: StatusCodes.Status409Conflict),
+            ProjectOutcome.NotFound => TypedResults.Problem(outcome.Message, statusCode: StatusCodes.Status404NotFound),
+            ProjectOutcome.Failed => TypedResults.Problem(outcome.Message, statusCode: StatusCodes.Status422UnprocessableEntity),
+            _ => throw new UnreachableException($"A project write answered {outcome}."),
         };
 
         /// Both gates in one place: the name must parse as a single path segment

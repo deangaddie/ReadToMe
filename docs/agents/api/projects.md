@@ -9,7 +9,8 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/import \
   -H 'content-type: application/json' -d '{ "reread": false }'
 ```
 
-Title, bookTitle and author are stored trimmed; a blank title or a missing file is 400. Both
+Title, bookTitle and author are stored trimmed; a blank title, one with no folder name in it, or a
+missing file is 400, and a title whose folder already exists is 409. Both
 imports answer 204. `reread: true` clears existing content first (safe way to re-import).
 
 A manual reread re-splits the stored file by hand-chosen rules instead of the automatic
@@ -64,6 +65,10 @@ curl -s -X DELETE http://localhost:5000/api/projects/{folder}/cover   # → 204,
 
 curl -s -X DELETE http://localhost:5000/api/projects/{folder}          # → 204; the folder and everything in it, and its Series membership; 422 when the folder will not go
 ```
+
+The PATCH, narrator-only and cover writes answer 409 while the project is restoring or another
+writer holds it, 404 when the Book has no project row, and 422 only for a fault nobody foresaw,
+which the host logs.
 
 The cover is served at `/workspace/{folder}/{coverImage}`; `GET /api/projects` lists
 `coverImage` and `fileType` (`Epub` | `Text`) per project alongside the audio counters.
