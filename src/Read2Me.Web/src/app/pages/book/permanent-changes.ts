@@ -9,18 +9,8 @@ import { type NodeMenuTarget, WORD, displayName } from './node-menu-entries';
  * for. The counts come from the rows the action will touch; the page gathers them.
  */
 
-function plural(n: number, word: string): string {
+export function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
-}
-
-/** Add pauses, from the Book overflow, the Overview row and the pill: always asks, nothing is lost. */
-export function addPausesChange(chapterCount: number): PermanentChange {
-  return {
-    action: 'Add pauses',
-    scope: `Inserts a pause between paragraphs and at the end of every chapter (${plural(chapterCount, 'chapter')}).`,
-    cost: 'Removing them later means deleting each one.',
-    destructive: false,
-  };
 }
 
 /**

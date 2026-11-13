@@ -6,8 +6,7 @@ import { Preflight } from '@app/shared/preflight';
 import { ConfirmService, confirmPermanent } from '@app/ui/dialogs';
 import type { PipelineActionEvent, PipelineCheckpointEvent } from '@app/ui/pipeline';
 import { ToastService } from '@app/ui/toast';
-import { addPausesChange } from '../book/permanent-changes';
-import { rereadConfirm } from './permanent-changes';
+import { addPausesAction, rereadAction } from '../book/book-actions';
 import type { StepActionId, StepId } from './pipeline-steps';
 import type { ProjectStore } from './project-store';
 
@@ -45,10 +44,14 @@ export class StepRunner {
           this.toast.success('Book read in');
         });
       case 'reread':
-        if (!(await this.confirm.confirm(rereadConfirm(this.store.status()?.checkpoints ?? {}))))
+        if (
+          !(await this.confirm.confirm(
+            rereadAction.confirm(this.store.status()?.checkpoints ?? {}),
+          ))
+        )
           return;
         return this.run(step, action, async () => {
-          await this.projects.import(folder, true);
+          await rereadAction.command(this.projects, folder);
           this.toast.success('Book reread');
         });
       case 'checkStructure':
@@ -130,9 +133,9 @@ export class StepRunner {
       this.toast.problem(toApiError(error).toProblem());
       return;
     }
-    if (!(await confirmPermanent(addPausesChange(chapters)))) return;
+    if (!(await confirmPermanent(addPausesAction.confirm(chapters)))) return;
     return this.run(step, action, async () => {
-      await this.book.execute(folder, { type: 'AddPauses' });
+      await this.book.execute(folder, addPausesAction.command);
       this.toast.success('Pauses added');
     });
   }

@@ -20,6 +20,7 @@ import { STRUCTURE_RULES } from '../../../testing/structure-rules';
 import { FakeApi, problem } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';
 import { type FakeNavigation, installNavigation, settle } from '../../../testing/fake-navigation';
+import { rereadAction } from './book-actions';
 import { BookEditor } from './book-editor';
 import { BookStore } from './book-store';
 import type { BookPage } from './book-page';
@@ -1311,6 +1312,8 @@ describe('r2m-book-page', () => {
           confirmLabel: 'Delete and reread',
         }),
       ]);
+      // Built by the Book actions module, the one the Overview uses too (#349).
+      expect(confirms).toEqual([rereadAction.confirm({})]);
       expect(api.calls('POST', `${BASE}/import`)).toHaveLength(0);
 
       confirmAnswer = true;

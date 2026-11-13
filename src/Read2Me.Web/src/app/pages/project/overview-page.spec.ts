@@ -14,6 +14,7 @@ import { ToastService } from '@app/ui/toast';
 import { FakeApi, problem } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';
 import { type FakeNavigation, installNavigation, settle } from '../../../testing/fake-navigation';
+import { rereadAction } from '../book/book-actions';
 import type { OverviewPage } from './overview-page';
 import './project-shell';
 import { formatBuildDate } from './project-store';
@@ -332,6 +333,8 @@ describe('r2m-overview-page', () => {
       expect.objectContaining({ title: 'Reread the book?', destructive: true }),
     ]);
     expect(confirms[0]?.message).not.toContain('confirmed and skipped steps');
+    // Built by the Book actions module, the one the Book page uses too (#349).
+    expect(confirms).toEqual([rereadAction.confirm({})]);
     expect(api.calls('POST', `${BASE}/import`)).toHaveLength(0);
 
     confirmAnswer = true;

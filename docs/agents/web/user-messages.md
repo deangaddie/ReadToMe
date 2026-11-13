@@ -28,3 +28,4 @@ A **permanent-change confirm** (`ui/dialogs.ts`) guards a button or menu entry w
 - A count the confirm states comes from the rows it acts on: a selection's builder reads chapters outside the reader window first.
 - A dialog the user filled in is its own confirm (Reread with split rules: red submit, body names what goes; Add titles).
 - Each builder has a table spec. Read the feature folder's `permanent-changes.ts` for which of its actions confirm.
+- A Book action that runs from both the Book page and the Overview (Add pauses, Reread) keeps its confirm beside its command in `pages/book/book-actions.ts` instead, so neither page imports the other's builders.
