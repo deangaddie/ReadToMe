@@ -22,6 +22,7 @@ import { addPausesAction, rereadAction } from './book-actions';
 import { BookEditor } from './book-editor';
 import { BookStore } from './book-store';
 import { type HeadingRef, type TreeNode, placeholderTitleClass } from './book-tree';
+import { type DeepLinkAction, deepLinkStep } from './deep-link';
 import { openEditWithAiDialog } from './edit-with-ai/edit-with-ai-dialog';
 import { openManualRereadDialog } from './manual-reread-dialog';
 import { type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
@@ -222,24 +223,24 @@ export class BookPage extends R2mElement {
       untracked(() => void this.start(folder));
     });
 
-    // `?action=` (from the Overview's rows): once the book and its Pipeline steps have loaded (the
-    // dialog shows their advice) and nothing locks the editor, drop the param and open what the
-    // overflow entry opens. Unknown, no content, or a viewed History step: drop only, so the
-    // dialog doesn't open by itself on Back to current.
+    // `?action=` (from the Overview's rows): `deepLinkStep` decides; the page drops the param
+    // before it opens the dialog, so a link opens exactly once.
     this.effect(() => {
-      const action = this.router.query().get('action');
-      const overview = store.overview();
-      if (action === null || !overview || !project.pipeline()) return;
-      const viewing = project.readOnly() !== null;
-      if (editor.blocked() !== null && !viewing) return;
+      const step = deepLinkStep({
+        action: this.router.query().get('action'),
+        overview: store.overview(),
+        pipelineLoaded: project.pipeline() !== null,
+        viewing: project.readOnly() !== null,
+        blocked: editor.blocked() !== null,
+      });
+      if (step === 'wait') return;
       untracked(() => {
         const query = Object.fromEntries(this.router.query());
         this.router.navigate(this.router.path(), {
           replace: true,
           query: { ...query, action: null },
         });
-        const open = overview.hasContent && !viewing ? this.deepLinks.get(action) : undefined;
-        if (open) void open();
+        if (step !== 'drop') void this.deepLinks[step.open]();
       });
     });
 
@@ -824,11 +825,11 @@ export class BookPage extends R2mElement {
   // ---- book actions (ticket 11) -------------------------------------------------------------------
 
   /** What `?action=` opens, by query value: the same as the overflow entry (spec §5). */
-  private readonly deepLinks: ReadonlyMap<string, () => Promise<void>> = new Map([
-    ['titles', () => this.addTitles()],
-    ['edit-ai', () => this.editWithAi()],
-    ['manual-reread', () => this.rereadManually()],
-  ]);
+  private readonly deepLinks: Readonly<Record<DeepLinkAction, () => Promise<void>>> = {
+    titles: () => this.addTitles(),
+    'edit-ai': () => this.editWithAi(),
+    'manual-reread': () => this.rereadManually(),
+  };
 
   /** An action's advice line (spec §2) over the project's Pipeline steps, or null. */
   private advice(action: StepActionId): string | null {
