@@ -266,12 +266,13 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
 
     /// <summary>
     /// While a Restore runs, every route the Project activity gate guards answers 409 "Project is
-    /// restoring": writes, another Restore, the enqueues and voice batches, and every read at a
+    /// restoring": writes, another Restore, a delete, the enqueues and voice batches, and every read at a
     /// step. Which acts the gate refuses in which state is ProjectActivityTests.
     /// </summary>
     [Theory]
     [InlineData("command")]
     [InlineData("restore")]
+    [InlineData("delete")]
     [InlineData("attribution enqueue")]
     [InlineData("voice-batch prompts")]
     [InlineData("voice-batch audio")]
@@ -301,6 +302,7 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
                 "command" => await Http.PostAsync($"{project}/commands",
                     new StringContent("""{ "type": "CreateCharacter", "name": "Ganondorf" }""", Encoding.UTF8, "application/json")),
                 "restore" => await Http.PostAsync($"{project}/history/{started}/restore", null),
+                "delete" => await Http.DeleteAsync(project),
                 "attribution enqueue" => await Http.PostAsJsonAsync($"{project}/attribution/enqueue",
                     new { level = "Chapter", nodeId = book.ChapterId("ch1"), unprocessedOnly = true }),
                 "voice-batch prompts" => await Http.PostAsJsonAsync($"{project}/voice-batch/prompts", new { regenerateAll = false }),
@@ -312,8 +314,10 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             };
 
             Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-            Assert.Equal(ProjectActivity.RestoringReason,
-                JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
+            var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+            Assert.Equal(ProjectActivity.RestoringReason, problem.GetProperty("detail").GetString());
+            if (route == "delete")
+                Assert.Equal("restoring", problem.GetProperty("activity").GetString());
             Assert.True((await HistoryAsync(folder)).GetProperty("restoring").GetBoolean());
         }
         finally
@@ -323,7 +327,7 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     }
 
     [Fact]
-    public async Task While_the_project_is_busy_a_step_cannot_be_read_or_viewed_and_409_says_why()
+    public async Task While_the_project_is_busy_a_step_cannot_be_read_or_viewed_nor_the_project_deleted_and_409_says_why()
     {
         var folder = $"api-history-{Guid.NewGuid():N}";
         var book = await app.SeedProjectAsync(folder, "History Book", "Author");
@@ -345,12 +349,18 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             var read = await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/book?at={started}");
             var step = await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/history/{started}");
             var restore = await Http.PostAsync($"{app.BaseUrl}/api/projects/{folder}/history/{started}/restore", null);
+            var delete = await Http.DeleteAsync($"{app.BaseUrl}/api/projects/{folder}");
 
             Assert.Equal(HttpStatusCode.Conflict, read.StatusCode);
             Assert.Equal(HttpStatusCode.Conflict, step.StatusCode);
             Assert.Equal(HttpStatusCode.Conflict, restore.StatusCode);
             var detail = JsonDocument.Parse(await read.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString();
             Assert.StartsWith("Assembly", detail);
+            Assert.Equal(HttpStatusCode.Conflict, delete.StatusCode);
+            var refused = JsonDocument.Parse(await delete.Content.ReadAsStringAsync()).RootElement;
+            Assert.StartsWith("Assembly", refused.GetProperty("detail").GetString());
+            Assert.Equal("busy", refused.GetProperty("activity").GetString());
+            Assert.Equal(HttpStatusCode.OK, (await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/history")).StatusCode);
         }
         finally
         {

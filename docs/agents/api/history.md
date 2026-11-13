@@ -139,6 +139,10 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/history/{stepId}/res
 - Refused with 409 while anything is queued or running for the project (`detail` is the busy
   reason) or a Restore of it is already running. While one runs, every other write and enqueue for
   the project answers 409 "Project is restoring" at once, and `GET /history` says `restoring: true`.
+- `DELETE /api/projects/{folder}` asks the same gate (#346): 409 while the project is busy or
+  restoring (`detail` says why, and `activity` names the state, as on every gate 409), and nothing is cancelled. While a delete runs, every write,
+  enqueue, step read and Restore for the project answers 409 "Project is being deleted". Deleting
+  is never reported as `restoring` and has no hub event.
 - Open Edit with AI sessions for the project are dropped: they were planned against the project as
   it was, so their apply can't write over the restored text blind. Their dialogs hear it on the hub
   (`bookEdit` `Dropped`).

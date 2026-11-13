@@ -26,6 +26,7 @@ import { SeriesActions } from './series-actions';
 import { type SeriesPanelTab, seriesCard, seriesPanel } from './series-card';
 import type { CastRead } from './series-cast-board';
 import './series-cast-board';
+import { deleteRefusedMessage } from './delete-refusal';
 import { deleteProjectConfirm } from './permanent-changes';
 import {
   bookLabel,
@@ -482,7 +483,12 @@ export class ProjectsPage extends R2mElement {
       await this.store.delete(project.folderName);
       this.toast.success(`Deleted ${project.title}`);
     } catch (error) {
-      this.toast.problem(toApiError(error).toProblem());
+      const problem = toApiError(error);
+      if (problem.status === 409 && problem.detail)
+        this.toast.error(
+          deleteRefusedMessage(project.title, problem.detail, problem.extensions['activity']),
+        );
+      else this.toast.problem(problem.toProblem());
     } finally {
       this.deleting.set(null);
     }

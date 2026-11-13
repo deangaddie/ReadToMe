@@ -20,6 +20,9 @@ namespace Read2Me.Services.UseCases
         /// <summary>The input breaks a rule (a blank title); nothing was written.</summary>
         public sealed record Refused(string Message) : NotDone(Message);
 
+        /// <summary>The <see cref="History.ProjectActivity"/> gate refused: the project is busy, restoring or being deleted; nothing was touched.</summary>
+        public sealed record ActivityRefused(History.ActivityRefusal Refusal) : NotDone(Refusal.Reason);
+
         /// <summary>The write did not happen.</summary>
         public sealed record Failed(string Message) : NotDone(Message);
     }

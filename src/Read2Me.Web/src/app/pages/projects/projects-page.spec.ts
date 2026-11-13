@@ -66,6 +66,7 @@ beforeEach(() => {
     success: (m: string) => toasts.push(m),
     problem: (p: { detail?: string }) => toasts.push(`problem: ${p.detail}`),
     warn: (m: string) => toasts.push(`warn: ${m}`),
+    error: (m: string) => toasts.push(`error: ${m}`),
   } as unknown as ToastService);
 });
 afterEach(() => document.body.replaceChildren());
@@ -255,6 +256,29 @@ describe('r2m-projects-page', () => {
     expect(api.calls('DELETE', '/api/projects/dracula')).toHaveLength(1);
     expect(cards(page)).toEqual(['emma']);
     expect(toasts).toEqual(['Deleted Dracula']);
+  });
+
+  it('a delete refused as busy names the book and the reason, points to Activity, and re-enables the card', async () => {
+    const page = await render([dracula]);
+    api.on('DELETE', '/api/projects/dracula', () =>
+      Response.json(
+        { title: 'Conflict', status: 409, detail: '128 paragraphs · assembling', activity: 'busy' },
+        { status: 409 },
+      ),
+    );
+
+    page.querySelector<HTMLButtonElement>('.r2m-project-card__delete')!.click();
+    await confirmDialog('confirm');
+    await flush();
+    await page.rendered();
+
+    expect(toasts).toEqual([
+      "error: Can't delete Dracula: 128 paragraphs · assembling. Stop it in Activity, then delete.",
+    ]);
+    expect(cards(page)).toEqual(['dracula']);
+    expect(page.querySelector<HTMLButtonElement>('.r2m-project-card__delete')!.disabled).toBe(
+      false,
+    );
   });
 
   it('cancelling the confirm sends nothing', async () => {

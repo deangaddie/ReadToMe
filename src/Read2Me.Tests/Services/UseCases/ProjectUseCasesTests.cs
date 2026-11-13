@@ -8,6 +8,8 @@ using Read2Me.Data;
 using Read2Me.Data.Enums;
 using Read2Me.Data.Series;
 using Read2Me.Services;
+using Read2Me.Services.History;
+using Read2Me.Services.Queueing;
 using Read2Me.Services.Series;
 using Read2Me.Services.UseCases;
 using Read2Me.Tests.Fakes;
@@ -28,11 +30,15 @@ namespace Read2Me.Tests.Services.UseCases
         private readonly ServiceProvider _root;
         private readonly AsyncServiceScope _scope;
         private readonly CollectingLogger<ProjectUseCases> _log = new();
+        private ProjectBusy? _busy;
+        private readonly ProjectActivity _activity;
 
         public ProjectUseCasesTests()
         {
+            _activity = new ProjectActivity(() => new Busy(() => _busy));
             var services = new ServiceCollection();
             services.AddLogging();
+            services.AddSingleton(_activity);
             services.AddBookCommandHandlers();
             services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
             services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
@@ -89,6 +95,57 @@ namespace Read2Me.Tests.Services.UseCases
             Assert.False(Directory.Exists(Path.Combine(TempDir, Study)));
             Assert.Single(await MembersAsync(seriesId));
             Assert.Single(_log.At(LogLevel.Warning));
+        }
+
+        [Fact]
+        public async Task A_delete_while_busy_is_refused_with_the_reason_and_deletes_nothing()
+        {
+            var seriesId = await StudyInASeriesAsync();
+            _busy = new ProjectBusy([new BusySource(BusySourceKind.Assembly, "128 paragraphs · assembling")]);
+
+            var outcome = await UseCases.DeleteAsync(new ProjectFolderId(Study), Ct);
+
+            Assert.Equal(new ProjectOutcome.ActivityRefused(new ActivityRefusal(ActivityRefusalKind.Busy, "128 paragraphs · assembling")), outcome);
+            Assert.True(Directory.Exists(Path.Combine(TempDir, Study)));
+            Assert.Single(await MembersAsync(seriesId));
+        }
+
+        [Fact]
+        public async Task A_delete_while_restoring_is_refused_as_restoring()
+        {
+            await StudyInASeriesAsync();
+            Assert.Null(_activity.TryBeginRestore(new ProjectFolderId(Study)));
+
+            var outcome = await UseCases.DeleteAsync(new ProjectFolderId(Study), Ct);
+
+            Assert.Equal(ActivityRefusalKind.Restoring, Assert.IsType<ProjectOutcome.ActivityRefused>(outcome).Refusal.Kind);
+            Assert.True(Directory.Exists(Path.Combine(TempDir, Study)));
+        }
+
+        [Fact]
+        public async Task The_project_is_deleting_while_its_folder_goes_and_idle_after_a_failed_delete()
+        {
+            await StudyInASeriesAsync();
+            var folder = new ProjectFolderId(Study);
+            ActivityRefusal? during = null;
+
+            var outcome = await With(new UndeletableWriter(() => during = _activity.MayWrite(folder))).DeleteAsync(folder, Ct);
+
+            Assert.IsType<ProjectOutcome.Failed>(outcome);
+            Assert.Equal(ActivityRefusalKind.Deleting, during?.Kind);
+            Assert.Null(_activity.MayWrite(folder));
+            Assert.Null(_activity.TryBeginRestore(folder));
+        }
+
+        [Fact]
+        public async Task The_claim_is_released_after_a_delete()
+        {
+            await StudyInASeriesAsync();
+            var folder = new ProjectFolderId(Study);
+
+            Assert.IsType<ProjectOutcome.Done>(await UseCases.DeleteAsync(folder, Ct));
+
+            Assert.Null(_activity.MayEnqueue(folder));
         }
 
         // ── title rule ──────────────────────────────────────────────────────────
@@ -156,18 +213,28 @@ namespace Read2Me.Tests.Services.UseCases
             var sp = _scope.ServiceProvider;
             return new ProjectUseCases(
                 sp.GetRequiredService<IProjectCatalogReader>(), writer, sp.GetRequiredService<Read2Me.Services.Mutations.BookMutations>(),
-                sp.GetRequiredService<SeriesRegistry>(), _log);
+                sp.GetRequiredService<SeriesRegistry>(), _activity, _log);
         }
 
         /// <summary>A writer whose folder will not go: a file held open, a permissions fault.</summary>
-        private sealed class UndeletableWriter : IProjectWriter
+        private sealed class UndeletableWriter(Action? onDelete = null) : IProjectWriter
         {
-            public void DeleteProject(ProjectFolderId folderId) => throw new IOException("The folder is in use.");
+            public void DeleteProject(ProjectFolderId folderId)
+            {
+                onDelete?.Invoke();
+                throw new IOException("The folder is in use.");
+            }
             public Task<string> CreateProjectAsync(string title, string bookTitle, string author,
                 string originalFileName, Stream fileStream, BookFileType fileType) => throw new NotSupportedException();
             public Task UpdateMetadataAsync(ProjectFolderId folderId, string? title, string? bookTitle, string? author) => throw new NotSupportedException();
             public Task SaveCoverImageAsync(ProjectFolderId folderId, string filename, Stream stream) => throw new NotSupportedException();
             public Task DeleteCoverImageAsync(ProjectFolderId folderId) => throw new NotSupportedException();
+        }
+
+        /// <summary>Every project busy with whatever the test last set, or idle.</summary>
+        private sealed class Busy(Func<ProjectBusy?> answer) : IProjectBusyAnswer
+        {
+            public ProjectBusy? For(ProjectFolderId folder) => answer();
         }
 
         private static CancellationToken Ct => TestContext.Current.CancellationToken;

@@ -105,9 +105,22 @@ namespace Read2Me.App.Api
                 : null;
         }
 
-        /// <summary>409: the <see cref="ProjectActivity"/> gate refused, and <c>detail</c> says why.</summary>
+        /// <summary>
+        /// 409: the <see cref="ProjectActivity"/> gate refused, <c>detail</c> says why, and the
+        /// <c>activity</c> extension names the state that refused it (<c>busy</c>, <c>restoring</c>
+        /// or <c>deleting</c>), so a client can say what to do next.
+        /// </summary>
         internal static ProblemHttpResult Refused(ActivityRefusal refusal) =>
-            TypedResults.Problem(refusal.Reason, statusCode: StatusCodes.Status409Conflict);
+            TypedResults.Problem(refusal.Reason, statusCode: StatusCodes.Status409Conflict,
+                extensions: new Dictionary<string, object?> { ["activity"] = ActivityWireName(refusal.Kind) });
+
+        private static string ActivityWireName(ActivityRefusalKind kind) => kind switch
+        {
+            ActivityRefusalKind.Busy => "busy",
+            ActivityRefusalKind.Restoring => "restoring",
+            ActivityRefusalKind.Deleting => "deleting",
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "No wire name."),
+        };
 
         internal static ProblemHttpResult UnknownStep(Guid stepId) =>
             TypedResults.Problem($"The project's History has no step {stepId}.", statusCode: StatusCodes.Status404NotFound);

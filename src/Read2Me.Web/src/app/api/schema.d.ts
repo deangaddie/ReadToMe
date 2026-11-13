@@ -1037,7 +1037,7 @@ export interface paths {
         };
         put?: never;
         post?: never;
-        /** Delete a project folder and everything in it. */
+        /** Delete a project folder and everything in it. 409 while the project is busy or restoring; nothing is cancelled. */
         delete: {
             parameters: {
                 query?: never;
