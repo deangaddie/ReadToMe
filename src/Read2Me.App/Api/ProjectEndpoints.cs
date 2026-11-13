@@ -29,7 +29,7 @@ namespace Read2Me.App.Api
                 .WithSummary("Project metadata for one folder.");
             endpoints.MapDelete("/api/projects/{folder}", DeleteAsync)
                 .RecordsNoStep("Removes the project, History and all.")
-                .WithSummary("Delete a project folder and everything in it.");
+                .WithSummary("Delete a project folder and everything in it. 409 while the project is busy or restoring; nothing is cancelled.");
             endpoints.MapPost("/api/projects/{folder}/import", ImportAsync)
                 .RecordsOwnStep()
                 .WithSummary("Read the stored book file into volumes/chapters/paragraphs. reread=true clears existing content first. 204 on success. " +
@@ -221,12 +221,15 @@ namespace Read2Me.App.Api
                 ? TypedResults.Problem(failed.Message, statusCode: StatusCodes.Status422UnprocessableEntity)
                 : TypedResults.NoContent();
 
-        /// <summary>A lifecycle write that did not happen: refused input is a 400, a failed write a 422.</summary>
+        /// <summary>A lifecycle write that did not happen: refused input is a 400, a gate refusal (busy, restoring, deleting) a 409, a failed write a 422.</summary>
         private static ProblemHttpResult Problem(ProjectOutcome.NotDone outcome) => TypedResults.Problem(
             outcome.Message,
-            statusCode: outcome is ProjectOutcome.Refused
-                ? StatusCodes.Status400BadRequest
-                : StatusCodes.Status422UnprocessableEntity);
+            statusCode: outcome switch
+            {
+                ProjectOutcome.Refused => StatusCodes.Status400BadRequest,
+                ProjectOutcome.Blocked => StatusCodes.Status409Conflict,
+                _ => StatusCodes.Status422UnprocessableEntity,
+            });
 
         /// Both gates in one place: the name must parse as a single path segment
         /// (traversal guard) and must exist on disk — anything else is a 404.

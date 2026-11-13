@@ -20,9 +20,9 @@ public class ProjectActivityTests
 
     public ProjectActivityTests() => _activity = new ProjectActivity(() => _busy);
 
-    public enum State { Idle, Busy, Restoring, BusyAndRestoring }
+    public enum State { Idle, Busy, Restoring, BusyAndRestoring, Deleting }
 
-    public enum Act { Write, Enqueue, ViewStep, StartRestore, PlanEdit }
+    public enum Act { Write, Enqueue, ViewStep, StartRestore, PlanEdit, StartDelete }
 
     public static TheoryData<Act, State, ActivityRefusalKind?> Policy => new()
     {
@@ -30,22 +30,32 @@ public class ProjectActivityTests
         { Act.Write, State.Busy, null },
         { Act.Write, State.Restoring, ActivityRefusalKind.Restoring },
         { Act.Write, State.BusyAndRestoring, ActivityRefusalKind.Restoring },
+        { Act.Write, State.Deleting, ActivityRefusalKind.Deleting },
         { Act.Enqueue, State.Idle, null },
         { Act.Enqueue, State.Busy, null },
         { Act.Enqueue, State.Restoring, ActivityRefusalKind.Restoring },
         { Act.Enqueue, State.BusyAndRestoring, ActivityRefusalKind.Restoring },
+        { Act.Enqueue, State.Deleting, ActivityRefusalKind.Deleting },
         { Act.ViewStep, State.Idle, null },
         { Act.ViewStep, State.Busy, ActivityRefusalKind.Busy },
         { Act.ViewStep, State.Restoring, ActivityRefusalKind.Restoring },
         { Act.ViewStep, State.BusyAndRestoring, ActivityRefusalKind.Restoring },
+        { Act.ViewStep, State.Deleting, ActivityRefusalKind.Deleting },
         { Act.StartRestore, State.Idle, null },
         { Act.StartRestore, State.Busy, ActivityRefusalKind.Busy },
         { Act.StartRestore, State.Restoring, ActivityRefusalKind.Restoring },
         { Act.StartRestore, State.BusyAndRestoring, ActivityRefusalKind.Restoring },
+        { Act.StartRestore, State.Deleting, ActivityRefusalKind.Deleting },
         { Act.PlanEdit, State.Idle, null },
         { Act.PlanEdit, State.Busy, null },
         { Act.PlanEdit, State.Restoring, ActivityRefusalKind.Restoring },
         { Act.PlanEdit, State.BusyAndRestoring, ActivityRefusalKind.Restoring },
+        { Act.PlanEdit, State.Deleting, ActivityRefusalKind.Deleting },
+        { Act.StartDelete, State.Idle, null },
+        { Act.StartDelete, State.Busy, ActivityRefusalKind.Busy },
+        { Act.StartDelete, State.Restoring, ActivityRefusalKind.Restoring },
+        { Act.StartDelete, State.BusyAndRestoring, ActivityRefusalKind.Restoring },
+        { Act.StartDelete, State.Deleting, ActivityRefusalKind.Deleting },
     };
 
     [Theory]
@@ -63,6 +73,8 @@ public class ProjectActivityTests
             Assert.Equal(BusyReason, refusal!.Reason);
         if (expected == ActivityRefusalKind.Restoring)
             Assert.Equal(ProjectActivity.RestoringReason, refusal!.Reason);
+        if (expected == ActivityRefusalKind.Deleting)
+            Assert.Equal(ProjectActivity.DeletingReason, refusal!.Reason);
     }
 
     [Theory]
@@ -163,6 +175,63 @@ public class ProjectActivityTests
     }
 
     [Fact]
+    public void A_delete_refused_as_busy_releases_the_claim_so_a_later_one_begins()
+    {
+        _busy.Answer = Busy();
+
+        Assert.Equal(ActivityRefusalKind.Busy, _activity.TryBeginDelete(Folder)?.Kind);
+        Assert.Null(_activity.MayWrite(Folder));
+        Assert.Null(_activity.MayEnqueue(Folder));
+
+        _busy.Answer = null;
+        Assert.Null(_activity.TryBeginDelete(Folder));
+        Assert.Equal(ActivityRefusalKind.Deleting, _activity.MayWrite(Folder)?.Kind);
+    }
+
+    [Fact]
+    public void A_delete_claims_before_asking_about_busy()
+    {
+        _busy.OnAsked = () => Assert.Equal(ActivityRefusalKind.Deleting, _activity.MayEnqueue(Folder)?.Kind);
+
+        Assert.Null(_activity.TryBeginDelete(Folder));
+        Assert.True(_busy.Asked);
+    }
+
+    [Fact]
+    public void Deleting_is_not_reported_as_restoring_and_holds_no_restore_waiters()
+    {
+        Assert.Null(_activity.TryBeginDelete(Folder));
+
+        Assert.False(_activity.IsRestoring(Folder));
+        Assert.True(_activity.WhenRestoreEnded(Folder).IsCompleted);
+    }
+
+    [Fact]
+    public void Ending_a_restore_never_releases_a_delete_nor_the_other_way_round()
+    {
+        Assert.Null(_activity.TryBeginDelete(Folder));
+        _activity.EndRestore(Folder);
+        Assert.Equal(ActivityRefusalKind.Deleting, _activity.MayWrite(Folder)?.Kind);
+        _activity.EndDelete(Folder);
+
+        Assert.Null(_activity.TryBeginRestore(Folder));
+        _activity.EndDelete(Folder);
+        Assert.Equal(ActivityRefusalKind.Restoring, _activity.MayWrite(Folder)?.Kind);
+    }
+
+    [Fact]
+    public void Everything_is_allowed_again_once_the_delete_ends()
+    {
+        Assert.Null(_activity.TryBeginDelete(Folder));
+        _activity.EndDelete(Folder);
+
+        Assert.Null(_activity.MayWrite(Folder));
+        Assert.Null(_activity.MayEnqueue(Folder));
+        Assert.Null(_activity.MayViewStep(Folder));
+        Assert.Null(_activity.MayPlanEdit(_activity.Mark(Folder)));
+    }
+
+    [Fact]
     public void WhenRestoreEnded_is_complete_when_no_restore_runs()
     {
         Assert.True(_activity.WhenRestoreEnded(Folder).IsCompleted);
@@ -186,6 +255,8 @@ public class ProjectActivityTests
             Assert.Null(_activity.TryBeginRestore(Folder));
         if (state is State.Busy or State.BusyAndRestoring)
             _busy.Answer = Busy();
+        if (state is State.Deleting)
+            Assert.Null(_activity.TryBeginDelete(Folder));
     }
 
     private ActivityRefusal? Ask(Act action, RestoreMark mark, ProjectFolderId? folder = null)
@@ -198,6 +269,7 @@ public class ProjectActivityTests
             Act.ViewStep => _activity.MayViewStep(asked),
             Act.StartRestore => _activity.TryBeginRestore(asked),
             Act.PlanEdit => _activity.MayPlanEdit(mark),
+            Act.StartDelete => _activity.TryBeginDelete(asked),
             _ => throw new ArgumentOutOfRangeException(nameof(action)),
         };
     }

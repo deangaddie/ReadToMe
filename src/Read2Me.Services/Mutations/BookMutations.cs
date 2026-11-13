@@ -288,8 +288,10 @@ public sealed class BookMutations(
     }
 
     /// <summary>
-    /// Every mutation but the Restore's own asks <see cref="ProjectActivity"/>, which refuses a write only while the
-    /// project is restoring, so its refusal is always <see cref="BookMutationRejection.Restoring"/>.
+    /// Every mutation but the Restore's own asks <see cref="ProjectActivity"/>, which refuses a write only in the
+    /// project's exclusive phase, so its refusal is always <see cref="BookMutationRejection.Restoring"/>, carrying the
+    /// gate's reason. While deleting (#346) that reason is "Project is being deleted"; no queue item can meet it,
+    /// since a delete only begins on a project that is not busy.
     /// The exemption is this type check rather than a flag a mutation declares, so no other mutation
     /// can exempt itself (#240).
     /// </summary>

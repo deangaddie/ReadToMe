@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
   deleteProjectConfirm,
+  deleteRefusedMessage,
   deleteSeriesConfirm,
   leaveConfirm,
   linkConfirm,
@@ -150,6 +151,20 @@ describe('deleteProjectConfirm()', () => {
         position: 2,
       }).message,
     ).toBe(`${base} Part of Sherlock Holmes (Book 2); the other books keep their Voices.`);
+  });
+});
+
+describe('deleteRefusedMessage()', () => {
+  it('names the book and the reason and points to Activity', () => {
+    expect(deleteRefusedMessage('Pride and Prejudice', '128 paragraphs · assembling')).toBe(
+      "Can't delete Pride and Prejudice: 128 paragraphs · assembling. Stop it in Activity, then delete.",
+    );
+  });
+
+  it('keeps the reason as the host wrote it, without a doubled full stop', () => {
+    expect(deleteRefusedMessage('Emma', 'Project is restoring.')).toBe(
+      "Can't delete Emma: Project is restoring. Stop it in Activity, then delete.",
+    );
   });
 });
 

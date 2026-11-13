@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Read2Me.Core.Models;
 using Read2Me.Data.Enums;
+using Read2Me.Services.History;
 using Read2Me.Services.Mutations;
 using Read2Me.Services.Series;
 
@@ -13,7 +14,7 @@ namespace Read2Me.Services.UseCases
     /// </summary>
     public class ProjectUseCases(
         IProjectCatalogReader reader, IProjectWriter writer, BookMutations mutations,
-        SeriesRegistry registry, ILogger<ProjectUseCases> logger)
+        SeriesRegistry registry, ProjectActivity activity, ILogger<ProjectUseCases> logger)
     {
         /// <summary>The refusal of a create with a blank title; the API also answers it for a missing file.</summary>
         public const string TitleAndFileRequired = "Fields 'title' and 'file' are required.";
@@ -53,8 +54,26 @@ namespace Read2Me.Services.UseCases
         /// the folder was still there. A folder that will not go is a failure and keeps the
         /// membership. A forget that throws is not: the project is gone, and the next write to that
         /// series heals the stale member, as it does for a book whose Id could not be read.
+        /// <para>
+        /// The whole of it holds the gate's deleting claim (#346), so nothing writes, enqueues or
+        /// restores meanwhile. A busy or restoring project is refused, never cancelled.
+        /// </para>
         /// </summary>
         public async Task<ProjectOutcome> DeleteAsync(ProjectFolderId folderId, CancellationToken ct = default)
+        {
+            if (activity.TryBeginDelete(folderId) is { } refusal)
+                return new ProjectOutcome.Blocked(refusal);
+            try
+            {
+                return await DeleteClaimedAsync(folderId, ct);
+            }
+            finally
+            {
+                activity.EndDelete(folderId);
+            }
+        }
+
+        private async Task<ProjectOutcome> DeleteClaimedAsync(ProjectFolderId folderId, CancellationToken ct)
         {
             var projectId = await ProjectIdAsync(folderId);
 
