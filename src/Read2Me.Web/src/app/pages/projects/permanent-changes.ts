@@ -126,14 +126,6 @@ export function deleteProjectConfirm(
   };
 }
 
-/**
- * The toast for a delete the host refused (409, #346): the project is busy or restoring, and
- * nothing was cancelled. `reason` is the host's `detail`, shown as written.
- */
-export function deleteRefusedMessage(title: string, reason: string): string {
-  return `Can't delete ${title}: ${reason.trim().replace(/\.$/, '')}. Stop it in Activity, then delete.`;
-}
-
 // ---- the series cast board (Character linking #208, 7) -----------------------------------------
 
 /** “A”, “A” and “B”; “no Voices” for none. */

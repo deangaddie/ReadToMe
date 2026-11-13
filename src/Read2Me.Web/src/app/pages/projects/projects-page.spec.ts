@@ -260,7 +260,12 @@ describe('r2m-projects-page', () => {
 
   it('a delete refused as busy names the book and the reason, points to Activity, and re-enables the card', async () => {
     const page = await render([dracula]);
-    api.on('DELETE', '/api/projects/dracula', () => problem(409, '128 paragraphs · assembling'));
+    api.on('DELETE', '/api/projects/dracula', () =>
+      Response.json(
+        { title: 'Conflict', status: 409, detail: '128 paragraphs · assembling', activity: 'busy' },
+        { status: 409 },
+      ),
+    );
 
     page.querySelector<HTMLButtonElement>('.r2m-project-card__delete')!.click();
     await confirmDialog('confirm');

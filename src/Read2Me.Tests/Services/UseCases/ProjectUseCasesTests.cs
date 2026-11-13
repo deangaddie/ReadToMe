@@ -105,7 +105,7 @@ namespace Read2Me.Tests.Services.UseCases
 
             var outcome = await UseCases.DeleteAsync(new ProjectFolderId(Study), Ct);
 
-            Assert.Equal(new ProjectOutcome.Blocked(new ActivityRefusal(ActivityRefusalKind.Busy, "128 paragraphs · assembling")), outcome);
+            Assert.Equal(new ProjectOutcome.ActivityRefused(new ActivityRefusal(ActivityRefusalKind.Busy, "128 paragraphs · assembling")), outcome);
             Assert.True(Directory.Exists(Path.Combine(TempDir, Study)));
             Assert.Single(await MembersAsync(seriesId));
         }
@@ -118,7 +118,7 @@ namespace Read2Me.Tests.Services.UseCases
 
             var outcome = await UseCases.DeleteAsync(new ProjectFolderId(Study), Ct);
 
-            Assert.Equal(ActivityRefusalKind.Restoring, Assert.IsType<ProjectOutcome.Blocked>(outcome).Refusal.Kind);
+            Assert.Equal(ActivityRefusalKind.Restoring, Assert.IsType<ProjectOutcome.ActivityRefused>(outcome).Refusal.Kind);
             Assert.True(Directory.Exists(Path.Combine(TempDir, Study)));
         }
 

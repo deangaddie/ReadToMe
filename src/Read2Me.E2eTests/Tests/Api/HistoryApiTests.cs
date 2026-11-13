@@ -314,8 +314,10 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             };
 
             Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-            Assert.Equal(ProjectActivity.RestoringReason,
-                JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
+            var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+            Assert.Equal(ProjectActivity.RestoringReason, problem.GetProperty("detail").GetString());
+            if (route == "delete")
+                Assert.Equal("restoring", problem.GetProperty("activity").GetString());
             Assert.True((await HistoryAsync(folder)).GetProperty("restoring").GetBoolean());
         }
         finally
@@ -355,8 +357,9 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             var detail = JsonDocument.Parse(await read.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString();
             Assert.StartsWith("Assembly", detail);
             Assert.Equal(HttpStatusCode.Conflict, delete.StatusCode);
-            Assert.StartsWith("Assembly",
-                JsonDocument.Parse(await delete.Content.ReadAsStringAsync()).RootElement.GetProperty("detail").GetString());
+            var refused = JsonDocument.Parse(await delete.Content.ReadAsStringAsync()).RootElement;
+            Assert.StartsWith("Assembly", refused.GetProperty("detail").GetString());
+            Assert.Equal("busy", refused.GetProperty("activity").GetString());
             Assert.Equal(HttpStatusCode.OK, (await Http.GetAsync($"{app.BaseUrl}/api/projects/{folder}/history")).StatusCode);
         }
         finally

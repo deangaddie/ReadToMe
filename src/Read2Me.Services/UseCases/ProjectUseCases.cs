@@ -62,7 +62,7 @@ namespace Read2Me.Services.UseCases
         public async Task<ProjectOutcome> DeleteAsync(ProjectFolderId folderId, CancellationToken ct = default)
         {
             if (activity.TryBeginDelete(folderId) is { } refusal)
-                return new ProjectOutcome.Blocked(refusal);
+                return new ProjectOutcome.ActivityRefused(refusal);
             try
             {
                 return await DeleteClaimedAsync(folderId, ct);

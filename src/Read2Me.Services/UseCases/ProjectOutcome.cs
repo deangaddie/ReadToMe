@@ -21,7 +21,7 @@ namespace Read2Me.Services.UseCases
         public sealed record Refused(string Message) : NotDone(Message);
 
         /// <summary>The <see cref="History.ProjectActivity"/> gate refused: the project is busy, restoring or being deleted; nothing was touched.</summary>
-        public sealed record Blocked(History.ActivityRefusal Refusal) : NotDone(Refusal.Reason);
+        public sealed record ActivityRefused(History.ActivityRefusal Refusal) : NotDone(Refusal.Reason);
 
         /// <summary>The write did not happen.</summary>
         public sealed record Failed(string Message) : NotDone(Message);

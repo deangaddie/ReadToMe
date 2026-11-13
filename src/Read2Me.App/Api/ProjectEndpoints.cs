@@ -221,15 +221,13 @@ namespace Read2Me.App.Api
                 ? TypedResults.Problem(failed.Message, statusCode: StatusCodes.Status422UnprocessableEntity)
                 : TypedResults.NoContent();
 
-        /// <summary>A lifecycle write that did not happen: refused input is a 400, a gate refusal (busy, restoring, deleting) a 409, a failed write a 422.</summary>
-        private static ProblemHttpResult Problem(ProjectOutcome.NotDone outcome) => TypedResults.Problem(
-            outcome.Message,
-            statusCode: outcome switch
-            {
-                ProjectOutcome.Refused => StatusCodes.Status400BadRequest,
-                ProjectOutcome.Blocked => StatusCodes.Status409Conflict,
-                _ => StatusCodes.Status422UnprocessableEntity,
-            });
+        /// <summary>A lifecycle write that did not happen: refused input is a 400, a gate refusal the gate's 409, a failed write a 422.</summary>
+        private static ProblemHttpResult Problem(ProjectOutcome.NotDone outcome) => outcome switch
+        {
+            ProjectOutcome.ActivityRefused refused => StepReads.Refused(refused.Refusal),
+            ProjectOutcome.Refused => TypedResults.Problem(outcome.Message, statusCode: StatusCodes.Status400BadRequest),
+            _ => TypedResults.Problem(outcome.Message, statusCode: StatusCodes.Status422UnprocessableEntity),
+        };
 
         /// Both gates in one place: the name must parse as a single path segment
         /// (traversal guard) and must exist on disk — anything else is a 404.
