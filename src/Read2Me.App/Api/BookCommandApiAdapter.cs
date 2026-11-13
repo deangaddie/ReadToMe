@@ -53,27 +53,13 @@ namespace Read2Me.App.Api
                 // where a refusal this command has always answered as null arrives.
                 BookMutationOutcome.NoChange => TypedResults.Ok(new CommandResponse(result.EntityId)),
 
-                // Cancelled before the commit point, so nothing was written. The request is already
-                // gone; rethrowing keeps ASP.NET's abort handling rather than inventing a status.
-                // A mutation that has committed never reaches here: BookMutations stops observing
-                // cancellation at its commit point precisely so a committed change cannot be
-                // reported as an uncommitted one.
-                BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } cancelled
-                    => throw new OperationCanceledException(cancelled.Message, ct),
-
-                // A Restore began after the request passed the endpoint's own check: the same 409.
-                BookMutationOutcome.Rejected { Reason: BookMutationRejection.Restoring } restoring
-                    => TypedResults.Problem(restoring.Message, statusCode: StatusCodes.Status409Conflict),
-
-                // Another linked book can't take the write (ADR 0018): a state refusal, naming its books.
-                BookMutationOutcome.Rejected { Reason: BookMutationRejection.Blocked } blocked
-                    => TypedResults.Problem(blocked.Message, statusCode: StatusCodes.Status409Conflict,
-                        extensions: blocked.Extensions?.ToDictionary(e => e.Key, e => e.Value)),
-
-                // Every other expected refusal the command did not soften: the same 422 an agent has
-                // always seen, now carrying the mutation's own reason as the message.
+                // Every other refusal answers by its Refusal kind (MutationRefusalProblem): a cancelled
+                // one rethrows, contention — a Restore begun after the endpoint's own check, another
+                // writer, a linked book that can't take the write (ADR 0018) — is 409. One answer is
+                // this contract's own (ADR 0007): a missing thing a command did not soften stays the
+                // 422 an agent has always seen, since the endpoint's 404 means an unknown project.
                 BookMutationOutcome.Rejected rejected
-                    => TypedResults.Problem(rejected.Message, statusCode: StatusCodes.Status422UnprocessableEntity),
+                    => MutationRefusalProblem.From(rejected, ct, missingStatus: StatusCodes.Status422UnprocessableEntity),
 
                 _ => throw new NotSupportedException(
                     $"Unhandled mutation outcome {result.Outcome.GetType().Name}."),

@@ -4,7 +4,7 @@ Domain vocabulary for ReadToMe. Use these terms exactly in code, tests, and disc
 
 | Area | File | Covers |
 | ---- | ---- | ------ |
-| Book structure, view, selection, status | [context/book-structure.md](context/book-structure.md) | Volume…ParagraphItem hierarchy, speech vs pause + `NarrationRule`, Book Hierarchy, Edit plan, Edit session, Edit source, Alias, Book mutation + receipt, Character paragraph, paragraph/audio item selection, Roll-up, Generatable item, Node Status Badge/roll-up |
+| Book structure, view, selection, status | [context/book-structure.md](context/book-structure.md) | Volume…ParagraphItem hierarchy, speech vs pause + `NarrationRule`, Book Hierarchy, Edit plan, Edit session, Edit source, Alias, Book mutation + receipt, Refusal kind, Character paragraph, paragraph/audio item selection, Roll-up, Generatable item, Node Status Badge/roll-up |
 | Project history | [context/history.md](context/history.md) | History, History step, Step scope, Background run, Project state, State file, View a step, Restore, Busy, Restoring, Deleting, Project activity gate |
 | Voice rules | [context/voice-rules.md](context/voice-rules.md) | Voice, Voice Rule, default rule, Position, Anchor, evaluation, effective Character, `VoiceResolver`, `NodeOrderTables`, `AnchorSpanResolver`, dangling anchor, rule editor, resolved preview, Reference Limit |
 | Book series | [context/series.md](context/series.md) | Series, Series position, Poster, Series character, Linked character (series), Differs from series, Link suggestion, Not the same, Series copy |

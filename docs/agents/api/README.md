@@ -25,6 +25,14 @@ declared once as the `default` response of every operation in the document rathe
 per status. 400 malformed input, 404 unknown folder/entity, 409 already-running, blocked or refused by state (e.g. a series name taken)
 (assembly carries `audioRemainingCount`; a Project activity gate refusal carries `activity`: `busy`, `restoring` or `deleting`), 422 domain failure (message in `detail`).
 
+**Refused mutations**: every endpoint that commits a Book mutation answers a refusal by its
+Refusal kind (`context/book-structure.md`), the same whichever route asked: contention (another
+write holds the project, the Project activity gate, a linked book that can't take it, a clash
+such as a Pronunciation's written form) **409**, missing **404**, invalid **422**. A cancelled
+request gets no answer. The command endpoint keeps two older answers (ADR 0007): a refusal a
+command has always softened is `200 { "newEntityId": null }`, and a missing thing a strict
+command names is **422**, since that endpoint's 404 means an unknown project.
+
 **Polling pattern**: the four long operations (attribution, audio, voice batch,
 assembly) return `202 Accepted` and run in the background. Poll their status
 endpoint until idle, then read per-item outcomes:

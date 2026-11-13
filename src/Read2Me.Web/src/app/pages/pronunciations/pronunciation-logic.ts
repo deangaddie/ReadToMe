@@ -84,7 +84,7 @@ export interface DeleteGate {
 
 export interface SaveGate extends DeleteGate {
   duplicateOf: PronunciationRef | null;
-  /** The host's 400 detail for the draft, or null. */
+  /** The host’s 422 detail for the draft, or null. */
   invalid: string | null;
 }
 

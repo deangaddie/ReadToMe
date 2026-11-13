@@ -14,7 +14,7 @@ curl -s 'http://localhost:5000/api/projects/{folder}/pronunciations/matches?chap
 curl -s -X POST http://localhost:5000/api/projects/{folder}/pronunciations \
   -H 'content-type: application/json' -d '{ "writtenForm": "Watson", "spokenForm": "WAT-sun" }'
 # → 201 with the entry plus audioDiscardCount and needsAudioCount. Both forms trimmed, inner whitespace
-# collapsed. 400: written form not 1–100 characters or not starting and ending with a letter or digit,
+# collapsed. 422: written form not 1–100 characters or not starting and ending with a letter or digit,
 # spoken form not 1–200 characters; 409: another entry has that written form, ignoring case.
 # One History step: Pronunciation: add "Watson" (action Pronunciation).
 curl -s -X PUT http://localhost:5000/api/projects/{folder}/pronunciations/{id} \
@@ -27,6 +27,7 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/pronunciations/impac
   -H 'content-type: application/json' -d '{ "id": null, "writtenForm": "Watson", "spokenForm": "WAT-sun", "delete": false }'
 # A dry run, no step: audioDiscardCount is what saving the draft discards; each overlap's draftWins says
 # whether the draft's form wins there; each match gives its sentence as written and as spoken.
+# 422 an invalid draft (the add's refusal), 404 unknown id.
 curl -s -X POST http://localhost:5000/api/projects/{folder}/pronunciations/try -o try.wav \
   -H 'content-type: application/json' \
   -d '{ "itemId": "…", "sentenceStart": 9, "draft": { "id": null, "writtenForm": "Watson", "spokenForm": "WAHT-sun" },

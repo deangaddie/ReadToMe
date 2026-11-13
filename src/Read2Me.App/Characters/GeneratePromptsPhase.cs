@@ -96,7 +96,7 @@ public sealed class GeneratePromptsPhase : ISweepPhase<PromptWorkItem>
                     _folder, item.CharacterId, voice.Name,
                     IsGenerated: true, voice.Description, voice.DesignPrompt), ct);
 
-            if (created is BookMutationOutcome.Rejected { Reason: BookMutationRejection.NotFound })
+            if (created is BookMutationOutcome.Rejected { Kind: BookMutationRefusalKind.Missing })
                 return new PhaseStepOutcome(Ok: false, Update: null,
                     FailReason: $"Character {item.CharacterName} no longer exists");
             if (Refusal(created) is { } reason)
@@ -115,11 +115,6 @@ public sealed class GeneratePromptsPhase : ISweepPhase<PromptWorkItem>
     /// — which is why that case is raised before the refusals are read rather than returned as one.
     /// </para>
     /// </summary>
-    private static string? Refusal(BookMutationOutcome outcome)
-    {
-        if (outcome is BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } cancelled)
-            throw new OperationCanceledException(cancelled.Message);
-
-        return outcome is BookMutationOutcome.Rejected rejected ? rejected.Message : null;
-    }
+    private static string? Refusal(BookMutationOutcome outcome) =>
+        outcome.ThrowIfCancelled() is BookMutationOutcome.Rejected rejected ? rejected.Message : null;
 }

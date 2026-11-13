@@ -195,14 +195,10 @@ namespace Read2Me.Services.UseCases
         private static ProjectOutcome Outcome(BookMutationOutcome outcome) => outcome switch
         {
             BookMutationOutcome.Committed or BookMutationOutcome.NoChange => new ProjectOutcome.Done(),
-            BookMutationOutcome.Rejected
-            {
-                Reason: BookMutationRejection.Conflict or BookMutationRejection.Stale
-                    or BookMutationRejection.Restoring or BookMutationRejection.Blocked,
-            } rejected => new ProjectOutcome.Conflict(rejected.Message),
-            BookMutationOutcome.Rejected { Reason: BookMutationRejection.NotFound } rejected => new ProjectOutcome.NotFound(rejected.Message),
-            BookMutationOutcome.Rejected { Reason: BookMutationRejection.Validation } rejected => new ProjectOutcome.Refused(rejected.Message),
-            BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } rejected => throw new OperationCanceledException(rejected.Message),
+            BookMutationOutcome.Rejected { Kind: BookMutationRefusalKind.Cancelled } rejected => throw new OperationCanceledException(rejected.Message),
+            BookMutationOutcome.Rejected { Kind: BookMutationRefusalKind.Contention } rejected => new ProjectOutcome.Conflict(rejected.Message),
+            BookMutationOutcome.Rejected { Kind: BookMutationRefusalKind.Missing } rejected => new ProjectOutcome.NotFound(rejected.Message),
+            BookMutationOutcome.Rejected { Kind: BookMutationRefusalKind.Invalid } rejected => new ProjectOutcome.Refused(rejected.Message),
             _ => throw new UnreachableException($"A project write answered {outcome}."),
         };
 

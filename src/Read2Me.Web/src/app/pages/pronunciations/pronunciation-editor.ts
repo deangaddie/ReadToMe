@@ -124,7 +124,7 @@ export class PronunciationEditor extends R2mElement {
   readonly spoken = signal('');
   /** The host's answer for the draft as last asked; kept while a newer question is pending. */
   readonly impact = signal<PronunciationImpactReport | null>(null);
-  /** The host's 400 detail for the draft, or null. */
+  /** The host’s 422 detail for the draft, or null. */
   readonly invalid = signal<string | null>(null);
   readonly writing = signal(false);
 
@@ -198,7 +198,7 @@ export class PronunciationEditor extends R2mElement {
       if (asked !== this.asked) return;
       const error = toApiError(e);
       this.impact.set(null);
-      this.invalid.set(error.status === 400 ? (error.detail ?? error.message) : null);
+      this.invalid.set(error.status === 422 ? (error.detail ?? error.message) : null);
     }
   }
 

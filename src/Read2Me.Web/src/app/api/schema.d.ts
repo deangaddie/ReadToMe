@@ -3854,7 +3854,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** Add a Pronunciation { writtenForm, spokenForm }. Both are trimmed and inner whitespace collapsed to one space. Written form: 1–100 characters, starting and ending with a letter or digit; spoken form: 1–200 characters. 201 with the entry, its reach and what it cost; 400 invalid; 409 when another entry has the written form, ignoring case. One History step, labelled Pronunciation: add "<written>". Items with audio whose Spoken text the change alters lose it (WAV reference and audio review), as a text edit does; audioDiscardCount counts them, needsAudioCount the spoken items without audio after it. 409 while audio generation is queued or running for the project, or a Restore runs. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
+        /** Add a Pronunciation { writtenForm, spokenForm }. Both are trimmed and inner whitespace collapsed to one space. Written form: 1–100 characters, starting and ending with a letter or digit; spoken form: 1–200 characters. 201 with the entry, its reach and what it cost; 422 invalid; 409 when another entry has the written form, ignoring case. One History step, labelled Pronunciation: add "<written>". Items with audio whose Spoken text the change alters lose it (WAV reference and audio review), as a text edit does; audioDiscardCount counts them, needsAudioCount the spoken items without audio after it. 409 while audio generation is queued or running for the project, or a Restore runs. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
         post: {
             parameters: {
                 query?: never;
@@ -3912,7 +3912,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** What saving a draft { id?, writtenForm, spokenForm, delete? } would do, writing nothing: no id adds, an id edits that entry, delete: true deletes it (forms ignored). Answers matchCount, itemCount, withAudioCount (a delete's: the entry's reach now), audioDiscardCount (exactly what the save would discard), overlaps (entries whose written form holds the draft's as whole words or is held by it, draftWins when the draft's is the longer and so wins), duplicateOf (another entry with the written form, ignoring case: a save would be 409; the counts treat the draft as taking its place), and matches in book order: itemId, chapterId, chapterTitle, speaker, hasAudio, the sentence around it, sentenceStart (where it starts in the item's text, what a try-out names it by), matchStart and matchLength in that sentence, spokenSentence, the sentence with the drafted list applied, and spokenMatchStart and spokenMatchLength, where the match's spoken form (its case carried over) sits in spokenSentence. 400 invalid; 404 unknown id. */
+        /** What saving a draft { id?, writtenForm, spokenForm, delete? } would do, writing nothing: no id adds, an id edits that entry, delete: true deletes it (forms ignored). Answers matchCount, itemCount, withAudioCount (a delete's: the entry's reach now), audioDiscardCount (exactly what the save would discard), overlaps (entries whose written form holds the draft's as whole words or is held by it, draftWins when the draft's is the longer and so wins), duplicateOf (another entry with the written form, ignoring case: a save would be 409; the counts treat the draft as taking its place), and matches in book order: itemId, chapterId, chapterTitle, speaker, hasAudio, the sentence around it, sentenceStart (where it starts in the item's text, what a try-out names it by), matchStart and matchLength in that sentence, spokenSentence, the sentence with the drafted list applied, and spokenMatchStart and spokenMatchLength, where the match's spoken form (its case carried over) sits in spokenSentence. 422 invalid; 404 unknown id. */
         post: {
             parameters: {
                 query?: never;
@@ -4085,7 +4085,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Edit a Pronunciation's { writtenForm, spokenForm }, checked as an add. 200 with the entry, its reach and what it cost; 400 invalid; 404 unknown id; 409 when another entry has the written form. Saving it unchanged writes nothing and lands no step; otherwise one History step, labelled Pronunciation: edit "<written>". Items with audio whose Spoken text the change alters lose it (WAV reference and audio review), as a text edit does; audioDiscardCount counts them, needsAudioCount the spoken items without audio after it. 409 while audio generation is queued or running for the project, or a Restore runs. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
+        /** Edit a Pronunciation's { writtenForm, spokenForm }, checked as an add. 200 with the entry, its reach and what it cost; 422 invalid; 404 unknown id; 409 when another entry has the written form. Saving it unchanged writes nothing and lands no step; otherwise one History step, labelled Pronunciation: edit "<written>". Items with audio whose Spoken text the change alters lose it (WAV reference and audio review), as a text edit does; audioDiscardCount counts them, needsAudioCount the spoken items without audio after it. 409 while audio generation is queued or running for the project, or a Restore runs. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
         put: {
             parameters: {
                 query?: never;
@@ -4690,7 +4690,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Transcribe a voice's reference audio with the active transcription service and store the result as its transcript. 422 without audio or an active service. */
+        /** Transcribe a voice's reference audio with the active transcription service and store the result as its transcript. 422 without audio or an active service; 409 while the project is restoring; 404 when the voice is gone. */
         post: {
             parameters: {
                 query?: never;
