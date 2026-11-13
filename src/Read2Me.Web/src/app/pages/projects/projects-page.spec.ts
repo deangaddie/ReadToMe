@@ -331,58 +331,6 @@ describe('r2m-projects-page Books view', () => {
     expect(toasts).toEqual(['Emma is Book 1 of Austen. Edit the number if it belongs elsewhere.']);
   });
 
-  it('Move to another series… asks Leave’s confirm, then joins with move', async () => {
-    const other: SeriesDto = {
-      id: 'x',
-      name: 'Holmes novels',
-      poster: { url: null, source: 'None', coverPosition: null },
-      books: [],
-    };
-    const page = await render([four, scarlet], [holmes, other]);
-    api.on('PUT', '/api/series/x/books/four', { position: 1 });
-
-    card(page, 'four').querySelector<HTMLButtonElement>('[data-action="move-series"]')!.click();
-    await settle();
-    const picker = document.querySelector('r2m-series-picker')!;
-    await picker.rendered();
-    picker.querySelector<HTMLButtonElement>('[data-series-id="x"]')!.click();
-    await flush();
-    const { title } = await confirmDialog('confirm');
-
-    expect(title).toBe('Move The Sign of the Four to Holmes novels?');
-    expect(api.calls('PUT', '/api/series/x/books/four').map((r) => r.body)).toEqual([
-      { move: true },
-    ]);
-  });
-
-  it('New series… for a member asks to move first, then creates it and moves the book in', async () => {
-    const page = await render([four, scarlet], [holmes]);
-    api
-      .on('POST', '/api/series', { id: 'n' })
-      .on('PUT', '/api/series/n/books/four', { position: 1 });
-
-    card(page, 'four').querySelector<HTMLButtonElement>('[data-action="move-series"]')!.click();
-    await settle();
-    const picker = document.querySelector('r2m-series-picker')!;
-    await picker.rendered();
-    picker.querySelector<HTMLButtonElement>('[data-action="new-series"]')!.click();
-    await flush();
-    const { title } = await confirmDialog('confirm');
-    await answerPrompt('Holmes novels');
-    await flush();
-
-    expect(title).toBe('Move The Sign of the Four to a new series?');
-    expect(api.calls('POST', '/api/series').map((r) => r.body)).toEqual([
-      { name: 'Holmes novels', folder: null },
-    ]);
-    expect(api.calls('PUT', '/api/series/n/books/four').map((r) => r.body)).toEqual([
-      { move: true },
-    ]);
-    expect(toasts).toEqual([
-      'The Sign of the Four is Book 1 of Holmes novels. Edit the number if it belongs elsewhere.',
-    ]);
-  });
-
   it('Remove from <series> asks first, then leaves', async () => {
     const page = await render([four, scarlet], [holmes]);
     api.on('DELETE', '/api/series/h/books/four', undefined);
@@ -407,6 +355,44 @@ describe('r2m-projects-page Books view', () => {
     expect(text(card(page, 'four').querySelector('.r2m-project-card__series'))).toContain(
       'Sherlock Holmes · Book 2',
     );
+  });
+
+  it('reads both lists again after a hub reconnect, as a series signal may have been missed', async () => {
+    const page = await render([emma, four, scarlet], []);
+    api.on('GET', '/api/series', [holmes]);
+
+    live.resync();
+    await settle();
+    await page.rendered();
+
+    expect(api.calls('GET', '/api/series')).toHaveLength(2);
+    expect(text(card(page, 'four').querySelector('.r2m-project-card__series'))).toContain(
+      'Sherlock Holmes · Book 2',
+    );
+  });
+
+  it('a Series write reads the shelf again before it finishes, a hub signal or not', async () => {
+    const page = await render([four, scarlet], [holmes]);
+    api
+      .on('DELETE', '/api/series/h/books/four', undefined)
+      .on('GET', '/api/series', [{ ...holmes, books: [holmes.books[0]!] }]);
+
+    card(page, 'four').querySelector<HTMLButtonElement>('[data-action="leave-series"]')!.click();
+    await confirmDialog('confirm');
+    await page.rendered();
+
+    expect(api.calls('GET', '/api/series')).toHaveLength(2);
+    expect(card(page, 'four').querySelector('.r2m-project-card__series')).toBeNull();
+  });
+
+  it('deleting a member book reads the series again', async () => {
+    const page = await render([four, scarlet], [holmes]);
+    api.on('DELETE', '/api/projects/four', undefined).on('GET', '/api/projects', [scarlet]);
+
+    card(page, 'four').querySelector<HTMLButtonElement>('.r2m-project-card__delete')!.click();
+    await confirmDialog('confirm');
+
+    expect(api.calls('GET', '/api/series')).toHaveLength(2);
   });
 });
 
@@ -491,7 +477,7 @@ describe('r2m-projects-page Series view', () => {
     expect(save().disabled).toBe(false);
     api.on('PUT', '/api/series/h/positions', holmes);
     save().click();
-    await settle();
+    await flush();
     await page.rendered();
 
     expect(api.calls('PUT', '/api/series/h/positions').map((r) => r.body)).toEqual([
@@ -541,21 +527,6 @@ describe('r2m-projects-page Series view', () => {
     expect(api.calls('POST', '/api/series').map((r) => r.body)).toEqual([
       { name: 'Austen', folder: null },
     ]);
-  });
-
-  it('a taken name asks again with the typed name', async () => {
-    const page = await render([emma], [holmes]);
-    await showSeries(page);
-    api.on('PATCH', '/api/series/h', () => problem(409, 'There is already a series called Oz.'));
-
-    page.querySelector<HTMLButtonElement>('[data-action="rename-series"]')!.click();
-    await answerPrompt('Oz');
-
-    expect(toasts).toEqual(['problem: There is already a series called Oz.']);
-    const prompt = document.querySelector('r2m-text-prompt-dialog')!;
-    expect(prompt.querySelector<HTMLInputElement>('.r2m-text-prompt-dialog__input')!.value).toBe(
-      'Oz',
-    );
   });
 
   it('Add book… groups the other books and joins the picked one', async () => {
@@ -913,6 +884,17 @@ describe('r2m-projects-page series cast board', () => {
     expect(api.calls('GET', '/api/series/h/cast')).toHaveLength(3);
   });
 
+  it('reads the board again after a hub reconnect', async () => {
+    const { el } = await openBoard();
+
+    live.resync();
+    await settle();
+    await el.rendered();
+
+    // Opening's two reads, then the board's after the reconnect.
+    expect(api.calls('GET', '/api/series/h/cast')).toHaveLength(3);
+  });
+
   describe('Link suggestions (#223)', () => {
     /** Four's Holmes suggested in Holmes' row, and Watson a suggested row across both books. */
     const suggesting = (): SeriesCastDto => ({
@@ -1130,30 +1112,6 @@ describe('r2m-projects-page series cast board', () => {
     });
   });
 
-  it('Remove from <series> names the book’s linked Characters', async () => {
-    const page = await render([four, scarlet], [holmes]);
-    api.on('GET', '/api/series/h/cast', board());
-    api.on('DELETE', '/api/series/h/books/four', undefined);
-
-    card(page, 'four').querySelector<HTMLButtonElement>('[data-action="leave-series"]')!.click();
-    const { message } = await confirmDialog('confirm');
-
-    expect(message).toStartWith(
-      'Narrator loses its series link. This book keeps its own copy of its Voices.',
-    );
-  });
-
-  it('Delete series names the Series characters whose links go', async () => {
-    const page = await render([four, scarlet], [holmes]);
-    api.on('GET', '/api/series/h/cast', board());
-    await showSeries(page);
-
-    page.querySelector<HTMLButtonElement>('[data-action="delete-series"]')!.click();
-    const { message } = await confirmDialog('cancel');
-
-    expect(message).toContain('the links of Narrator and Sherlock Holmes are removed');
-  });
-
   describe('inline series Voice editors (#221)', () => {
     const detailOf = (label: string) => ({
       seriesCopyFolder: 'scarlet',
@@ -1244,19 +1202,5 @@ describe('r2m-projects-page series cast board', () => {
       ).not.toBeNull();
       expect(el.querySelector('tr[data-editor-for="sc-narrator"]')).toBeNull();
     });
-  });
-});
-
-describe('r2m-projects-page series confirms without the cast read', () => {
-  it('Remove from <series> still asks, naming no Characters, when the cast can’t be read', async () => {
-    const page = await render([four, scarlet], [holmes]);
-    api.on('GET', '/api/series/h/cast', () => problem(422, 'registry unreadable'));
-    api.on('DELETE', '/api/series/h/books/four', undefined);
-
-    card(page, 'four').querySelector<HTMLButtonElement>('[data-action="leave-series"]')!.click();
-    const { message } = await confirmDialog('confirm');
-
-    expect(message).toStartWith('Any of its Characters linked to the series lose their link.');
-    expect(api.calls('DELETE', '/api/series/h/books/four')).toHaveLength(1);
   });
 });

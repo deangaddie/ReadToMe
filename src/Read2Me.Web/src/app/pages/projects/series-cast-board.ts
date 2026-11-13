@@ -3,13 +3,12 @@ import {
   type SeriesCastDto,
   type SeriesCastRowDto,
   type SeriesSuggestedRowDto,
-  SeriesApi,
   toApiError,
 } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
-import { LiveService } from '@app/live/live.service';
+import { SeriesStore, rereads } from '@app/series/series-store';
 import { icon, statusChip } from '@app/ui/partials';
 import { SeriesActions } from './series-actions';
 import { type BoardCell, boardCells, pickerOptions, suggestedRowCells } from './series-cast';
@@ -37,12 +36,11 @@ export interface BoardSeries {
  * One row per Series character (the Narrator a row like any other), one column per book in Series
  * position order. A cell is linked (the name, and ✕ to unlink) or empty (a picker of that book's
  * unlinked Characters); the last row shares a Character as new. A row's label opens its inline
- * series Voice editor under it (#221), several at once. Read when shown, and again on the
- * hub's `series` signal for this series and after each of its own writes.
+ * series Voice editor under it (#221), several at once. Read when shown, and again on each
+ * {@link SeriesStore} change naming this series (its own writes included) and on `Resynced`.
  */
 export class SeriesCastBoard extends R2mElement {
-  private readonly api = use(SeriesApi);
-  private readonly live = use(LiveService);
+  private readonly seriesStore = use(SeriesStore);
   private readonly actions = use(SeriesActions);
 
   private readonly _series = signal<BoardSeries | null>(null);
@@ -76,9 +74,9 @@ export class SeriesCastBoard extends R2mElement {
   protected override connected(): void {
     this.classList.add('series-cast');
     this.onDisconnect(
-      this.live.on('series', (m) => {
-        if (m.seriesId === this._series()?.id && m.kind === 'Changed') void this.load();
-      }),
+      this.seriesStore.changes((change) =>
+        rereads(change, this._series()?.id) ? this.load() : undefined,
+      ),
     );
     void this.load();
   }
@@ -89,7 +87,7 @@ export class SeriesCastBoard extends R2mElement {
     if (!series) return;
     const seq = ++this.seq;
     try {
-      const cast = await this.api.cast(series.id);
+      const cast = await this.seriesStore.cast(series.id);
       if (seq !== this.seq) return;
       this.cast.set(cast);
       this.error.set(null);
@@ -103,14 +101,14 @@ export class SeriesCastBoard extends R2mElement {
     }
   }
 
-  /** Runs one write, then reads the board again whatever it answered. */
+  /** Runs one write; `SeriesStore` reads the board again before it resolves. */
   private async write(run: (series: BoardSeries, cast: SeriesCastDto) => Promise<boolean>) {
     const series = this._series();
     const cast = this.cast();
     if (!series || !cast || this.busy()) return;
     this.busy.set(true);
     try {
-      if (await run(series, cast)) await this.load();
+      await run(series, cast);
     } finally {
       this.busy.set(false);
     }

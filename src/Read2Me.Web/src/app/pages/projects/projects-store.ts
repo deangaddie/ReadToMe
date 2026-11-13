@@ -3,23 +3,23 @@ import {
   type ProjectSummary,
   ProjectsApi,
   type SeriesDto,
-  SeriesApi,
 } from '@app/api';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
-import { LiveService, type Unsubscribe } from '@app/live/live.service';
+import type { Unsubscribe } from '@app/live/live.service';
+import { SeriesStore } from '@app/series/series-store';
 import { membershipOf, seriesViews, shelfItems } from './series-shelf';
 
 /**
  * The shelf's lists (design §6.1): the projects and the series, read together on every visit to
- * `/projects`, after this page's own writes, and again on the hub's `series` signal while the page
- * follows it (a registry write or a member book's commit, from any tab or agent). The Series view
- * is derived from both reads here; the host has no combined read.
+ * `/projects`, and again on every {@link SeriesStore} change while the page follows it (a Series
+ * write from this page, the hub's `series` signal from any tab or agent, a reconnect). Series
+ * writes go through `SeriesStore`, which waits for this re-read. The Series view is derived from
+ * both reads here; the host has no combined read.
  */
 export class ProjectsStore {
   private readonly api = use(ProjectsApi);
-  private readonly seriesApi = use(SeriesApi);
-  private readonly live = use(LiveService);
+  private readonly seriesStore = use(SeriesStore);
 
   private readonly _projects = signal<ProjectSummary[]>([]);
   private readonly _series = signal<SeriesDto[]>([]);
@@ -45,9 +45,9 @@ export class ProjectsStore {
   readonly loaded = this._loaded.asReadonly();
   readonly error = this._error.asReadonly();
 
-  /** Re-reads on every `series` hub signal until the returned function is called. */
+  /** Re-reads on every Series change until the returned function is called. */
   follow(): Unsubscribe {
-    return this.live.on('series', () => void this.load().catch(() => undefined));
+    return this.seriesStore.changes(() => this.reload());
   }
 
   /** Reads both lists; a slower, older read never overwrites a newer one. */
@@ -55,7 +55,7 @@ export class ProjectsStore {
     const seq = ++this.loadSeq;
     this._loading.set(true);
     try {
-      const [projects, series] = await Promise.all([this.api.list(), this.seriesApi.list()]);
+      const [projects, series] = await Promise.all([this.api.list(), this.seriesStore.list()]);
       if (seq !== this.loadSeq) return;
       this._projects.set(projects);
       this._series.set(series);
@@ -79,58 +79,23 @@ export class ProjectsStore {
     return folderName;
   }
 
-  /** Deletes the project; the host drops its registry entry, so the series are read again. */
+  /**
+   * Deletes the project. A member book also leaves its series (#330), so `SeriesStore` raises a
+   * `Changed` for that series, whatever the delete answered, and the shelf reads again from it;
+   * a book in no series just reads again.
+   */
   async delete(folder: string): Promise<void> {
-    await this.api.delete(folder);
-    this._projects.update((list) => list.filter((p) => p.folderName !== folder));
-    await this.reload();
+    const seriesId = this.membership().get(folder)?.seriesId;
+    try {
+      await this.api.delete(folder);
+      this._projects.update((list) => list.filter((p) => p.folderName !== folder));
+    } finally {
+      if (seriesId) await this.seriesStore.changed(seriesId);
+    }
+    if (!seriesId) await this.reload();
   }
 
-  /** A new series, empty or (with `folder`) with that book as Book 1. Resolves its id. */
-  async createSeries(name: string, folder?: string): Promise<string> {
-    const id = await this.seriesApi.create(name, folder);
-    await this.reload();
-    return id;
-  }
-
-  async renameSeries(id: string, name: string): Promise<void> {
-    await this.seriesApi.rename(id, name);
-    await this.reload();
-  }
-
-  async deleteSeries(id: string): Promise<void> {
-    await this.seriesApi.delete(id);
-    await this.reload();
-  }
-
-  async uploadPoster(id: string, file: File): Promise<void> {
-    await this.seriesApi.uploadPoster(id, file);
-    await this.reload();
-  }
-
-  async clearPoster(id: string): Promise<void> {
-    await this.seriesApi.clearPoster(id);
-    await this.reload();
-  }
-
-  /** Join, or Move to with `move`; resolves the assigned Series position. */
-  async join(id: string, folder: string, move: boolean): Promise<number> {
-    const position = await this.seriesApi.join(id, folder, move);
-    await this.reload();
-    return position;
-  }
-
-  async leave(id: string, folder: string): Promise<void> {
-    await this.seriesApi.leave(id, folder);
-    await this.reload();
-  }
-
-  async savePositions(id: string, positions: Record<string, number>): Promise<void> {
-    await this.seriesApi.savePositions(id, positions);
-    await this.reload();
-  }
-
-  /** A reload after a write that already landed: its failure shows as the load error, not the write's. */
+  /** A reload after a write: its failure shows as the load error, not the write's. */
   private reload(): Promise<void> {
     return this.load().catch(() => undefined);
   }

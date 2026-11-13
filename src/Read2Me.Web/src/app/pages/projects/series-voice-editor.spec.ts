@@ -434,8 +434,7 @@ describe('r2m-series-voice-editor', () => {
 
     confirmAnswer = true;
     action(el, 'push').click();
-    await settle();
-    await settle();
+    await new Promise((r) => setTimeout(r, 0));
     expect(api.calls('POST', push).map((r) => r.body)).toEqual([{ folder: 'four' }]);
     expect(toasts).toEqual(['success: Saved in 3 books']);
   });
