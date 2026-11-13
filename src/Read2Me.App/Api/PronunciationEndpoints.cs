@@ -80,13 +80,13 @@ namespace Read2Me.App.Api
                 .RecordsOwnStep()
                 .WithSummary("Add a Pronunciation { writtenForm, spokenForm }. Both are trimmed and inner whitespace collapsed to one space. " +
                              $"Written form: 1–{PronunciationForms.MaxWrittenLength} characters, starting and ending with a letter or digit; " +
-                             $"spoken form: 1–{PronunciationForms.MaxSpokenLength} characters. 201 with the entry, its reach and what it cost; 400 invalid; " +
+                             $"spoken form: 1–{PronunciationForms.MaxSpokenLength} characters. 201 with the entry, its reach and what it cost; 422 invalid; " +
                              "409 when another entry has the written form, ignoring case. One History step, labelled Pronunciation: add \"<written>\". " +
                              ChangeCost);
             endpoints.MapPut("/api/projects/{folder}/pronunciations/{id:guid}", EditAsync)
                 .RecordsOwnStep()
                 .WithSummary("Edit a Pronunciation's { writtenForm, spokenForm }, checked as an add. 200 with the entry, its reach and what it cost; " +
-                             "400 invalid; 404 unknown id; 409 when another entry has the written form. Saving it unchanged writes nothing and lands no step; " +
+                             "422 invalid; 404 unknown id; 409 when another entry has the written form. Saving it unchanged writes nothing and lands no step; " +
                              "otherwise one History step, labelled Pronunciation: edit \"<written>\". " + ChangeCost);
             endpoints.MapDelete("/api/projects/{folder}/pronunciations/{id:guid}", DeleteAsync)
                 .RecordsOwnStep()
@@ -102,7 +102,7 @@ namespace Read2Me.App.Api
                              "itemId, chapterId, chapterTitle, speaker, hasAudio, the sentence around it, sentenceStart (where it starts in the item's text, " +
                              "what a try-out names it by), matchStart and matchLength in that sentence, " +
                              "spokenSentence, the sentence with the drafted list applied, and spokenMatchStart and spokenMatchLength, where the match's " +
-                             "spoken form (its case carried over) sits in spokenSentence. 400 invalid; 404 unknown id.");
+                             "spoken form (its case carried over) sits in spokenSentence. 422 invalid; 404 unknown id.");
             endpoints.MapPost("/api/projects/{folder}/pronunciations/try", TryAsync).RefusedWhileSetupCheckRuns()
                 .RecordsNoStep("A try-out: it renders a sentence and stores nothing.")
                 .Produces<Stream>(contentType: "audio/wav")
@@ -322,16 +322,7 @@ namespace Read2Me.App.Api
 
         private static ProblemHttpResult Refusal(BookMutationOutcome outcome, CancellationToken ct) => outcome switch
         {
-            BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } cancelled =>
-                throw new OperationCanceledException(cancelled.Message, ct),
-            BookMutationOutcome.Rejected { Reason: BookMutationRejection.Validation } invalid =>
-                TypedResults.Problem(invalid.Message, statusCode: StatusCodes.Status400BadRequest),
-            BookMutationOutcome.Rejected { Reason: BookMutationRejection.NotFound } missing =>
-                TypedResults.Problem(missing.Message, statusCode: StatusCodes.Status404NotFound),
-            BookMutationOutcome.Rejected { Reason: BookMutationRejection.Conflict or BookMutationRejection.Restoring } conflict =>
-                TypedResults.Problem(conflict.Message, statusCode: StatusCodes.Status409Conflict),
-            BookMutationOutcome.Rejected rejected =>
-                TypedResults.Problem(rejected.Message, statusCode: StatusCodes.Status422UnprocessableEntity),
+            BookMutationOutcome.Rejected rejected => MutationRefusalProblem.From(rejected, ct),
             _ => throw new NotSupportedException($"Unhandled mutation outcome {outcome.GetType().Name}."),
         };
     }

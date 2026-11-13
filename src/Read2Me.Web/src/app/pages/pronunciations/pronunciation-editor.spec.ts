@@ -218,12 +218,12 @@ describe('a new pronunciation', () => {
       () =>
         new Response(
           JSON.stringify({
-            status: 400,
-            title: 'Bad Request',
+            status: 422,
+            title: 'Unprocessable Entity',
             detail: 'Written form must end with a letter or digit.',
           }),
           {
-            status: 400,
+            status: 422,
             headers: { 'Content-Type': 'application/problem+json' },
           },
         ),

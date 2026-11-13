@@ -12,7 +12,10 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/commands \
 `UpdateChapterTitle`, `AddPauses`, `InsertPauseParagraph`, `DeleteVoice`, …); the
 error for an unknown type lists every valid one. The project folder always comes
 from the URL — no command schema has `folderId`, and one sent in the body is ignored.
-Split/create commands return `{ "newEntityId": "<guid>" }`.
+Split/create commands return `{ "newEntityId": "<guid>" }`. A refusal is **422**, or **409** when
+the project's state refuses it (another write holds it, it is restoring or being deleted, a linked
+book can't take the write); some commands answer an unknown target as a no-op instead
+(the API README, "Refused mutations").
 
 Every command is in the OpenAPI document (#328): the operation's body is `BookCommand`, a
 `oneOf` over one component per record (`DeleteVolumeCommand`, `InsertNodeCommand`, …)

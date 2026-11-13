@@ -77,9 +77,8 @@ public sealed class HistoryRestore(
                 case BookMutationOutcome.NoChange:
                     // The project already is the step's state: nothing to record, nothing dropped.
                     return new RestoreOutcome.Restored(null, AudioDiscardCount: 0, NeedsAudioCount: 0);
-                case BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } cancelled:
-                    throw new OperationCanceledException(cancelled.Message, ct);
                 case BookMutationOutcome.Rejected rejected:
+                    rejected.ThrowIfCancelled(ct);
                     return new RestoreOutcome.Refused(rejected.Message);
                 default:
                     throw new InvalidOperationException($"Unhandled mutation outcome {outcome.GetType().Name}.");

@@ -144,9 +144,8 @@ namespace Read2Me.Services.UseCases
             return outcome switch
             {
                 BookMutationOutcome.NoChange => new BookImportOutcome.Unchanged(),
-                BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } => Cancelled(),
-                BookMutationOutcome.Rejected
-                    { Reason: BookMutationRejection.Conflict or BookMutationRejection.Stale or BookMutationRejection.Restoring } conflict =>
+                BookMutationOutcome.Rejected { Kind: BookMutationRefusalKind.Cancelled } => Cancelled(),
+                BookMutationOutcome.Rejected { Kind: BookMutationRefusalKind.Contention } conflict =>
                     new BookImportOutcome.Failed(BookImportFailure.Conflict, conflict.Message),
                 BookMutationOutcome.Rejected rejected =>
                     new BookImportOutcome.Failed(BookImportFailure.Invalid, rejected.Message),

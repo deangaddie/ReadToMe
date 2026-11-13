@@ -68,14 +68,14 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
     [Theory]
     [InlineData("'Rain", "RAYN")]
     [InlineData("Rain", null)]
-    public async Task An_invalid_form_is_400_and_lands_no_step(string? written, string? spoken)
+    public async Task An_invalid_form_is_422_and_lands_no_step(string? written, string? spoken)
     {
         var folder = await SeedAsync();
         var before = (await StepsAsync(folder)).Count;
 
         var response = await AddAsync(folder, written, spoken);
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         Assert.Equal(before, (await StepsAsync(folder)).Count);
     }
 
@@ -261,7 +261,7 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         Assert.Equal(HttpStatusCode.NotFound, (await EditAsync(folder, Guid.NewGuid(), "Rain", "x")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await DeleteAsync(folder, Guid.NewGuid())).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await EditAsync(folder, night, "RAIN", "x")).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await EditAsync(folder, night, "night!", "x")).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await EditAsync(folder, night, "night!", "x")).StatusCode);
     }
 
     [Fact]
@@ -340,11 +340,11 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
     }
 
     [Fact]
-    public async Task The_impact_of_an_invalid_draft_is_400_and_of_an_unknown_entry_404()
+    public async Task The_impact_of_an_invalid_draft_is_422_and_of_an_unknown_entry_404()
     {
         var folder = await SeedAsync();
 
-        Assert.Equal(HttpStatusCode.BadRequest, (await ImpactAsync(folder, new { writtenForm = "'Rain", spokenForm = "x" })).StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await ImpactAsync(folder, new { writtenForm = "'Rain", spokenForm = "x" })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await ImpactAsync(folder, new { id = Guid.NewGuid(), delete = true })).StatusCode);
     }
 

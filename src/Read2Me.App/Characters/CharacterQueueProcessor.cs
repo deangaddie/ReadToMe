@@ -255,11 +255,10 @@ namespace Read2Me.App.Characters
 
             // A cancelled apply is a cancelled item, not a settled one — the legacy command path
             // threw here, and the drain's own handler is what turns that into "cancelled paragraph".
-            if (outcome is BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } cancelled)
-                throw new OperationCanceledException(cancelled.Message, ct);
+            outcome.ThrowIfCancelled(ct);
 
             // Refused while the project restores: the caller runs the paragraph again afterwards.
-            if (outcome is BookMutationOutcome.Rejected { Reason: BookMutationRejection.Restoring })
+            if (outcome is BookMutationOutcome.Rejected { Activity.Kind: ActivityRefusalKind.Restoring })
                 throw UncommittedArtifact.AsException(outcome, $"paragraph {item.ParagraphId} attributions", ct);
 
             // Every other refusal is expected and not the queue's business to retry: the paragraph

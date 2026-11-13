@@ -100,12 +100,18 @@ namespace Read2Me.Tests.Api
             Assert.Null(IdOf(BookCommandApiAdapter.ToResult(softened, CancellationToken.None)));
         }
 
+        /// <summary>
+        /// A refusal the command did not soften answers by its Refusal kind, except that a missing
+        /// thing stays the 422 this contract has always given (ADR 0007): the endpoint's 404 means
+        /// an unknown project.
+        /// </summary>
         [Theory]
-        [InlineData(BookMutationRejection.Validation)]
-        [InlineData(BookMutationRejection.NotFound)]
-        [InlineData(BookMutationRejection.Conflict)]
-        [InlineData(BookMutationRejection.Stale)]
-        public void AnExpectedRefusalTheCommandDoesNotSoften_Is422WithItsReason(BookMutationRejection reason)
+        [InlineData(BookMutationRejection.Validation, StatusCodes.Status422UnprocessableEntity)]
+        [InlineData(BookMutationRejection.NotFound, StatusCodes.Status422UnprocessableEntity)]
+        [InlineData(BookMutationRejection.Conflict, StatusCodes.Status409Conflict)]
+        [InlineData(BookMutationRejection.Activity, StatusCodes.Status409Conflict)]
+        [InlineData(BookMutationRejection.Blocked, StatusCodes.Status409Conflict)]
+        public void AnExpectedRefusalTheCommandDoesNotSoften_AnswersItsStatusWithItsReason(BookMutationRejection reason, int status)
         {
             var result = BookCommandApiAdapter.ToResult(
                 BookCommandWireContract.AsCommandResult(
@@ -113,8 +119,7 @@ namespace Read2Me.Tests.Api
                 CancellationToken.None);
 
             var problem = Assert.IsType<ProblemHttpResult>(result.Result);
-            Assert.Equal(StatusCodes.Status422UnprocessableEntity, problem.StatusCode);
-            Assert.Equal("that character is not in this book", problem.ProblemDetails.Detail);
+            Assert.Equal((status, "that character is not in this book"), (problem.StatusCode, problem.ProblemDetails.Detail));
         }
 
         [Fact]

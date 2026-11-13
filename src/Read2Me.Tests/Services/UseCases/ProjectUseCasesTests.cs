@@ -203,8 +203,7 @@ namespace Read2Me.Tests.Services.UseCases
 
         [Theory]
         [InlineData(BookMutationRejection.Conflict)]
-        [InlineData(BookMutationRejection.Stale)]
-        [InlineData(BookMutationRejection.Restoring)]
+        [InlineData(BookMutationRejection.Activity)]
         [InlineData(BookMutationRejection.Blocked)]
         public async Task A_write_the_project_state_refuses_is_a_conflict_with_the_mutations_reason(BookMutationRejection reason)
         {

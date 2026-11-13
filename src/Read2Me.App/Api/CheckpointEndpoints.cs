@@ -68,19 +68,12 @@ namespace Read2Me.App.Api
 
         /// <summary>
         /// The outcome table. A repeat changed nothing and still answers 204: the pill already shows
-        /// that state. A write-lock conflict is 409, so a client can tell "try again" from "never".
+        /// that state. A refusal answers by its Refusal kind, so a client can tell "try again" (409) from "never" (422).
         /// </summary>
         internal static Results<NoContent, NotFound, ProblemHttpResult> ToResult(BookMutationOutcome outcome, CancellationToken ct) => outcome switch
         {
             BookMutationOutcome.Committed or BookMutationOutcome.NoChange => TypedResults.NoContent(),
-            BookMutationOutcome.Rejected { Reason: BookMutationRejection.Cancelled } cancelled
-                => throw new OperationCanceledException(cancelled.Message, ct),
-            BookMutationOutcome.Rejected { Reason: BookMutationRejection.Conflict or BookMutationRejection.Stale or BookMutationRejection.Restoring } conflict
-                => TypedResults.Problem(conflict.Message, statusCode: StatusCodes.Status409Conflict),
-            BookMutationOutcome.Rejected { Reason: BookMutationRejection.NotFound } missing
-                => TypedResults.Problem(missing.Message, statusCode: StatusCodes.Status404NotFound),
-            BookMutationOutcome.Rejected rejected
-                => TypedResults.Problem(rejected.Message, statusCode: StatusCodes.Status422UnprocessableEntity),
+            BookMutationOutcome.Rejected rejected => MutationRefusalProblem.From(rejected, ct),
             _ => throw new NotSupportedException($"Unhandled mutation outcome {outcome.GetType().Name}."),
         };
     }

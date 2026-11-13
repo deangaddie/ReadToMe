@@ -52,7 +52,8 @@ namespace Read2Me.Tests.Api
         [InlineData(BookMutationRejection.Validation, StatusCodes.Status422UnprocessableEntity)]
         [InlineData(BookMutationRejection.NotFound, StatusCodes.Status404NotFound)]
         [InlineData(BookMutationRejection.Conflict, StatusCodes.Status409Conflict)]
-        [InlineData(BookMutationRejection.Stale, StatusCodes.Status409Conflict)]
+        [InlineData(BookMutationRejection.Activity, StatusCodes.Status409Conflict)]
+        [InlineData(BookMutationRejection.Blocked, StatusCodes.Status409Conflict)]
         public void ARefusal_answersItsStatusWithTheSentence(BookMutationRejection reason, int status)
         {
             var result = CheckpointEndpoints.ToResult(new BookMutationOutcome.Rejected(reason, "Read the book first."), default);

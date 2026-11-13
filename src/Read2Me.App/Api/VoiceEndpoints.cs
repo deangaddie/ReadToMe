@@ -76,7 +76,7 @@ namespace Read2Me.App.Api
                 .WithSummary("Upload or replace a voice's reference audio: multipart field 'file' (audio, 200 MB max). Normalises, stores and commits in one step; answers the updated voice. Any earlier voice-editor edit is discarded. 422 when the normalised reference is over the Reference Limit's hard limit (30 s / 5 MiB), with nothing stored; over the soft limit (15 s) it is stored and the voice's referenceWarning is set.");
             endpoints.MapPost("/api/projects/{folder}/voices/{voiceId:guid}/transcribe", TranscribeAsync).RefusedWhileSetupCheckRuns()
                 .RecordsStep("Transcribe voice", StepAction.Voice)
-                .WithSummary("Transcribe a voice's reference audio with the active transcription service and store the result as its transcript. 422 without audio or an active service.");
+                .WithSummary("Transcribe a voice's reference audio with the active transcription service and store the result as its transcript. 422 without audio or an active service; 409 while the project is restoring; 404 when the voice is gone.");
             endpoints.MapPost("/api/projects/{folder}/characters/{characterId:guid}/design-prompt/render", RenderDesignPromptAsync)
                 .RecordsNoStep("Renders a template; nothing is written.")
                 .WithSummary("The voice-design prompt template rendered for this character (book, author, name). Nothing is persisted; edit it and send it to /generate.");
@@ -241,11 +241,19 @@ namespace Read2Me.App.Api
             }
 
             OriginHeader.Apply(request, origin);
-            var outcome = await mutations.CommitAsync(new SetVoiceTranscriptMutation(folderId, voice.Id, transcript), ct);
-            return outcome is BookMutationOutcome.Rejected rejected
-                ? TypedResults.Problem(rejected.Message, statusCode: StatusCodes.Status422UnprocessableEntity)
-                : TypedResults.Ok(new TranscribeVoiceResponse(transcript));
+            return TranscriptAnswer(
+                await mutations.CommitAsync(new SetVoiceTranscriptMutation(folderId, voice.Id, transcript), ct), transcript, ct);
         }
+
+        /// <summary>
+        /// What committing the transcript answers. A refusal answers by its kind (#357): a Restore
+        /// begun mid-transcribe is 409, a voice deleted meanwhile 404, and a cancelled one never answers.
+        /// </summary>
+        internal static Results<Ok<TranscribeVoiceResponse>, NotFound, ProblemHttpResult> TranscriptAnswer(
+            BookMutationOutcome outcome, string transcript, CancellationToken ct) =>
+            outcome is BookMutationOutcome.Rejected rejected
+                ? MutationRefusalProblem.From(rejected, ct)
+                : TypedResults.Ok(new TranscribeVoiceResponse(transcript));
 
         /// The voice-design prompt template rendered for one character, with the book's title and author.
         private static async Task<Results<Ok<RenderedDesignPromptResponse>, NotFound>> RenderDesignPromptAsync(
