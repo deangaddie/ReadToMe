@@ -58,7 +58,7 @@ interface RowView {
  * `Resynced`.
  */
 export class SeriesVoiceEditor extends R2mElement {
-  private readonly series = use(SeriesStore);
+  private readonly seriesStore = use(SeriesStore);
   private readonly book = use(BookApi);
   private readonly confirm = use(ConfirmService);
   private readonly prompt = use(PromptService);
@@ -82,7 +82,9 @@ export class SeriesVoiceEditor extends R2mElement {
     this.classList.add('series-voices');
     this.cast.seriesEditor = true;
     this.onDisconnect(
-      this.series.changes((change) => (rereads(change, this.seriesId) ? this.load() : undefined)),
+      this.seriesStore.changes((change) =>
+        rereads(change, this.seriesId) ? this.load() : undefined,
+      ),
     );
     this.onDisconnect(() => this.cast.close());
     void this.load();
@@ -93,7 +95,7 @@ export class SeriesVoiceEditor extends R2mElement {
     if (!this.seriesId || !this.seriesCharacterId) return;
     const seq = ++this.seq;
     try {
-      const detail = await this.series.character(this.seriesId, this.seriesCharacterId);
+      const detail = await this.seriesStore.character(this.seriesId, this.seriesCharacterId);
       if (seq !== this.seq) return;
       this.detail.set(detail);
       this.error.set(null);
@@ -150,7 +152,7 @@ export class SeriesVoiceEditor extends R2mElement {
   async push(callout: DiffersCallout): Promise<void> {
     let losses;
     try {
-      ({ losses } = await this.series.previewPush(
+      ({ losses } = await this.seriesStore.previewPush(
         this.seriesId,
         this.seriesCharacterId,
         callout.book.folder,
@@ -169,7 +171,7 @@ export class SeriesVoiceEditor extends R2mElement {
     );
     if (!ok) return;
     await this.write(
-      () => this.series.push(this.seriesId, this.seriesCharacterId, callout.book.folder),
+      () => this.seriesStore.push(this.seriesId, this.seriesCharacterId, callout.book.folder),
       true,
       false,
     );

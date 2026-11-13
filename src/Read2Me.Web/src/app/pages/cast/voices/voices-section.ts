@@ -21,7 +21,7 @@ import './voice-card';
  */
 export class VoicesSection extends R2mElement {
   private store!: CastStore;
-  private readonly series = use(SeriesStore);
+  private readonly seriesStore = use(SeriesStore);
   private readonly confirm = use(ConfirmService);
   private readonly toast = use(ToastService);
   readonly resolving = signal(false);
@@ -132,15 +132,16 @@ export class VoicesSection extends R2mElement {
     this.resolving.set(true);
     try {
       const [detail, preview] = await Promise.all([
-        this.series.character(link.seriesId, link.seriesCharacterId),
+        this.seriesStore.character(link.seriesId, link.seriesCharacterId),
         how === 'push'
-          ? this.series.previewPush(link.seriesId, link.seriesCharacterId, folder)
-          : this.series.previewTake(link.seriesId, link.seriesCharacterId, folder),
+          ? this.seriesStore.previewPush(link.seriesId, link.seriesCharacterId, folder)
+          : this.seriesStore.previewTake(link.seriesId, link.seriesCharacterId, folder),
       ]);
       const confirm = resolveConfirm(detail, folder, name, how, preview.losses);
       if (!confirm || !(await this.confirm.confirm(confirm))) return;
-      if (how === 'push') await this.series.push(link.seriesId, link.seriesCharacterId, folder);
-      else await this.series.take(link.seriesId, link.seriesCharacterId, folder);
+      if (how === 'push')
+        await this.seriesStore.push(link.seriesId, link.seriesCharacterId, folder);
+      else await this.seriesStore.take(link.seriesId, link.seriesCharacterId, folder);
       // Read again here: a push writes only the other books, so no receipt reaches this one, yet
       // this book's `differs` has changed.
       await this.store.refresh();
