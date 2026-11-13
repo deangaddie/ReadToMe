@@ -1,9 +1,9 @@
 /** The `?action=` values the Book page opens: each the same as its overflow entry (spec §5). */
-const DEEP_LINK_ACTIONS = ['titles', 'edit-ai', 'manual-reread'] as const;
-export type DeepLinkAction = (typeof DEEP_LINK_ACTIONS)[number];
+const ACTION_DEEP_LINK_NAMES = ['titles', 'edit-ai', 'manual-reread'] as const;
+export type ActionDeepLinkName = (typeof ACTION_DEEP_LINK_NAMES)[number];
 
-/** What the Book page reads to decide a `?action=` deep link (from the Overview's rows). */
-export interface DeepLinkInput {
+/** What the Book page reads to decide an Action deep link (`?action=`, from the Overview's rows). */
+export interface ActionDeepLinkInput {
   /** The `?action=` value, or null when the URL has none. */
   readonly action: string | null;
   /** The book's overview, or null until it has loaded. */
@@ -17,29 +17,29 @@ export interface DeepLinkInput {
 }
 
 /**
- * What the page does with a deep link now: leave the parameter for a later run, drop it, or drop
- * it and open that action's dialog. The page drops before it opens, so a link opens exactly once.
+ * What the page does with an Action deep link now: leave the parameter for a later run, drop it, or drop
+ * it and open that action's dialog. The page drops before it opens, so the link opens exactly once.
  */
-export type DeepLinkStep = 'wait' | 'drop' | { readonly open: DeepLinkAction };
+export type ActionDeepLinkOutcome = 'wait' | 'drop' | { readonly open: ActionDeepLinkName };
 
 /**
  * The `?action=` policy. It waits until the book and its Pipeline steps have loaded and nothing
  * locks the editor. A viewed History step, a book with no content or an unknown name only drops
  * the parameter, so the dialog doesn't open by itself on Back to current.
  */
-export function deepLinkStep({
+export function decideActionDeepLink({
   action,
   overview,
   pipelineLoaded,
   viewing,
   blocked,
-}: DeepLinkInput): DeepLinkStep {
+}: ActionDeepLinkInput): ActionDeepLinkOutcome {
   if (action === null || !overview || !pipelineLoaded) return 'wait';
   if (blocked && !viewing) return 'wait';
-  if (viewing || !overview.hasContent || !isDeepLinkAction(action)) return 'drop';
+  if (viewing || !overview.hasContent || !isActionDeepLinkName(action)) return 'drop';
   return { open: action };
 }
 
-function isDeepLinkAction(action: string): action is DeepLinkAction {
-  return (DEEP_LINK_ACTIONS as readonly string[]).includes(action);
+function isActionDeepLinkName(action: string): action is ActionDeepLinkName {
+  return (ACTION_DEEP_LINK_NAMES as readonly string[]).includes(action);
 }

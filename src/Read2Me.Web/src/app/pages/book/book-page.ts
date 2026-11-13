@@ -22,7 +22,7 @@ import { addPausesAction, rereadAction } from './book-actions';
 import { BookEditor } from './book-editor';
 import { BookStore } from './book-store';
 import { type HeadingRef, type TreeNode, placeholderTitleClass } from './book-tree';
-import { type DeepLinkAction, deepLinkStep } from './deep-link';
+import { type ActionDeepLinkName, decideActionDeepLink } from './action-deep-link';
 import { openEditWithAiDialog } from './edit-with-ai/edit-with-ai-dialog';
 import { openManualRereadDialog } from './manual-reread-dialog';
 import { type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
@@ -223,24 +223,24 @@ export class BookPage extends R2mElement {
       untracked(() => void this.start(folder));
     });
 
-    // `?action=` (from the Overview's rows): `deepLinkStep` decides; the page drops the param
-    // before it opens the dialog, so a link opens exactly once.
+    // An Action deep link (`?action=`): `decideActionDeepLink` decides; the page drops the param
+    // before it opens the dialog, so the link opens exactly once.
     this.effect(() => {
-      const step = deepLinkStep({
+      const outcome = decideActionDeepLink({
         action: this.router.query().get('action'),
         overview: store.overview(),
         pipelineLoaded: project.pipeline() !== null,
         viewing: project.readOnly() !== null,
         blocked: editor.blocked() !== null,
       });
-      if (step === 'wait') return;
+      if (outcome === 'wait') return;
       untracked(() => {
         const query = Object.fromEntries(this.router.query());
         this.router.navigate(this.router.path(), {
           replace: true,
           query: { ...query, action: null },
         });
-        if (step !== 'drop') void this.deepLinks[step.open]();
+        if (outcome !== 'drop') void this.actionDeepLinks[outcome.open]();
       });
     });
 
@@ -825,7 +825,7 @@ export class BookPage extends R2mElement {
   // ---- book actions (ticket 11) -------------------------------------------------------------------
 
   /** What `?action=` opens, by query value: the same as the overflow entry (spec §5). */
-  private readonly deepLinks: Readonly<Record<DeepLinkAction, () => Promise<void>>> = {
+  private readonly actionDeepLinks: Readonly<Record<ActionDeepLinkName, () => Promise<void>>> = {
     titles: () => this.addTitles(),
     'edit-ai': () => this.editWithAi(),
     'manual-reread': () => this.rereadManually(),

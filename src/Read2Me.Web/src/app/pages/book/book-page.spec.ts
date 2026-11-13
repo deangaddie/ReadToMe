@@ -1383,9 +1383,10 @@ describe('r2m-book-page', () => {
     }
   });
 
-  // The policy (wait, drop, or drop and open) is `deepLinkStep`'s table in deep-link.spec.ts; these
+  // The policy (wait, drop, or drop and open) is `decideActionDeepLink`'s table in
+  // action-deep-link.spec.ts; these
   // mount cases hold the page acting on it.
-  describe('?action= deep links (guidance-primitives 18)', () => {
+  describe('Action deep links, ?action= (guidance-primitives 18)', () => {
     /** The last navigation the page made, if it replaced the entry. */
     const lastReplace = () => navigation.calls.filter((c) => c.history === 'replace').at(-1)?.url;
 
