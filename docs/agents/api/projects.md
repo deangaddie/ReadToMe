@@ -9,7 +9,8 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/import \
   -H 'content-type: application/json' -d '{ "reread": false }'
 ```
 
-Both imports answer 204. `reread: true` clears existing content first (safe way to re-import).
+Title, bookTitle and author are stored trimmed; a blank title or a missing file is 400. Both
+imports answer 204. `reread: true` clears existing content first (safe way to re-import).
 
 A manual reread re-splits the stored file by hand-chosen rules instead of the automatic
 reader (the book page's "Manual reread" dialog on the wire). It also replaces existing content:
@@ -52,7 +53,7 @@ Project-level metadata and the cover image:
 ```bash
 curl -s -X PATCH http://localhost:5000/api/projects/{folder} \
   -H 'content-type: application/json' -d '{ "title": "New title", "author": "A. Author" }'
-  # omitted fields stay as they are; a blank title/bookTitle is 400; the folder name never changes
+  # omitted fields stay as they are; values are trimmed; a blank title/bookTitle is 400; the folder name never changes
 
 curl -s -X PUT http://localhost:5000/api/projects/{folder}/narrator-only-mode \
   -H 'content-type: application/json' -d '{ "enabled": true }'     # → 204
@@ -61,7 +62,7 @@ curl -s -X PUT http://localhost:5000/api/projects/{folder}/cover \
   -F file=@/path/to/cover.jpg                        # jpg/jpeg/png/webp ≤ 10 MB → { "coverImage": "cover.jpg" }
 curl -s -X DELETE http://localhost:5000/api/projects/{folder}/cover   # → 204, also when there was none
 
-curl -s -X DELETE http://localhost:5000/api/projects/{folder}          # → 204; the folder and everything in it
+curl -s -X DELETE http://localhost:5000/api/projects/{folder}          # → 204; the folder and everything in it, and its Series membership; 422 when the folder will not go
 ```
 
 The cover is served at `/workspace/{folder}/{coverImage}`; `GET /api/projects` lists
