@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Threading;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -88,7 +89,8 @@ namespace Read2Me.App.Api
             {
                 ProjectOutcome.Created created => TypedResults.Created(
                     $"/api/projects/{created.FolderName}", new CreateProjectResponse(created.FolderName)),
-                var other => Problem(other),
+                ProjectOutcome.NotDone problem => Problem(problem),
+                var other => throw new UnreachableException($"A create answered {other}."),
             };
         }
 
@@ -109,11 +111,9 @@ namespace Read2Me.App.Api
             if (!TryResolve(folder, fs, out var folderId))
                 return TypedResults.NotFound();
 
-            return await useCases.DeleteAsync(folderId, ct) switch
-            {
-                ProjectOutcome.Done => TypedResults.NoContent(),
-                var other => Problem(other),
-            };
+            return await useCases.DeleteAsync(folderId, ct) is ProjectOutcome.NotDone problem
+                ? Problem(problem)
+                : TypedResults.NoContent();
         }
 
         private static async Task<Results<Ok<ProjectDetailDto>, NotFound, ProblemHttpResult>> UpdateAsync(
@@ -125,11 +125,10 @@ namespace Read2Me.App.Api
             if (body is null)
                 return TypedResults.Problem("Expected a JSON body.", statusCode: StatusCodes.Status400BadRequest);
 
-            return await useCases.UpdateMetadataAsync(folderId, body.Title, body.BookTitle, body.Author) switch
-            {
-                ProjectOutcome.Done => await DetailAsync(folderId, reader, reads, ct),
-                var other => Problem(other),
-            };
+            return await useCases.UpdateMetadataAsync(folderId, body.Title, body.BookTitle, body.Author)
+                is ProjectOutcome.NotDone problem
+                ? Problem(problem)
+                : await DetailAsync(folderId, reader, reads, ct);
         }
 
         private static async Task<Results<NoContent, NotFound, ProblemHttpResult>> SetNarratorOnlyModeAsync(
@@ -223,12 +222,11 @@ namespace Read2Me.App.Api
                 : TypedResults.NoContent();
 
         /// <summary>A lifecycle write that did not happen: refused input is a 400, a failed write a 422.</summary>
-        private static ProblemHttpResult Problem(ProjectOutcome outcome) => outcome switch
-        {
-            ProjectOutcome.Refused refused => TypedResults.Problem(refused.Message, statusCode: StatusCodes.Status400BadRequest),
-            ProjectOutcome.Failed failed => TypedResults.Problem(failed.Message, statusCode: StatusCodes.Status422UnprocessableEntity),
-            _ => throw new InvalidOperationException($"{outcome} is a success, not a problem."),
-        };
+        private static ProblemHttpResult Problem(ProjectOutcome.NotDone outcome) => TypedResults.Problem(
+            outcome.Message,
+            statusCode: outcome is ProjectOutcome.Refused
+                ? StatusCodes.Status400BadRequest
+                : StatusCodes.Status422UnprocessableEntity);
 
         /// Both gates in one place: the name must parse as a single path segment
         /// (traversal guard) and must exist on disk — anything else is a 404.
