@@ -192,6 +192,33 @@ public class BackgroundRunTrackerTests : ProjectDbTestBase
     }
 
     [Fact]
+    public async Task ACancelledRun_ClosesWhenTheWorkerTurnEnds_NotOnTheClear()
+    {
+        await SeedOneItemAsync();
+        await History.ListAsync(_folder);
+        var paragraphs = Paragraphs(_folder, 2);
+        _queue.Enqueue(paragraphs);
+        Assert.True(_queue.Reader.TryRead(out var taken));
+        var turn = _queue.BeginTurn(taken)!;
+        _queue.MarkProcessing(taken);
+        await AttributeAsync(new CreateCharacterMutation(_folder, "Alice"));
+
+        _queue.CancelAll();
+        await _tracker.ClosedAsync();
+        Assert.True((await History.ListAsync(_folder)).Steps[0].IsOpen);
+
+        // The cancelled batch is still unwinding, and what it commits lands in the cancelled step.
+        await AttributeAsync(new CreateCharacterMutation(_folder, "Bob"));
+        turn.Dispose();
+        await _tracker.ClosedAsync();
+
+        var steps = (await History.ListAsync(_folder)).Steps;
+        Assert.Equal(["Attribution", "History started"], steps.Select(s => s.Label));
+        Assert.False(steps[0].IsOpen);
+        Assert.Equal("0 of 2 paragraphs, cancelled", steps[0].Note);
+    }
+
+    [Fact]
     public async Task AnotherProjectsQueueWork_NeitherOpensNorKeepsOpenThisProjectsRun()
     {
         await SeedOneItemAsync();

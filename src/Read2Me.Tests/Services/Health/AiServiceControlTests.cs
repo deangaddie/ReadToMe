@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using Read2Me.Services.Events;
 using Read2Me.Services.Health;
 using Read2Me.Services.Queueing;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Health;
@@ -415,6 +416,8 @@ public class AiServiceControlTests
     private sealed class ChannelSource(ChannelReader<int> reader) : IQueueSource<int>
     {
         public ChannelReader<int> Reader => reader;
+
+        public IDisposable? BeginTurn(int item) => NoTurn.Instance;
     }
 
     [Fact]

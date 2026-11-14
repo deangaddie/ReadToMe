@@ -39,6 +39,19 @@ namespace Read2Me.Tests.Services.Queueing
         }
 
         [Fact]
+        public void MarkProcessing_KeyClearedWhileHeld_StaysUntracked()
+        {
+            var store = NewStore();
+            store.TryMarkQueued(1);
+            store.ClearAll();
+
+            store.MarkProcessing(1);
+
+            Assert.Null(store.StatusOf(1));
+            Assert.Equal(0, store.CurrentElapsedSeconds());
+        }
+
+        [Fact]
         public void ReturnToQueued_ProcessingKey_SetsQueued()
         {
             var store = NewStore();

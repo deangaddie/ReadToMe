@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.App.Queueing;
 using Read2Me.Services.Queueing;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.App.Queueing
@@ -44,6 +45,33 @@ namespace Read2Me.Tests.App.Queueing
 
             Assert.Equal(tcs.Task, completed);
             Assert.Equal(2, processed.Count);
+        }
+
+        /// <summary>
+        /// The Worker turn keeps the project busy until the item's work has let go of it, and the
+        /// scope (with its project DB connection) is the last thing holding it.
+        /// </summary>
+        [Fact]
+        public async Task Worker_EndsTheTurnOnlyAfterTheScopeIsDisposed()
+        {
+            var channel = Channel.CreateUnbounded<int>();
+            var events = new List<string>();
+            var turnEnded = new TaskCompletionSource();
+            var source = new TurnRecordingSource(channel.Reader, events, turnEnded);
+            var scopeFactory = new RecordingScopeFactory(new FakeProcessor(i => events.Add($"process {i}")), events);
+
+            var worker = new QueueWorker<int>(
+                source, new ProcessingGate<int>(), scopeFactory, NullLogger<QueueWorker<int>>.Instance);
+            using var cts = new CancellationTokenSource();
+
+            channel.Writer.TryWrite(5);
+            await worker.StartAsync(cts.Token);
+
+            await turnEnded.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            cts.Cancel();
+            await worker.StopAsync(CancellationToken.None);
+
+            Assert.Equal(["turn begins 5", "scope created", "process 5", "scope disposed", "turn ends 5"], events);
         }
 
         [Fact]
@@ -298,6 +326,8 @@ namespace Read2Me.Tests.App.Queueing
         private sealed class FakeSource(ChannelReader<int> reader) : IQueueSource<int>
         {
             public ChannelReader<int> Reader => reader;
+
+            public IDisposable? BeginTurn(int item) => NoTurn.Instance;
         }
 
         private sealed class SwappableSource(ChannelReader<int> first, ChannelReader<int> second) : IQueueSource<int>
@@ -312,6 +342,51 @@ namespace Read2Me.Tests.App.Queueing
                     _swapped = true;
                     return first;
                 }
+            }
+
+            public IDisposable? BeginTurn(int item) => NoTurn.Instance;
+        }
+
+        private sealed class TurnRecordingSource(ChannelReader<int> reader, List<string> events, TaskCompletionSource ended)
+            : IQueueSource<int>
+        {
+            public ChannelReader<int> Reader => reader;
+
+            public IDisposable BeginTurn(int item)
+            {
+                events.Add($"turn begins {item}");
+                return new Turn(() =>
+                {
+                    events.Add($"turn ends {item}");
+                    ended.TrySetResult();
+                });
+            }
+
+            private sealed class Turn(Action onEnd) : IDisposable
+            {
+                public void Dispose() => onEnd();
+            }
+        }
+
+        /// <summary>Hands out scopes that resolve the processor and record their creation and disposal.</summary>
+        private sealed class RecordingScopeFactory(IQueueProcessor<int> processor, List<string> events)
+            : IServiceScopeFactory
+        {
+            public IServiceScope CreateScope()
+            {
+                events.Add("scope created");
+                return new Scope(processor, events);
+            }
+
+            private sealed class Scope(IQueueProcessor<int> processor, List<string> events)
+                : IServiceScope, IServiceProvider
+            {
+                public IServiceProvider ServiceProvider => this;
+
+                public object? GetService(Type serviceType) =>
+                    serviceType == typeof(IQueueProcessor<int>) ? processor : null;
+
+                public void Dispose() => events.Add("scope disposed");
             }
         }
 

@@ -158,27 +158,22 @@ namespace Read2Me.Tests.Services.Queueing
             Assert.Equal(new AttemptState(Retries: 0, Busies: 1), requeued.Attempts);
         }
 
+        /// <summary>
+        /// The gate never lets a Restore begin while the item is tracked, so by the time the arm runs
+        /// the Restore has ended and the item goes straight back. The wait itself, for a Restore still
+        /// running, is <c>DelayedWriteTests</c>'.
+        /// </summary>
         [Fact]
-        public async Task Apply_RetryAfterRestore_StaysQueued_AndRunsOnceTheRestoreEnds()
+        public void Apply_RetryAfterRestore_ReturnsToQueue_SpendingNoBudget()
         {
-            var activity = new ProjectActivity();
-            var sut = Sut(activity);
+            var sut = Sut();
             var item = MakeItem();
-            // A Restore never begins while the item is tracked, so it begins first and the worker is
-            // handed the item without the gate, as it holds one whose write the Restore refused.
-            Assert.Null(activity.TryBeginRestore(Folder));
-            sut.MarkProcessing(item);
+            EnqueueAndProcess(sut, item);
 
             sut.Apply(item, new Disposition.RetryAfterRestore());
 
             Assert.Equal(QueueItemStatus.Queued, sut.StatusOf(item.Key));
-            await Task.Delay(50, TestContext.Current.CancellationToken);
-            Assert.False(sut.Reader.TryPeek(out _));
-
-            activity.EndRestore(Folder);
-
-            var requeued = await sut.Reader.ReadAsync(TestContext.Current.CancellationToken)
-                .AsTask().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.True(sut.Reader.TryRead(out var requeued));
             Assert.Equal(item.Key, requeued.Key);
             // Waiting out a Restore spends neither budget.
             Assert.Equal(default, requeued.Attempts);
@@ -367,21 +362,160 @@ namespace Read2Me.Tests.Services.Queueing
         }
 
         [Fact]
-        public async Task CancelAll_DuringARestore_DoesNotResurrectTheItem()
+        public void CancelAll_ThenMarkProcessing_LeavesTheItemUntracked()
         {
-            var activity = new ProjectActivity();
-            var sut = Sut(activity);
+            var sut = Sut();
             var item = MakeItem();
-            Assert.Null(activity.TryBeginRestore(Folder));
-            sut.MarkProcessing(item);
-            sut.Apply(item, new Disposition.RetryAfterRestore());
+            sut.Enqueue([item]);
+            Assert.True(sut.Reader.TryRead(out _));
 
             sut.CancelAll();
-            activity.EndRestore(Folder);
+            sut.MarkProcessing(item);
 
-            await Task.Delay(100, TestContext.Current.CancellationToken);
-            Assert.False(sut.Reader.TryRead(out _));
             Assert.Null(sut.StatusOf(item.Key));
+            Assert.Null(sut.BusyFor(Folder));
+        }
+
+        // ── Worker turn ───────────────────────────────────────────────────────
+
+        /// <summary>Takes the item off the channel and begins its turn, as the worker does.</summary>
+        private static IDisposable TakeTurn(WorkQueue<Work> sut)
+        {
+            Assert.True(sut.Reader.TryRead(out var taken));
+            return sut.BeginTurn(taken)!;
+        }
+
+        [Fact]
+        public void AfterCancelAll_TheTurnKeepsItsProjectBusy_Stopping()
+        {
+            var sut = Sut();
+            var item = MakeItem();
+            sut.Enqueue([item]);
+            using var turn = TakeTurn(sut);
+            sut.MarkProcessing(item);
+
+            sut.CancelAll();
+
+            Assert.Null(sut.StatusOf(item.Key));
+            Assert.Equal(new BusySource(BusySourceKind.AudioQueue, "Audio: stopping"), sut.BusyFor(Folder));
+            Assert.Null(sut.BusyFor(new ProjectFolderId("another-book")));
+        }
+
+        [Fact]
+        public void EndingTheTurn_ClearsBusy_AndAnnounces()
+        {
+            var sut = Sut();
+            sut.Enqueue([MakeItem()]);
+            var turn = TakeTurn(sut);
+            sut.CancelAll();
+            var changed = 0;
+            sut.Changed += () => changed++;
+
+            turn.Dispose();
+
+            Assert.Null(sut.BusyFor(Folder));
+            Assert.Equal(1, changed);
+        }
+
+        [Fact]
+        public void ADrainedTurn_KeepsEveryProjectInTheBatchBusy()
+        {
+            var sut = Sut();
+            var other = new ProjectFolderId("another-book");
+            sut.Enqueue([MakeItem(), MakeItem(folder: other)]);
+            Assert.True(sut.Reader.TryRead(out var first));
+            using var turn = sut.BeginTurn(first);
+            sut.DrainAll(first);
+
+            sut.CancelAll();
+
+            Assert.Equal("Audio: stopping", sut.BusyFor(Folder)?.Reason);
+            Assert.Equal("Audio: stopping", sut.BusyFor(other)?.Reason);
+        }
+
+        [Fact]
+        public void BusyFor_WhileATurnHoldsAProjectWithItemsLeft_CountsTheItems()
+        {
+            var sut = Sut();
+            var item = MakeItem();
+            sut.Enqueue([item, MakeItem()]);
+            using var turn = TakeTurn(sut);
+            sut.MarkProcessing(item);
+
+            Assert.Equal("Audio: 2 items left", sut.BusyFor(Folder)?.Reason);
+        }
+
+        /// <summary>
+        /// A turn Cancel all cut loose is still unwinding; nothing it marks or settles may reach the
+        /// queue, not even for the same item queued again since.
+        /// </summary>
+        [Theory]
+        [InlineData("MarkProcessing")]
+        [InlineData("Defer")]
+        [InlineData("Complete")]
+        [InlineData("Failed")]
+        [InlineData("RetryOnce")]
+        public void ACutLooseTurn_LeavesTheItemQueuedAgainAlone(string then)
+        {
+            var completed = new List<WorkItemKey>();
+            var sut = Sut(onComplete: completed.Add);
+            var item = MakeItem();
+            sut.Enqueue([item]);
+            using var turn = TakeTurn(sut);
+            sut.MarkProcessing(item);
+            sut.CancelAll();
+            sut.Enqueue([item]);
+            var changed = 0;
+            sut.Changed += () => changed++;
+
+            switch (then)
+            {
+                case "MarkProcessing": sut.MarkProcessing(item); break;
+                case "Defer": sut.Defer(item); break;
+                case "Complete": sut.Apply(item, new Disposition.Complete(1.0)); break;
+                case "Failed": sut.Apply(item, new Disposition.Failed("late")); break;
+                default: sut.Apply(item, new Disposition.RetryOnce()); break;
+            }
+
+            Assert.Equal(QueueItemStatus.Queued, sut.StatusOf(item.Key));
+            Assert.Null(sut.OutcomeOf(item.Key));
+            Assert.Empty(completed);
+            Assert.Equal(0, sut.Counts().Completed);
+            Assert.Equal(0, changed);
+            // Only the re-queue's own write is on the channel.
+            Assert.True(sut.Reader.TryRead(out _));
+            Assert.False(sut.Reader.TryRead(out _));
+        }
+
+        /// <summary>
+        /// Cancel all can land between the worker's read and its turn; the item it read is cancelled
+        /// and gets no turn, so it is never worked under the fresh token.
+        /// </summary>
+        [Fact]
+        public void BeginTurn_ForAnItemCancelAllClearedSinceItsRead_IsNull()
+        {
+            var sut = Sut();
+            sut.Enqueue([MakeItem()]);
+            Assert.True(sut.Reader.TryRead(out var taken));
+
+            sut.CancelAll();
+
+            Assert.Null(sut.BeginTurn(taken));
+            Assert.Null(sut.BusyFor(Folder));
+        }
+
+        [Fact]
+        public void ATurnBegunAfterCancelAll_IsNotCutLoose()
+        {
+            var sut = Sut();
+            sut.CancelAll();
+            var item = MakeItem();
+            sut.Enqueue([item]);
+            using var turn = TakeTurn(sut);
+
+            sut.MarkProcessing(item);
+
+            Assert.Equal(QueueItemStatus.Processing, sut.StatusOf(item.Key));
         }
 
         // ── Reads ─────────────────────────────────────────────────────────────
