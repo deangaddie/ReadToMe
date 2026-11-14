@@ -55,7 +55,6 @@ namespace Read2Me.Tests.App.Characters
             services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
             services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
             services.AddSingleton<IBookMutationImplementation<AttributeParagraphItemsMutation>>(_commits);
-            services.AddSingleton<IProjectBusyAnswer>(NeverBusy.Instance);
             _root = services.BuildServiceProvider();
 
             _sut = new CharacterQueueProcessor(

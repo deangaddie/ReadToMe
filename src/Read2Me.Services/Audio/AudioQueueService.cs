@@ -34,7 +34,7 @@ namespace Read2Me.Services.Audio
 
     internal readonly record struct AudioItemKey(ProjectFolderId Folder, Guid ParagraphItemId);
 
-    public sealed class AudioQueueService : IQueueSource<QueuedAudioItem>, IAudioQueue
+    public sealed class AudioQueueService : IQueueSource<QueuedAudioItem>, IAudioQueue, IBusySource
     {
         private Channel<QueuedAudioItem> _channel =
             Channel.CreateUnbounded<QueuedAudioItem>(new UnboundedChannelOptions { SingleReader = true });
@@ -43,11 +43,11 @@ namespace Read2Me.Services.Audio
         private readonly ConcurrentDictionary<AudioItemKey, long> _versions = new();
         private readonly ProjectActivity _activity;
 
-        // Held by Enqueue across its gate check and its queuing, and by BusyFor: a Restore that
-        // claims the project mid-enqueue then waits in BusyFor and sees the items as busy.
-        private readonly object _enqueueLock = new();
-
-        public AudioQueueService(ProjectActivity activity) => _activity = activity;
+        public AudioQueueService(ProjectActivity activity)
+        {
+            _activity = activity;
+            activity.Register(this);
+        }
 
         public event Action? Changed;
 
@@ -55,25 +55,24 @@ namespace Read2Me.Services.Audio
 
         /// <summary>
         /// Queues the items, or refuses them all — queuing and announcing nothing — when the gate
-        /// refuses an enqueue for any of their projects. An item already queued or generating is not
-        /// queued twice. Null means queued.
+        /// refuses a start for any of their projects. An item already queued or generating is not
+        /// queued twice. Null means queued. The queuing is the gate's start, so a Restore either
+        /// sees the items as busy or is seen by the enqueue.
         /// </summary>
         public ActivityRefusal? Enqueue(IEnumerable<QueuedAudioItem> items)
         {
             var list = items.ToList();
-            lock (_enqueueLock)
+            var refusal = _activity.TryStart(list.Select(i => i.Folder), () =>
             {
-                if (_activity.MayEnqueue(list.Select(i => i.Folder)) is { } refusal)
-                    return refusal;
-
                 foreach (var item in list)
                 {
                     if (_store.TryMarkQueued(Key(item)))
                         _channel.Writer.TryWrite(item);
                 }
-            }
-            Changed?.Invoke();
-            return null;
+            });
+            if (refusal is null)
+                Changed?.Invoke();
+            return refusal;
         }
 
         public void MarkProcessing(QueuedAudioItem item)
@@ -203,9 +202,7 @@ namespace Read2Me.Services.Audio
         /// </summary>
         public BusySource? BusyFor(ProjectFolderId folder)
         {
-            int left;
-            lock (_enqueueLock)
-                left = _store.TrackedKeys().Count(k => k.Folder == folder);
+            var left = _store.TrackedKeys().Count(k => k.Folder == folder);
             return left == 0
                 ? null
                 : new BusySource(BusySourceKind.AudioQueue, $"Audio: {BusySource.Plural(left, "item")} left");

@@ -28,7 +28,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task DrainBatch_TakesQueuedItemsFromSameChapter_UpToMax()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var chapterId = Guid.NewGuid();
             var items = Enumerable.Range(0, 4).Select(_ => MakeChapterItem(chapterId)).ToArray();
             svc.Enqueue(items);
@@ -45,7 +45,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task DrainBatch_StopsAtChapterBoundary()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var chapterA = Guid.NewGuid();
             var chapterB = Guid.NewGuid();
             var a1 = MakeChapterItem(chapterA);
@@ -64,7 +64,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task DrainBatch_MaxOne_ReturnsOnlyFirst()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var chapterId = Guid.NewGuid();
             var i1 = MakeChapterItem(chapterId);
             var i2 = MakeChapterItem(chapterId);
@@ -79,7 +79,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task DrainBatch_EmptyQueue_ReturnsFirstOnly()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var item = MakeChapterItem(Guid.NewGuid());
             svc.Enqueue([item]);
 
@@ -94,7 +94,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task DrainAll_ReturnsFirstPlusAllRemaining_InBookOrder_AcrossChapters()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var chapterA = Guid.NewGuid();
             var chapterB = Guid.NewGuid();
             var a1 = MakeChapterItem(chapterA);
@@ -111,7 +111,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task DrainAll_SpansMultipleFolders_InBookOrder()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var folderA = new ProjectFolderId("book-a");
             var folderB = new ProjectFolderId("book-b");
             var a = new QueuedParagraph(folderA, Guid.NewGuid(), "P", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
@@ -127,7 +127,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task DrainAll_DrainsChannel_EmptyAfterwards()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var chapterId = Guid.NewGuid();
             var items = Enumerable.Range(0, 3).Select(_ => MakeChapterItem(chapterId)).ToArray();
             svc.Enqueue(items);
@@ -141,7 +141,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task DrainAll_EmptyRemainder_ReturnsFirstOnly()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var item = MakeChapterItem(Guid.NewGuid());
             svc.Enqueue([item]);
 
@@ -154,7 +154,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task DrainAll_MarksNothing_StatusesUnchanged()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var chapterId = Guid.NewGuid();
             var i1 = MakeChapterItem(chapterId);
             var i2 = MakeChapterItem(chapterId);
@@ -176,7 +176,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void Apply_Failed_RecordsOutcome()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
 
@@ -192,7 +192,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void Apply_Unfinished_RecordsOutcome()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
 
@@ -208,7 +208,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void Apply_Unfinished_CarriesReasonIntoOutcome()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
 
@@ -220,7 +220,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void Apply_Complete_ClearsPriorOutcome()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var paragraphId = Guid.NewGuid();
             var item = MakeItem(paragraphId);
 
@@ -240,7 +240,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void Apply_RetryOnce_ReturnsToQueue_SpendingARetry()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
             Assert.True(svc.Reader.TryRead(out _));
@@ -259,7 +259,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Apply_RetryAfter_ReturnsToQueueAfterDelay_SpendingABusy()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
             Assert.True(svc.Reader.TryRead(out _));
@@ -282,7 +282,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void Enqueue_WhileTheProjectIsRestoring_IsRefused_AndQueuesNothing()
         {
-            var activity = NeverBusy.Activity();
+            var activity = new ProjectActivity();
             var svc = new CharacterQueueService(activity);
             var changed = 0;
             svc.Changed += () => changed++;
@@ -301,7 +301,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void Enqueue_AnotherProjectRestoring_IsAccepted()
         {
-            var activity = NeverBusy.Activity();
+            var activity = new ProjectActivity();
             var svc = new CharacterQueueService(activity);
             Assert.Null(activity.TryBeginRestore(new ProjectFolderId("another-book")));
 
@@ -311,12 +311,13 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Apply_RetryAfterRestore_StaysQueued_AndRunsOnceTheRestoreEnds()
         {
-            var activity = NeverBusy.Activity();
+            var activity = new ProjectActivity();
             var svc = new CharacterQueueService(activity);
             var item = MakeItem();
-            EnqueueAndProcess(svc, item);
-            Assert.True(svc.Reader.TryRead(out _));
+            // A Restore never begins while the item is tracked, so it begins first and the worker is
+            // handed the item without the gate, as it holds one whose write the Restore refused.
             Assert.Null(activity.TryBeginRestore(Folder));
+            svc.MarkProcessing(item);
 
             svc.Apply(item, new Disposition.RetryAfterRestore());
 
@@ -337,12 +338,13 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Apply_RetryAfterRestore_CancelAllDuringTheRestore_DoesNotResurrectTheItem()
         {
-            var activity = NeverBusy.Activity();
+            var activity = new ProjectActivity();
             var svc = new CharacterQueueService(activity);
             var item = MakeItem();
-            EnqueueAndProcess(svc, item);
-            Assert.True(svc.Reader.TryRead(out _));
+            // A Restore never begins while the item is tracked, so it begins first and the worker is
+            // handed the item without the gate, as it holds one whose write the Restore refused.
             Assert.Null(activity.TryBeginRestore(Folder));
+            svc.MarkProcessing(item);
 
             svc.Apply(item, new Disposition.RetryAfterRestore());
             svc.CancelAll();
@@ -356,7 +358,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void Enqueue_ClearsPriorOutcome()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var paragraphId = Guid.NewGuid();
             var item = MakeItem(paragraphId);
 
@@ -375,7 +377,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void CancelAll_StillClearsActiveStatus()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var inFlight = MakeItem();
             EnqueueAndProcess(svc, inFlight);
 
@@ -391,7 +393,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Apply_RetryAfter_AfterCancelAll_LeavesTheItemCancelled()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var inFlight = MakeItem();
             EnqueueAndProcess(svc, inFlight);
             await svc.Reader.ReadAsync(TestContext.Current.CancellationToken);
@@ -408,7 +410,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Apply_RetryOnce_AfterCancelAll_DoesNotRequeueOnTheNewChannel()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var inFlight = MakeItem();
             EnqueueAndProcess(svc, inFlight);
             await svc.Reader.ReadAsync(TestContext.Current.CancellationToken);
@@ -423,7 +425,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void MarkDeferred_AfterCancelAll_LeavesTheItemCancelled()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var inFlight = MakeItem();
             EnqueueAndProcess(svc, inFlight);
 
@@ -436,7 +438,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public async Task Apply_RetryAfter_CancelAllDuringBackoff_DoesNotResurrectOnNewChannel()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var stale = MakeItem();
             EnqueueAndProcess(svc, stale);
             await svc.Reader.ReadAsync();
@@ -462,7 +464,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void ClearOutcome_RemovesAndFiresChanged()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
             svc.Apply(item, new Disposition.Failed("error"));
@@ -479,7 +481,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void ClearOutcome_NothingToRemove_DoesNotFireChanged()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             int changeCount = 0;
             svc.Changed += () => changeCount++;
 
@@ -491,7 +493,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void Enqueue_SameParagraphTwice_OnlyQueuesOnce()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var item = MakeItem();
 
             svc.Enqueue([item]);
@@ -505,7 +507,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void CancelAll_PreservesOutcomes()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
             svc.Apply(item, new Disposition.Failed("error"));
@@ -520,7 +522,7 @@ namespace Read2Me.Tests.Services.Characters
         [Fact]
         public void Apply_Failed_DoesNotChangeAverage()
         {
-            var svc = new CharacterQueueService(NeverBusy.Activity());
+            var svc = new CharacterQueueService(new ProjectActivity());
 
             // Complete one item to set the average
             var item1 = MakeItem();

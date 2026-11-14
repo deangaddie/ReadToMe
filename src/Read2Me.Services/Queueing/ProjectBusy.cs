@@ -21,8 +21,14 @@ public sealed record ProjectBusy(IReadOnlyList<BusySource> Sources)
     public string Reason => string.Join(" · ", Sources.Select(s => s.Reason));
 }
 
-/// <summary>"Is anything queued or running for this project, and what?" Null means the project is idle.</summary>
-public interface IProjectBusyAnswer
+/// <summary>
+/// Work that can make a project busy: the Character Queue, the Audio Queue, the voice batch and an
+/// Assembly. Each registers itself with <see cref="History.ProjectActivity"/> when it is built, and
+/// the gate asks every registered source. <see cref="BusyFor"/> may take the source's own lock but
+/// never calls the gate.
+/// </summary>
+public interface IBusySource
 {
-    ProjectBusy? For(ProjectFolderId folder);
+    /// <summary>What is queued or running for <paramref name="folder"/>; null when nothing is.</summary>
+    BusySource? BusyFor(ProjectFolderId folder);
 }

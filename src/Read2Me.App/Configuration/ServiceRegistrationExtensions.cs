@@ -226,9 +226,6 @@ public static class ServiceRegistrationExtensions
         // History's Background runs follow the Character Queue and the voice batch.
         services.AddSingleton<BackgroundRunTracker>();
         services.AddWorkspaceHostedService(sp => sp.GetRequiredService<BackgroundRunTracker>());
-        // Reads the queues, the voice batch and the Assembly, all singletons registered in this file.
-        services.AddSingleton<ProjectBusyAnswer>();
-        services.AddSingleton<IProjectBusyAnswer>(sp => sp.GetRequiredService<ProjectBusyAnswer>());
 
         // AI book edits
         services.AddScoped<Read2Me.Services.Llm.ChapterOutlineBuilder>();

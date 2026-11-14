@@ -41,7 +41,7 @@ namespace Read2Me.Services.Characters
 
     internal readonly record struct ParagraphKey(ProjectFolderId Folder, Guid ParagraphId);
 
-    public sealed class CharacterQueueService : IQueueSource<QueuedParagraph>, IParagraphQueueProbe, ICharacterQueue
+    public sealed class CharacterQueueService : IQueueSource<QueuedParagraph>, IParagraphQueueProbe, ICharacterQueue, IBusySource
     {
         private Channel<QueuedParagraph> _channel =
             Channel.CreateUnbounded<QueuedParagraph>(new UnboundedChannelOptions { SingleReader = true });
@@ -52,11 +52,11 @@ namespace Read2Me.Services.Characters
 
         private readonly ProjectActivity _activity;
 
-        // Held by Enqueue across its gate check and its queuing, and by BusyFor: a Restore that
-        // claims the project mid-enqueue then waits in BusyFor and sees the paragraphs as busy.
-        private readonly object _enqueueLock = new();
-
-        public CharacterQueueService(ProjectActivity activity) => _activity = activity;
+        public CharacterQueueService(ProjectActivity activity)
+        {
+            _activity = activity;
+            activity.Register(this);
+        }
 
         public event Action? Changed;
 
@@ -89,25 +89,24 @@ namespace Read2Me.Services.Characters
 
         /// <summary>
         /// Queues the paragraphs, or refuses them all — queuing and announcing nothing — when the gate
-        /// refuses an enqueue for any of their projects. A paragraph already queued or processing is
-        /// not queued twice. Null means queued.
+        /// refuses a start for any of their projects. A paragraph already queued or processing is
+        /// not queued twice. Null means queued. The queuing is the gate's start, so a Restore either
+        /// sees the paragraphs as busy or is seen by the enqueue.
         /// </summary>
         public ActivityRefusal? Enqueue(IEnumerable<QueuedParagraph> paragraphs)
         {
             var list = paragraphs.ToList();
-            lock (_enqueueLock)
+            var refusal = _activity.TryStart(list.Select(p => p.Folder), () =>
             {
-                if (_activity.MayEnqueue(list.Select(p => p.Folder)) is { } refusal)
-                    return refusal;
-
                 foreach (var p in list)
                 {
                     if (_store.TryMarkQueued(Key(p)))
                         _channel.Writer.TryWrite(p);
                 }
-            }
-            Changed?.Invoke();
-            return null;
+            });
+            if (refusal is null)
+                Changed?.Invoke();
+            return refusal;
         }
 
         /// <summary>
@@ -267,9 +266,7 @@ namespace Read2Me.Services.Characters
         /// </summary>
         public BusySource? BusyFor(ProjectFolderId folder)
         {
-            int left;
-            lock (_enqueueLock)
-                left = _store.TrackedKeys().Count(k => k.Folder == folder);
+            var left = _store.TrackedKeys().Count(k => k.Folder == folder);
             return left == 0
                 ? null
                 : new BusySource(BusySourceKind.CharacterQueue, $"Attribution: {BusySource.Plural(left, "paragraph")} left");

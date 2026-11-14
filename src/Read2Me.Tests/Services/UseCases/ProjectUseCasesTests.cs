@@ -31,12 +31,12 @@ namespace Read2Me.Tests.Services.UseCases
         private readonly ServiceProvider _root;
         private readonly AsyncServiceScope _scope;
         private readonly CollectingLogger<ProjectUseCases> _log = new();
-        private ProjectBusy? _busy;
+        private BusySource? _busy;
         private readonly ProjectActivity _activity;
 
         public ProjectUseCasesTests()
         {
-            _activity = new ProjectActivity(() => new Busy(() => _busy));
+            _activity = BusyGate.With(new Busy(() => _busy));
             var services = new ServiceCollection();
             services.AddLogging();
             services.AddSingleton(_activity);
@@ -102,7 +102,7 @@ namespace Read2Me.Tests.Services.UseCases
         public async Task A_delete_while_busy_is_refused_with_the_reason_and_deletes_nothing()
         {
             var seriesId = await StudyInASeriesAsync();
-            _busy = new ProjectBusy([new BusySource(BusySourceKind.Assembly, "128 paragraphs · assembling")]);
+            _busy = new BusySource(BusySourceKind.Assembly, "128 paragraphs · assembling");
 
             var outcome = await UseCases.DeleteAsync(new ProjectFolderId(Study), Ct);
 
@@ -146,7 +146,7 @@ namespace Read2Me.Tests.Services.UseCases
 
             Assert.IsType<ProjectOutcome.Done>(await UseCases.DeleteAsync(folder, Ct));
 
-            Assert.Null(_activity.MayEnqueue(folder));
+            Assert.Null(_activity.TryStart([folder], () => { }));
         }
 
         // ── title rule ──────────────────────────────────────────────────────────
@@ -413,9 +413,9 @@ namespace Read2Me.Tests.Services.UseCases
         }
 
         /// <summary>Every project busy with whatever the test last set, or idle.</summary>
-        private sealed class Busy(Func<ProjectBusy?> answer) : IProjectBusyAnswer
+        private sealed class Busy(Func<BusySource?> answer) : IBusySource
         {
-            public ProjectBusy? For(ProjectFolderId folder) => answer();
+            public BusySource? BusyFor(ProjectFolderId folder) => answer();
         }
 
         private static CancellationToken Ct => TestContext.Current.CancellationToken;

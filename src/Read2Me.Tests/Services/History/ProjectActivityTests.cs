@@ -7,7 +7,8 @@ namespace Read2Me.Tests.Services.History;
 
 /// <summary>
 /// The <b>Project activity</b> gate's policy table (spec #112, "Policy"): every action in every state
-/// — idle, busy, restoring, and both — through the gate's public questions, with busy faked.
+/// — idle, busy, restoring, and both — through the gate's public questions, with busy faked by a
+/// registered source; and the start protocol (#359) against a Restore and a delete, with no queue built.
 /// </summary>
 public class ProjectActivityTests
 {
@@ -16,13 +17,13 @@ public class ProjectActivityTests
     private const string BusyReason = "Audio Queue: 3 paragraphs";
 
     private readonly FakeBusy _busy = new();
-    private readonly ProjectActivity _activity;
+    private readonly ProjectActivity _activity = new();
 
-    public ProjectActivityTests() => _activity = new ProjectActivity(() => _busy);
+    public ProjectActivityTests() => _activity.Register(_busy);
 
     public enum State { Idle, Busy, Restoring, BusyAndRestoring, Deleting }
 
-    public enum Act { Write, Enqueue, ViewStep, StartRestore, PlanEdit, StartDelete }
+    public enum Act { Write, Start, ViewStep, StartRestore, PlanEdit, StartDelete }
 
     public static TheoryData<Act, State, ActivityRefusalKind?> Policy => new()
     {
@@ -31,11 +32,11 @@ public class ProjectActivityTests
         { Act.Write, State.Restoring, ActivityRefusalKind.Restoring },
         { Act.Write, State.BusyAndRestoring, ActivityRefusalKind.Restoring },
         { Act.Write, State.Deleting, ActivityRefusalKind.Deleting },
-        { Act.Enqueue, State.Idle, null },
-        { Act.Enqueue, State.Busy, null },
-        { Act.Enqueue, State.Restoring, ActivityRefusalKind.Restoring },
-        { Act.Enqueue, State.BusyAndRestoring, ActivityRefusalKind.Restoring },
-        { Act.Enqueue, State.Deleting, ActivityRefusalKind.Deleting },
+        { Act.Start, State.Idle, null },
+        { Act.Start, State.Busy, null },
+        { Act.Start, State.Restoring, ActivityRefusalKind.Restoring },
+        { Act.Start, State.BusyAndRestoring, ActivityRefusalKind.Restoring },
+        { Act.Start, State.Deleting, ActivityRefusalKind.Deleting },
         { Act.ViewStep, State.Idle, null },
         { Act.ViewStep, State.Busy, ActivityRefusalKind.Busy },
         { Act.ViewStep, State.Restoring, ActivityRefusalKind.Restoring },
@@ -89,23 +90,23 @@ public class ProjectActivityTests
     }
 
     [Fact]
-    public void An_enqueue_across_projects_is_refused_when_any_of_them_is_restoring()
+    public void A_start_across_projects_is_refused_when_any_of_them_is_restoring()
     {
         Assert.Null(_activity.TryBeginRestore(Folder));
 
-        var refusal = _activity.MayEnqueue([Other, Folder, Other]);
+        var refusal = Start(Other, Folder, Other);
 
         Assert.Equal(ActivityRefusalKind.Restoring, refusal?.Kind);
         Assert.Equal(ProjectActivity.RestoringReason, refusal!.Reason);
     }
 
     [Fact]
-    public void An_enqueue_across_projects_is_allowed_when_none_is_restoring()
+    public void A_start_across_projects_is_allowed_when_none_is_restoring()
     {
         _busy.Answer = Busy();
 
-        Assert.Null(_activity.MayEnqueue([Other, Folder]));
-        Assert.Null(_activity.MayEnqueue([]));
+        Assert.Null(Start(Other, Folder));
+        Assert.Null(Start());
     }
 
     [Fact]
@@ -170,7 +171,7 @@ public class ProjectActivityTests
         _activity.EndRestore(Folder);
 
         Assert.Null(_activity.MayWrite(Folder));
-        Assert.Null(_activity.MayEnqueue(Folder));
+        Assert.Null(Start(Folder));
         Assert.Null(_activity.MayViewStep(Folder));
     }
 
@@ -181,7 +182,7 @@ public class ProjectActivityTests
 
         Assert.Equal(ActivityRefusalKind.Busy, _activity.TryBeginDelete(Folder)?.Kind);
         Assert.Null(_activity.MayWrite(Folder));
-        Assert.Null(_activity.MayEnqueue(Folder));
+        Assert.Null(Start(Folder));
 
         _busy.Answer = null;
         Assert.Null(_activity.TryBeginDelete(Folder));
@@ -191,7 +192,7 @@ public class ProjectActivityTests
     [Fact]
     public void A_delete_claims_before_asking_about_busy()
     {
-        _busy.OnAsked = () => Assert.Equal(ActivityRefusalKind.Deleting, _activity.MayEnqueue(Folder)?.Kind);
+        _busy.OnAsked = () => Assert.Equal(ActivityRefusalKind.Deleting, _activity.MayWrite(Folder)?.Kind);
 
         Assert.Null(_activity.TryBeginDelete(Folder));
         Assert.True(_busy.Asked);
@@ -226,7 +227,7 @@ public class ProjectActivityTests
         _activity.EndDelete(Folder);
 
         Assert.Null(_activity.MayWrite(Folder));
-        Assert.Null(_activity.MayEnqueue(Folder));
+        Assert.Null(Start(Folder));
         Assert.Null(_activity.MayViewStep(Folder));
         Assert.Null(_activity.MayPlanEdit(_activity.Mark(Folder)));
     }
@@ -249,6 +250,128 @@ public class ProjectActivityTests
         await ended.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
     }
 
+    // ── The start protocol (#359) ─────────────────────────────────────────
+
+    [Fact]
+    public void A_start_the_gate_allows_runs_and_answers_its_result()
+    {
+        var start = _activity.TryStart(Folder, () => 42);
+
+        Assert.Equal(new ActivityStart<int>.Started(42), start);
+    }
+
+    [Theory]
+    [InlineData(State.Restoring, ActivityRefusalKind.Restoring)]
+    [InlineData(State.Deleting, ActivityRefusalKind.Deleting)]
+    public void A_refused_start_never_runs(State state, ActivityRefusalKind expected)
+    {
+        Enter(state);
+        var ran = false;
+
+        var start = _activity.TryStart(Folder, () => ran = true);
+
+        Assert.Equal(expected, Assert.IsType<ActivityStart<bool>.Refused>(start).Refusal.Kind);
+        Assert.False(ran);
+    }
+
+    [Fact]
+    public void A_start_across_projects_refused_for_one_runs_for_none()
+    {
+        Assert.Null(_activity.TryBeginDelete(Other));
+        var ran = false;
+
+        Assert.Equal(ActivityRefusalKind.Deleting, _activity.TryStart([Folder, Other], () => { ran = true; })?.Kind);
+        Assert.False(ran);
+    }
+
+    [Fact]
+    public void A_restore_after_a_start_finds_the_started_work_busy()
+    {
+        Assert.Null(_activity.TryStart([Folder], () => { _busy.Answer = Busy(); }));
+
+        Assert.Equal(ActivityRefusalKind.Busy, _activity.TryBeginRestore(Folder)?.Kind);
+        Assert.Equal(ActivityRefusalKind.Busy, _activity.TryBeginDelete(Folder)?.Kind);
+    }
+
+    [Theory]
+    [InlineData(Act.StartRestore)]
+    [InlineData(Act.StartDelete)]
+    public async Task A_claim_during_a_start_waits_for_it_and_then_finds_the_work_busy(Act claim)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var inStart = new ManualResetEventSlim();
+        using var finish = new ManualResetEventSlim();
+        var starting = Task.Run(() => _activity.TryStart([Folder], () =>
+        {
+            inStart.Set();
+            finish.Wait(ct);
+            _busy.Answer = Busy();
+        }), ct);
+        Assert.True(inStart.Wait(TimeSpan.FromSeconds(5), ct));
+
+        var claiming = Task.Run(() => Ask(claim, _activity.Mark(Folder)), ct);
+        await Task.Delay(100, ct);
+        Assert.False(claiming.IsCompleted, "the claim must wait for the start in flight");
+
+        finish.Set();
+        Assert.Null(await starting.WaitAsync(TimeSpan.FromSeconds(5), ct));
+        Assert.Equal(ActivityRefusalKind.Busy, (await claiming.WaitAsync(TimeSpan.FromSeconds(5), ct))?.Kind);
+        Assert.False(_activity.IsRestoring(Folder));
+        Assert.Null(_activity.MayWrite(Folder));
+    }
+
+    [Theory]
+    [InlineData(Act.StartRestore, ActivityRefusalKind.Restoring)]
+    [InlineData(Act.StartDelete, ActivityRefusalKind.Deleting)]
+    public async Task A_start_during_a_claim_waits_for_it_and_then_is_refused(Act claim, ActivityRefusalKind expected)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var asking = new ManualResetEventSlim();
+        using var answer = new ManualResetEventSlim();
+        _busy.OnAsked = () => { asking.Set(); answer.Wait(ct); };
+        var claiming = Task.Run(() => Ask(claim, _activity.Mark(Folder)), ct);
+        Assert.True(asking.Wait(TimeSpan.FromSeconds(5), ct));
+        _busy.OnAsked = null;
+
+        var ran = false;
+        var starting = Task.Run(() => _activity.TryStart([Folder], () => { ran = true; }), ct);
+        await Task.Delay(100, ct);
+        Assert.False(starting.IsCompleted, "the start must wait for the claim in flight");
+
+        answer.Set();
+        Assert.Null(await claiming.WaitAsync(TimeSpan.FromSeconds(5), ct));
+        Assert.Equal(expected, (await starting.WaitAsync(TimeSpan.FromSeconds(5), ct))?.Kind);
+        Assert.False(ran);
+    }
+
+    // ── The busy answer ───────────────────────────────────────────────────
+
+    [Fact]
+    public void Busy_is_null_while_no_registered_source_is_busy()
+    {
+        Assert.Null(_activity.BusyFor(Folder));
+        Assert.Null(new ProjectActivity().BusyFor(Folder));
+    }
+
+    [Fact]
+    public void Busy_names_every_busy_source_in_kind_order_whatever_the_registration_order()
+    {
+        var assembly = new FakeBusy { Answer = new BusySource(BusySourceKind.Assembly, "Assembly: preparing") };
+        var attribution = new FakeBusy { Answer = new BusySource(BusySourceKind.CharacterQueue, "Attribution: 2 paragraphs left") };
+        _activity.Register(assembly);
+        _activity.Register(attribution);
+        _busy.Answer = Busy();
+
+        var busy = _activity.BusyFor(Folder);
+
+        Assert.Equal(
+            [BusySourceKind.CharacterQueue, BusySourceKind.AudioQueue, BusySourceKind.Assembly],
+            busy!.Sources.Select(s => s.Kind));
+        Assert.Equal($"Attribution: 2 paragraphs left · {BusyReason} · Assembly: preparing", busy.Reason);
+    }
+
+    private ActivityRefusal? Start(params ProjectFolderId[] folders) => _activity.TryStart(folders, () => { });
+
     private void Enter(State state)
     {
         if (state is State.Restoring or State.BusyAndRestoring)
@@ -265,7 +388,7 @@ public class ProjectActivityTests
         return action switch
         {
             Act.Write => _activity.MayWrite(asked),
-            Act.Enqueue => _activity.MayEnqueue(asked),
+            Act.Start => Start(asked),
             Act.ViewStep => _activity.MayViewStep(asked),
             Act.StartRestore => _activity.TryBeginRestore(asked),
             Act.PlanEdit => _activity.MayPlanEdit(mark),
@@ -274,17 +397,17 @@ public class ProjectActivityTests
         };
     }
 
-    private static ProjectBusy Busy() => new([new BusySource(BusySourceKind.AudioQueue, BusyReason)]);
+    private static BusySource Busy() => new(BusySourceKind.AudioQueue, BusyReason);
 
-    private sealed class FakeBusy : IProjectBusyAnswer
+    private sealed class FakeBusy : IBusySource
     {
-        public ProjectBusy? Answer { get; set; }
+        public BusySource? Answer { get; set; }
         /// <summary>When set, only this folder is busy; otherwise the answer is for every folder.</summary>
         public ProjectFolderId? BusyFolder { get; set; }
         public Action? OnAsked { get; set; }
         public bool Asked { get; private set; }
 
-        public ProjectBusy? For(ProjectFolderId folder)
+        public BusySource? BusyFor(ProjectFolderId folder)
         {
             Asked = true;
             OnAsked?.Invoke();

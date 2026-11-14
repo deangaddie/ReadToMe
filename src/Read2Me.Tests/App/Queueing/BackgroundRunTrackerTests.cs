@@ -37,7 +37,6 @@ public class BackgroundRunTrackerTests : ProjectDbTestBase
         services.AddBookCommandHandlers();
         services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
         services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
-        services.AddSingleton<IProjectBusyAnswer>(NeverBusy.Instance);
         _root = services.BuildServiceProvider();
         _folder = new ProjectFolderId(FolderName);
         _queue = new CharacterQueueService(_root.GetRequiredService<ProjectActivity>());

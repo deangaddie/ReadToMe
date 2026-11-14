@@ -7,6 +7,7 @@ using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Assembly;
 using Read2Me.Services.Events;
+using Read2Me.Services.History;
 using Read2Me.Services.Queueing;
 using Read2Me.Services.Voice;
 using Read2Me.Tests.Fakes;
@@ -100,15 +101,17 @@ namespace Read2Me.Tests.Services.Audio
             services.AddSingleton<IProjectCatalogReader>(fakeReader);
             services.AddSingleton<AudioProcessingSettingsService>(fakeSettings);
             var sp = services.BuildServiceProvider();
+            var activity = new ProjectActivity();
 
             var sut = new AudiobookAssemblyService(
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 encoder,
                 broadcaster,
                 fs,
+                activity,
                 NullLogger<AudiobookAssemblyService>.Instance);
 
-            return new Harness(sut, encoder, events, fakeReader);
+            return new Harness(sut, encoder, events, fakeReader, activity);
         }
 
         private static async Task WaitForIdleAsync(AudiobookAssemblyService sut, int timeoutMs = 5000)
@@ -136,11 +139,11 @@ namespace Read2Me.Tests.Services.Audio
             Directory.CreateDirectory(audioDir);
             await File.WriteAllBytesAsync(Path.Combine(audioDir, "a.wav"), new byte[4]);
 
-            var r1 = h.Sut.StartAsync(Folder);
-            var r2 = h.Sut.StartAsync(Folder); // second call while first is queued
+            var r1 = await h.Sut.StartAsync(Folder);
+            var r2 = await h.Sut.StartAsync(Folder); // second call while first is queued
 
-            Assert.True(r1, "first start must succeed");
-            Assert.False(r2, "second start while running must return false");
+            Assert.IsType<AssemblyStart.Started>(r1);
+            Assert.IsType<AssemblyStart.AlreadyRunning>(r2);
 
             h.Sut.Cancel(); // clean up
             await WaitForIdleAsync(h.Sut);
@@ -158,12 +161,60 @@ namespace Read2Me.Tests.Services.Audio
             };
             var h = BuildHarness(manifest);
 
-            h.Sut.StartAsync(Folder);
-            await WaitForIdleAsync(h.Sut);
+            Assert.Equal(new AssemblyStart.AudioMissing(1), await h.Sut.StartAsync(Folder));
 
             Assert.Equal(1, h.Sut.AudioRemainingCount);
             Assert.False(h.Sut.IsRunning);
             Assert.Equal(0, h.Encoder.EncodeCallCount);
+        }
+
+        // ── Project activity gate (#359) ──────────────────────────────────────
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task StartAsync_WhileARestoreHoldsTheProject_IsRefusedAndRunsNothing(bool allowPartial)
+        {
+            var h = BuildHarness([AudioEntry(Guid.NewGuid(), "audio/a.wav")]);
+            Assert.Null(h.Activity.TryBeginRestore(Folder));
+
+            var start = await h.Sut.StartAsync(Folder, allowPartial, TestContext.Current.CancellationToken);
+
+            Assert.Equal(new AssemblyStart.Refused(
+                new ActivityRefusal(ActivityRefusalKind.Restoring, ProjectActivity.RestoringReason)), start);
+            Assert.False(h.Sut.IsRunning);
+            Assert.Null(h.Sut.BusyFor(Folder));
+            Assert.Empty(h.Events);
+        }
+
+        [Fact]
+        public async Task StartAsync_WhileADeleteHoldsTheProject_IsRefusedAndRunsNothing()
+        {
+            var h = BuildHarness([AudioEntry(Guid.NewGuid(), "audio/a.wav")]);
+            Assert.Null(h.Activity.TryBeginDelete(Folder));
+
+            var start = await h.Sut.StartAsync(Folder, ct: TestContext.Current.CancellationToken);
+
+            Assert.Equal(new AssemblyStart.Refused(
+                new ActivityRefusal(ActivityRefusalKind.Deleting, ProjectActivity.DeletingReason)), start);
+            Assert.False(h.Sut.IsRunning);
+            Assert.Empty(h.Events);
+        }
+
+        [Fact]
+        public async Task StartAsync_ARestoreAfterTheStart_IsRefusedAsBusy()
+        {
+            var h = BuildHarness([AudioEntry(Guid.NewGuid(), "audio/a.wav")], encodeDelayMs: 2000);
+            Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
+            await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
+
+            Assert.IsType<AssemblyStart.Started>(await h.Sut.StartAsync(Folder));
+
+            Assert.Equal(ActivityRefusalKind.Busy, h.Activity.TryBeginRestore(Folder)?.Kind);
+            Assert.Equal(ActivityRefusalKind.Busy, h.Activity.TryBeginDelete(Folder)?.Kind);
+
+            h.Sut.Cancel();
+            await WaitForIdleAsync(h.Sut);
         }
 
         [Fact]
@@ -180,7 +231,7 @@ namespace Read2Me.Tests.Services.Audio
             Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
             await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
 
-            h.Sut.StartAsync(Folder);
+            await h.Sut.StartAsync(Folder);
             await WaitForIdleAsync(h.Sut);
 
             Assert.Equal(0, h.Sut.AudioRemainingCount);
@@ -202,7 +253,7 @@ namespace Read2Me.Tests.Services.Audio
             Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
             await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
 
-            h.Sut.StartAsync(Folder);
+            await h.Sut.StartAsync(Folder);
 
             // Wait until Gather/Silence/Probe phases are done (but encode is still running).
             await Task.Delay(100);
@@ -234,7 +285,7 @@ namespace Read2Me.Tests.Services.Audio
             Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
             await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
 
-            h.Sut.StartAsync(Folder);
+            await h.Sut.StartAsync(Folder);
             await WaitForIdleAsync(h.Sut);
 
             var phases = h.Events
@@ -264,7 +315,7 @@ namespace Read2Me.Tests.Services.Audio
             Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
             await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
 
-            h.Sut.StartAsync(Folder);
+            await h.Sut.StartAsync(Folder);
             Assert.Equal(_folderName, h.Sut.Folder);
             await WaitForIdleAsync(h.Sut);
 
@@ -283,11 +334,11 @@ namespace Read2Me.Tests.Services.Audio
             Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
             await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
 
-            h.Sut.StartAsync(Folder);
+            await h.Sut.StartAsync(Folder);
             await WaitForIdleAsync(h.Sut);
             Assert.NotNull(h.Sut.OutputFileName);
 
-            h.Sut.StartAsync(Folder);
+            await h.Sut.StartAsync(Folder);
             Assert.Null(h.Sut.OutputFileName);
             await WaitForIdleAsync(h.Sut);
         }
@@ -304,7 +355,7 @@ namespace Read2Me.Tests.Services.Audio
             Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
             await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
 
-            h.Sut.StartAsync(Folder);
+            await h.Sut.StartAsync(Folder);
             await WaitForIdleAsync(h.Sut);
 
             var progressEvents = h.Events.OfType<AssemblyEncodeProgress>().ToList();
@@ -326,7 +377,7 @@ namespace Read2Me.Tests.Services.Audio
             Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
             await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
 
-            h.Sut.StartAsync(Folder);
+            await h.Sut.StartAsync(Folder);
             await WaitForIdleAsync(h.Sut);
 
             var outputDir = Path.Combine(_tempDir, _folderName, "output");
@@ -350,7 +401,7 @@ namespace Read2Me.Tests.Services.Audio
             Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
             await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
 
-            h.Sut.StartAsync(Folder);
+            await h.Sut.StartAsync(Folder);
             await WaitForIdleAsync(h.Sut);
 
             // Encoder must have been called with a .tmp path.
@@ -371,7 +422,7 @@ namespace Read2Me.Tests.Services.Audio
             Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
             await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
 
-            h.Sut.StartAsync(Folder);
+            await h.Sut.StartAsync(Folder);
             await WaitForIdleAsync(h.Sut);
 
             Assert.False(h.Sut.IsRunning);
@@ -391,7 +442,7 @@ namespace Read2Me.Tests.Services.Audio
             Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
             await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
 
-            h.Sut.StartAsync(Folder);
+            await h.Sut.StartAsync(Folder);
             await WaitForIdleAsync(h.Sut);
 
             var tmpPath = h.Encoder.LastOutputPath;
@@ -412,7 +463,7 @@ namespace Read2Me.Tests.Services.Audio
             Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
             await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
 
-            h.Sut.StartAsync(Folder);
+            await h.Sut.StartAsync(Folder);
             // Brief wait so the run enters the encode phase.
             await Task.Delay(100);
             h.Sut.Cancel();
@@ -438,7 +489,7 @@ namespace Read2Me.Tests.Services.Audio
             Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
             await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
 
-            h.Sut.StartAsync(Folder);
+            await h.Sut.StartAsync(Folder);
             await Task.Delay(100);
             h.Sut.Cancel();
 
@@ -461,7 +512,7 @@ namespace Read2Me.Tests.Services.Audio
 
             Assert.Null(h.Sut.BusyFor(Folder));
 
-            h.Sut.StartAsync(Folder);
+            await h.Sut.StartAsync(Folder);
             var deadline = DateTime.UtcNow.AddSeconds(5);
             while (h.Sut.CurrentPhase != AssemblyPhase.Encode && DateTime.UtcNow < deadline)
                 await Task.Delay(10);
@@ -493,10 +544,10 @@ namespace Read2Me.Tests.Services.Audio
             Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
             await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
 
-            var result = h.Sut.StartAsync(Folder, allowPartial: true);
+            var result = await h.Sut.StartAsync(Folder, allowPartial: true);
             await WaitForIdleAsync(h.Sut);
 
-            Assert.True(result);
+            Assert.IsType<AssemblyStart.Started>(result);
             Assert.Equal(1, h.Encoder.EncodeCallCount);
             Assert.Contains(h.Events, e => e is AssemblyCompleted);
         }
@@ -514,7 +565,7 @@ namespace Read2Me.Tests.Services.Audio
             Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
             await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
 
-            h.Sut.StartAsync(Folder, allowPartial: true);
+            await h.Sut.StartAsync(Folder, allowPartial: true);
             await WaitForIdleAsync(h.Sut);
 
             var outputDir = Path.Combine(_tempDir, _folderName, "output");
@@ -550,7 +601,7 @@ namespace Read2Me.Tests.Services.Audio
             Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
             await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
 
-            h.Sut.StartAsync(Folder, allowPartial: true);
+            await h.Sut.StartAsync(Folder, allowPartial: true);
             await WaitForIdleAsync(h.Sut);
 
             Assert.Equal(1, h.Encoder.SilenceCallCount);
@@ -571,7 +622,7 @@ namespace Read2Me.Tests.Services.Audio
             Directory.CreateDirectory(Path.Combine(_tempDir, _folderName, "audio"));
             await File.WriteAllBytesAsync(Path.Combine(_tempDir, _folderName, "audio", "a.wav"), new byte[4]);
 
-            h.Sut.StartAsync(Folder);
+            await h.Sut.StartAsync(Folder);
             await WaitForIdleAsync(h.Sut);
 
             Assert.Equal(1, h.Encoder.EncodeCallCount);
@@ -585,7 +636,8 @@ namespace Read2Me.Tests.Services.Audio
             AudiobookAssemblyService Sut,
             FakeEncoder Encoder,
             List<AssemblyEvent> Events,
-            FakeProjectReader FakeReader);
+            FakeProjectReader FakeReader,
+            ProjectActivity Activity);
 
         private sealed class FakeEncoder : IAudiobookEncoder
         {

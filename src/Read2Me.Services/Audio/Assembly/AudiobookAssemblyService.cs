@@ -4,16 +4,36 @@ using Read2Me.Data;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services.Events;
+using Read2Me.Services.History;
 using Read2Me.Services.Queueing;
 
 namespace Read2Me.Services.Audio.Assembly
 {
-    public sealed class AudiobookAssemblyService
+    /// <summary>Whether an Audiobook Assembly started, or why not.</summary>
+    public abstract record AssemblyStart
+    {
+        private AssemblyStart() { }
+
+        /// <summary>The job is running in the background.</summary>
+        public sealed record Started : AssemblyStart;
+
+        /// <summary>The <see cref="ProjectActivity"/> gate refused: the project is restoring or being deleted.</summary>
+        public sealed record Refused(ActivityRefusal Refusal) : AssemblyStart;
+
+        /// <summary>A job is already running; one runs at a time, whatever the project.</summary>
+        public sealed record AlreadyRunning : AssemblyStart;
+
+        /// <summary><paramref name="Count"/> items still lack audio and the start didn't allow a partial build.</summary>
+        public sealed record AudioMissing(int Count) : AssemblyStart;
+    }
+
+    public sealed class AudiobookAssemblyService : IBusySource
     {
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly IAudiobookEncoder _encoder;
         private readonly EventBroadcaster<AssemblyEvent> _broadcaster;
         private readonly IFileSystem _fs;
+        private readonly ProjectActivity _activity;
         private readonly ILogger<AudiobookAssemblyService> _logger;
 
         private readonly object _lock = new();
@@ -36,39 +56,71 @@ namespace Read2Me.Services.Audio.Assembly
             IAudiobookEncoder encoder,
             EventBroadcaster<AssemblyEvent> broadcaster,
             IFileSystem fs,
+            ProjectActivity activity,
             ILogger<AudiobookAssemblyService> logger)
         {
             _scopeFactory = scopeFactory;
             _encoder = encoder;
             _broadcaster = broadcaster;
             _fs = fs;
+            _activity = activity;
             _logger = logger;
+            activity.Register(this);
         }
 
         /// <summary>
-        /// Starts an assembly job. No-op if already running; returns false.
-        /// When allowPartial is false (default), returns false if any non-pause items are missing audio.
-        /// When allowPartial is true, missing non-pause items are filtered out of the manifest.
+        /// Starts an assembly job in the background. Unless <paramref name="allowPartial"/>, it first
+        /// counts the items still lacking audio and answers <see cref="AssemblyStart.AudioMissing"/>
+        /// when there are any; with it, those items are filtered out of the manifest. Then it starts
+        /// through the <see cref="ProjectActivity"/> gate, which refuses it while the project is
+        /// restoring or being deleted, so neither can begin between the check and the job running.
+        /// One job runs at a time, whatever the project.
         /// </summary>
-        public bool StartAsync(ProjectFolderId folder, bool allowPartial = false)
+        public async Task<AssemblyStart> StartAsync(ProjectFolderId folder, bool allowPartial = false, CancellationToken ct = default)
         {
-            lock (_lock)
+            if (!allowPartial)
             {
-                if (IsRunning) return false;
-
-                IsRunning = true;
-                LastError = null;
-                EncodePercent = 0;
-                CurrentPhase = null;
-                Folder = folder.Value;
-                OutputFileName = null;
-
-                _cts = new CancellationTokenSource();
-                var ct = _cts.Token;
-                Task.Run(() => RunAsync(folder, allowPartial, ct));
+                await using var scope = _scopeFactory.CreateAsyncScope();
+                var manifest = await scope.ServiceProvider.GetRequiredService<IAudioItemReader>()
+                    .GetAssemblyManifestAsync(folder, ct);
+                var remaining = MissingAudio(manifest);
+                if (remaining > 0)
+                {
+                    // A running job's status is its own; only an idle service reports this count.
+                    lock (_lock) { if (!IsRunning) AudioRemainingCount = remaining; }
+                    return new AssemblyStart.AudioMissing(remaining);
+                }
             }
-            return true;
+
+            var start = _activity.TryStart<AssemblyStart>(folder, () =>
+            {
+                lock (_lock)
+                {
+                    if (IsRunning) return new AssemblyStart.AlreadyRunning();
+
+                    IsRunning = true;
+                    LastError = null;
+                    EncodePercent = 0;
+                    CurrentPhase = null;
+                    Folder = folder.Value;
+                    OutputFileName = null;
+
+                    _cts = new CancellationTokenSource();
+                    var jobCt = _cts.Token;
+                    Task.Run(() => RunAsync(folder, allowPartial, jobCt));
+                }
+                return new AssemblyStart.Started();
+            });
+            return start switch
+            {
+                ActivityStart<AssemblyStart>.Started(var started) => started,
+                ActivityStart<AssemblyStart>.Refused(var refusal) => new AssemblyStart.Refused(refusal),
+                _ => throw new InvalidOperationException($"Unhandled {start}."),
+            };
         }
+
+        private static int MissingAudio(IReadOnlyList<AssemblyManifestEntry> manifest) =>
+            manifest.Count(e => !ParagraphItemKinds.IsPause(e.ItemType) && e.AudioRelativePath == null);
 
         public void Cancel()
         {
@@ -113,8 +165,8 @@ namespace Read2Me.Services.Audio.Assembly
 
                 var rawManifest = await reader.GetAssemblyManifestAsync(folder, ct);
 
-                var remaining = rawManifest.Count(e =>
-                    !ParagraphItemKinds.IsPause(e.ItemType) && e.AudioRelativePath == null);
+                // Counted again: writes are allowed while busy, so audio may have gone since the start.
+                var remaining = MissingAudio(rawManifest);
 
                 if (remaining > 0 && !allowPartial)
                 {

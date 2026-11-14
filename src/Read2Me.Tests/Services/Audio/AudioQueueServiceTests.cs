@@ -31,7 +31,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void Enqueue_SetsStatusQueued()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             var item = MakeItem();
 
             svc.Enqueue([item]);
@@ -42,7 +42,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void Enqueue_Duplicate_IsNoOp()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             var item = MakeItem();
 
             svc.Enqueue([item]);
@@ -55,7 +55,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void Enqueue_AlreadyComplete_RequeuesForRegeneration()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
             svc.Apply(item, new Disposition.Complete(null, "audio/test.wav"));
@@ -68,7 +68,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void MarkProcessing_SetsStatusProcessing()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             var item = MakeItem();
             svc.Enqueue([item]);
 
@@ -87,7 +87,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void Apply_Complete_Settles_AndStampsVersion()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
 
@@ -100,7 +100,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void Apply_Complete_ClearsStaleOutcome()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
             svc.Apply(item, new Disposition.Failed("network error"));
@@ -118,7 +118,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void Apply_Unfinished_RecordsUnfinishedOutcome()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
 
@@ -134,7 +134,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void Apply_Failed_RecordsOutcome()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
 
@@ -150,7 +150,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task Apply_RetryOnce_ReturnsToQueued_AndSpendsARetry()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
 
@@ -165,7 +165,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task Apply_RetryAfter_ReturnsToQueued_AndSpendsABusy()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
 
@@ -180,7 +180,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void Enqueue_WhileTheProjectIsRestoring_IsRefused_AndQueuesNothing()
         {
-            var activity = NeverBusy.Activity();
+            var activity = new ProjectActivity();
             var svc = new AudioQueueService(activity);
             var changed = 0;
             svc.Changed += () => changed++;
@@ -198,11 +198,13 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task Apply_RetryAfterRestore_StaysQueued_AndRunsOnceTheRestoreEnds()
         {
-            var activity = NeverBusy.Activity();
+            var activity = new ProjectActivity();
             var svc = new AudioQueueService(activity);
             var item = MakeItem();
-            EnqueueAndProcess(svc, item);
+            // A Restore never begins while the item is tracked, so it begins first and the worker is
+            // handed the item without the gate, as it holds one whose write the Restore refused.
             Assert.Null(activity.TryBeginRestore(Folder));
+            svc.MarkProcessing(item);
 
             svc.Apply(item, new Disposition.RetryAfterRestore());
 
@@ -223,11 +225,13 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task Apply_RetryAfterRestore_CancelAllDuringTheRestore_DoesNotResurrectTheItem()
         {
-            var activity = NeverBusy.Activity();
+            var activity = new ProjectActivity();
             var svc = new AudioQueueService(activity);
             var item = MakeItem();
-            EnqueueAndProcess(svc, item);
+            // A Restore never begins while the item is tracked, so it begins first and the worker is
+            // handed the item without the gate, as it holds one whose write the Restore refused.
             Assert.Null(activity.TryBeginRestore(Folder));
+            svc.MarkProcessing(item);
 
             svc.Apply(item, new Disposition.RetryAfterRestore());
             svc.CancelAll();
@@ -245,7 +249,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task Apply_RetryAfter_ThenCancelAll_DoesNotResurrectTheItem()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
 
@@ -265,7 +269,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public async Task Apply_RetryAfter_AfterCancelAll_LeavesTheItemCancelled()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
 
@@ -281,7 +285,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void Apply_RetryOnce_AfterCancelAll_DoesNotRequeueOnTheNewChannel()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
 
@@ -295,7 +299,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void CancelAll_DrainsPendingAndResetsStatus()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             var item = MakeItem();
             svc.Enqueue([item]);
 
@@ -309,7 +313,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void Snapshot_ReturnsAccurateCounts()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             var item1 = MakeItem();
             var item2 = MakeItem();
             svc.Enqueue([item1, item2]);
@@ -324,7 +328,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void Changed_FiresOnEnqueue()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             int count = 0;
             svc.Changed += () => count++;
 
@@ -336,7 +340,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void Changed_FiresOnceOnApply()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             var item = MakeItem();
             EnqueueAndProcess(svc, item);
 
@@ -350,7 +354,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void AudioVersionOf_ChangesAfterEachCompletion()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             var item1 = MakeItem();
             EnqueueAndProcess(svc, item1);
             svc.Apply(item1, new Disposition.Complete(null, "audio/one.wav"));
@@ -369,7 +373,7 @@ namespace Read2Me.Tests.Services.Audio
         [Fact]
         public void Changed_FiresOnCancelAll()
         {
-            var svc = new AudioQueueService(NeverBusy.Activity());
+            var svc = new AudioQueueService(new ProjectActivity());
             svc.Enqueue([MakeItem()]);
 
             int count = 0;

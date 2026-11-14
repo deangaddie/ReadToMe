@@ -1,10 +1,8 @@
 using Microsoft.AspNetCore.Builder;
-using Read2Me.Data;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Read2Me.Core.IO;
-using Read2Me.Services;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Audio.Assembly;
 
@@ -99,30 +97,23 @@ namespace Read2Me.App.Api
 
         private static async Task<Results<Accepted<StartedResponse>, NotFound, ProblemHttpResult>> StartAsync(
             string folder, AssemblyStartRequest? body, IFileSystem fs,
-            IAudioItemReader reader, AudiobookAssemblyService service, CancellationToken ct)
+            AudiobookAssemblyService service, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return TypedResults.NotFound();
 
-            var allowPartial = body?.AllowPartial ?? false;
-
-            // The service only discovers missing audio after its async Gather phase; an
-            // agent needs the answer in the response, so run the same count up front.
-            if (!allowPartial)
+            return await service.StartAsync(folderId, body?.AllowPartial ?? false, ct) switch
             {
-                var manifest = await reader.GetAssemblyManifestAsync(folderId, ct);
-                var remaining = manifest.Count(e =>
-                    !ParagraphItemKinds.IsPause(e.ItemType) && e.AudioRelativePath == null);
-                if (remaining > 0)
-                    return TypedResults.Problem(
-                        $"{remaining} items still need audio. Generate audio first or pass allowPartial.",
-                        statusCode: StatusCodes.Status409Conflict,
-                        extensions: new Dictionary<string, object?> { ["audioRemainingCount"] = remaining });
-            }
-
-            return service.StartAsync(folderId, allowPartial)
-                ? TypedResults.Accepted((string?)null, new StartedResponse(true))
-                : TypedResults.Problem("Assembly is already running.", statusCode: StatusCodes.Status409Conflict);
+                AssemblyStart.Started => TypedResults.Accepted((string?)null, new StartedResponse(true)),
+                AssemblyStart.AudioMissing(var remaining) => TypedResults.Problem(
+                    $"{remaining} items still need audio. Generate audio first or pass allowPartial.",
+                    statusCode: StatusCodes.Status409Conflict,
+                    extensions: new Dictionary<string, object?> { ["audioRemainingCount"] = remaining }),
+                AssemblyStart.AlreadyRunning =>
+                    TypedResults.Problem("Assembly is already running.", statusCode: StatusCodes.Status409Conflict),
+                AssemblyStart.Refused(var refusal) => StepReads.Refused(refusal),
+                var other => throw new InvalidOperationException($"Unhandled {other}."),
+            };
         }
     }
 }

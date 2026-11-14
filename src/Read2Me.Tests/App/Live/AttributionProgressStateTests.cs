@@ -1,5 +1,6 @@
 using Read2Me.App.Live;
 using Read2Me.Core.Models;
+using Read2Me.Services.History;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
@@ -16,7 +17,7 @@ namespace Read2Me.Tests.App.Live
         private static (AttributionProgressState State, EventBroadcaster<LlmStreamEvent> Stream, CharacterQueueService Queue) Make()
         {
             var stream = new EventBroadcaster<LlmStreamEvent>();
-            var queue = new CharacterQueueService(NeverBusy.Activity());
+            var queue = new CharacterQueueService(new ProjectActivity());
             return (new AttributionProgressState(stream, queue), stream, queue);
         }
 

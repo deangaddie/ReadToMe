@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Read2Me.App.Characters;
 using Read2Me.Core.Models;
+using Read2Me.Services.History;
 using Read2Me.Services.Events;
 using Read2Me.Services.Llm;
 using Read2Me.Tests.Fakes;
@@ -36,7 +37,7 @@ public class VoiceBatchRunnerTests
         var llmEvents = new List<LlmStreamEvent>();
         llmBroadcaster.Event += e => { lock (llmEvents) llmEvents.Add(e); };
 
-        var runner = UnscopedVoiceBatch.Runner(NeverBusy.Activity(), broadcaster, llmBroadcaster);
+        var runner = UnscopedVoiceBatch.Runner(new ProjectActivity(), broadcaster, llmBroadcaster);
         return (runner, events, llmEvents);
     }
 
@@ -293,7 +294,7 @@ public class VoiceBatchRunnerTests
         var llmEvents = new EventBroadcaster<LlmStreamEvent>();
         batchEvents.Event += sequence.Add;
         llmEvents.Event += sequence.Add;
-        var runner = UnscopedVoiceBatch.Runner(NeverBusy.Activity(), batchEvents, llmEvents);
+        var runner = UnscopedVoiceBatch.Runner(new ProjectActivity(), batchEvents, llmEvents);
 
         await runner.RunPhaseAsync(
             new FakeSweepPhase(new[] { "a" }),

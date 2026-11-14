@@ -144,9 +144,8 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<History.BackgroundRuns>();
         services.AddScoped<Mutations.MutationOrigin>();
         services.AddScoped<History.HistoryStepScope>();
-        // Project activity: busy and restoring together; busy is resolved lazily (see the class).
-        services.TryAddSingleton(sp => new History.ProjectActivity(
-            () => sp.GetRequiredService<Queueing.IProjectBusyAnswer>()));
+        // Project activity: busy, restoring and deleting together; each busy source registers with it when built.
+        services.TryAddSingleton<History.ProjectActivity>();
         // Restore: the run and its started/finished signal; the restoring flag lives in the gate.
         services.TryAddSingleton<Events.EventBroadcaster<History.RestoreEvent>>();
         services.AddScoped<History.HistoryRestore>();
