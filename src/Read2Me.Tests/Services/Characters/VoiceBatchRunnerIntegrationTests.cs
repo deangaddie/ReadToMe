@@ -86,7 +86,8 @@ namespace Read2Me.Tests.Services.Characters
             string cannedAudioFileName = "voices/voice.wav",
             string cannedTranscript = "sample text",
             double? cannedDurationMs = null,
-            NarratorIdentity? narrator = null)
+            NarratorIdentity? narrator = null,
+            Func<IServiceScopeFactory, IServiceScopeFactory>? scopes = null)
         {
             var chars = characters ?? Array.Empty<Character>();
             var voicesMap = voicesByCharacter ?? new Dictionary<Guid, List<VoiceEntity>>();
@@ -101,14 +102,15 @@ namespace Read2Me.Tests.Services.Characters
                 audioGenerationFails, audioGenerationThrows,
                 cannedAudioFileName, cannedTranscript, cannedPlan, cannedDurationMs);
 
-            return BuildRunner(fakeReader, fakeOrchestrator);
+            return BuildRunner(fakeReader, fakeOrchestrator, scopes);
         }
 
         /// <summary>
         /// The runner over a real write side: the mutation wiring and its project database, with the
         /// roster reads and the LLM standing in as fakes.
         /// </summary>
-        private Harness BuildRunner(IProjectReader reader, VoiceOrchestrator orchestrator)
+        private Harness BuildRunner(
+            IProjectReader reader, VoiceOrchestrator orchestrator, Func<IServiceScopeFactory, IServiceScopeFactory>? scopes = null)
         {
             var events = new List<VoiceBatchEvent>();
 
@@ -124,7 +126,7 @@ namespace Read2Me.Tests.Services.Characters
             broadcaster.Event += e => { lock (events) events.Add(e); };
 
             var sut = new VoiceBatchRunner(
-                _root.GetRequiredService<IServiceScopeFactory>(),
+                scopes?.Invoke(_root.GetRequiredService<IServiceScopeFactory>()) ?? _root.GetRequiredService<IServiceScopeFactory>(),
                 _root.GetRequiredService<ProjectActivity>(),
                 NullLogger<VoiceBatchRunner>.Instance,
                 broadcaster,
@@ -471,6 +473,58 @@ namespace Read2Me.Tests.Services.Characters
             await WaitForIdleAsync(h.Sut);
 
             Assert.Null(h.Sut.BusyFor(Folder));
+        }
+
+        [Fact]
+        public async Task BusyFor_AfterACompletedBatch_StaysBusyUntilItsScopeIsDisposed()
+        {
+            var character = MakeCharacter("Jude");
+            var held = new HeldDisposal();
+            var h = BuildHarness(
+                characters: new[] { character },
+                voicesByCharacter: new Dictionary<Guid, List<VoiceEntity>> { [character.Id] = new() },
+                scopes: held.Over);
+
+            h.Sut.StartGeneratePrompts(Folder);
+            await held.Disposing.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+            Assert.NotNull(h.Sut.BusyFor(Folder));
+            lock (h.Events) Assert.DoesNotContain(h.Events, e => e is BatchCompleted);
+
+            held.Release();
+            await WaitForIdleAsync(h.Sut);
+
+            Assert.Null(h.Sut.BusyFor(Folder));
+            lock (h.Events) Assert.Contains(h.Events, e => e is BatchCompleted);
+        }
+
+        [Fact]
+        public async Task BusyFor_AfterACancelledBatch_StaysBusyUntilItsScopeIsDisposed()
+        {
+            var kim = MakeCharacter("Kim");
+            var lou = MakeCharacter("Lou");
+            var held = new HeldDisposal();
+            var h = BuildHarness(
+                characters: new[] { kim, lou },
+                voicesByCharacter: new Dictionary<Guid, List<VoiceEntity>> { [kim.Id] = new(), [lou.Id] = new() },
+                orchestratorDelayMs: 3000,
+                scopes: held.Over);
+
+            h.Sut.StartGeneratePrompts(Folder);
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (h.Sut.Total == 0 && DateTime.UtcNow < deadline)
+                await Task.Delay(10);
+            h.Sut.Cancel();
+            await held.Disposing.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+            Assert.NotNull(h.Sut.BusyFor(Folder));
+            lock (h.Events) Assert.DoesNotContain(h.Events, e => e is BatchCancelled);
+
+            held.Release();
+            await WaitForIdleAsync(h.Sut);
+
+            Assert.Null(h.Sut.BusyFor(Folder));
+            lock (h.Events) Assert.Contains(h.Events, e => e is BatchCancelled);
         }
 
         [Fact]
@@ -890,6 +944,42 @@ namespace Read2Me.Tests.Services.Characters
         // ── Fakes ──────────────────────────────────────────────────────────────
 
         private sealed record Harness(VoiceBatchRunner Sut, List<VoiceBatchEvent> Events, BackgroundRunTracker Tracker);
+
+        /// <summary>
+        /// Real scopes whose disposal waits for <see cref="Release"/>, so a test can look at the
+        /// batch while its scope (and the project DB connection in it) is still open.
+        /// </summary>
+        private sealed class HeldDisposal
+        {
+            private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            private readonly TaskCompletionSource _disposing = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            /// <summary>Completes when the batch starts disposing its scope.</summary>
+            public Task Disposing => _disposing.Task;
+
+            public void Release() => _released.TrySetResult();
+
+            public IServiceScopeFactory Over(IServiceScopeFactory inner) => new Factory(inner, this);
+
+            private sealed class Factory(IServiceScopeFactory inner, HeldDisposal held) : IServiceScopeFactory
+            {
+                public IServiceScope CreateScope() => new Scope(inner.CreateAsyncScope(), held);
+            }
+
+            private sealed class Scope(AsyncServiceScope inner, HeldDisposal held) : IServiceScope, IAsyncDisposable
+            {
+                public IServiceProvider ServiceProvider => inner.ServiceProvider;
+
+                public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
+
+                public async ValueTask DisposeAsync()
+                {
+                    held._disposing.TrySetResult();
+                    await held._released.Task.WaitAsync(TimeSpan.FromSeconds(30));
+                    await inner.DisposeAsync();
+                }
+            }
+        }
 
         private sealed class FakeProjectReader2 : ProjectReaderFakeBase
         {
