@@ -105,16 +105,25 @@ public static class ServiceRegistrationExtensions
 
     public static IServiceCollection AddAudioQueueServices(this IServiceCollection services)
     {
-        services.AddSingleton<Read2Me.Services.Audio.AudioQueueService>();
-        services.AddSingleton<IQueueSource<Read2Me.Services.Audio.QueuedAudioItem>>(
-            sp => sp.GetRequiredService<Read2Me.Services.Audio.AudioQueueService>());
-        services.AddSingleton<Read2Me.Services.Audio.IAudioQueue>(
-            sp => sp.GetRequiredService<Read2Me.Services.Audio.AudioQueueService>());
-        services.AddScoped<IAudioQueueProcessor, AudioQueueProcessor>();
-        services.AddScoped<IQueueProcessor<Read2Me.Services.Audio.QueuedAudioItem>>(
-            sp => sp.GetRequiredService<IAudioQueueProcessor>());
-        services.AddSingleton<IProcessingGate<Read2Me.Services.Audio.QueuedAudioItem>, ProcessingGate<Read2Me.Services.Audio.QueuedAudioItem>>();
-        services.AddWorkspaceHostedService<QueueWorker<Read2Me.Services.Audio.QueuedAudioItem>>();
+        services.AddWorkQueue<QueuedAudioItem, AudioQueueService, AudioQueueProcessor>();
+        services.AddSingleton<IAudioQueue>(sp => sp.GetRequiredService<AudioQueueService>());
+        return services;
+    }
+
+    /// <summary>
+    /// One Work queue: its service (a singleton, also the worker's <see cref="IQueueSource{TItem}"/>),
+    /// its processor (scoped, one per item the worker takes), its Processing gate, and the worker that
+    /// drains it. The queue's own interfaces are registered beside the call.
+    /// </summary>
+    private static IServiceCollection AddWorkQueue<TItem, TService, TProcessor>(this IServiceCollection services)
+        where TService : class, IQueueSource<TItem>
+        where TProcessor : class, IQueueProcessor<TItem>
+    {
+        services.AddSingleton<TService>();
+        services.AddSingleton<IQueueSource<TItem>>(sp => sp.GetRequiredService<TService>());
+        services.AddScoped<IQueueProcessor<TItem>, TProcessor>();
+        services.AddSingleton<IProcessingGate<TItem>, ProcessingGate<TItem>>();
+        services.AddWorkspaceHostedService<QueueWorker<TItem>>();
         return services;
     }
 
@@ -197,20 +206,11 @@ public static class ServiceRegistrationExtensions
 
     public static IServiceCollection AddCharacterServices(this IServiceCollection services)
     {
-        services.AddSingleton<CharacterQueueService>();
-        services.AddSingleton<IParagraphQueueProbe>(
-            sp => sp.GetRequiredService<CharacterQueueService>());
-        services.AddSingleton<ICharacterQueue>(
-            sp => sp.GetRequiredService<CharacterQueueService>());
+        services.AddWorkQueue<QueuedParagraph, CharacterQueueService, CharacterQueueProcessor>();
+        services.AddSingleton<IParagraphQueueProbe>(sp => sp.GetRequiredService<CharacterQueueService>());
+        services.AddSingleton<ICharacterQueue>(sp => sp.GetRequiredService<CharacterQueueService>());
         services.AddSingleton<NodeStatusService>();
         services.AddSingleton<Read2Me.App.Live.AttributionProgressState>();
-        services.AddSingleton<IQueueSource<QueuedParagraph>>(
-            sp => sp.GetRequiredService<CharacterQueueService>());
-        services.AddScoped<ICharacterQueueProcessor, CharacterQueueProcessor>();
-        services.AddScoped<IQueueProcessor<QueuedParagraph>>(
-            sp => sp.GetRequiredService<ICharacterQueueProcessor>());
-        services.AddSingleton<IProcessingGate<QueuedParagraph>, ProcessingGate<QueuedParagraph>>();
-        services.AddWorkspaceHostedService<QueueWorker<QueuedParagraph>>();
         services.AddScoped<AttributionRequestBuilder>();
         services.AddScoped<CharacterAttributionService>();
         services.AddScoped<ChapterAttributionStep>();

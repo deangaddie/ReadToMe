@@ -144,7 +144,7 @@ public sealed class BackgroundRunTracker(
     }
 
     private int FailedIn(ProjectFolderId folder, Attribution run) =>
-        run.Seen.Count(p => characterQueue.OutcomeOf(folder, p)?.Kind == ParagraphOutcomeKind.Failed);
+        run.Seen.Count(p => characterQueue.OutcomeOf(folder, p)?.Kind == QueueOutcomeKind.Failed);
 
     /// <summary>
     /// The batch runs from its first event (once planning has counted the work) to its terminal one.

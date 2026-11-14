@@ -14,13 +14,14 @@ namespace Read2Me.Services.Characters
         Guid ChapterId,
         Guid PartId,
         Guid VolumeId,
-        AttemptState Attempts = default);
+        AttemptState Attempts = default) : IQueuedWork<QueuedParagraph>
+    {
+        public WorkItemKey Key => new(Folder, ParagraphId);
+
+        public QueuedParagraph WithAttempts(AttemptState attempts) => this with { Attempts = attempts };
+    }
 
     public enum ParagraphQueueStatus { Queued, Processing }
-
-    public enum ParagraphOutcomeKind { Failed, Unfinished }
-
-    public sealed record ParagraphOutcome(ParagraphOutcomeKind Kind, string? Reason);
 
     /// <summary>The attribution queue's counts and timings, answered by <c>GET /api/attribution/queue</c>.</summary>
     public sealed record AttributionQueueSnapshot(
@@ -39,116 +40,49 @@ namespace Read2Me.Services.Characters
         public bool IsBusy => QueuedCount + ProcessingCount > 0;
     }
 
-    internal readonly record struct ParagraphKey(ProjectFolderId Folder, Guid ParagraphId);
-
-    public sealed class CharacterQueueService : IQueueSource<QueuedParagraph>, IParagraphQueueProbe, ICharacterQueue, IBusySource
+    /// <summary>
+    /// The <b>Character Queue</b>: a <see cref="WorkQueue{TItem}"/> of paragraphs. Everything a Work
+    /// queue does is the module's; this adds the paragraph-shaped reads its callers ask.
+    /// </summary>
+    public sealed class CharacterQueueService : IQueueSource<QueuedParagraph>, IParagraphQueueProbe, ICharacterQueue
     {
-        private Channel<QueuedParagraph> _channel =
-            Channel.CreateUnbounded<QueuedParagraph>(new UnboundedChannelOptions { SingleReader = true });
-
-        private readonly QueueStateStore<ParagraphKey, ParagraphOutcome> _store = new();
-
-        private CancellationTokenSource _itemCts = new();
-
-        private readonly ProjectActivity _activity;
+        private readonly WorkQueue<QueuedParagraph> _queue;
 
         public CharacterQueueService(ProjectActivity activity)
         {
-            _activity = activity;
-            activity.Register(this);
+            _queue = new WorkQueue<QueuedParagraph>(
+                activity, new WorkQueueBusy(BusySourceKind.CharacterQueue, "Attribution", "paragraph"));
         }
 
-        public event Action? Changed;
-
-        /// <summary>
-        /// Raised by <see cref="CancelAll"/> before it clears anything, so a listener can tell a
-        /// cancelled folder from one that drained — the <see cref="Changed"/> that follows looks the same.
-        /// </summary>
-        public event Action? Cancelling;
-
-        public ChannelReader<QueuedParagraph> Reader => _channel.Reader;
-
-        public CancellationToken ItemCancellationToken => _itemCts.Token;
-
-        public void CancelAll()
+        public event Action? Changed
         {
-            Cancelling?.Invoke();
-
-            var old = Interlocked.Exchange(ref _itemCts, new CancellationTokenSource());
-            old.Cancel();
-            old.Dispose();
-
-            var oldChannel = Interlocked.Exchange(ref _channel,
-                Channel.CreateUnbounded<QueuedParagraph>(new UnboundedChannelOptions { SingleReader = true }));
-            oldChannel.Writer.TryComplete();
-
-            _store.ClearAll();
-
-            Changed?.Invoke();
+            add => _queue.Changed += value;
+            remove => _queue.Changed -= value;
         }
 
-        /// <summary>
-        /// Queues the paragraphs, or refuses them all — queuing and announcing nothing — when the gate
-        /// refuses a start for any of their projects. A paragraph already queued or processing is
-        /// not queued twice. Null means queued. The queuing is the gate's start, so a Restore either
-        /// sees the paragraphs as busy or is seen by the enqueue.
-        /// </summary>
-        public ActivityRefusal? Enqueue(IEnumerable<QueuedParagraph> paragraphs)
+        /// <inheritdoc cref="WorkQueue{TItem}.Cancelling"/>
+        public event Action? Cancelling
         {
-            var list = paragraphs.ToList();
-            var refusal = _activity.TryStart(list.Select(p => p.Folder), () =>
-            {
-                foreach (var p in list)
-                {
-                    if (_store.TryMarkQueued(Key(p)))
-                        _channel.Writer.TryWrite(p);
-                }
-            });
-            if (refusal is null)
-                Changed?.Invoke();
-            return refusal;
+            add => _queue.Cancelling += value;
+            remove => _queue.Cancelling -= value;
         }
 
-        /// <summary>
-        /// Returns <paramref name="first"/> plus up to <paramref name="max"/>-1 further queued
-        /// paragraphs from the same folder and chapter, drained from the head of the queue.
-        /// The queue is enqueued in book order, so the result is in book order. Must only be
-        /// called from the channel's single reader (the queue worker).
-        /// </summary>
-        public IReadOnlyList<QueuedParagraph> DrainBatch(QueuedParagraph first, int max)
-        {
-            var batch = new List<QueuedParagraph> { first };
-            while (batch.Count < max &&
-                   _channel.Reader.TryPeek(out var next) &&
-                   next.Folder == first.Folder &&
-                   next.ChapterId == first.ChapterId)
-            {
-                if (!_channel.Reader.TryRead(out var item))
-                    break;
-                batch.Add(item);
-            }
-            return batch;
-        }
+        public ChannelReader<QueuedParagraph> Reader => _queue.Reader;
+
+        public CancellationToken ItemCancellationToken => _queue.ItemCancellationToken;
+
+        public void CancelAll() => _queue.CancelAll();
+
+        public ActivityRefusal? Enqueue(IEnumerable<QueuedParagraph> paragraphs) => _queue.Enqueue(paragraphs);
 
         /// <summary>
         /// Returns <paramref name="first"/> plus every remaining queued paragraph, across all
-        /// chapters and folders, drained from the head of the queue. The queue is enqueued in book
-        /// order, so the result is in book order. Same single-reader contract as <see cref="DrainBatch"/>:
-        /// only the queue worker calls it, and it marks/resolves/requeues nothing.
+        /// chapters and folders. The queue is enqueued in book order, so the result is in book order.
+        /// Only the queue worker calls it, and it marks/resolves/requeues nothing.
         /// </summary>
-        public IReadOnlyList<QueuedParagraph> DrainAll(QueuedParagraph first)
-        {
-            var all = new List<QueuedParagraph> { first };
-            while (_channel.Reader.TryRead(out var item))
-                all.Add(item);
-            return all;
-        }
+        public IReadOnlyList<QueuedParagraph> DrainAll(QueuedParagraph first) => _queue.DrainAll(first);
 
-        public void MarkProcessing(QueuedParagraph item)
-        {
-            _store.MarkProcessing(Key(item));
-            Changed?.Invoke();
-        }
+        public void MarkProcessing(QueuedParagraph item) => _queue.MarkProcessing(item);
 
         /// <summary>
         /// Returns an in-flight item to Queued *without* putting it back on the channel: the caller
@@ -156,140 +90,51 @@ namespace Read2Me.Services.Characters
         /// Used when a chunk's LLM call finishes but leaves an item undecided — it must not sit in
         /// Processing while it waits for the next step's model burst.
         /// </summary>
-        public void MarkDeferred(QueuedParagraph item)
-        {
-            _store.ReturnToQueued(Key(item));
-            Changed?.Invoke();
-        }
+        public void MarkDeferred(QueuedParagraph item) => _queue.Defer(item);
 
-        /// <summary>
-        /// Runs the transition the decision produced. One entry point for every outcome, so the
-        /// processor names what it decided instead of picking a differently-named method per case.
-        /// <para>
-        /// Total: every <see cref="Disposition"/> member executes and no arm throws. It performs no
-        /// work — applying the answer and probing what it left behind stay with the processor, which
-        /// owns those collaborators.
-        /// </para>
-        /// <para>
-        /// Each retry arm bumps exactly the counter its own <see cref="QueueDisposition.Decide"/> arm
-        /// reads: <see cref="Disposition.RetryOnce"/> spends the once-only
-        /// <see cref="AttemptState.Retries"/> budget that a watchdog recovery is allowed, and
-        /// <see cref="Disposition.RetryAfter"/> spends an <see cref="AttemptState.Busies"/> so the
-        /// next backoff grows without ever touching the once-only budget. That makes the two budgets
-        /// independent structurally rather than by comment.
-        /// </para>
-        /// </summary>
-        public void Apply(QueuedParagraph item, Disposition disposition)
-        {
-            var key = Key(item);
-            switch (disposition)
-            {
-                // The stamps themselves reach every open Book View through the receipt the apply
-                // commits (ADR 0007) — the queue only carries queue state.
-                case Disposition.Complete complete:
-                    _store.Settle(key, elapsedSeconds: complete.Elapsed);
-                    break;
-
-                case Disposition.Unfinished unfinished:
-                    _store.Settle(
-                        key,
-                        new ParagraphOutcome(ParagraphOutcomeKind.Unfinished, unfinished.Reason),
-                        unfinished.Elapsed);
-                    break;
-
-                case Disposition.Failed failed:
-                    _store.Abandon(key, new ParagraphOutcome(ParagraphOutcomeKind.Failed, failed.Reason));
-                    break;
-
-                // Status returns to Queued and the item re-enters the channel, where it waits on the
-                // gate closed by recovery until that reopens it. An item a CancelAll cleared while
-                // in flight stays cancelled: it neither returns to Queued nor re-enters the channel.
-                case Disposition.RetryOnce:
-                    if (_store.ReturnToQueued(key))
-                        _channel.Writer.TryWrite(item with { Attempts = item.Attempts.WithRetry() });
-                    break;
-
-                // Status returns to Queued immediately; the write is deferred against the writer
-                // captured now, so a CancelAll during the backoff drops the item instead of
-                // resurrecting it on the replacement channel. One cleared before this runs stays
-                // cancelled, as above.
-                case Disposition.RetryAfter retryAfter:
-                    if (!_store.ReturnToQueued(key)) break;
-                    _ = DelayedWrite.Schedule(
-                        _channel.Writer,
-                        item with { Attempts = item.Attempts.WithBusy() },
-                        retryAfter.Delay,
-                        _itemCts.Token);
-                    break;
-
-                // As RetryAfter, but the wait is the project's Restore, and no budget is spent.
-                case Disposition.RetryAfterRestore:
-                    if (!_store.ReturnToQueued(key)) break;
-                    _ = DelayedWrite.ScheduleWhen(_channel.Writer, item, _activity.WhenRestoreEnded(item.Folder), _itemCts.Token);
-                    break;
-            }
-
-            Changed?.Invoke();
-        }
+        /// <inheritdoc cref="WorkQueue{TItem}.Apply"/>
+        /// <remarks>The stamps themselves reach every open Book View through the receipt the apply commits (ADR 0007).</remarks>
+        public void Apply(QueuedParagraph item, Disposition disposition) => _queue.Apply(item, disposition);
 
         /// <summary>
         /// Paragraphs of <paramref name="folder"/> the queue currently says anything about: queued,
-        /// processing, or carrying a terminal outcome. The live hub relay diffs per-item status from
+        /// processing, or carrying a Queue outcome. The live hub relay diffs per-item status from
         /// this set; single-row reads use <see cref="StatusOf"/>.
         /// </summary>
         public IReadOnlyCollection<Guid> KnownParagraphs(ProjectFolderId folder)
-            => _store.TrackedKeys().Concat(_store.OutcomeKeys())
-                .Where(k => k.Folder == folder).Select(k => k.ParagraphId).Distinct().ToArray();
+            => _queue.KnownKeys().Where(k => k.Folder == folder).Select(k => k.Id).Distinct().ToArray();
 
         public ParagraphQueueStatus? StatusOf(ProjectFolderId folder, Guid paragraphId)
-            => Map(_store.StatusOf(new ParagraphKey(folder, paragraphId)));
+            => Map(_queue.StatusOf(new WorkItemKey(folder, paragraphId)));
 
-        public ParagraphOutcome? OutcomeOf(ProjectFolderId folder, Guid paragraphId)
-            => _store.OutcomeOf(new ParagraphKey(folder, paragraphId));
+        public QueueOutcome? OutcomeOf(ProjectFolderId folder, Guid paragraphId)
+            => _queue.OutcomeOf(new WorkItemKey(folder, paragraphId));
 
         public void ClearOutcome(ProjectFolderId folder, Guid paragraphId)
-        {
-            if (_store.ClearOutcome(new ParagraphKey(folder, paragraphId)))
-                Changed?.Invoke();
-        }
+            => _queue.ClearOutcome(new WorkItemKey(folder, paragraphId));
 
         public bool IsBusy(ProjectFolderId folder, Guid paragraphId) =>
             StatusOf(folder, paragraphId) is not null;
 
         /// <summary>The paragraphs still queued or processing, by folder; a folder with none is absent.</summary>
         public ILookup<ProjectFolderId, Guid> PendingParagraphs() =>
-            _store.TrackedKeys().ToLookup(k => k.Folder, k => k.ParagraphId);
+            _queue.TrackedKeys().ToLookup(k => k.Folder, k => k.Id);
 
-        /// <summary>
-        /// The folder's paragraphs still queued or processing, or null when it has none here.
-        /// Settled items (Failed/Unfinished included) are finished work and do not count.
-        /// </summary>
-        public BusySource? BusyFor(ProjectFolderId folder)
-        {
-            var left = _store.TrackedKeys().Count(k => k.Folder == folder);
-            return left == 0
-                ? null
-                : new BusySource(BusySourceKind.CharacterQueue, $"Attribution: {BusySource.Plural(left, "paragraph")} left");
-        }
+        /// <inheritdoc cref="WorkQueue{TItem}.BusyFor"/>
+        public BusySource? BusyFor(ProjectFolderId folder) => _queue.BusyFor(folder);
 
         public AttributionQueueSnapshot Snapshot()
         {
-            var (queuedCount, processingCount) = _store.CountStatuses();
-            var (completed, avg) = _store.Metrics();
-            double eta = avg > 0 ? queuedCount * avg : 0;
-            var elapsed = _store.CurrentElapsedSeconds();
-
+            var c = _queue.Counts();
             return new AttributionQueueSnapshot(
-                QueuedCount: queuedCount,
-                ProcessingCount: processingCount,
-                AverageSecondsPerParagraph: avg,
-                EstimatedSecondsRemaining: eta,
-                CompletedCount: completed,
-                CurrentItemElapsedSeconds: elapsed
+                QueuedCount: c.Queued,
+                ProcessingCount: c.Processing,
+                AverageSecondsPerParagraph: c.AverageSeconds,
+                EstimatedSecondsRemaining: c.EstimatedSecondsRemaining,
+                CompletedCount: c.Completed,
+                CurrentItemElapsedSeconds: c.CurrentItemElapsedSeconds
             );
         }
-
-        private static ParagraphKey Key(QueuedParagraph i) => new(i.Folder, i.ParagraphId);
 
         /// <summary>
         /// Narrows the shared store's status to the two states callers outside the queue can see.

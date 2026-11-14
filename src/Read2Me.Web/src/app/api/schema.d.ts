@@ -9232,19 +9232,6 @@ export interface components {
         };
         /** @enum {unknown} */
         AudioGenMessageKind: "ItemStarted" | "AudioGenerated" | "Normalized" | "PostProcessed" | "Transcribed" | "Verified" | "Failed" | "ModelLoading";
-        AudioItemOutcome: {
-            kind: components["schemas"]["AudioItemOutcomeKind"];
-            reason: null | string;
-        };
-        /**
-         * @description Why a settled item is not simply done. `Unfinished` exists so
-         *     void AudioQueueService.Apply(QueuedAudioItem item, Disposition disposition) can stay total over Disposition: this
-         *     queue's phase 1 cannot produce it today (a resolution failure is a `Failed` work outcome,
-         *     not empty work), but throwing would break totality and recording it as `Failed` would lie
-         *     to the UI chip.
-         * @enum {unknown}
-         */
-        AudioItemOutcomeKind: "Failed" | "Unfinished";
         /** @enum {unknown} */
         AudioItemQueueStatus: "Queued" | "Processing";
         /**
@@ -9266,7 +9253,7 @@ export interface components {
         AudioItemStatusDto: {
             /** Format: int64 */
             audioVersion: null | number;
-            outcome: null | components["schemas"]["AudioItemOutcome"];
+            outcome: null | components["schemas"]["QueueOutcome"];
             status: null | components["schemas"]["AudioItemQueueStatus"];
         };
         /**
@@ -10067,7 +10054,7 @@ export interface components {
         ItemStatusEntry: {
             /** Format: int64 */
             audioVersion: null | number;
-            outcome: null | components["schemas"]["AudioItemOutcome"];
+            outcome: null | components["schemas"]["QueueOutcome"];
             review: null | components["schemas"]["AudioReviewDto"];
             status: null | components["schemas"]["AudioItemQueueStatus"];
         };
@@ -10447,7 +10434,7 @@ export interface components {
          *     paragraph items, which carry the stamped character.
          */
         ParagraphAttributionStatusDto: {
-            outcome: null | components["schemas"]["ParagraphOutcome"];
+            outcome: null | components["schemas"]["QueueOutcome"];
             status: null | components["schemas"]["ParagraphQueueStatus"];
         };
         /** @description A paragraph with its nearest neighbours in the same chapter, nearest last in IReadOnlyList&lt;ContextParagraphDto&gt; ParagraphContextDto.Before and first in IReadOnlyList&lt;ContextParagraphDto&gt; ParagraphContextDto.After. */
@@ -10480,12 +10467,6 @@ export interface components {
             text: null | string;
             voiceInstructions: null | string;
         };
-        ParagraphOutcome: {
-            kind: components["schemas"]["ParagraphOutcomeKind"];
-            reason: null | string;
-        };
-        /** @enum {unknown} */
-        ParagraphOutcomeKind: "Failed" | "Unfinished";
         /** @enum {unknown} */
         ParagraphQueueStatus: "Queued" | "Processing";
         /**
@@ -10504,7 +10485,7 @@ export interface components {
         };
         /** @description What the attribution queue currently says about one paragraph; null fields mean "nothing". */
         ParagraphStatusEntry: {
-            outcome: null | components["schemas"]["ParagraphOutcome"];
+            outcome: null | components["schemas"]["QueueOutcome"];
             status: null | components["schemas"]["ParagraphQueueStatus"];
         };
         /**
@@ -10944,6 +10925,16 @@ export interface components {
             audio: components["schemas"]["AudioQueueSnapshot"];
             escalation: null | components["schemas"]["EscalationState"];
         };
+        /** @description A <b>Queue outcome</b>: why an item the queue settled is not simply done. A completed item has none. */
+        QueueOutcome: {
+            kind: components["schemas"]["QueueOutcomeKind"];
+            reason: null | string;
+        };
+        /**
+         * @description The marker a settled-but-not-completed item keeps: <b>Queue outcome</b> (CONTEXT: queueing).
+         * @enum {unknown}
+         */
+        QueueOutcomeKind: "Failed" | "Unfinished";
         /**
          * @description BookMutationEffects on the wire, with IReadOnlyList&lt;BookFacets&gt; ReceiptEffects.Facets as a list of single facets
          *     (never `None` or `All`): a `[Flags]` value would travel as one comma-joined string the
@@ -12191,8 +12182,6 @@ export type AudioCountsDto = components['schemas']['AudioCountsDto'];
 export type AudioEnqueueRequest = components['schemas']['AudioEnqueueRequest'];
 export type AudioGenMessage = components['schemas']['AudioGenMessage'];
 export type AudioGenMessageKind = components['schemas']['AudioGenMessageKind'];
-export type AudioItemOutcome = components['schemas']['AudioItemOutcome'];
-export type AudioItemOutcomeKind = components['schemas']['AudioItemOutcomeKind'];
 export type AudioItemQueueStatus = components['schemas']['AudioItemQueueStatus'];
 export type AudioItemRefDto = components['schemas']['AudioItemRefDto'];
 export type AudioItemStatusDto = components['schemas']['AudioItemStatusDto'];
@@ -12322,8 +12311,6 @@ export type ParagraphAttributionStatusDto = components['schemas']['ParagraphAttr
 export type ParagraphContextDto = components['schemas']['ParagraphContextDto'];
 export type ParagraphDto = components['schemas']['ParagraphDto'];
 export type ParagraphItemDto = components['schemas']['ParagraphItemDto'];
-export type ParagraphOutcome = components['schemas']['ParagraphOutcome'];
-export type ParagraphOutcomeKind = components['schemas']['ParagraphOutcomeKind'];
 export type ParagraphQueueStatus = components['schemas']['ParagraphQueueStatus'];
 export type ParagraphRefDto = components['schemas']['ParagraphRefDto'];
 export type ParagraphStatusEntry = components['schemas']['ParagraphStatusEntry'];
@@ -12373,6 +12360,8 @@ export type ProposalStatus = components['schemas']['ProposalStatus'];
 export type ProposeBookEditRequest = components['schemas']['ProposeBookEditRequest'];
 export type ProposeOneBookEditRequest = components['schemas']['ProposeOneBookEditRequest'];
 export type QueueMessage = components['schemas']['QueueMessage'];
+export type QueueOutcome = components['schemas']['QueueOutcome'];
+export type QueueOutcomeKind = components['schemas']['QueueOutcomeKind'];
 export type ReceiptEffects = components['schemas']['ReceiptEffects'];
 export type ReceiptMessage = components['schemas']['ReceiptMessage'];
 export type RecentAudioSampleDto = components['schemas']['RecentAudioSampleDto'];

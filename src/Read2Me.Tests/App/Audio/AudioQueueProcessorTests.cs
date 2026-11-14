@@ -236,6 +236,25 @@ namespace Read2Me.Tests.App.Audio
                 () => _sut.ProcessItemAsync(queued, cts.Token));
         }
 
+        /// <summary>
+        /// Cancel all while the take generates: the queue has already cleared the item, so the
+        /// processor records nothing, applies nothing and publishes no failure.
+        /// </summary>
+        [Fact]
+        public async Task CancelAllWhileGenerating_AppliesNothing()
+        {
+            _resolver.Result = SuccessResolution();
+            _pipeline.Result = OkResult();
+            _pipeline.WhileRunning = _queue.CancelAll;
+            var queued = MakeItem();
+
+            await _sut.ProcessItemAsync(queued, TestContext.Current.CancellationToken);
+
+            Assert.Empty(_queue.Applied);
+            Assert.Null(_recorder.LastFolder);
+            Assert.DoesNotContain(_events, e => e is Failed);
+        }
+
         [Fact]
         public async Task ResolverFailure_WithSpeakerAndText_PublishesItemStartedWithThem()
         {
@@ -251,6 +270,12 @@ namespace Read2Me.Tests.App.Audio
         {
             public List<(QueuedAudioItem Item, Disposition D)> Applied { get; } = [];
             public List<QueuedAudioItem> Processing { get; } = [];
+
+            private readonly CancellationTokenSource _itemCts = new();
+
+            public CancellationToken ItemCancellationToken => _itemCts.Token;
+
+            public void CancelAll() => _itemCts.Cancel();
 
             public ActivityRefusal? Enqueue(IEnumerable<QueuedAudioItem> items) => null;
 

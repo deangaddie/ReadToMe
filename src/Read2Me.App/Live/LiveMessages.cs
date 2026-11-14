@@ -10,6 +10,7 @@ using Read2Me.Services.Health;
 using Read2Me.Services.History;
 using Read2Me.Services.Llm;
 using Read2Me.Services.Mutations;
+using Read2Me.Services.Queueing;
 
 namespace Read2Me.App.Live;
 
@@ -56,12 +57,12 @@ public sealed record ItemStatusMessage(
     IReadOnlyDictionary<string, ItemStatusEntry?> Items);
 
 /// <summary>What the attribution queue currently says about one paragraph; null fields mean "nothing".</summary>
-public sealed record ParagraphStatusEntry(ParagraphQueueStatus? Status, ParagraphOutcome? Outcome);
+public sealed record ParagraphStatusEntry(ParagraphQueueStatus? Status, QueueOutcome? Outcome);
 
 /// <summary>What the audio queue and the review mirror say about one item.</summary>
 public sealed record ItemStatusEntry(
     AudioItemQueueStatus? Status,
-    AudioItemOutcome? Outcome,
+    QueueOutcome? Outcome,
     long? AudioVersion,
     AudioReviewDto? Review);
 
