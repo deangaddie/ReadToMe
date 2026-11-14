@@ -17,13 +17,22 @@ import type {
   StreamKind,
   WatchdogState,
 } from '@app/live/live-messages';
-import { IDLE_ASSEMBLY, IDLE_VOICE_BATCH, type LiveProject } from '@app/live/live-state';
+import { entryFor, folderKey, keyFor } from '@app/live/folders';
+import {
+  IDLE_ASSEMBLY,
+  IDLE_VOICE_BATCH,
+  type LiveProject,
+  applyItemStatus,
+  applyNodeStatus,
+  emptyProject,
+} from '@app/live/live-state';
 
 /**
  * The slice of `LiveService` the shell, the project store and the activity centre read, with
  * group membership recorded. Streams are real Emitters: a spec pushes a hub message with
- * {@link emit} (fold the matching state signal first, as `LiveService` does) and a resync with
- * {@link resync}.
+ * {@link emit} (fold the matching state signal first, as `LiveService` does; `nodeStatus` and
+ * `itemStatus` fold into {@link projects} here) and a resync with {@link resync}. A joined project
+ * has an unseeded entry until {@link seed}.
  */
 export class FakeLive {
   readonly state = signal<LiveConnectionState>('connected');
@@ -52,7 +61,19 @@ export class FakeLive {
   }
   /** Delivers one message to every `on(family)` listener. */
   emit<K extends LiveFamily>(family: K, message: LiveMessageMap[K]): void {
+    if (family === 'nodeStatus') {
+      const m = message as LiveMessageMap['nodeStatus'];
+      this.updateProject(m.folder, (p) => applyNodeStatus(p, m));
+    } else if (family === 'itemStatus') {
+      const m = message as LiveMessageMap['itemStatus'];
+      this.updateProject(m.folder, (p) => applyItemStatus(p, m));
+    }
     this.stream(family).emit(message);
+  }
+  private updateProject(folder: string, change: (p: LiveProject) => LiveProject): void {
+    const all = this.projects();
+    const key = keyFor(all, folder);
+    if (key !== undefined) this.projects.set({ ...all, [key]: change(all[key]!) });
   }
   private stream(family: string): Emitter<unknown> {
     let stream = this.#streams.get(family);
@@ -91,13 +112,18 @@ export class FakeLive {
     return 'fake-connection';
   }
   async joinProject(folder: string) {
-    const key = folder.toLowerCase();
+    const key = folderKey(folder);
     const count = (this.#projectRefs.get(key) ?? 0) + 1;
     this.#projectRefs.set(key, count);
-    if (count === 1) this.joined.push(folder);
+    if (count > 1) return;
+    this.joined.push(folder);
+    this.projects.update((all) => ({
+      ...all,
+      [keyFor(all, folder) ?? folder]: entryFor(all, folder) ?? emptyProject(folder),
+    }));
   }
   async leaveProject(folder: string) {
-    const key = folder.toLowerCase();
+    const key = folderKey(folder);
     const count = this.#projectRefs.get(key);
     if (!count) return;
     if (count > 1) {
@@ -106,6 +132,12 @@ export class FakeLive {
     }
     this.#projectRefs.delete(key);
     this.left.push(folder);
+    this.projects.update((all) => {
+      const next = { ...all };
+      const k = keyFor(next, folder);
+      if (k !== undefined) delete next[k];
+      return next;
+    });
   }
   async joinStream(kind: StreamKind) {
     this.joinedStreams.push(kind);

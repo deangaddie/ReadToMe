@@ -2,6 +2,7 @@ import type { BookFacets, LiveSnapshot } from '@app/api';
 import { use } from '@app/core/services';
 import { effect, untracked } from '@app/core/signals';
 import { Debounced } from '@app/shared/debounced';
+import { entryFor } from './folders';
 import { type Receipt, hasFacet } from './live-messages';
 import { LiveService, type Unsubscribe } from './live.service';
 
@@ -45,7 +46,6 @@ export class ProjectFeed {
 
   follow(folder: string, follower: ProjectFollower, options: FollowOptions = {}): FollowHandle {
     const live = this.live;
-    const key = folderKey(folder);
     /** Highest revision accounted for; null before the baseline and any receipt. */
     let seen: number | null = null;
     let baselined = false;
@@ -71,7 +71,7 @@ export class ProjectFeed {
     };
 
     const onResync = (snapshot: LiveSnapshot): void => {
-      const revision = revisionIn(snapshot.projects, key);
+      const revision = entryFor(snapshot.projects, folder)?.revision;
       if (revision === undefined) return;
       if (!baselined) {
         held = Math.max(held ?? revision, revision);
@@ -91,7 +91,7 @@ export class ProjectFeed {
       let adopted = false;
       stops.push(
         effect(() => {
-          const entry = entryIn(live.projects(), key);
+          const entry = entryFor(live.projects(), folder);
           if (adopted || !entry?.seeded) return;
           adopted = true;
           untracked(() => baseline(entry.revision));
@@ -141,20 +141,4 @@ export class ProjectFeed {
       },
     };
   }
-}
-
-function folderKey(folder: string): string {
-  return folder.toLowerCase();
-}
-
-function entryIn<T>(byFolder: Record<string, T> | null | undefined, key: string): T | undefined {
-  const match = Object.keys(byFolder ?? {}).find((k) => folderKey(k) === key);
-  return match === undefined ? undefined : byFolder?.[match];
-}
-
-function revisionIn(
-  projects: LiveSnapshot['projects'] | null | undefined,
-  key: string,
-): number | undefined {
-  return entryIn(projects, key)?.revision;
 }

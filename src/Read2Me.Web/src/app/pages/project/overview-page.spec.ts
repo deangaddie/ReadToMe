@@ -267,6 +267,7 @@ describe('r2m-overview-page', () => {
 
   it('a nodeStatus delta taking attribution to 0 unassigned leaves Speakers waiting for its review', async () => {
     const page = await render();
+    live.seed('dracula');
     const step = (name: string) => page.querySelector<HTMLElement>(`[data-step="${name}"]`)!;
     const chip = (name: string) => text(step(name).querySelector('.r2m-pipeline__chip'));
     expect(step('Structure').getAttribute('aria-current')).toBe('step');

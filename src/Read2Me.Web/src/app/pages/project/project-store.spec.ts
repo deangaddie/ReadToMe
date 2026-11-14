@@ -6,7 +6,15 @@ import {
   VIEWING_READ_ONLY,
 } from '@app/api';
 import { Emitter } from '@app/core/emitter';
-import { IDLE_ASSEMBLY, IDLE_VOICE_BATCH } from '@app/live/live-state';
+import { keyFor } from '@app/live/folders';
+import {
+  IDLE_ASSEMBLY,
+  IDLE_VOICE_BATCH,
+  type LiveProject,
+  applyItemStatus,
+  applyNodeStatus,
+  emptyProject,
+} from '@app/live/live-state';
 import { override, resetServices, use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import type {
@@ -72,22 +80,28 @@ function statusDto(overrides: Partial<ProjectStatusDto> = {}): ProjectStatusDto 
   };
 }
 
-/** The slice of LiveService the store uses, over Emitters. */
+/**
+ * The slice of LiveService the store uses. Joined projects sit in {@link projects} as in the real
+ * service: unseeded until {@link answerJoin}, and folding every `nodeStatus` / `itemStatus` delta.
+ */
 class FakeLive {
-  readonly nodeStatus = new Emitter<NodeStatusMessage>();
-  readonly itemStatus = new Emitter<ItemStatusMessage>();
+  readonly nodeStatus = {
+    emit: (m: NodeStatusMessage) => this.fold(m.folder, (p) => applyNodeStatus(p, m)),
+  };
+  readonly itemStatus = {
+    emit: (m: ItemStatusMessage) => this.fold(m.folder, (p) => applyItemStatus(p, m)),
+  };
   readonly assemblyMessages = new Emitter<AssemblyMessage>();
   readonly assembly = signal<AssemblyState>(IDLE_ASSEMBLY);
   readonly voiceBatch = signal<VoiceBatchState>(IDLE_VOICE_BATCH);
   readonly receiptsEmitter = new Emitter<Receipt>();
   readonly resyncedEmitter = new Emitter<LiveSnapshot>();
-  readonly projects = signal<Record<string, ProjectSnapshot>>({});
+  readonly projects = signal<Record<string, LiveProject>>({});
   readonly joined: string[] = [];
   readonly left: string[] = [];
+  private readonly refs = new Map<string, number>();
 
   on(family: string, listener: (m: unknown) => void) {
-    if (family === 'nodeStatus') return this.nodeStatus.subscribe(listener);
-    if (family === 'itemStatus') return this.itemStatus.subscribe(listener);
     if (family === 'assembly') return this.assemblyMessages.subscribe(listener);
     throw new Error(`unexpected family ${family}`);
   }
@@ -99,9 +113,32 @@ class FakeLive {
   }
   async joinProject(folder: string) {
     this.joined.push(folder);
+    const count = this.refs.get(folder) ?? 0;
+    this.refs.set(folder, count + 1);
+    if (count === 0) this.projects.update((all) => ({ ...all, [folder]: emptyProject(folder) }));
   }
   async leaveProject(folder: string) {
     this.left.push(folder);
+    const count = (this.refs.get(folder) ?? 0) - 1;
+    if (count > 0) {
+      this.refs.set(folder, count);
+      return;
+    }
+    this.refs.delete(folder);
+    this.projects.update((all) => {
+      const next = { ...all };
+      delete next[folder];
+      return next;
+    });
+  }
+  /** The hub answers `JoinProject` (or a reconnect `GetSnapshot`) for a joined project. */
+  answerJoin(folder: string, snapshot: Partial<ProjectSnapshot> = {}) {
+    this.fold(folder, (p) => ({ ...p, ...snapshot, seeded: true }));
+  }
+  private fold(folder: string, change: (p: LiveProject) => LiveProject) {
+    const all = this.projects();
+    const key = keyFor(all, folder);
+    if (key !== undefined) this.projects.set({ ...all, [key]: change(all[key]!) });
   }
 }
 
@@ -155,12 +192,23 @@ describe('ProjectStore', () => {
 
   const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
-  async function open(status = statusDto(), outputs: unknown = []) {
+  /** Opens dracula; unless `joinAnswered` is false the hub answers the join as `/status` read it. */
+  async function open(status = statusDto(), outputs: unknown = [], joinAnswered = true) {
     api.on('GET', DETAIL_URL, DETAIL);
     api.on('GET', STATUS_URL, status);
     api.on('GET', OUTPUTS_URL, outputs);
     await store.open('dracula');
+    if (joinAnswered) answerJoin(status);
     await settle();
+  }
+
+  function answerJoin(status = statusDto(), more: Partial<ProjectSnapshot> = {}) {
+    live.answerJoin('dracula', {
+      revision: status.revision,
+      nodes: status.nodes,
+      folderAudioRemaining: status.audio.remaining,
+      ...more,
+    });
   }
 
   const exportStep = () => store.pipeline()?.find((s) => s.id === 'Export');
@@ -326,30 +374,27 @@ describe('ProjectStore', () => {
     });
   });
 
-  it('seeds item status from the live snapshot once the group is joined', async () => {
-    live.projects.set({
-      Dracula: {
-        folder: 'Dracula',
-        revision: 5,
-        nodes: {},
-        folderAudioRemaining: 0,
-        paragraphs: { p9: paragraphEntry({ status: 'Queued' }) },
-        items: { i9: itemEntry({ status: 'Processing' }) },
-      },
+  it('reads nodes from /status until the hub answers the join, then from the live entry', async () => {
+    await open(statusDto(), [], false);
+    live.nodeStatus.emit({ folder: 'dracula', nodes: { v1: null }, folderAudioRemaining: 0 });
+    expect(store.nodes()['v1']?.attributionRemaining).toBe(2);
+    expect(store.folderAudioRemaining()).toBe(2);
+
+    answerJoin(statusDto(), {
+      nodes: { v9: summary() },
+      folderAudioRemaining: 7,
+      paragraphs: { p9: paragraphEntry({ status: 'Queued' }) },
+      items: { i9: itemEntry({ status: 'Processing' }) },
     });
-    await open();
-    await settle();
+    expect(Object.keys(store.nodes())).toEqual(['v9']);
+    expect(store.folderAudioRemaining()).toBe(7);
     expect(store.paragraphs()['p9']).toEqual(paragraphEntry({ status: 'Queued' }));
     expect(store.audioInFlight()).toBe(1);
   });
 
-  it('seeds item status again from a reconnect snapshot', async () => {
+  it('takes a reconnect answer for the project whole, item status included', async () => {
     await open();
-    live.resyncedEmitter.emit({
-      projects: {
-        dracula: { revision: 5, paragraphs: {}, items: { i7: itemEntry({ status: 'Queued' }) } },
-      },
-    } as unknown as LiveSnapshot);
+    answerJoin(statusDto(), { items: { i7: itemEntry({ status: 'Queued' }) } });
     expect(store.audioInFlight()).toBe(1);
   });
 
@@ -363,56 +408,25 @@ describe('ProjectStore', () => {
       expect(store.readOnly()).toBeNull();
     });
 
-    it('drops status deltas while viewing, and applies them again after Back to current', async () => {
+    it('holds the step’s /status values against live deltas, and follows live again on return', async () => {
       await open();
       use(StepView).view('dracula', 's8');
+      api.on('GET', STATUS_URL, statusDto({ nodes: { v1: summary({ attributionRemaining: 9 }) } }));
+      await store.reload();
 
-      live.nodeStatus.emit({
-        folder: 'dracula',
-        nodes: { v1: null },
-        folderAudioRemaining: 0,
-      });
+      live.nodeStatus.emit({ folder: 'dracula', nodes: { v1: null }, folderAudioRemaining: 0 });
       live.itemStatus.emit({
         folder: 'dracula',
         paragraphs: {},
         items: { i1: itemEntry({ status: 'Queued' }) },
       });
-      expect(store.nodes()['v1']).toBeDefined();
+      expect(store.nodes()['v1']?.attributionRemaining).toBe(9);
       expect(store.folderAudioRemaining()).toBe(2);
       expect(store.audioInFlight()).toBe(0);
 
       use(StepView).clear('dracula');
-      live.nodeStatus.emit({
-        folder: 'dracula',
-        nodes: { v1: null },
-        folderAudioRemaining: 0,
-      });
-      live.itemStatus.emit({
-        folder: 'dracula',
-        paragraphs: {},
-        items: { i1: itemEntry({ status: 'Queued' }) },
-      });
       expect(store.nodes()['v1']).toBeUndefined();
       expect(store.folderAudioRemaining()).toBe(0);
-      expect(store.audioInFlight()).toBe(1);
-    });
-
-    it('back to current, the reload takes the item status the live snapshot moved to meanwhile', async () => {
-      await open();
-      use(StepView).view('dracula', 's8');
-      live.projects.set({
-        dracula: {
-          folder: 'dracula',
-          revision: 6,
-          nodes: {},
-          folderAudioRemaining: 0,
-          paragraphs: {},
-          items: { i4: itemEntry({ status: 'Processing' }) },
-        },
-      });
-
-      use(StepView).clear('dracula');
-      await store.reload();
       expect(store.audioInFlight()).toBe(1);
     });
   });

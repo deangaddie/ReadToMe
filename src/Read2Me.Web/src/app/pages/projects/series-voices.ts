@@ -5,6 +5,7 @@ import type {
   SeriesVoiceLossDto,
   VoiceDto,
 } from '@app/api';
+import { sameFolder } from '@app/live/folders';
 import { bookLabel } from './series-shelf';
 import type { ConfirmOptions } from '@app/ui/dialogs';
 import { list, pushSeriesVoicesConfirm, takeSeriesVoicesConfirm } from './permanent-changes';
@@ -119,7 +120,7 @@ export function resolveConfirm(
   losses: readonly SeriesVoiceLossDto[] = [],
 ): ConfirmOptions | null {
   // Folders compare ignoring case, as the host's do.
-  const book = detail.books.find((b) => b.folder.toLowerCase() === folder.toLowerCase());
+  const book = detail.books.find((b) => sameFolder(b.folder, folder));
   if (!book) return null;
   if (how === 'push')
     return pushSeriesVoicesConfirm({

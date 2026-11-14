@@ -13,6 +13,7 @@ import { use } from '@app/core/services';
 import { Emitter } from '@app/core/emitter';
 import { ORIGIN_ID } from '@app/api';
 import { ToastService } from '@app/ui/toast';
+import { folderKey, sameFolder } from './folders';
 import {
   LIVE_CONNECTION_FACTORY,
   LIVE_HUB_URL,
@@ -153,9 +154,8 @@ export class LiveService {
 
   /** Receipts for one project with `isOwn` set when this tab's `X-Origin-Id` produced the write. */
   receipts(folder: string, listener: (receipt: Receipt) => void): Unsubscribe {
-    const key = folderKey(folder);
     return this.on('receipt', (r) => {
-      if (folderKey(r.folder) === key) listener({ ...r, isOwn: r.originId === ORIGIN_ID });
+      if (sameFolder(r.folder, folder)) listener({ ...r, isOwn: r.originId === ORIGIN_ID });
     });
   }
 
@@ -437,10 +437,6 @@ export class LiveService {
   private projectKeyFor(folder: string): string | null {
     return this.projectRefs.get(folderKey(folder))?.folder ?? null;
   }
-}
-
-function folderKey(folder: string): string {
-  return folder.toLowerCase();
 }
 
 function delay(ms: number): Promise<void> {
