@@ -18,6 +18,7 @@ using Read2Me.Services.Pronunciations;
 using Read2Me.Services.Queueing;
 using Read2Me.TestUtils;
 using Read2Me.Tests.Infrastructure;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.Services.History;
@@ -44,7 +45,7 @@ public class RestoreTests : ProjectDbTestBase
         services.AddBookCommandHandlers();
         services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
         services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
-        services.AddSingleton<IProjectBusyAnswer>(_busy);
+        services.AddSingleton(BusyGate.With(_busy));
         services.AddScoped<IBookMutationImplementation<RestoreStepMutation>>(
             _ => new ThrowingRestore(new RestoreStepMutationImplementation(), this));
         _root = services.BuildServiceProvider();
@@ -442,7 +443,7 @@ public class RestoreTests : ProjectDbTestBase
         var target = await TipAsync();
         await CommitAsync(new CreateCharacterMutation(_folder, "Bob"));
         var before = await History.ListAsync(_folder);
-        _busy.Answer = new ProjectBusy([new BusySource(BusySourceKind.CharacterQueue, "Attribution: 3 paragraphs left")]);
+        _busy.Answer = new BusySource(BusySourceKind.CharacterQueue, "Attribution: 3 paragraphs left");
 
         var refused = Assert.IsType<RestoreOutcome.Refused>(await RestoreAsync(target));
 
@@ -492,7 +493,7 @@ public class RestoreTests : ProjectDbTestBase
     public async Task WhileBusy_AWriteStillApplies()
     {
         await SeedAsync();
-        _busy.Answer = new ProjectBusy([new BusySource(BusySourceKind.CharacterQueue, "Attribution: 3 paragraphs left")]);
+        _busy.Answer = new BusySource(BusySourceKind.CharacterQueue, "Attribution: 3 paragraphs left");
 
         Assert.IsType<BookMutationOutcome.Committed>(await CommitAsync(new CreateCharacterMutation(_folder, "Alice")));
     }
@@ -562,12 +563,12 @@ public class RestoreTests : ProjectDbTestBase
         }
     }
 
-    private sealed class FakeBusy : IProjectBusyAnswer
+    private sealed class FakeBusy : IBusySource
     {
-        public ProjectBusy? Answer { get; set; }
+        public BusySource? Answer { get; set; }
         public Action? OnAsked { get; set; }
 
-        public ProjectBusy? For(ProjectFolderId folder)
+        public BusySource? BusyFor(ProjectFolderId folder)
         {
             OnAsked?.Invoke();
             return Answer;

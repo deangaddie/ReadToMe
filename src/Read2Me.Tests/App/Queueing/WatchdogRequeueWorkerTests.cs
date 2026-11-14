@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.App.Queueing;
 using Read2Me.Core.Models;
+using Read2Me.Services.History;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Queueing;
 using Read2Me.Tests.Fakes;
@@ -18,7 +19,7 @@ namespace Read2Me.Tests.App.Queueing
         [Fact]
         public async Task RequeuedItem_WaitsOnClosedGate_ThenCompletesWhenReopened()
         {
-            var queue = new CharacterQueueService(NeverBusy.Activity());
+            var queue = new CharacterQueueService(new ProjectActivity());
             var gate = new ProcessingGate<QueuedParagraph>();
             var completed = new TaskCompletionSource();
             var attempts = new List<int>(); // Retries budget observed per processing attempt

@@ -3,7 +3,6 @@ using System.Threading.Channels;
 using Microsoft.AspNetCore.SignalR;
 using Read2Me.App.Api;
 using Read2Me.App.Characters;
-using Read2Me.App.Queueing;
 using Read2Me.App.Services.SetupCheck;
 using Read2Me.Core.Models;
 using Read2Me.Services.Audio;
@@ -85,7 +84,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
     private readonly AudiobookAssemblyService _assemblyService;
     private readonly VoiceBatchRunner _batchRunner;
     private readonly ThroughputAggregator _throughput;
-    private readonly ProjectBusyAnswer _busy;
+    private readonly ProjectActivity _activity;
     private readonly ILogger<LiveRelay> _logger;
     private readonly TimeProvider _clock;
 
@@ -138,7 +137,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         AudiobookAssemblyService assemblyService,
         VoiceBatchRunner batchRunner,
         ThroughputAggregator throughput,
-        ProjectBusyAnswer busy,
+        ProjectActivity activity,
         ILogger<LiveRelay> logger,
         TimeProvider? clock = null)
     {
@@ -165,7 +164,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
         _assemblyService = assemblyService;
         _batchRunner = batchRunner;
         _throughput = throughput;
-        _busy = busy;
+        _activity = activity;
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
 
@@ -514,7 +513,7 @@ public sealed class LiveRelay : IHostedService, IDisposable
                 await SendAsync(() => _hub.Clients.Group(LiveGroups.Project(folder))
                     .ItemStatus(new ItemStatusMessage(folder, paragraphDelta, itemDelta)));
 
-            var busy = _busy.For(id)?.Reason;
+            var busy = _activity.BusyFor(id)?.Reason;
             if (busy != last.Busy)
                 await SendAsync(() => _hub.Clients.Group(LiveGroups.Project(folder))
                     .History(LiveMessageMapper.BusyChanged(folder, busy)));

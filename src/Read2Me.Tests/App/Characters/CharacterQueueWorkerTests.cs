@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.App.Characters;
 using Read2Me.App.Queueing;
 using Read2Me.Core.Models;
+using Read2Me.Services.History;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Queueing;
 using Read2Me.Tests.Fakes;
@@ -17,7 +18,7 @@ namespace Read2Me.Tests.App.Characters
         [Fact]
         public async Task Worker_ContinuesAfterPerItemFailure()
         {
-            var queue = new CharacterQueueService(NeverBusy.Activity());
+            var queue = new CharacterQueueService(new ProjectActivity());
             var processed = new List<Guid>();
             var tcs = new TaskCompletionSource();
 

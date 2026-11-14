@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
-using Read2Me.App.Queueing;
 using Read2Me.Core.IO;
 using Read2Me.Services.History;
 
@@ -91,14 +90,14 @@ namespace Read2Me.App.Api
         }
 
         private static async Task<Results<Ok<HistoryDto>, NotFound>> ListAsync(
-            string folder, IFileSystem fs, ProjectHistory history, ProjectBusyAnswer busy, ProjectActivity activity, CancellationToken ct)
+            string folder, IFileSystem fs, ProjectHistory history, ProjectActivity activity, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return TypedResults.NotFound();
 
             var list = await history.ListAsync(folderId, ct);
             return TypedResults.Ok(new HistoryDto(
-                list.Steps, list.HeadStepId, busy.For(folderId) is { } b ? new HistoryBusyDto(b.Reason) : null,
+                list.Steps, list.HeadStepId, activity.BusyFor(folderId) is { } b ? new HistoryBusyDto(b.Reason) : null,
                 activity.IsRestoring(folderId)));
         }
 

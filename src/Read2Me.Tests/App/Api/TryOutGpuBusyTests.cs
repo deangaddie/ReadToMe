@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Read2Me.App.Api;
 using Read2Me.App.Characters;
 using Read2Me.Core.Models;
+using Read2Me.Services.History;
 using Read2Me.Services.Audio;
 using Read2Me.Services.Characters;
 using Read2Me.Services.Events;
@@ -28,7 +29,7 @@ public sealed class TryOutGpuBusyTests : IDisposable
 
     public TryOutGpuBusyTests()
     {
-        var activity = NeverBusy.Activity();
+        var activity = new ProjectActivity();
         (_characters, _audio) = (new(activity), new(activity));
         _voiceBatch = new VoiceBatchRunner(_batchScopes, activity, NullLogger<VoiceBatchRunner>.Instance,
             new EventBroadcaster<VoiceBatchEvent>(), new EventBroadcaster<LlmStreamEvent>());

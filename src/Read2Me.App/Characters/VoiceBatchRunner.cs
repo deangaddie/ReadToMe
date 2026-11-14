@@ -31,7 +31,7 @@ public abstract record VoiceBatchStart
     public sealed record Refused(ActivityRefusal Refusal) : VoiceBatchStart;
 }
 
-public sealed class VoiceBatchRunner
+public sealed class VoiceBatchRunner : IBusySource
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ProjectActivity _activity;
@@ -65,6 +65,7 @@ public sealed class VoiceBatchRunner
         _logger = logger;
         _batchEvents = batchEvents;
         _llmEvents = llmEvents;
+        activity.Register(this);
     }
 
     public VoiceBatchStart StartGeneratePrompts(ProjectFolderId folder, bool regenerateAll = false) =>
@@ -74,22 +75,29 @@ public sealed class VoiceBatchRunner
         Start("Generating audio", folder, ct => RunWithScopeAsync(new GenerateAudioPhase(), folder, ct));
 
     /// <summary>
-    /// Starts the batch unless one is running or the <see cref="ProjectActivity"/> gate refuses.
-    /// <see cref="ProjectActivity.MayEnqueue(ProjectFolderId)"/> is asked under the lock <see cref="BusyFor"/> takes,
-    /// so it can't race a Restore: one that claimed the project first is seen here, and one that
-    /// claims it after finds this batch running and is refused.
+    /// Starts the batch unless the <see cref="ProjectActivity"/> gate refuses or one is running.
+    /// The start is the gate's, so it can't race a Restore: one that claimed the project first
+    /// refuses it, and one that claims it after finds this batch running and is refused.
     /// </summary>
     private VoiceBatchStart Start(string operation, ProjectFolderId folder, Func<CancellationToken, Task> run)
     {
-        lock (_lock)
+        var start = _activity.TryStart<VoiceBatchStart>(folder, () =>
         {
-            if (IsRunning) return new VoiceBatchStart.AlreadyRunning();
-            if (_activity.MayEnqueue(folder) is { } refusal) return new VoiceBatchStart.Refused(refusal);
-            ResetState(operation, folder);
-            var ct = _cts!.Token;
-            Task.Run(() => run(ct));
-        }
-        return new VoiceBatchStart.Started();
+            lock (_lock)
+            {
+                if (IsRunning) return new VoiceBatchStart.AlreadyRunning();
+                ResetState(operation, folder);
+                var ct = _cts!.Token;
+                Task.Run(() => run(ct));
+            }
+            return new VoiceBatchStart.Started();
+        });
+        return start switch
+        {
+            ActivityStart<VoiceBatchStart>.Started(var started) => started,
+            ActivityStart<VoiceBatchStart>.Refused(var refusal) => new VoiceBatchStart.Refused(refusal),
+            _ => throw new InvalidOperationException($"Unhandled {start}."),
+        };
     }
 
     public void Cancel()

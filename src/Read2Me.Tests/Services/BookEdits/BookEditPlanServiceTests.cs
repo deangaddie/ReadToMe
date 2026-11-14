@@ -1,7 +1,6 @@
 using Read2Me.Core.Models;
 using Read2Me.Services.BookEdits;
 using Read2Me.Services.History;
-using Read2Me.Services.Queueing;
 using Xunit;
 
 namespace Read2Me.Tests.Services.BookEdits
@@ -16,7 +15,7 @@ namespace Read2Me.Tests.Services.BookEdits
     {
         private static readonly ProjectFolderId Folder = new("book-a");
 
-        private readonly ProjectActivity _activity = new(() => new NotBusy());
+        private readonly ProjectActivity _activity = new();
         private readonly BookEditSessionStore _sessions = new(TimeProvider.System);
         private readonly FakePlanner _planner = new();
         private readonly FakeResolver _resolver = new();
@@ -199,11 +198,6 @@ namespace Read2Me.Tests.Services.BookEdits
             var planned = Assert.IsType<EditPlanResult.Planned>(await PlanAsync());
 
             Assert.Equal([EditProgramDescriber.TitlesAlsoMatch(_resolver.TitleCounts)!], planned.Warnings);
-        }
-
-        private sealed class NotBusy : IProjectBusyAnswer
-        {
-            public ProjectBusy? For(ProjectFolderId folder) => null;
         }
 
         private sealed class FakePlanner() : BookEditPlanner(null!, null!, null!, null!, null!)

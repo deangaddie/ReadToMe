@@ -118,7 +118,6 @@ namespace Read2Me.Tests.Services.Characters
             services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
             services.AddSingleton(reader);
             services.AddSingleton<VoiceOrchestrator>(orchestrator);
-            services.AddSingleton<IProjectBusyAnswer>(NeverBusy.Instance);
             _root = services.BuildServiceProvider();
 
             var broadcaster = new EventBroadcaster<VoiceBatchEvent>();

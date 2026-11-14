@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Read2Me.App.Characters;
 using Read2Me.App.Live;
-using Read2Me.App.Queueing;
 using Read2Me.App.Services.SetupCheck;
 using Read2Me.Core.IO;
 using Read2Me.Core.Models;
@@ -43,7 +42,7 @@ public class LiveRelayTests : IAsyncLifetime
     private readonly EventBroadcaster<SettingsChanged> _settings = new();
     private readonly EventBroadcaster<SeriesChanged> _series = new();
     private readonly EventBroadcaster<SetupCheckChanged> _setupCheck = new();
-    private readonly ProjectActivity _activity = NeverBusy.Activity();
+    private readonly ProjectActivity _activity = new ProjectActivity();
     private readonly CharacterQueueService _attribution;
     private readonly AudioQueueService _audio;
     private readonly NodeStatusService _nodes;
@@ -61,7 +60,7 @@ public class LiveRelayTests : IAsyncLifetime
         var progress = new AttributionProgressState(_llm, _attribution);
         var assemblyService = new AudiobookAssemblyService(
             new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
-            Substitute.For<IAudiobookEncoder>(), _assembly, Substitute.For<IFileSystem>(),
+            Substitute.For<IAudiobookEncoder>(), _assembly, Substitute.For<IFileSystem>(), _activity,
             NullLogger<AudiobookAssemblyService>.Instance);
         var batchRunner = UnscopedVoiceBatch.Runner(_activity, _voiceBatch, _llm);
         var throughput = new ThroughputAggregator(_llm, new EventBroadcaster<LlmTimingsSample>());
@@ -69,7 +68,7 @@ public class LiveRelayTests : IAsyncLifetime
 
         _relay = new LiveRelay(_hub, _registry, status, _llm, _audioGen, _assembly, _voiceBatch, _watchdog, _serviceStatus, _receipts, _history, _restores,
             _settings, _series, _setupCheck, _attribution, _audio, _nodes, _reviews, progress, assemblyService, batchRunner, throughput,
-            new ProjectBusyAnswer(_attribution, _audio, batchRunner, assemblyService), NullLogger<LiveRelay>.Instance);
+            _activity, NullLogger<LiveRelay>.Instance);
         await _relay.StartAsync(CancellationToken.None);
     }
 
