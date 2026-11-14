@@ -103,26 +103,25 @@ public class VoiceBatchRunnerTests
     // ── Test 1: counter math ───────────────────────────────────────────────────
 
     [Fact]
-    public async Task RunPhaseAsync_AllSucceed_CountersCorrectAndBatchCompletedPublished()
+    public async Task RunPhaseAsync_AllSucceed_CountersCorrectAndEndsWithBatchCompleted()
     {
-        var (runner, events) = BuildRunner();
+        var (runner, _) = BuildRunner();
         var phase = new FakeSweepPhase(new[] { "a", "b", "c" });
 
-        await runner.RunPhaseAsync(phase, DummyDeps(), Folder, CancellationToken.None);
+        var ended = await runner.RunPhaseAsync(phase, DummyDeps(), Folder, CancellationToken.None);
 
         Assert.Equal(3, runner.Total);
         Assert.Equal(3, runner.Processed);
         Assert.Equal(0, runner.Failed);
-        Assert.False(runner.IsRunning);
-        Assert.Contains(events, e => e is BatchCompleted bc && bc.Processed == 3 && bc.Failed == 0);
+        Assert.Equal(new BatchCompleted(3, 0), ended);
     }
 
     // ── Test 2: cancel mid-sweep ───────────────────────────────────────────────
 
     [Fact]
-    public async Task RunPhaseAsync_CancelMidSweep_StopsAndPublishesBatchCancelled()
+    public async Task RunPhaseAsync_CancelMidSweep_StopsAndEndsWithBatchCancelled()
     {
-        var (runner, events) = BuildRunner();
+        var (runner, _) = BuildRunner();
         using var cts = new CancellationTokenSource();
         int callCount = 0;
 
@@ -135,11 +134,9 @@ public class VoiceBatchRunnerTests
                 return new PhaseStepOutcome(Ok: true, Update: null, FailReason: null);
             });
 
-        await runner.RunPhaseAsync(phase, DummyDeps(), Folder, cts.Token);
+        var ended = await runner.RunPhaseAsync(phase, DummyDeps(), Folder, cts.Token);
 
-        Assert.False(runner.IsRunning);
-        Assert.Contains(events, e => e is BatchCancelled);
-        Assert.DoesNotContain(events, e => e is BatchCompleted);
+        Assert.IsType<BatchCancelled>(ended);
         Assert.True(runner.Processed < 5);
     }
 
@@ -148,18 +145,18 @@ public class VoiceBatchRunnerTests
     [Fact]
     public async Task RunPhaseAsync_SoftFailOnOneItem_FailedIncrementedAndSweepContinues()
     {
-        var (runner, events) = BuildRunner();
+        var (runner, _) = BuildRunner();
         var phase = new FakeSweepPhase(
             items: new[] { "a", "b", "c" },
             step: item => item == "b"
                 ? new PhaseStepOutcome(Ok: false, Update: null, FailReason: "bad")
                 : new PhaseStepOutcome(Ok: true, Update: null, FailReason: null));
 
-        await runner.RunPhaseAsync(phase, DummyDeps(), Folder, CancellationToken.None);
+        var ended = await runner.RunPhaseAsync(phase, DummyDeps(), Folder, CancellationToken.None);
 
         Assert.Equal(3, runner.Processed);
         Assert.Equal(1, runner.Failed);
-        Assert.Contains(events, e => e is BatchCompleted bc && bc.Processed == 2 && bc.Failed == 1);
+        Assert.Equal(new BatchCompleted(2, 1), ended);
     }
 
     // ── Test 4: exception continue ────────────────────────────────────────────
@@ -167,7 +164,7 @@ public class VoiceBatchRunnerTests
     [Fact]
     public async Task RunPhaseAsync_StepThrowsNonOce_FailedIncrementedAndSweepContinues()
     {
-        var (runner, events) = BuildRunner();
+        var (runner, _) = BuildRunner();
         var phase = new FakeSweepPhase(
             items: new[] { "a", "b", "c" },
             step: item =>
@@ -176,11 +173,11 @@ public class VoiceBatchRunnerTests
                 return new PhaseStepOutcome(Ok: true, Update: null, FailReason: null);
             });
 
-        await runner.RunPhaseAsync(phase, DummyDeps(), Folder, CancellationToken.None);
+        var ended = await runner.RunPhaseAsync(phase, DummyDeps(), Folder, CancellationToken.None);
 
         Assert.Equal(3, runner.Processed);
         Assert.Equal(1, runner.Failed);
-        Assert.Contains(events, e => e is BatchCompleted bc && bc.Processed == 2 && bc.Failed == 1);
+        Assert.Equal(new BatchCompleted(2, 1), ended);
     }
 
     // ── Test 5: event order ────────────────────────────────────────────────────
@@ -198,15 +195,15 @@ public class VoiceBatchRunnerTests
                 ? new PhaseStepOutcome(Ok: true, Update: updateA, FailReason: null)
                 : new PhaseStepOutcome(Ok: true, Update: updateB, FailReason: null));
 
-        await runner.RunPhaseAsync(phase, DummyDeps(), Folder, CancellationToken.None);
+        var ended = await runner.RunPhaseAsync(phase, DummyDeps(), Folder, CancellationToken.None);
 
         Assert.IsType<BatchStarted>(events[0]);
         Assert.IsType<BatchProgress>(events[1]);
         Assert.IsType<VoiceUpdated>(events[2]);
         Assert.IsType<BatchProgress>(events[3]);
         Assert.IsType<VoiceUpdated>(events[4]);
-        Assert.IsType<BatchCompleted>(events[5]);
-        Assert.Equal(6, events.Count);
+        Assert.Equal(5, events.Count);
+        Assert.IsType<BatchCompleted>(ended);
     }
 
     // ── Throughput Run boundary ────────────────────────────────────────────────
@@ -287,7 +284,7 @@ public class VoiceBatchRunnerTests
     }
 
     [Fact]
-    public async Task RunPhaseAsync_EndsThroughputBeforePublishingTheTerminalBatchEvent()
+    public async Task RunPhaseAsync_EndsThroughputButLeavesTheTerminalBatchEventToTheScopesOwner()
     {
         var sequence = new List<object>();
         var batchEvents = new EventBroadcaster<VoiceBatchEvent>();
@@ -300,8 +297,10 @@ public class VoiceBatchRunnerTests
             new FakeSweepPhase(new[] { "a" }),
             DummyDeps(), Folder, CancellationToken.None);
 
-        Assert.IsType<RunEnded>(sequence[^2]);
-        Assert.IsType<BatchCompleted>(sequence[^1]);
+        // The terminal event follows once the batch's scope is disposed (RunWithScopeAsync), so
+        // the Throughput Run is closed before it repaints the progress UI.
+        Assert.IsType<RunEnded>(sequence[^1]);
+        Assert.DoesNotContain(sequence, e => e is BatchCompleted or BatchCancelled);
     }
 
     private sealed class ThrowingPlanPhase : ISweepPhase<string>

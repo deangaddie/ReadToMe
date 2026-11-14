@@ -136,21 +136,56 @@ public sealed class VoiceBatchRunner : IBusySource
         _cts = new CancellationTokenSource();
     }
 
+    /// <summary>
+    /// Runs the phase in its own scope, and ends the batch only once that scope (and the project
+    /// DB connection in it) is disposed: until then <see cref="BusyFor"/> still answers busy, so
+    /// the <see cref="ProjectActivity"/> gate can't let a delete or Restore in while it is open.
+    /// </summary>
     private async Task RunWithScopeAsync<TWork>(ISweepPhase<TWork> phase, ProjectFolderId folder, CancellationToken ct)
     {
-        await using var scope = _scopeFactory.CreateAsyncScope();
-        // What the batch commits is its project's Background run step in History.
-        scope.ServiceProvider.GetRequiredService<HistoryStepScope>().JoinBackgroundRuns(BackgroundRunKind.VoiceBatch);
-        var deps = new PhaseDeps(
-            scope.ServiceProvider.GetRequiredService<IProjectReader>(),
-            scope.ServiceProvider.GetRequiredService<BookMutations>(),
-            scope.ServiceProvider.GetRequiredService<IVoiceAudioRemover>(),
-            scope.ServiceProvider.GetRequiredService<VoiceOrchestrator>());
-        await RunPhaseAsync(phase, deps, folder, ct);
+        VoiceBatchEvent? terminalEvent = null;
+        try
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            // What the batch commits is its project's Background run step in History.
+            scope.ServiceProvider.GetRequiredService<HistoryStepScope>().JoinBackgroundRuns(BackgroundRunKind.VoiceBatch);
+            var deps = new PhaseDeps(
+                scope.ServiceProvider.GetRequiredService<IProjectReader>(),
+                scope.ServiceProvider.GetRequiredService<BookMutations>(),
+                scope.ServiceProvider.GetRequiredService<IVoiceAudioRemover>(),
+                scope.ServiceProvider.GetRequiredService<VoiceOrchestrator>());
+            terminalEvent = await RunPhaseAsync(phase, deps, folder, ct);
+        }
+        catch (OperationCanceledException) when (terminalEvent is null)
+        {
+            terminalEvent = new BatchCancelled();
+        }
+        catch (Exception ex)
+        {
+            // Building or disposing the scope failed; the phase's own failures never get here.
+            _logger.LogError(ex, "VoiceBatchRunner phase {Operation} failed", phase.Operation);
+            lock (_lock) { LastError ??= ex.Message; }
+            terminalEvent ??= new BatchCompleted(Processed - Failed, Failed);
+        }
+        End(terminalEvent);
     }
 
-    /// Pure envelope: takes already-built deps, creates no scope. Unit-under-test.
-    public async Task RunPhaseAsync<TWork>(
+    /// <summary>The batch is over: it stops reading busy, then says how it ended.</summary>
+    private void End(VoiceBatchEvent terminalEvent)
+    {
+        lock (_lock)
+        {
+            IsRunning = false;
+            CurrentVoiceName = null;
+            CurrentOperation = null;
+        }
+        _batchEvents.Publish(terminalEvent);
+    }
+
+    /// Pure envelope: takes already-built deps, creates no scope. Unit-under-test. Returns the
+    /// event that says how the batch ended without publishing it: the batch ends (stops reading
+    /// busy, then publishes that event) only once the caller has disposed its scope.
+    public async Task<VoiceBatchEvent> RunPhaseAsync<TWork>(
         ISweepPhase<TWork> phase,
         PhaseDeps deps,
         ProjectFolderId folder,
@@ -161,7 +196,6 @@ public sealed class VoiceBatchRunner : IBusySource
         // throws there is no run to end, and every other exit — completion, cancellation,
         // failure — must close the run or the next run's total is stranded.
         var runStarted = false;
-        VoiceBatchEvent? terminalEvent = null;
         try
         {
             lock (_lock) { CurrentOperation = phase.Operation; }
@@ -212,45 +246,25 @@ public sealed class VoiceBatchRunner : IBusySource
                 }
             }
 
-            lock (_lock)
-            {
-                IsRunning = false;
-                CurrentVoiceName = null;
-                CurrentOperation = null;
-            }
-            terminalEvent = new BatchCompleted(Processed - Failed, Failed);
+            return new BatchCompleted(Processed - Failed, Failed);
         }
         catch (OperationCanceledException)
         {
-            lock (_lock)
-            {
-                IsRunning = false;
-                CurrentVoiceName = null;
-                CurrentOperation = null;
-            }
-            terminalEvent = new BatchCancelled();
+            return new BatchCancelled();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "VoiceBatchRunner phase {Operation} failed", phase.Operation);
-            lock (_lock)
-            {
-                IsRunning = false;
-                CurrentVoiceName = null;
-                CurrentOperation = null;
-                LastError = ex.Message;
-            }
-            terminalEvent = new BatchCompleted(Processed - Failed, Failed);
+            lock (_lock) { LastError = ex.Message; }
+            return new BatchCompleted(Processed - Failed, Failed);
         }
         finally
         {
-            // Close the Throughput Run before the ordinary terminal batch event repaints the
-            // progress UI. The batch dialog can then pull the final snapshot and reveal its table
-            // without subscribing to the LLM stream or adding a throughput-specific repaint.
+            // Close the Throughput Run before End's terminal batch event repaints the progress UI.
+            // The batch dialog can then pull the final snapshot and reveal its table without
+            // subscribing to the LLM stream or adding a throughput-specific repaint.
             if (runStarted)
                 _llmEvents.Publish(new RunEnded());
-            if (terminalEvent is not null)
-                _batchEvents.Publish(terminalEvent);
         }
     }
 }
