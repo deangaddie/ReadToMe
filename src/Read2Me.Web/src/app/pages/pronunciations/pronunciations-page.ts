@@ -6,9 +6,7 @@ import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
 import { computed, signal, untracked } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
-import { hasFacet } from '@app/live/live-messages';
-import { LiveService } from '@app/live/live.service';
-import { Debounced } from '@app/shared/debounced';
+import { ProjectFeed } from '@app/live/project-feed';
 import { confirmDiscard } from '@app/shared/unsaved-changes';
 import { ConfirmService } from '@app/ui/dialogs';
 import { blockable, emptyState, icon, spinner, statusChip } from '@app/ui/partials';
@@ -32,12 +30,12 @@ const editingKey = (editing: Editing): string =>
  * Pronunciation list on the left — Add pronunciation, search, and a Written | Spoken | Items |
  * With audio table with a delete per row — and the one entry being edited on the right, in the
  * shared {@link PronunciationEditor}. On narrow screens the editor replaces the list. The list
- * rereads on every receipt carrying the `Pronunciations` facet (any tab's or agent's change), and
- * at the viewed step while one is viewed (read-only then).
+ * rereads on every receipt carrying the `Pronunciations` facet (any tab's or agent's change) and
+ * on a catch-up after a hub reconnect, at the viewed step while one is viewed (read-only then).
  */
 export class PronunciationsPage extends R2mElement {
   private readonly api = use(PronunciationsApi);
-  private readonly live = use(LiveService);
+  private readonly feed = use(ProjectFeed);
   private readonly writer = use(PronunciationWriter);
   private readonly confirm = use(ConfirmService);
   private readonly router = use(Router);
@@ -57,7 +55,6 @@ export class PronunciationsPage extends R2mElement {
       ? (this.entries().find((e) => e.id === editing.id) ?? null)
       : null;
   });
-  private readonly refetch = new Debounced(() => this.load());
 
   protected override connected(): void {
     this.classList.add('pron-page');
@@ -66,11 +63,9 @@ export class PronunciationsPage extends R2mElement {
       const folder = this.project.folder();
       if (!folder) return;
       untracked(() => void this.load());
-      return this.live.receipts(folder, (r) => {
-        if (hasFacet(r.effects.facets, 'Pronunciations')) this.refetch.schedule();
-      });
+      const following = this.feed.refetchOn(folder, ['Pronunciations'], () => this.load());
+      return () => following.close();
     });
-    this.onDisconnect(() => this.refetch.cancel());
     // `?entry=` (the Book view's Edit pencil): open that entry once the list holds it, then drop the param.
     this.effect(() => {
       const id = this.router.query().get('entry');

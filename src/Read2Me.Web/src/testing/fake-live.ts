@@ -2,7 +2,6 @@ import type {
   AssemblyState,
   LiveMessageMap,
   LiveSnapshot,
-  ProjectSnapshot,
   QueueMessage,
   ThroughputSnapshot,
   VoiceBatchState,
@@ -18,7 +17,7 @@ import type {
   StreamKind,
   WatchdogState,
 } from '@app/live/live-messages';
-import { IDLE_ASSEMBLY, IDLE_VOICE_BATCH } from '@app/live/live-state';
+import { IDLE_ASSEMBLY, IDLE_VOICE_BATCH, type LiveProject } from '@app/live/live-state';
 
 /**
  * The slice of `LiveService` the shell, the project store and the activity centre read, with
@@ -29,7 +28,8 @@ import { IDLE_ASSEMBLY, IDLE_VOICE_BATCH } from '@app/live/live-state';
 export class FakeLive {
   readonly state = signal<LiveConnectionState>('connected');
   readonly statusLabel = () => (this.state() === 'connected' ? 'Live updates connected' : 'Lost');
-  readonly projects = signal<Record<string, ProjectSnapshot>>({});
+  /** Joined projects as the hub answered for them; {@link seed} one so a `ProjectFeed` follower has its baseline. */
+  readonly projects = signal<Record<string, LiveProject>>({});
   readonly queue = signal<QueueMessage | null>(null);
   readonly assembly = signal<AssemblyState>(IDLE_ASSEMBLY);
   readonly voiceBatch = signal<VoiceBatchState>(IDLE_VOICE_BATCH);
@@ -69,6 +69,21 @@ export class FakeLive {
   /** Delivers a hub snapshot to every `resynced` listener, as a (re)connect does. */
   resync(snapshot = {} as LiveSnapshot): void {
     this.#resynced.emit(snapshot);
+  }
+  /** The hub answered `JoinProject` for `folder` at `revision`. */
+  seed(folder: string, revision = 1): void {
+    this.projects.update((all) => ({
+      ...all,
+      [folder]: {
+        folder,
+        revision,
+        nodes: {},
+        folderAudioRemaining: 0,
+        paragraphs: {},
+        items: {},
+        seeded: true,
+      },
+    }));
   }
   connectionId(): string | null {
     return 'fake-connection';

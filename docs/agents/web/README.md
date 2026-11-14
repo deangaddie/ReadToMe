@@ -38,6 +38,6 @@ oxlint's type-aware rules plus `eslint-plugin-lit` on templates; no `fetch` outs
 
 Methods, families, payloads and scopes are in [../api/live-hub.md](../api/live-hub.md). What the web app adds:
 
-- `LiveService` (`live/`, started once from `main.ts`) remembers joined groups, re-joins them after every reconnect, then re-reads the snapshot. The shell reads its `state` for the connection dot, also on `app-root` as `data-live-state` (the E2E ready hook).
+- `LiveService` (`live/`, started once from `main.ts`) remembers joined groups, re-joins them after every reconnect, then re-reads the snapshot. The shell reads its `state` for the connection dot, also on `app-root` as `data-live-state` (the E2E ready hook). A view follows a project through `ProjectFeed` (`live/project-feed.ts`), never `live.receipts` / `live.resynced` directly, so it catches up on what it missed while the hub was away.
 - Every hub record is generated into `schema.d.ts` (ADR 0017), so a drifted field fails `typecheck` once `pwsh scripts/api-types.ps1` regenerates the contract; `live-messages.ts` keeps only what has no wire counterpart.
 - A new family needs its `ILiveClient` method on the host, then its name in `LIVE_FAMILIES`, which typecheck holds to the document.

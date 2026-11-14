@@ -112,8 +112,17 @@ function mergeDeltas<T>(
   return next;
 }
 
-export function emptyProject(folder: string): ProjectSnapshot {
+/**
+ * A joined project as `LiveService` holds it: the hub's snapshot plus the deltas applied since.
+ * `seeded` is set once a `JoinProject` or `GetSnapshot` answer has landed, so "nothing there yet"
+ * differs from "empty".
+ */
+export type LiveProject = ProjectSnapshot & { readonly seeded: boolean };
+
+/** A project joined but not answered yet. */
+export function emptyProject(folder: string): LiveProject {
   return {
+    seeded: false,
     folder,
     revision: 0,
     nodes: {},
@@ -123,7 +132,7 @@ export function emptyProject(folder: string): ProjectSnapshot {
   };
 }
 
-export function applyNodeStatus(project: ProjectSnapshot, m: NodeStatusMessage): ProjectSnapshot {
+export function applyNodeStatus<P extends ProjectSnapshot>(project: P, m: NodeStatusMessage): P {
   return {
     ...project,
     nodes: mergeDeltas(project.nodes, m.nodes),
@@ -131,7 +140,7 @@ export function applyNodeStatus(project: ProjectSnapshot, m: NodeStatusMessage):
   };
 }
 
-export function applyItemStatus(project: ProjectSnapshot, m: ItemStatusMessage): ProjectSnapshot {
+export function applyItemStatus<P extends ProjectSnapshot>(project: P, m: ItemStatusMessage): P {
   return {
     ...project,
     paragraphs: mergeDeltas(project.paragraphs, m.paragraphs),

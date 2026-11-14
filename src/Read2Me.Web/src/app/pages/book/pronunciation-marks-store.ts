@@ -1,8 +1,7 @@
 import { type Guid, PronunciationsApi } from '@app/api';
 import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
-import { hasFacet } from '@app/live/live-messages';
-import { LiveService, type Unsubscribe } from '@app/live/live.service';
+import { type FollowHandle, ProjectFeed } from '@app/live/project-feed';
 import { Debounced } from '@app/shared/debounced';
 import { type IndexedMarks, NO_MARKS, indexSpans } from './pronunciation-marks';
 
@@ -15,14 +14,14 @@ import { type IndexedMarks, NO_MARKS, indexSpans } from './pronunciation-marks';
  */
 export class PronunciationMarks {
   private readonly api = use(PronunciationsApi);
-  private readonly live = use(LiveService);
+  private readonly feed = use(ProjectFeed);
 
   private readonly _marks = signal<IndexedMarks>(NO_MARKS);
   readonly marks = this._marks.asReadonly();
 
   private folder: string | null = null;
   private chapterIds: readonly Guid[] = [];
-  private unsubscribe: Unsubscribe | null = null;
+  private following: FollowHandle | null = null;
   private seq = 0;
   private readonly refetch = new Debounced(() => this.load());
 
@@ -31,17 +30,15 @@ export class PronunciationMarks {
     if (folder !== this.folder) {
       this.close();
       this.folder = folder;
-      this.unsubscribe = this.live.receipts(folder, (r) => {
-        if (hasFacet(r.effects.facets, 'Pronunciations')) this.refetch.schedule();
-      });
+      this.following = this.feed.refetchOn(folder, ['Pronunciations'], () => this.load());
     }
     this.chapterIds = chapterIds;
     this.refetch.schedule();
   }
 
   close(): void {
-    this.unsubscribe?.();
-    this.unsubscribe = null;
+    this.following?.close();
+    this.following = null;
     this.refetch.cancel();
     this.folder = null;
     this.chapterIds = [];

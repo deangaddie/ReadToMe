@@ -16,8 +16,8 @@ import {
 } from '@app/api';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
-import { type Receipt, hasFacet } from '@app/live/live-messages';
 import { LiveService, type Unsubscribe } from '@app/live/live.service';
+import { type FollowHandle, ProjectFeed } from '@app/live/project-feed';
 import { Debounced } from '@app/shared/debounced';
 import { ToastService } from '@app/ui/toast';
 import type { AliasOwner } from './alias-collisions';
@@ -45,8 +45,9 @@ export const SERIES_VOICES_READ_ONLY =
 /**
  * The cast page's state (ticket 15, design §9 "Cast"): the roster summary, the selected character,
  * its lines and its voices (16). Writes post a command and reload from the response (design §8
- * "optimistic nothing"); receipts from elsewhere — another tab, an agent, an attribution run —
- * reload too, debounced per burst. A running voice batch patches the selected character's voices in
+ * "optimistic nothing"); changes from elsewhere — another tab, an agent, an attribution run, or
+ * what was missed while the hub was away — reload too, through the {@link ProjectFeed}, debounced
+ * per burst. A running voice batch patches the selected character's voices in
  * place from `voiceBatch.voiceUpdated` and reloads on `completed`. Provided by the cast page, so it
  * lives as long as the page does.
  */
@@ -55,10 +56,12 @@ export class CastStore {
   private readonly voicesApi = use(VoicesApi);
   private readonly book = use(BookApi);
   private readonly live = use(LiveService);
+  private readonly feed = use(ProjectFeed);
   private readonly toast = use(ToastService);
   private readonly stepView = use(StepView);
 
   private subscriptions: Unsubscribe[] = [];
+  private following: FollowHandle | null = null;
   private readonly refetch = new Debounced(() => this.refresh());
 
   private readonly _folder = signal<string | null>(null);
@@ -134,16 +137,18 @@ export class CastStore {
   /** Any character has a voice — the prompt batch then asks for its scope (research §4). */
   readonly anyVoices = computed(() => this._rows().some((r) => r.voiceCount > 0));
 
-  /** Loads the roster and listens for receipts that change it. */
+  /** Loads the roster and follows the project for changes to it. */
   async open(folder: string): Promise<void> {
     this.close();
     this._folder.set(folder);
     this._rows.set([]);
     this._error.set(null);
-    this.subscriptions = [
-      this.live.receipts(folder, (r) => this.onReceipt(r)),
-      this.live.on('voiceBatch', (m) => this.onVoiceBatch(m)),
-    ];
+    this.following = this.feed.refetchOn(
+      folder,
+      () => this.facets(),
+      () => this.refresh(),
+    );
+    this.subscriptions = [this.live.on('voiceBatch', (m) => this.onVoiceBatch(m))];
 
     this._loading.set(true);
     try {
@@ -158,6 +163,8 @@ export class CastStore {
 
   close(): void {
     for (const unsubscribe of this.subscriptions) unsubscribe();
+    this.following?.close();
+    this.following = null;
     this.subscriptions = [];
     this.refetch.cancel();
     this._folder.set(null);
@@ -266,9 +273,9 @@ export class CastStore {
     }
   }
 
-  private onReceipt(r: Receipt): void {
-    const facets = this._selectedId() ? [...CAST_FACETS, ...VOICE_RULE_FACETS] : CAST_FACETS;
-    if (facets.some((f) => hasFacet(r.effects.facets, f))) this.refetch.schedule();
+  /** The facets that change what the page shows: more while a character is selected. */
+  private facets(): readonly BookFacets[] {
+    return this._selectedId() ? [...CAST_FACETS, ...VOICE_RULE_FACETS] : CAST_FACETS;
   }
 
   /**

@@ -5,29 +5,19 @@ import type {
   VoiceDto,
   BookFacets,
   ReceiptMessage,
-  VoiceBatchMessage,
 } from '@app/api';
-import { Emitter } from '@app/core/emitter';
 import { override, resetServices } from '@app/core/services';
 import type { Receipt } from '@app/live/live-messages';
-import { LiveService } from '@app/live/live.service';
 import { REFETCH_DEBOUNCE_MS } from '@app/shared/debounced';
 import { ToastService } from '@app/ui/toast';
 import { FakeApi, problem } from '../../../testing/fake-api';
+import { FakeLive } from '../../../testing/fake-live';
+import { projectSnapshot } from '../../../testing/fake-hub-connection';
 import { CastStore } from './cast-store';
 import { voiceBatchMessage } from '../../../testing/live-messages';
 
-/** The slice of LiveService the store uses: project receipts and voice-batch messages over Emitters. */
-class FakeLive {
-  readonly receiptsEmitter = new Emitter<Receipt>();
-  readonly voiceBatchEmitter = new Emitter<VoiceBatchMessage>();
-  receipts(_folder: string, listener: (r: Receipt) => void) {
-    return this.receiptsEmitter.subscribe(listener);
-  }
-  on(family: string, listener: (m: VoiceBatchMessage) => void) {
-    return family === 'voiceBatch' ? this.voiceBatchEmitter.subscribe(listener) : () => undefined;
-  }
-}
+/** The Cast page follows "dracula": the hub has answered for it, so the feed has its baseline. */
+const REVISION = 1;
 
 const SUMMARY = '/api/projects/dracula/characters/summary';
 const LINES = '/api/projects/dracula/characters/alice/lines';
@@ -77,7 +67,7 @@ function receipt(facets: BookFacets[]): Receipt {
     folder: 'dracula',
     mutationName: 'X',
     mutationId: 'm',
-    revision: 1,
+    revision: REVISION,
     effects: {
       scope: 'Exact',
       createdId: null,
@@ -105,8 +95,8 @@ beforeEach(() => {
   resetServices();
   api = new FakeApi();
   api.install();
-  live = new FakeLive();
-  override(LiveService, live as unknown as LiveService);
+  live = new FakeLive().install();
+  live.seed('dracula', REVISION);
   problems = [];
   override(ToastService, { problem: (p: unknown) => problems.push(p) } as unknown as ToastService);
   store = new CastStore();
@@ -171,8 +161,8 @@ describe('CastStore', () => {
     api.on('GET', SUMMARY, [row('Narrator'), row('Alice', 3)]);
     api.on('GET', LINES, [{ itemId: 'i1', paragraphId: 'p1', chapterId: 'c1', text: 'New' }]);
     api.on('GET', VOICES, voiceList([{ name: 'New' }]));
-    live.receiptsEmitter.emit(receipt(['Characters']));
-    live.receiptsEmitter.emit(receipt(['Attribution', 'Audio']));
+    live.emit('receipt', receipt(['Characters']));
+    live.emit('receipt', receipt(['Attribution', 'Audio']));
     expect(api.calls('GET', SUMMARY)).toHaveLength(1);
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', SUMMARY)).toHaveLength(2);
@@ -183,13 +173,28 @@ describe('CastStore', () => {
     expect(store.voices().voices.map((v) => v.name)).toEqual(['New']);
   });
 
+  it('reloads after a hub reconnect whose snapshot is ahead of what it saw, and not otherwise', async () => {
+    await open();
+    live.resync({ projects: { dracula: projectSnapshot('dracula', REVISION) } } as never);
+    await settle(REFETCH_DEBOUNCE_MS + 20);
+    expect(api.calls('GET', SUMMARY)).toHaveLength(1);
+
+    // A character added in another browser while the hub was away: no receipt reached this tab.
+    api.on('GET', SUMMARY, [row('Narrator'), row('Alice', 2), row('Van Helsing')]);
+    live.resync({ projects: { dracula: projectSnapshot('dracula', REVISION + 2) } } as never);
+    await settle(REFETCH_DEBOUNCE_MS + 20);
+    expect(api.calls('GET', SUMMARY)).toHaveLength(2);
+    expect(store.rows().map((r) => r.name)).toEqual(['Narrator', 'Alice', 'Van Helsing']);
+  });
+
   it('a batch voiceUpdated patches the selected voice in place and bumps its audio version', async () => {
     await open();
     api.on('GET', LINES, []);
     api.on('GET', VOICES, voiceList([{ id: 'v1' }, { id: 'v2', name: 'Other' }]));
     await store.select('alice');
 
-    live.voiceBatchEmitter.emit(
+    live.emit(
+      'voiceBatch',
       voiceBatchMessage({
         kind: 'VoiceUpdated',
         characterId: 'alice',
@@ -205,7 +210,8 @@ describe('CastStore', () => {
     expect(api.calls('GET', VOICES)).toHaveLength(1);
 
     // Another character's voice is not this panel's business.
-    live.voiceBatchEmitter.emit(
+    live.emit(
+      'voiceBatch',
       voiceBatchMessage({
         kind: 'VoiceUpdated',
         characterId: 'bob',
@@ -222,7 +228,8 @@ describe('CastStore', () => {
     await store.select('alice');
 
     api.on('GET', VOICES, voiceList([{ id: 'v-new', designPrompt: 'x' }]));
-    live.voiceBatchEmitter.emit(
+    live.emit(
+      'voiceBatch',
       voiceBatchMessage({
         kind: 'VoiceUpdated',
         characterId: 'alice',
@@ -230,7 +237,7 @@ describe('CastStore', () => {
         designPrompt: 'x',
       }),
     );
-    live.voiceBatchEmitter.emit(voiceBatchMessage({ kind: 'Completed', processed: 1, failed: 0 }));
+    live.emit('voiceBatch', voiceBatchMessage({ kind: 'Completed', processed: 1, failed: 0 }));
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', SUMMARY)).toHaveLength(2);
     expect(api.calls('GET', VOICES)).toHaveLength(2);
@@ -239,7 +246,7 @@ describe('CastStore', () => {
 
   it('a VoiceRules or Structure receipt reloads the selected rules and preview, but only with a selection', async () => {
     await open();
-    live.receiptsEmitter.emit(receipt(['Structure']));
+    live.emit('receipt', receipt(['Structure']));
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', SUMMARY)).toHaveLength(1);
 
@@ -265,7 +272,7 @@ describe('CastStore', () => {
       },
     ]);
     api.on('GET', PREVIEW, [{ chapterId: 'c1', chapterTitle: 'One', voiceName: 'Main' }]);
-    live.receiptsEmitter.emit(receipt(['VoiceRules']));
+    live.emit('receipt', receipt(['VoiceRules']));
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', SUMMARY)).toHaveLength(2);
     expect(api.calls('GET', RULES)).toHaveLength(2);
@@ -292,7 +299,7 @@ describe('CastStore', () => {
 
   it('ignores receipts that touch nothing the roster shows', async () => {
     await open();
-    live.receiptsEmitter.emit(receipt(['ItemText', 'NodeTitle']));
+    live.emit('receipt', receipt(['ItemText', 'NodeTitle']));
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', SUMMARY)).toHaveLength(1);
   });
@@ -335,7 +342,7 @@ describe('CastStore', () => {
     await open();
     store.close();
     expect(store.folder()).toBeNull();
-    live.receiptsEmitter.emit(receipt(['Characters']));
+    live.emit('receipt', receipt(['Characters']));
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', SUMMARY)).toHaveLength(1);
   });
