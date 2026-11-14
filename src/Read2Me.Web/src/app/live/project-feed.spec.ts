@@ -231,6 +231,14 @@ describe('ProjectFeed', () => {
       expect(heard).toEqual([]);
     });
 
+    it('a held snapshot level with the read catches nothing up', async () => {
+      await connectJoined();
+      const { heard, handle } = follow(FOLDER, { baseline: 'await' });
+      await reconnectAt(7);
+      handle.baseline(7);
+      expect(heard).toEqual([]);
+    });
+
     it('a repeated baseline only ever raises the revision seen', async () => {
       await connectJoined();
       const { heard, handle } = follow(FOLDER, { baseline: 'await' });
@@ -247,14 +255,21 @@ describe('ProjectFeed', () => {
   });
 
   describe('refetchOn', () => {
-    function refetchOn(facets: Parameters<ProjectFeed['refetchOn']>[1]) {
+    function refetchOn(
+      facets: Parameters<ProjectFeed['refetchOn']>[1],
+      options: { baseline?: 'await' } = {},
+    ) {
       let reads = 0;
-      handles.push(
-        feed.refetchOn(FOLDER, facets, async () => {
+      const handle = feed.refetchOn(
+        FOLDER,
+        facets,
+        async () => {
           reads++;
-        }),
+        },
+        options,
       );
-      return { reads: () => reads };
+      handles.push(handle);
+      return { reads: () => reads, handle };
     }
 
     it('refetches once per burst of receipts with a wanted facet, and not for others', async () => {
@@ -294,6 +309,22 @@ describe('ProjectFeed', () => {
 
       facets = ['Characters', 'VoiceRules'];
       connection().emit('receipt', receipt(7, ['VoiceRules']));
+      await timers.advance(REFETCH_DEBOUNCE_MS);
+      expect(reads()).toBe(1);
+    });
+
+    it("with { baseline: 'await' }, holds a snapshot until the baseline and refetches when it is ahead", async () => {
+      await connectJoined();
+      const { reads, handle } = refetchOn(['Pronunciations'], { baseline: 'await' });
+      await reconnectAt(7);
+      await timers.advance(REFETCH_DEBOUNCE_MS);
+      expect(reads()).toBe(0);
+
+      handle.baseline(6);
+      await timers.advance(REFETCH_DEBOUNCE_MS);
+      expect(reads()).toBe(1);
+      // Seen is the snapshot now: the next receipt is no gap.
+      connection().emit('receipt', receipt(8, ['Characters']));
       await timers.advance(REFETCH_DEBOUNCE_MS);
       expect(reads()).toBe(1);
     });

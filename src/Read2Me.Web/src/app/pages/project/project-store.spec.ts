@@ -168,10 +168,9 @@ describe('ProjectStore', () => {
   it('loads detail + status, joins the project group and names the breadcrumb', async () => {
     await open();
 
-    expect(live.joined).toEqual(['dracula']);
+    expect(live.joined).toContain('dracula');
     expect(store.detail()?.title).toBe('Dracula');
     expect(store.status()?.revision).toBe(5);
-    expect(store.revision()).toBe(5);
     expect(store.nodes()['v1']?.attributionRemaining).toBe(2);
     expect(store.folderAudioRemaining()).toBe(2);
     expect(use(ProjectTitles).titles()['dracula']).toBe('Dracula');
@@ -228,7 +227,6 @@ describe('ProjectStore', () => {
 
     live.receiptsEmitter.emit(receipt(6, ['Structure']));
     live.receiptsEmitter.emit(receipt(7, ['Structure', 'Audio']));
-    expect(store.revision()).toBe(7);
     expect(api.calls('GET', STATUS_URL)).toHaveLength(1);
 
     await settle(REFETCH_DEBOUNCE_MS + 20);
@@ -269,7 +267,7 @@ describe('ProjectStore', () => {
     live.receiptsEmitter.emit(receipt(9, ['VoiceRules']));
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', STATUS_URL)).toHaveLength(2);
-    expect(store.revision()).toBe(9);
+    expect(store.status()?.revision).toBe(9);
   });
 
   it('Characters / Narrator / ProjectPolicy receipts refetch the detail', async () => {
@@ -281,7 +279,14 @@ describe('ProjectStore', () => {
     expect(store.detail()?.narratorOnlyMode).toBe(true);
   });
 
-  it('a resync whose project revision is ahead refetches status', async () => {
+  it('a revision gap refetches the detail too', async () => {
+    await open();
+    live.receiptsEmitter.emit(receipt(9, ['VoiceRules']));
+    await settle(REFETCH_DEBOUNCE_MS + 20);
+    expect(api.calls('GET', DETAIL_URL)).toHaveLength(2);
+  });
+
+  it('a resync whose project revision is ahead refetches status and the detail, once', async () => {
     await open();
     api.on('GET', STATUS_URL, statusDto({ revision: 8 }));
     live.resyncedEmitter.emit({
@@ -289,6 +294,7 @@ describe('ProjectStore', () => {
     } as unknown as LiveSnapshot);
     await settle(REFETCH_DEBOUNCE_MS + 20);
     expect(api.calls('GET', STATUS_URL)).toHaveLength(2);
+    expect(api.calls('GET', DETAIL_URL)).toHaveLength(2);
 
     live.resyncedEmitter.emit({
       projects: { dracula: { revision: 8 } },
@@ -313,15 +319,10 @@ describe('ProjectStore', () => {
       await settle(REFETCH_DEBOUNCE_MS + 20);
     }
 
-    it('reads status once when the snapshot matches what /status read', async () => {
-      await snapshotThenStatus(5);
-      expect(api.calls('GET', STATUS_URL)).toHaveLength(1);
-    });
-
     it('refetches status when the snapshot is ahead of what /status read', async () => {
       await snapshotThenStatus(8);
       expect(api.calls('GET', STATUS_URL)).toHaveLength(2);
-      expect(store.revision()).toBe(8);
+      expect(store.status()?.revision).toBe(8);
     });
   });
 
@@ -339,6 +340,16 @@ describe('ProjectStore', () => {
     await open();
     await settle();
     expect(store.paragraphs()['p9']).toEqual(paragraphEntry({ status: 'Queued' }));
+    expect(store.audioInFlight()).toBe(1);
+  });
+
+  it('seeds item status again from a reconnect snapshot', async () => {
+    await open();
+    live.resyncedEmitter.emit({
+      projects: {
+        dracula: { revision: 5, paragraphs: {}, items: { i7: itemEntry({ status: 'Queued' }) } },
+      },
+    } as unknown as LiveSnapshot);
     expect(store.audioInFlight()).toBe(1);
   });
 
@@ -409,7 +420,7 @@ describe('ProjectStore', () => {
   it('close leaves the group and stops listening', async () => {
     await open();
     store.close();
-    expect(live.left).toEqual(['dracula']);
+    expect(live.left).toEqual(live.joined);
     live.nodeStatus.emit({ folder: 'dracula', nodes: { v1: null }, folderAudioRemaining: 0 });
     expect(store.nodes()['v1']).toBeDefined();
   });

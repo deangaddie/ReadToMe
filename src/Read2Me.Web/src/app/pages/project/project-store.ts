@@ -17,10 +17,10 @@ import {
 } from '@app/api';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
-import { type Receipt, hasFacet } from '@app/live/live-messages';
 import { LiveService, type Unsubscribe } from '@app/live/live.service';
+import { type FollowHandle, ProjectFeed } from '@app/live/project-feed';
 import { ProjectTitles } from '@app/shell/project-titles';
-import { Debounced, REFETCH_DEBOUNCE_MS } from '@app/shared/debounced';
+import { REFETCH_DEBOUNCE_MS } from '@app/shared/debounced';
 import { type PipelineStep, derivePipeline } from './pipeline-steps';
 
 export { REFETCH_DEBOUNCE_MS };
@@ -45,31 +45,30 @@ type StatusMap<T> = Record<string, T | null>;
 /**
  * One project's state for every route under `/projects/{folder}` (design §9), provided by the
  * project shell. Holds the detail and the `/status` bootstrap, keeps the node and item status maps
- * current from hub deltas, and turns receipts into refetches — never into entity patches (spec D6):
- * a receipt whose facets move a count, or whose revision skips one, refetches `/status`; one that
- * touches the narrator or project policy refetches the detail. It also owns the nine-step
- * {@link pipeline} and its last input: the newest build, read on open and again when this
- * project's assembly completes, plus the hub's voice-batch and assembly flags.
+ * current from hub deltas, and turns receipts into refetches — never into entity patches (spec D6).
+ * It follows the project through two {@link ProjectFeed} handles, both baselined by every `/status`
+ * answer: a receipt whose facets move a count refetches `/status`, one that touches the narrator
+ * or project policy refetches the detail, and a gap or a catch-up refetches both. It also owns
+ * the nine-step {@link pipeline} and its last input: the newest build, read on open and again when
+ * this project's assembly completes, plus the hub's voice-batch and assembly flags.
  */
 export class ProjectStore {
   private readonly api = use(ProjectsApi);
   private readonly assembly = use(AssemblyApi);
   private readonly live = use(LiveService);
+  private readonly feed = use(ProjectFeed);
   private readonly titles = use(ProjectTitles);
   private readonly stepView = use(StepView);
 
   private subscriptions: Unsubscribe[] = [];
+  /** The `/status` and detail refetches; both take every `/status` revision as their baseline. */
+  private following: FollowHandle[] = [];
   /** Bumped per detail + status read, so a read overtaken by a newer one (at another step) lands nowhere. */
   private loads = 0;
-  private readonly statusRefetch = new Debounced(() => this.refreshStatus());
-  private readonly detailRefetch = new Debounced(() => this.refreshDetail());
-  /** The highest snapshot revision that arrived before `/status` answered, compared once it does. */
-  private heldSnapshot: number | null = null;
 
   private readonly _folder = signal<string | null>(null);
   private readonly _detail = signal<ProjectDetailDto | null>(null);
   private readonly _status = signal<ProjectStatusDto | null>(null);
-  private readonly _revision = signal(0);
   private readonly _nodes = signal<StatusMap<NodeStatusSummaryDto>>({});
   private readonly _folderAudioRemaining = signal(0);
   private readonly _paragraphs = signal<StatusMap<ParagraphStatusEntry>>({});
@@ -83,8 +82,6 @@ export class ProjectStore {
   readonly detail = this._detail.asReadonly();
   /** The last `/status` read; its `nodes` and `audio.remaining` go stale — read {@link nodes} instead. */
   readonly status = this._status.asReadonly();
-  /** Highest book revision seen, from `/status` or a receipt. */
-  readonly revision = this._revision.asReadonly();
   readonly nodes = this._nodes.asReadonly();
   readonly folderAudioRemaining = this._folderAudioRemaining.asReadonly();
   readonly paragraphs = this._paragraphs.asReadonly();
@@ -131,18 +128,23 @@ export class ProjectStore {
     this._status.set(null);
     this._error.set(null);
     this._lastOutput.set(null);
-    this.heldSnapshot = null;
 
+    // Item status (#368 moves it onto the live entry): joined first, so this join is the one that
+    // waits for the hub's answer, and seeded again from every reconnect snapshot.
+    void this.live.joinProject(folder).then(() => this.seedItemsFromLive());
     this.subscriptions = [
       this.live.on('nodeStatus', (m) => this.applyNodeStatus(m)),
       this.live.on('itemStatus', (m) => this.applyItemStatus(m)),
-      this.live.receipts(folder, (r) => this.onReceipt(r)),
-      this.live.resynced((s) => this.onResync(s)),
+      this.live.resynced((s) => this.seedItemsFromSnapshot(s)),
       this.live.on('assembly', (m) => {
         if (m.kind === 'Completed' && this.isMine(m.folder ?? folder)) void this.loadLastOutput();
       }),
     ];
-    void this.live.joinProject(folder).then(() => this.seedItemsFromLive());
+    const awaitStatus = { baseline: 'await' } as const;
+    this.following = [
+      this.feed.refetchOn(folder, STATUS_FACETS, () => this.refreshStatus(), awaitStatus),
+      this.feed.refetchOn(folder, DETAIL_FACETS, () => this.refreshDetail(), awaitStatus),
+    ];
     void this.loadLastOutput();
     await this.load(folder);
   }
@@ -181,7 +183,8 @@ export class ProjectStore {
   close(): void {
     for (const unsubscribe of this.subscriptions) unsubscribe();
     this.subscriptions = [];
-    this.clearTimers();
+    for (const handle of this.following) handle.close();
+    this.following = [];
     const folder = this._folder();
     if (folder) void this.live.leaveProject(folder);
     this._folder.set(null);
@@ -221,12 +224,9 @@ export class ProjectStore {
 
   private applyStatus(status: ProjectStatusDto): void {
     this._status.set(status);
-    this._revision.set(status.revision);
     this._nodes.set(status.nodes);
     this._folderAudioRemaining.set(status.audio.remaining);
-    const held = this.heldSnapshot;
-    this.heldSnapshot = null;
-    if (held !== null && held > status.revision) this.scheduleStatus();
+    for (const handle of this.following) handle.baseline(status.revision);
   }
 
   /** A viewing tab shows the past project: live status deltas would move its pills on with today's. */
@@ -242,28 +242,9 @@ export class ProjectStore {
     this._items.update((i) => mergeDeltas(i, m.items));
   }
 
-  private onReceipt(r: Receipt): void {
-    const seen = this._revision();
-    const gap = r.revision > seen + 1;
-    if (r.revision > seen) this._revision.set(r.revision);
-
-    const facets = r.effects.facets;
-    if (gap || STATUS_FACETS.some((f) => hasFacet(facets, f))) this.scheduleStatus();
-    if (DETAIL_FACETS.some((f) => hasFacet(facets, f))) this.scheduleDetail();
-  }
-
-  /** After a reconnect the hub may have committed revisions this client never heard about. */
-  private onResync(snapshot: LiveSnapshot): void {
+  private seedItemsFromSnapshot(snapshot: LiveSnapshot): void {
     const project = this.projectIn(snapshot.projects);
-    if (!project) return;
-    this.seedItems(project.paragraphs, project.items);
-    // Before `/status` answers there is no baseline to compare with (the revision still holds the
-    // previous project's, or 0): hold the snapshot rather than read `/status` twice on every open.
-    if (!this._status()) {
-      this.heldSnapshot = Math.max(this.heldSnapshot ?? project.revision, project.revision);
-      return;
-    }
-    if (project.revision > this._revision()) this.scheduleStatus();
+    if (project) this.seedItems(project.paragraphs, project.items);
   }
 
   private seedItemsFromLive(): void {
@@ -284,19 +265,6 @@ export class ProjectStore {
     if (!folder || !projects) return undefined;
     const key = Object.keys(projects).find((k) => sameFolder(k, folder));
     return key === undefined ? undefined : projects[key];
-  }
-
-  private scheduleStatus(): void {
-    this.statusRefetch.schedule();
-  }
-
-  private scheduleDetail(): void {
-    this.detailRefetch.schedule();
-  }
-
-  private clearTimers(): void {
-    this.statusRefetch.cancel();
-    this.detailRefetch.cancel();
   }
 
   private isMine(folder: string): boolean {
