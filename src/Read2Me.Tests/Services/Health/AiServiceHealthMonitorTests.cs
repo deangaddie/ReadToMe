@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using Read2Me.Services.Events;
 using Read2Me.Services.Health;
 using Read2Me.Services.Queueing;
+using Read2Me.Tests.Fakes;
 using Xunit;
 
 namespace Read2Me.Tests.Services.Health;
@@ -394,6 +395,8 @@ public class AiServiceHealthMonitorTests
     {
         public ChannelReader<int> Reader { get; } =
             Channel.CreateUnbounded<int>().Reader;
+
+        public IDisposable? BeginTurn(int item) => NoTurn.Instance;
     }
 
     /// <summary>audio.cpp and whisper both map to one real audio gate, as in production.</summary>

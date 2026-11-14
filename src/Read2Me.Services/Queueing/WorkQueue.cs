@@ -47,9 +47,19 @@ namespace Read2Me.Services.Queueing
     /// the item cancellation token, the one <see cref="Apply"/> that runs every <see cref="Disposition"/>,
     /// Cancel all, and the busy answer. The queue that holds it adds only what is its own: the work
     /// (its processor), and what it remembers about a completed item (<c>onComplete</c>).
+    /// <para>
+    /// The worker holds a <b>Worker turn</b> (CONTEXT: queueing) for the work it has taken, from
+    /// <see cref="BeginTurn"/> until that work has let go of its project. The turn's projects stay
+    /// busy until it ends, even after Cancel all. A turn Cancel all cut loose no longer changes the
+    /// queue: its <see cref="MarkProcessing"/>, <see cref="Defer"/> and <see cref="Apply"/> are ignored.
+    /// </para>
     /// </summary>
     public sealed class WorkQueue<TItem> : IQueueSource<TItem>, IBusySource where TItem : IQueuedWork<TItem>
     {
+        // Guards the generation, the turn, and every state change a cut-loose turn must not make.
+        private readonly object _lock = new();
+        private long _generation;
+        private WorkerTurn? _turn;
         private Channel<TItem> _channel = NewChannel();
         private CancellationTokenSource _itemCts = new();
         private readonly QueueStateStore<WorkItemKey, QueueOutcome> _store = new();
@@ -60,9 +70,13 @@ namespace Read2Me.Services.Queueing
 
         /// <param name="onComplete">
         /// Runs inside the <see cref="Disposition.Complete"/> arm, before <see cref="Changed"/>, so an
-        /// item cannot complete without it.
+        /// item cannot complete without it. Runs under the queue's lock, so it must be quick and never
+        /// call the Project activity gate.
         /// </param>
-        /// <param name="onCancel">Runs inside <see cref="CancelAll"/>, after the state is cleared and before <see cref="Changed"/>.</param>
+        /// <param name="onCancel">
+        /// Runs inside <see cref="CancelAll"/>, after the state is cleared and before <see cref="Changed"/>;
+        /// under the queue's lock, as <paramref name="onComplete"/> does.
+        /// </param>
         public WorkQueue(ProjectActivity activity, WorkQueueBusy busy, Action<WorkItemKey>? onComplete = null, Action? onCancel = null)
         {
             _activity = activity;
@@ -94,12 +108,16 @@ namespace Read2Me.Services.Queueing
         public ActivityRefusal? Enqueue(IEnumerable<TItem> items)
         {
             var list = items.ToList();
+            // Gate lock, then this queue's: the lock order ProjectActivity's lock rules allow.
             var refusal = _activity.TryStart(list.Select(i => i.Key.Folder), () =>
             {
-                foreach (var item in list)
+                lock (_lock)
                 {
-                    if (_store.TryMarkQueued(item.Key))
-                        _channel.Writer.TryWrite(item);
+                    foreach (var item in list)
+                    {
+                        if (_store.TryMarkQueued(item.Key))
+                            _channel.Writer.TryWrite(item);
+                    }
                 }
             });
             if (refusal is null)
@@ -107,10 +125,30 @@ namespace Read2Me.Services.Queueing
             return refusal;
         }
 
-        /// <summary>The item has gone in flight.</summary>
+        /// <summary>
+        /// The worker's <b>Worker turn</b> for <paramref name="item"/>, just taken off the channel. Its
+        /// project stays busy until the turn is disposed, which the worker does once the item's work
+        /// has let go of the project (after its DI scope). Disposing it raises <see cref="Changed"/>.
+        /// Null when <see cref="CancelAll"/> cleared the item between its read and its turn: the
+        /// worker drops it unworked. Only the channel's single reader may call it, and one turn at a time.
+        /// </summary>
+        public IDisposable? BeginTurn(TItem item)
+        {
+            lock (_lock)
+            {
+                if (_store.StatusOf(item.Key) is null) return null;
+                return _turn = new WorkerTurn(this, item.Key.Folder, _generation);
+            }
+        }
+
+        /// <summary>The item has gone in flight. An item <see cref="CancelAll"/> cleared stays cancelled.</summary>
         public void MarkProcessing(TItem item)
         {
-            _store.MarkProcessing(item.Key);
+            lock (_lock)
+            {
+                if (TurnCutLoose()) return;
+                _store.MarkProcessing(item.Key);
+            }
             Changed?.Invoke();
         }
 
@@ -121,20 +159,27 @@ namespace Read2Me.Services.Queueing
         /// </summary>
         public void Defer(TItem item)
         {
-            _store.ReturnToQueued(item.Key);
+            lock (_lock)
+            {
+                if (TurnCutLoose()) return;
+                _store.ReturnToQueued(item.Key);
+            }
             Changed?.Invoke();
         }
 
         /// <summary>
         /// Returns <paramref name="first"/> plus every remaining queued item, drained from the head of
-        /// the queue in the order it was enqueued. Marks, settles and requeues nothing. Only the
-        /// channel's single reader (the queue worker) may call it.
+        /// the queue in the order it was enqueued. Marks, settles and requeues nothing; the Worker
+        /// turn now holds every drained item's project. Only the channel's single reader (the queue
+        /// worker) may call it.
         /// </summary>
         public IReadOnlyList<TItem> DrainAll(TItem first)
         {
             var all = new List<TItem> { first };
             while (_channel.Reader.TryRead(out var item))
                 all.Add(item);
+            lock (_lock)
+                _turn?.Folders.UnionWith(all.Select(i => i.Key.Folder));
             return all;
         }
 
@@ -147,10 +192,21 @@ namespace Read2Me.Services.Queueing
         /// budget a watchdog recovery is allowed, and <see cref="Disposition.RetryAfter"/> spends an
         /// <see cref="AttemptState.Busies"/> so the next backoff grows without touching the once-only
         /// budget. An item <see cref="CancelAll"/> cleared while in flight stays cancelled: no retry arm
-        /// returns it to Queued or puts it back on the channel.
+        /// returns it to Queued or puts it back on the channel. A Worker turn Cancel all cut loose
+        /// applies nothing at all, so it cannot settle an item queued again since.
         /// </para>
         /// </summary>
         public void Apply(TItem item, Disposition disposition)
+        {
+            lock (_lock)
+            {
+                if (TurnCutLoose()) return;
+                RunDisposition(item, disposition);
+            }
+            Changed?.Invoke();
+        }
+
+        private void RunDisposition(TItem item, Disposition disposition)
         {
             var key = item.Key;
             switch (disposition)
@@ -190,27 +246,35 @@ namespace Read2Me.Services.Queueing
                         _channel.Writer, item, _activity.WhenRestoreEnded(key.Folder), _itemCts.Token);
                     break;
             }
-
-            Changed?.Invoke();
         }
 
         /// <summary>
         /// <b>Cancel all</b>: stops the item in flight (its token), drops every waiting item and every
         /// pending retry (the channel they would write to is completed), and clears queued/processing
-        /// state. Queue outcomes survive.
+        /// state. Queue outcomes survive. The current Worker turn is cut loose: it keeps its projects
+        /// busy until it ends, but changes nothing in the queue from here on.
         /// </summary>
         public void CancelAll()
         {
             Cancelling?.Invoke();
 
-            var old = Interlocked.Exchange(ref _itemCts, new CancellationTokenSource());
-            old.Cancel();
-            old.Dispose();
+            CancellationTokenSource oldCts;
+            Channel<TItem> oldChannel;
+            lock (_lock)
+            {
+                _generation++;
+                oldCts = _itemCts;
+                _itemCts = new CancellationTokenSource();
+                oldChannel = _channel;
+                _channel = NewChannel();
+                _store.ClearAll();
+                _onCancel?.Invoke();
+            }
 
-            Interlocked.Exchange(ref _channel, NewChannel()).Writer.TryComplete();
-
-            _store.ClearAll();
-            _onCancel?.Invoke();
+            // Outside the lock: cancelling runs the in-flight work's callbacks.
+            oldCts.Cancel();
+            oldCts.Dispose();
+            oldChannel.Writer.TryComplete();
 
             Changed?.Invoke();
         }
@@ -233,16 +297,21 @@ namespace Read2Me.Services.Queueing
         public IEnumerable<WorkItemKey> KnownKeys() => _store.TrackedKeys().Concat(_store.OutcomeKeys());
 
         /// <summary>
-        /// The folder's items still queued or processing, or null when it has none. An item stays
-        /// tracked from enqueue until its disposition, so the one in flight always counts; settled
-        /// items are finished work and do not.
+        /// The folder's items still queued or processing; with none, "stopping" while the Worker turn
+        /// still holds work for it; otherwise null. An item stays tracked from enqueue until its
+        /// disposition, so the one in flight always counts; settled items are finished work and do
+        /// not. The turn counts until its work has let go of the project, so a cancelled item still
+        /// unwinding keeps it busy.
         /// </summary>
         public BusySource? BusyFor(ProjectFolderId folder)
         {
             var left = _store.TrackedKeys().Count(k => k.Folder == folder);
-            return left == 0
-                ? null
-                : new BusySource(_busy.Kind, $"{_busy.Label}: {BusySource.Plural(left, _busy.Noun)} left");
+            if (left > 0)
+                return new BusySource(_busy.Kind, $"{_busy.Label}: {BusySource.Plural(left, _busy.Noun)} left");
+            lock (_lock)
+                return _turn is { } turn && turn.Folders.Contains(folder)
+                    ? new BusySource(_busy.Kind, $"{_busy.Label}: stopping")
+                    : null;
         }
 
         public WorkQueueCounts Counts()
@@ -255,5 +324,31 @@ namespace Read2Me.Services.Queueing
 
         private static Channel<TItem> NewChannel() =>
             Channel.CreateUnbounded<TItem>(new UnboundedChannelOptions { SingleReader = true });
+
+        /// <summary>Under the lock: the worker's current turn began before the last Cancel all.</summary>
+        private bool TurnCutLoose() => _turn is { } turn && turn.Generation != _generation;
+
+        private void EndTurn(WorkerTurn turn)
+        {
+            lock (_lock)
+            {
+                if (!ReferenceEquals(_turn, turn)) return;
+                _turn = null;
+            }
+            Changed?.Invoke();
+        }
+
+        /// <summary>
+        /// A <b>Worker turn</b>: the projects it holds work for, and the Cancel all generation it began
+        /// in. Its folders change only under the queue's lock.
+        /// </summary>
+        private sealed class WorkerTurn(WorkQueue<TItem> queue, ProjectFolderId folder, long generation) : IDisposable
+        {
+            public HashSet<ProjectFolderId> Folders { get; } = [folder];
+
+            public long Generation { get; } = generation;
+
+            public void Dispose() => queue.EndTurn(this);
+        }
     }
 }

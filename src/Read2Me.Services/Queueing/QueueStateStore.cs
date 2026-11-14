@@ -51,11 +51,20 @@ namespace Read2Me.Services.Queueing
             return false;
         }
 
-        /// <summary>Moves the key to Processing and starts the single-reader elapsed clock.</summary>
+        /// <summary>
+        /// Moves a tracked key to Processing and starts the single-reader elapsed clock. A key no
+        /// longer tracked was cleared by <see cref="ClearAll"/> while the worker held it, so, as with
+        /// <see cref="ReturnToQueued"/>, it stays cancelled: tracking it again would leave a
+        /// Processing key nothing will ever settle.
+        /// </summary>
         public void MarkProcessing(TKey key)
         {
-            _status[key] = QueueItemStatus.Processing;
-            _processingStartedAt = DateTimeOffset.UtcNow;
+            while (_status.TryGetValue(key, out var current))
+            {
+                if (!_status.TryUpdate(key, QueueItemStatus.Processing, current)) continue;
+                _processingStartedAt = DateTimeOffset.UtcNow;
+                return;
+            }
         }
 
         /// <summary>

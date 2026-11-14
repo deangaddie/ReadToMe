@@ -4,8 +4,11 @@ Vocabulary common to the Character Queue and the Audio Queue. Each queue's own t
 
 Use these terms exactly in code, tests, and discussion.
 
-- **Work queue** — what the Character Queue and the Audio Queue each are: an item is in it at most once, it starts only through the Project activity gate, it runs each item's Disposition, and **Cancel all** stops the item in flight as well as dropping the waiting ones. Each queue adds only what is its own — the work, its apply product, and what it remembers about a finished item (the Audio Queue's audio version).
+- **Work queue** — what the Character Queue and the Audio Queue each are: an item is in it at most once, it starts only through the Project activity gate, it runs each item's Disposition, and **Cancel all** stops the item in flight as well as dropping the waiting ones. The waiting ones leave at once, but the project stays busy until the Worker turn holding the item in flight has ended. Each queue adds only what is its own — the work, its apply product, and what it remembers about a finished item (the Audio Queue's audio version).
   _Avoid_: "gated work queue" — a Work queue meets two gates, the Project activity gate on the way in and its Processing gate (held while the watchdog recovers a provider) on the way out; name the one meant.
+
+- **Worker turn** — a Work queue worker's hold on the work it has taken: from taking an item (and, on the Character Queue, everything drained with it) until that work has fully stopped and let go of its project. While a turn holds work for a project, that project is busy, even after Cancel all has cleared the queue ("Audio: stopping"). A turn that Cancel all cut loose no longer changes the queue: what it marks or settles afterwards is ignored, so it can't touch an item queued again since.
+  _Avoid_: "in flight" for the whole turn ("in flight" is the item being worked; the turn lasts until its work has let go); "the processor returned" as the end (the work isn't over until it has let go of the project)
 
 - **Queue outcome** — the marker a Work queue keeps on an item it settled without completing: `Failed` (abandoned) or `Unfinished` (work done, something left), with a reason. One kind shared by both queues; a completed item carries none.
   _Avoid_: a per-queue outcome type — the two queues' markers mean the same thing.

@@ -69,6 +69,9 @@ namespace Read2Me.Services.Characters
 
         public ChannelReader<QueuedParagraph> Reader => _queue.Reader;
 
+        /// <inheritdoc cref="WorkQueue{TItem}.BeginTurn"/>
+        public IDisposable? BeginTurn(QueuedParagraph item) => _queue.BeginTurn(item);
+
         public CancellationToken ItemCancellationToken => _queue.ItemCancellationToken;
 
         public void CancelAll() => _queue.CancelAll();

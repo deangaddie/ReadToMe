@@ -23,6 +23,11 @@ public sealed class QueueWorker<TItem>(
             {
                 await gate.WaitAsync(ct);
                 var item = await source.Reader.ReadAsync(ct);
+                // The Worker turn is taken before the scope, so it ends after the scope — and the
+                // project DB connection it holds — has been disposed: until then the project is busy.
+                using var turn = source.BeginTurn(item);
+                if (turn is null)
+                    continue; // Cancel all dropped it between the read and the turn
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var processor = scope.ServiceProvider.GetRequiredService<IQueueProcessor<TItem>>();
                 await processor.ProcessItemAsync(item, ct);

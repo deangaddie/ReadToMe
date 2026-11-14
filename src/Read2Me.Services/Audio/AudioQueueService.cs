@@ -55,6 +55,9 @@ namespace Read2Me.Services.Audio
 
         public ChannelReader<QueuedAudioItem> Reader => _queue.Reader;
 
+        /// <inheritdoc cref="WorkQueue{TItem}.BeginTurn"/>
+        public IDisposable? BeginTurn(QueuedAudioItem item) => _queue.BeginTurn(item);
+
         public CancellationToken ItemCancellationToken => _queue.ItemCancellationToken;
 
         public ActivityRefusal? Enqueue(IEnumerable<QueuedAudioItem> items) => _queue.Enqueue(items);

@@ -114,7 +114,14 @@ public sealed class BackgroundRunTracker(
                 run.Done = run.Seen.Count - paragraphs.Count();
             }
 
-            foreach (var (folder, run) in _attribution.Where(r => !pending.Contains(r.Key)).ToList())
+            // A cancelled run stays open until the Worker turn unwinding its work has ended — the
+            // queue reads busy for the folder until then — so what that work still commits lands in it.
+            bool StillUnwinding(ProjectFolderId folder, Attribution run) =>
+                run.Cancelled && characterQueue.BusyFor(folder) is not null;
+
+            foreach (var (folder, run) in _attribution
+                         .Where(r => !pending.Contains(r.Key) && !StillUnwinding(r.Key, r.Value))
+                         .ToList())
             {
                 _attribution.Remove(folder);
                 if (!run.Cancelled)
@@ -127,9 +134,9 @@ public sealed class BackgroundRunTracker(
 
     /// <summary>
     /// Raised before the queue clears: every folder's run is marked cancelled, with how far it got
-    /// and how many paragraphs failed — the clear takes their outcomes — and ends on the
-    /// <see cref="CharacterQueueService.Changed"/> that follows the clear. Until then work still in
-    /// flight commits into it.
+    /// and how many paragraphs failed — the clear takes their outcomes — and ends on the first
+    /// <see cref="CharacterQueueService.Changed"/> after the clear that finds the folder no longer
+    /// busy: once the Worker turn unwinding its work has ended. Until then that work commits into it.
     /// </summary>
     private void OnQueueCancelling()
     {
