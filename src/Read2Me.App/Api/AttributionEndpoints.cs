@@ -6,6 +6,7 @@ using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.App.Live;
 using Read2Me.Services.Characters;
+using Read2Me.Services.Queueing;
 using Read2Me.Services.UseCases;
 
 namespace Read2Me.App.Api
@@ -28,7 +29,7 @@ namespace Read2Me.App.Api
     /// Queue state only. Attribution results are per item now — read them from the book endpoint's
     /// paragraph items, which carry the stamped character.
     /// </summary>
-    public sealed record ParagraphAttributionStatusDto(ParagraphQueueStatus? Status, ParagraphOutcome? Outcome);
+    public sealed record ParagraphAttributionStatusDto(ParagraphQueueStatus? Status, QueueOutcome? Outcome);
 
     public static class AttributionEndpoints
     {

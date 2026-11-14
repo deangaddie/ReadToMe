@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading;
 using Read2Me.Services.History;
 using Read2Me.Services.Queueing;
 
@@ -8,10 +9,9 @@ namespace Read2Me.Services.Audio
     /// The audio queue as its processor uses it: take the work, signal that an item has gone in
     /// flight, and apply the one <see cref="Disposition"/> the decision produced.
     /// <para>
-    /// Three mutators, not one per outcome, and the mirror of <see cref="Characters.ICharacterQueue"/>
-    /// minus what this queue has no use for: there is no <c>MarkDeferred</c> (nothing here holds an
-    /// item back for a later escalation step), no <c>DrainAll</c> (the worker hands over one item at a
-    /// time) and no item cancellation token (this queue cancels by completing its channel).
+    /// The mirror of <see cref="Characters.ICharacterQueue"/> minus what this queue has no use for:
+    /// there is no <c>MarkDeferred</c> (nothing here holds an item back for a later escalation step)
+    /// and no <c>DrainAll</c> (the worker hands over one item at a time).
     /// </para>
     /// <para>
     /// Both <see cref="Enqueue"/> and <see cref="MarkProcessing"/> take the payload rather than a
@@ -20,6 +20,9 @@ namespace Read2Me.Services.Audio
     /// </summary>
     public interface IAudioQueue
     {
+        /// <summary>Cancelled when the queue is cleared (Cancel all), so the item generating stops with it.</summary>
+        CancellationToken ItemCancellationToken { get; }
+
         /// <summary>Queues the items; the gate's refusal, queuing nothing, when it refuses an enqueue for any of their projects.</summary>
         ActivityRefusal? Enqueue(IEnumerable<QueuedAudioItem> items);
 

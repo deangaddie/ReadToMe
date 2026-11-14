@@ -6,6 +6,7 @@ using Read2Me.Core.IO;
 using Read2Me.Core.Models;
 using Read2Me.Services;
 using Read2Me.Services.Audio;
+using Read2Me.Services.Queueing;
 using Read2Me.Services.UseCases;
 
 namespace Read2Me.App.Api
@@ -14,7 +15,7 @@ namespace Read2Me.App.Api
         BookNodeLevel Level, Guid NodeId, bool NeedsAudioOnly = true, bool NarratorOnlyMode = false);
     /// <summary>The body of <c>POST …/audio/enqueue-items</c>: an explicit item selection or a single retry. Ids that name no item are ignored.</summary>
     public sealed record ItemsEnqueueRequest(Guid[] ItemIds);
-    public sealed record AudioItemStatusDto(AudioItemQueueStatus? Status, AudioItemOutcome? Outcome, long? AudioVersion);
+    public sealed record AudioItemStatusDto(AudioItemQueueStatus? Status, QueueOutcome? Outcome, long? AudioVersion);
 
     /// <summary><see cref="AudioReviewInfo"/> on the wire, shared with the live hub's item status; nulls are sent explicitly.</summary>
     public sealed record AudioReviewDto(

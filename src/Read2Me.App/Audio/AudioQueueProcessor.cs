@@ -17,8 +17,12 @@ namespace Read2Me.App.Audio
         EventBroadcaster<AudioGenEvent> broadcaster,
         ILogger<AudioQueueProcessor> logger) : IAudioQueueProcessor
     {
-        public async Task ProcessItemAsync(QueuedAudioItem queued, CancellationToken ct)
+        public async Task ProcessItemAsync(QueuedAudioItem queued, CancellationToken hostCt)
         {
+            // Cancel all stops the item in flight as well as the waiting ones.
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(hostCt, queue.ItemCancellationToken);
+            var ct = linked.Token;
+
             queue.MarkProcessing(queued);
 
             try
@@ -27,14 +31,15 @@ namespace Read2Me.App.Audio
                 Report(queued, disposition);
                 queue.Apply(queued, disposition);
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            catch (OperationCanceledException) when (hostCt.IsCancellationRequested)
             {
                 throw;
             }
             catch (OperationCanceledException)
             {
-                // Reachable only from the resolver — everything after it converts its own
-                // cancellation into a Failed disposition rather than dropping the item.
+                // Cancel all, which has already cleared the item: it applies and publishes nothing.
+                // The resolver can also throw one of its own; the pipeline and the recorder throw
+                // only for the token.
                 logger.LogInformation("Cancelled audio item {ItemId}", queued.Item.ParagraphItemId);
             }
         }
@@ -110,27 +115,28 @@ namespace Read2Me.App.Audio
             QueuedAudioItem queued, PipelineRequest req, PipelineResult result, CancellationToken ct)
         {
             var itemId = queued.Item.ParagraphItemId;
-            try
+
+            // A Restore that began while the take generated is the shared step's: it generates
+            // the take again afterwards.
+            return await ApplyFirstStep.RunAsync(async () =>
             {
-                var relativePath = await recorder.RecordAsync(queued.Folder, itemId, result, req.SourceText, ct);
-                return AudioDisposition.DecideApplied(relativePath);
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                throw;
-            }
-            // Its project began a Restore while the take generated: generate it again afterwards.
-            catch (ProjectRestoringException)
-            {
-                return new Disposition.RetryAfterRestore();
-            }
-            // The one catch that survives the pipeline going total, and it is not an AI seam:
-            // recording writes the audio file and can fail on ordinary I/O.
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed recording audio item {ItemId}", itemId);
-                return new Disposition.Failed(ex.Message);
-            }
+                try
+                {
+                    var relativePath = await recorder.RecordAsync(queued.Folder, itemId, result, req.SourceText, ct);
+                    return AudioDisposition.DecideApplied(relativePath);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                // The one catch that survives the pipeline going total, and it is not an AI seam:
+                // recording writes the audio file and can fail on ordinary I/O.
+                catch (Exception ex) when (ex is not ProjectRestoringException)
+                {
+                    logger.LogError(ex, "Failed recording audio item {ItemId}", itemId);
+                    return new Disposition.Failed(ex.Message);
+                }
+            });
         }
 
         /// <summary>

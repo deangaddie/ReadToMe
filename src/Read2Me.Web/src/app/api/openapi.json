@@ -869,31 +869,6 @@
           "ModelLoading"
         ]
       },
-      "AudioItemOutcome": {
-        "properties": {
-          "kind": {
-            "$ref": "#/components/schemas/AudioItemOutcomeKind"
-          },
-          "reason": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "kind",
-          "reason"
-        ],
-        "type": "object"
-      },
-      "AudioItemOutcomeKind": {
-        "description": "Why a settled item is not simply done. `Unfinished` exists so\r\nvoid AudioQueueService.Apply(QueuedAudioItem item, Disposition disposition) can stay total over Disposition: this\r\nqueue's phase 1 cannot produce it today (a resolution failure is a `Failed` work outcome,\r\nnot empty work), but throwing would break totality and recording it as `Failed` would lie\r\nto the UI chip.",
-        "enum": [
-          "Failed",
-          "Unfinished"
-        ]
-      },
       "AudioItemQueueStatus": {
         "enum": [
           "Queued",
@@ -948,7 +923,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/AudioItemOutcome"
+                "$ref": "#/components/schemas/QueueOutcome"
               }
             ]
           },
@@ -3278,7 +3253,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/AudioItemOutcome"
+                "$ref": "#/components/schemas/QueueOutcome"
               }
             ]
           },
@@ -4374,7 +4349,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/ParagraphOutcome"
+                "$ref": "#/components/schemas/QueueOutcome"
               }
             ]
           },
@@ -4499,30 +4474,6 @@
         ],
         "type": "object"
       },
-      "ParagraphOutcome": {
-        "properties": {
-          "kind": {
-            "$ref": "#/components/schemas/ParagraphOutcomeKind"
-          },
-          "reason": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "kind",
-          "reason"
-        ],
-        "type": "object"
-      },
-      "ParagraphOutcomeKind": {
-        "enum": [
-          "Failed",
-          "Unfinished"
-        ]
-      },
       "ParagraphQueueStatus": {
         "enum": [
           "Queued",
@@ -4566,7 +4517,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/ParagraphOutcome"
+                "$ref": "#/components/schemas/QueueOutcome"
               }
             ]
           },
@@ -5913,6 +5864,32 @@
           "escalation"
         ],
         "type": "object"
+      },
+      "QueueOutcome": {
+        "description": "A <b>Queue outcome</b>: why an item the queue settled is not simply done. A completed item has none.",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/QueueOutcomeKind"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "QueueOutcomeKind": {
+        "description": "The marker a settled-but-not-completed item keeps: <b>Queue outcome</b> (CONTEXT: queueing).",
+        "enum": [
+          "Failed",
+          "Unfinished"
+        ]
       },
       "ReceiptEffects": {
         "description": "BookMutationEffects on the wire, with IReadOnlyList&lt;BookFacets&gt; ReceiptEffects.Facets as a list of single facets\r\n(never `None` or `All`): a `[Flags]` value would travel as one comma-joined string the\r\ndocument can't describe.",

@@ -147,22 +147,19 @@ namespace Read2Me.App.Characters
             QueuedParagraph item, AttributionOutcome outcome, double elapsedSeconds,
             NarratorCache narrators, CancellationToken ct)
         {
-            try
+            // A Restore that began under the answer is the shared step's: it asks again once the
+            // Restore has finished.
+            return await ApplyFirstStep.RunAsync(async () =>
             {
                 await ApplyAttributionsAsync(item, outcome.Answer!, narrators, ct);
-            }
-            // The project began a Restore under the answer: ask again once it has finished.
-            catch (ProjectRestoringException)
-            {
-                return new Disposition.RetryAfterRestore();
-            }
 
-            var unattributed = await reader.CountUnattributedCharacterItemsAsync(item.Folder, item.ParagraphId);
-            if (unattributed > 0)
-                logger.LogInformation("Paragraph {ParagraphId} has {Count} unattributed item(s) after apply",
-                    item.ParagraphId, unattributed);
+                var unattributed = await reader.CountUnattributedCharacterItemsAsync(item.Folder, item.ParagraphId);
+                if (unattributed > 0)
+                    logger.LogInformation("Paragraph {ParagraphId} has {Count} unattributed item(s) after apply",
+                        item.ParagraphId, unattributed);
 
-            return CharacterDisposition.DecideApplied(unattributed, elapsedSeconds, outcome.Work.Reason);
+                return CharacterDisposition.DecideApplied(unattributed, elapsedSeconds, outcome.Work.Reason);
+            });
         }
 
         /// <summary>

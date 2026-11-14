@@ -4,6 +4,12 @@ Vocabulary common to the Character Queue and the Audio Queue. Each queue's own t
 
 Use these terms exactly in code, tests, and discussion.
 
+- **Work queue** — what the Character Queue and the Audio Queue each are: an item is in it at most once, it starts only through the Project activity gate, it runs each item's Disposition, and **Cancel all** stops the item in flight as well as dropping the waiting ones. Each queue adds only what is its own — the work, its apply product, and what it remembers about a finished item (the Audio Queue's audio version).
+  _Avoid_: "gated work queue" — a Work queue meets two gates, the Project activity gate on the way in and its Processing gate (held while the watchdog recovers a provider) on the way out; name the one meant.
+
+- **Queue outcome** — the marker a Work queue keeps on an item it settled without completing: `Failed` (abandoned) or `Unfinished` (work done, something left), with a reason. One kind shared by both queues; a completed item carries none.
+  _Avoid_: a per-queue outcome type — the two queues' markers mean the same thing.
+
 - **Work outcome** — how one unit of queued work ended, reduced to what a retry decision needs: `Ok`, `Failed`, `Unavailable` (provider down — the watchdog is recovering it), `Busy` (provider alive but not ready: a llama endpoint still loading its model, or an audio.cpp TTS endpoint still generating with another model after the client's 503 retries), plus a reason. Deliberately **narrow**: it says nothing about the *quality* of the work, only about how the provider behaved. Both queues report one, and both can produce `Busy`.
   A queue's own richer outcome carries a Work outcome rather than replacing it — an **Attribution outcome** keeps its answer and its Resolved/Unknown distinction, and the audio pipeline keeps its recorded path. Whether a paragraph is *finished* is still decided after apply, from the items, never from the Work outcome.
   _Avoid_: treating `Ok` as "complete" (an `Ok` attribution answer can still leave items unattributed); adding quality states (`Unknown`, `ParseFailed`) to it — `ParseFailed` and a missing LLM config are both `Failed` as far as the queue is concerned; confusing it with **Run outcome** (`LlmRunOutcome`), which is one LLM call's ending and sits a layer below.

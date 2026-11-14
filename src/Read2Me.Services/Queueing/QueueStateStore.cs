@@ -11,8 +11,8 @@ namespace Read2Me.Services.Queueing
     /// (resolved overlay, cache-bust versions) are composed alongside this store,
     /// not pushed into it.
     /// </summary>
-    /// <typeparam name="TKey">Item key, e.g. ParagraphKey or AudioItemKey.</typeparam>
-    /// <typeparam name="TOutcome">Terminal outcome, e.g. ParagraphOutcome or AudioItemOutcome.</typeparam>
+    /// <typeparam name="TKey">Item key, e.g. <see cref="WorkItemKey"/>.</typeparam>
+    /// <typeparam name="TOutcome">Terminal outcome, e.g. <see cref="QueueOutcome"/>.</typeparam>
     public sealed class QueueStateStore<TKey, TOutcome>
         where TKey : notnull
         where TOutcome : class

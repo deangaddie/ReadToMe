@@ -7,20 +7,14 @@ using Read2Me.Services.Queueing;
 namespace Read2Me.Services.Audio
 {
     public readonly record struct QueuedAudioItem(
-        ProjectFolderId Folder, AudioItemRef Item, AttemptState Attempts = default);
+        ProjectFolderId Folder, AudioItemRef Item, AttemptState Attempts = default) : IQueuedWork<QueuedAudioItem>
+    {
+        public WorkItemKey Key => new(Folder, Item.ParagraphItemId);
+
+        public QueuedAudioItem WithAttempts(AttemptState attempts) => this with { Attempts = attempts };
+    }
 
     public enum AudioItemQueueStatus { Queued, Processing }
-
-    /// <summary>
-    /// Why a settled item is not simply done. <c>Unfinished</c> exists so
-    /// <see cref="AudioQueueService.Apply"/> can stay total over <see cref="Disposition"/>: this
-    /// queue's phase 1 cannot produce it today (a resolution failure is a <c>Failed</c> work outcome,
-    /// not empty work), but throwing would break totality and recording it as <c>Failed</c> would lie
-    /// to the UI chip.
-    /// </summary>
-    public enum AudioItemOutcomeKind { Failed, Unfinished }
-
-    public sealed record AudioItemOutcome(AudioItemOutcomeKind Kind, string? Reason);
 
     /// <summary>The audio queue's counts and timings, answered by <c>GET /api/audio/queue</c>.</summary>
     public sealed record AudioQueueSnapshot(
@@ -32,183 +26,73 @@ namespace Read2Me.Services.Audio
         double CurrentItemElapsedSeconds
     );
 
-    internal readonly record struct AudioItemKey(ProjectFolderId Folder, Guid ParagraphItemId);
-
-    public sealed class AudioQueueService : IQueueSource<QueuedAudioItem>, IAudioQueue, IBusySource
+    /// <summary>
+    /// The <b>Audio Queue</b>: a <see cref="WorkQueue{TItem}"/> of ParagraphItems. What it adds is the
+    /// <b>audio version</b> — a cache-bust stamp each completion takes, inside the Complete arm, so an
+    /// item cannot complete without one. The recorded audio itself is not this queue's business: the
+    /// item's audio reference and its review are one Book mutation the recorder commits, and every
+    /// open Book View converges on its receipt (ADR 0007).
+    /// </summary>
+    public sealed class AudioQueueService : IQueueSource<QueuedAudioItem>, IAudioQueue
     {
-        private Channel<QueuedAudioItem> _channel =
-            Channel.CreateUnbounded<QueuedAudioItem>(new UnboundedChannelOptions { SingleReader = true });
-
-        private readonly QueueStateStore<AudioItemKey, AudioItemOutcome> _store = new();
-        private readonly ConcurrentDictionary<AudioItemKey, long> _versions = new();
-        private readonly ProjectActivity _activity;
+        private readonly WorkQueue<QueuedAudioItem> _queue;
+        private readonly ConcurrentDictionary<WorkItemKey, long> _versions = new();
 
         public AudioQueueService(ProjectActivity activity)
         {
-            _activity = activity;
-            activity.Register(this);
+            _queue = new WorkQueue<QueuedAudioItem>(
+                activity,
+                new WorkQueueBusy(BusySourceKind.AudioQueue, "Audio", "item"),
+                onComplete: key => _versions[key] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                onCancel: _versions.Clear);
         }
 
-        public event Action? Changed;
-
-        public ChannelReader<QueuedAudioItem> Reader => _channel.Reader;
-
-        /// <summary>
-        /// Queues the items, or refuses them all — queuing and announcing nothing — when the gate
-        /// refuses a start for any of their projects. An item already queued or generating is not
-        /// queued twice. Null means queued. The queuing is the gate's start, so a Restore either
-        /// sees the items as busy or is seen by the enqueue.
-        /// </summary>
-        public ActivityRefusal? Enqueue(IEnumerable<QueuedAudioItem> items)
+        public event Action? Changed
         {
-            var list = items.ToList();
-            var refusal = _activity.TryStart(list.Select(i => i.Folder), () =>
-            {
-                foreach (var item in list)
-                {
-                    if (_store.TryMarkQueued(Key(item)))
-                        _channel.Writer.TryWrite(item);
-                }
-            });
-            if (refusal is null)
-                Changed?.Invoke();
-            return refusal;
+            add => _queue.Changed += value;
+            remove => _queue.Changed -= value;
         }
 
-        public void MarkProcessing(QueuedAudioItem item)
-        {
-            _store.MarkProcessing(Key(item));
-            Changed?.Invoke();
-        }
+        public ChannelReader<QueuedAudioItem> Reader => _queue.Reader;
 
-        /// <summary>
-        /// Runs the transition the decision produced. One entry point for every outcome, so the
-        /// processor names what it decided instead of picking a differently-named method per case.
-        /// <para>
-        /// Total: every <see cref="Disposition"/> member executes and no arm throws. It performs no
-        /// work — resolving, generating and recording stay with the processor, which owns those
-        /// collaborators.
-        /// </para>
-        /// <para>
-        /// <see cref="Disposition.Complete"/>'s cache-bust stamp sits <i>inside</i> the arm rather
-        /// than beside it: it is part of the transition, and splitting it out would recreate the
-        /// two-call sequence <c>Apply</c> exists to remove — making it possible to complete an item
-        /// without stamping it. The recorded audio itself is no longer this queue's business: the
-        /// item's audio reference and the review of it are one Book mutation, committed by the
-        /// recorder, and every open Book View converges on its receipt (ADR 0007).
-        /// </para>
-        /// <para>
-        /// Each retry arm bumps exactly the counter its own <see cref="QueueDisposition.Decide"/> arm
-        /// reads: <see cref="Disposition.RetryOnce"/> spends the once-only
-        /// <see cref="AttemptState.Retries"/> budget a watchdog recovery is allowed, and
-        /// <see cref="Disposition.RetryAfter"/> spends an <see cref="AttemptState.Busies"/> so the
-        /// next backoff grows without ever touching the once-only budget.
-        /// </para>
-        /// </summary>
-        public void Apply(QueuedAudioItem item, Disposition disposition)
-        {
-            var key = Key(item);
-            switch (disposition)
-            {
-                case Disposition.Complete complete:
-                    _store.Settle(key, elapsedSeconds: complete.Elapsed);
-                    _versions[key] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                    break;
+        public CancellationToken ItemCancellationToken => _queue.ItemCancellationToken;
 
-                case Disposition.Unfinished unfinished:
-                    _store.Settle(
-                        key,
-                        new AudioItemOutcome(AudioItemOutcomeKind.Unfinished, unfinished.Reason),
-                        unfinished.Elapsed);
-                    break;
+        public ActivityRefusal? Enqueue(IEnumerable<QueuedAudioItem> items) => _queue.Enqueue(items);
 
-                case Disposition.Failed failed:
-                    _store.Abandon(key, new AudioItemOutcome(AudioItemOutcomeKind.Failed, failed.Reason));
-                    break;
+        public void MarkProcessing(QueuedAudioItem item) => _queue.MarkProcessing(item);
 
-                // Status returns to Queued and the item re-enters the channel, where it waits on the
-                // gate closed by recovery until that reopens it. An item a CancelAll cleared while
-                // in flight stays cancelled: it neither returns to Queued nor re-enters the channel.
-                case Disposition.RetryOnce:
-                    if (_store.ReturnToQueued(key))
-                        _channel.Writer.TryWrite(item with { Attempts = item.Attempts.WithRetry() });
-                    break;
+        /// <inheritdoc cref="WorkQueue{TItem}.Apply"/>
+        public void Apply(QueuedAudioItem item, Disposition disposition) => _queue.Apply(item, disposition);
 
-                // Status returns to Queued immediately; the write is deferred against the writer
-                // captured now, so a CancelAll during the backoff drops the item instead of
-                // resurrecting it on the replacement channel. This queue has no item token, so the
-                // captured writer is the whole of that guarantee. One cleared before this runs
-                // stays cancelled, as above.
-                case Disposition.RetryAfter retryAfter:
-                    if (!_store.ReturnToQueued(key)) break;
-                    _ = DelayedWrite.Schedule(
-                        _channel.Writer,
-                        item with { Attempts = item.Attempts.WithBusy() },
-                        retryAfter.Delay,
-                        CancellationToken.None);
-                    break;
-
-                // As RetryAfter, but the wait is the project's Restore, and no budget is spent.
-                case Disposition.RetryAfterRestore:
-                    if (!_store.ReturnToQueued(key)) break;
-                    _ = DelayedWrite.ScheduleWhen(_channel.Writer, item, _activity.WhenRestoreEnded(item.Folder), CancellationToken.None);
-                    break;
-            }
-
-            Changed?.Invoke();
-        }
-
-        public void CancelAll()
-        {
-            var oldChannel = Interlocked.Exchange(ref _channel,
-                Channel.CreateUnbounded<QueuedAudioItem>(new UnboundedChannelOptions { SingleReader = true }));
-            oldChannel.Writer.TryComplete();
-
-            _store.ClearAll();
-            _versions.Clear();
-
-            Changed?.Invoke();
-        }
+        /// <inheritdoc cref="WorkQueue{TItem}.CancelAll"/>
+        public void CancelAll() => _queue.CancelAll();
 
         public AudioQueueSnapshot Snapshot()
         {
-            var (queued, processing) = _store.CountStatuses();
-            var (completed, avg) = _store.Metrics();
-            double eta = avg > 0 ? queued * avg : 0;
-            double elapsed = _store.CurrentElapsedSeconds();
-            return new AudioQueueSnapshot(queued, processing, avg, eta, completed, elapsed);
+            var c = _queue.Counts();
+            return new AudioQueueSnapshot(
+                c.Queued, c.Processing, c.AverageSeconds, c.EstimatedSecondsRemaining, c.Completed, c.CurrentItemElapsedSeconds);
         }
 
         /// <summary>
         /// Items of <paramref name="folder"/> the queue currently says anything about: queued,
-        /// processing, carrying an outcome, or with a bumped audio version. Feeds the live hub relay.
+        /// processing, carrying a Queue outcome, or with a bumped audio version. Feeds the live hub relay.
         /// </summary>
         public IReadOnlyCollection<Guid> KnownItems(ProjectFolderId folder)
-            => _store.TrackedKeys().Concat(_store.OutcomeKeys()).Concat(_versions.Keys)
-                .Where(k => k.Folder == folder).Select(k => k.ParagraphItemId).Distinct().ToArray();
+            => _queue.KnownKeys().Concat(_versions.Keys)
+                .Where(k => k.Folder == folder).Select(k => k.Id).Distinct().ToArray();
 
         public AudioItemQueueStatus? StatusOf(ProjectFolderId folder, Guid paragraphItemId)
-            => Map(_store.StatusOf(new AudioItemKey(folder, paragraphItemId)));
+            => Map(_queue.StatusOf(new WorkItemKey(folder, paragraphItemId)));
 
-        public AudioItemOutcome? OutcomeOf(ProjectFolderId folder, Guid paragraphItemId)
-            => _store.OutcomeOf(new AudioItemKey(folder, paragraphItemId));
+        public QueueOutcome? OutcomeOf(ProjectFolderId folder, Guid paragraphItemId)
+            => _queue.OutcomeOf(new WorkItemKey(folder, paragraphItemId));
 
         public long? AudioVersionOf(ProjectFolderId folder, Guid paragraphItemId)
-            => _versions.TryGetValue(new AudioItemKey(folder, paragraphItemId), out var v) ? v : null;
+            => _versions.TryGetValue(new WorkItemKey(folder, paragraphItemId), out var v) ? v : null;
 
-        /// <summary>
-        /// The folder's items still queued or generating, or null when it has none here. An item
-        /// stays tracked from enqueue until its disposition, so the one generating always counts.
-        /// </summary>
-        public BusySource? BusyFor(ProjectFolderId folder)
-        {
-            var left = _store.TrackedKeys().Count(k => k.Folder == folder);
-            return left == 0
-                ? null
-                : new BusySource(BusySourceKind.AudioQueue, $"Audio: {BusySource.Plural(left, "item")} left");
-        }
-
-        private static AudioItemKey Key(QueuedAudioItem i) => new(i.Folder, i.Item.ParagraphItemId);
+        /// <inheritdoc cref="WorkQueue{TItem}.BusyFor"/>
+        public BusySource? BusyFor(ProjectFolderId folder) => _queue.BusyFor(folder);
 
         private static AudioItemQueueStatus? Map(QueueItemStatus? s) => s switch
         {
