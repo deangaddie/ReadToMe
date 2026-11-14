@@ -37,6 +37,7 @@ public class RestoreTests : ProjectDbTestBase
     private readonly List<RestoreEvent> _events = [];
     private BookHierarchyBuilder _book = null!;
     private bool _throwBeforeCommit;
+    private Func<Task>? _duringRestore;
 
     public RestoreTests()
     {
@@ -470,13 +471,13 @@ public class RestoreTests : ProjectDbTestBase
         await CommitAsync(new CreateCharacterMutation(_folder, "Bob"));
         BookMutationOutcome? write = null, results = null;
         RestoreOutcome? second = null;
-        // Asked once the restoring flag is set, before the Restore commits.
-        _busy.OnAsked = () =>
+        // Run inside the Restore's own mutation: the claim is held, and the gate's lock is not.
+        _duringRestore = async () =>
         {
-            _busy.OnAsked = null;
-            write = CommitAsync(new CreateCharacterMutation(_folder, "Carol")).GetAwaiter().GetResult();
-            results = CommitAsync(new SetParagraphItemAudioMutation(_folder, _book.ItemId("i1"), "i1.wav")).GetAwaiter().GetResult();
-            second = RestoreAsync(target).GetAwaiter().GetResult();
+            _duringRestore = null;
+            write = await CommitAsync(new CreateCharacterMutation(_folder, "Carol"));
+            results = await CommitAsync(new SetParagraphItemAudioMutation(_folder, _book.ItemId("i1"), "i1.wav"));
+            second = await RestoreAsync(target);
         };
 
         Assert.IsType<RestoreOutcome.Restored>(await RestoreAsync(target));
@@ -552,12 +553,17 @@ public class RestoreTests : ProjectDbTestBase
         return (await db.Projects.SingleAsync()).CoverImage;
     }
 
-    /// <summary>The real Restore, which throws once it has applied, before the commit, when the test says so.</summary>
+    /// <summary>
+    /// The real Restore, which first runs the test's <c>_duringRestore</c> when set, and throws once it
+    /// has applied, before the commit, when the test says so.
+    /// </summary>
     private sealed class ThrowingRestore(RestoreStepMutationImplementation real, RestoreTests test)
         : IBookMutationImplementation<RestoreStepMutation>
     {
         public async Task<BookMutationEffects> ApplyAsync(RestoreStepMutation mutation, ProjectDbContext db, CancellationToken ct)
         {
+            if (test._duringRestore is { } during)
+                await during();
             var effects = await real.ApplyAsync(mutation, db, ct);
             return test._throwBeforeCommit ? throw new InvalidOperationException("Injected before the commit.") : effects;
         }
@@ -566,13 +572,8 @@ public class RestoreTests : ProjectDbTestBase
     private sealed class FakeBusy : IBusySource
     {
         public BusySource? Answer { get; set; }
-        public Action? OnAsked { get; set; }
 
-        public BusySource? BusyFor(ProjectFolderId folder)
-        {
-            OnAsked?.Invoke();
-            return Answer;
-        }
+        public BusySource? BusyFor(ProjectFolderId folder) => Answer;
     }
 
     private static EditProgram Program() => new(true, null, EditTargetSelector.ParagraphText, NodeFilter.All, ParagraphFilter.All,
