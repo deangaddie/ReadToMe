@@ -1,11 +1,4 @@
-import type {
-  BookFacets,
-  ItemStatusEntry,
-  ItemStatusMessage,
-  LiveSnapshot,
-  NodeStatusMessage,
-  ParagraphStatusEntry,
-} from '@app/api';
+import type { BookFacets, ItemStatusEntry, ParagraphStatusEntry } from '@app/api';
 import {
   AssemblyApi,
   type AssemblyOutputDto,
@@ -17,6 +10,7 @@ import {
 } from '@app/api';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
+import { entryFor, sameFolder } from '@app/live/folders';
 import { LiveService, type Unsubscribe } from '@app/live/live.service';
 import { type FollowHandle, ProjectFeed } from '@app/live/project-feed';
 import { ProjectTitles } from '@app/shell/project-titles';
@@ -40,12 +34,21 @@ const STATUS_FACETS: readonly BookFacets[] = [
 /** Facets the project detail shows: narrator link and name, narrator-only policy. */
 const DETAIL_FACETS: readonly BookFacets[] = ['Characters', 'Narrator', 'ProjectPolicy'];
 
-type StatusMap<T> = Record<string, T | null>;
+/** What the pipeline and the book page read: the node roll-ups and the queue's item status. */
+interface StatusMaps {
+  readonly nodes: Record<string, NodeStatusSummaryDto | null>;
+  readonly folderAudioRemaining: number;
+  readonly paragraphs: Record<string, ParagraphStatusEntry | null>;
+  readonly items: Record<string, ItemStatusEntry | null>;
+}
+
+const NO_STATUS: StatusMaps = { nodes: {}, folderAudioRemaining: 0, paragraphs: {}, items: {} };
 
 /**
  * One project's state for every route under `/projects/{folder}` (design §9), provided by the
- * project shell. Holds the detail and the `/status` bootstrap, keeps the node and item status maps
- * current from hub deltas, and turns receipts into refetches — never into entity patches (spec D6).
+ * project shell. Holds the detail and the `/status` bootstrap, and turns receipts into refetches —
+ * never into entity patches (spec D6). The node and item status maps are not its own: they are the
+ * live service's entry for the project once the hub has answered for it (see {@link statusMaps}).
  * It follows the project through two {@link ProjectFeed} handles, both baselined by every `/status`
  * answer: a receipt whose facets move a count refetches `/status`, one that touches the narrator
  * or project policy refetches the detail, and a gap or a catch-up refetches both. It also owns
@@ -69,10 +72,6 @@ export class ProjectStore {
   private readonly _folder = signal<string | null>(null);
   private readonly _detail = signal<ProjectDetailDto | null>(null);
   private readonly _status = signal<ProjectStatusDto | null>(null);
-  private readonly _nodes = signal<StatusMap<NodeStatusSummaryDto>>({});
-  private readonly _folderAudioRemaining = signal(0);
-  private readonly _paragraphs = signal<StatusMap<ParagraphStatusEntry>>({});
-  private readonly _items = signal<StatusMap<ItemStatusEntry>>({});
   private readonly _loading = signal(false);
   private readonly _error = signal<string | null>(null);
   /** Newest assembled audiobook, for the Export step; null when none or the read failed. */
@@ -82,10 +81,6 @@ export class ProjectStore {
   readonly detail = this._detail.asReadonly();
   /** The last `/status` read; its `nodes` and `audio.remaining` go stale — read {@link nodes} instead. */
   readonly status = this._status.asReadonly();
-  readonly nodes = this._nodes.asReadonly();
-  readonly folderAudioRemaining = this._folderAudioRemaining.asReadonly();
-  readonly paragraphs = this._paragraphs.asReadonly();
-  readonly items = this._items.asReadonly();
   readonly loading = this._loading.asReadonly();
   readonly error = this._error.asReadonly();
   /**
@@ -94,10 +89,30 @@ export class ProjectStore {
    */
   readonly readOnly = computed(() => this.stepView.readOnly(this._folder()));
 
+  /**
+   * Where the status maps come from. At a History step, the last `/status` read, which read `?at=`
+   * the step: live deltas are today's and must not move its pills, and the queue's item status is
+   * today's too, so there is none. Otherwise the live entry once the hub has answered for it; until
+   * then `/status`, so the pipeline does not flash empty.
+   */
+  private readonly statusMaps = computed<StatusMaps>(() => {
+    const folder = this._folder();
+    const entry = folder === null ? undefined : entryFor(this.live.projects(), folder);
+    if (this.readOnly() === null && entry?.seeded) return entry;
+    const status = this._status();
+    if (!status) return NO_STATUS;
+    return { ...NO_STATUS, nodes: status.nodes, folderAudioRemaining: status.audio.remaining };
+  });
+
+  readonly nodes = computed(() => this.statusMaps().nodes);
+  readonly folderAudioRemaining = computed(() => this.statusMaps().folderAudioRemaining);
+  readonly paragraphs = computed(() => this.statusMaps().paragraphs);
+  readonly items = computed(() => this.statusMaps().items);
+
   /** Items the audio queue reports queued or processing for this project. */
   readonly audioInFlight = computed(
     () =>
-      Object.values(this._items()).filter(
+      Object.values(this.items()).filter(
         (i) => i?.status === 'Queued' || i?.status === 'Processing',
       ).length,
   );
@@ -109,8 +124,8 @@ export class ProjectStore {
     const output = this._lastOutput();
     return derivePipeline({
       status,
-      nodes: this._nodes(),
-      folderAudioRemaining: this._folderAudioRemaining(),
+      nodes: this.nodes(),
+      folderAudioRemaining: this.folderAudioRemaining(),
       audioInFlight: this.audioInFlight(),
       voiceBatchRunning: this.live.voiceBatch().isRunning,
       assemblyRunning: this.live.assembly().isRunning,
@@ -120,7 +135,7 @@ export class ProjectStore {
     });
   });
 
-  /** Joins the project group, listens to its hub traffic and loads detail + status. */
+  /** Follows the project (which joins its group) and loads detail + status. */
   async open(folder: string): Promise<void> {
     this.close();
     this._folder.set(folder);
@@ -129,15 +144,10 @@ export class ProjectStore {
     this._error.set(null);
     this._lastOutput.set(null);
 
-    // Item status (#368 moves it onto the live entry): joined first, so this join is the one that
-    // waits for the hub's answer, and seeded again from every reconnect snapshot.
-    void this.live.joinProject(folder).then(() => this.seedItemsFromLive());
     this.subscriptions = [
-      this.live.on('nodeStatus', (m) => this.applyNodeStatus(m)),
-      this.live.on('itemStatus', (m) => this.applyItemStatus(m)),
-      this.live.resynced((s) => this.seedItemsFromSnapshot(s)),
       this.live.on('assembly', (m) => {
-        if (m.kind === 'Completed' && this.isMine(m.folder ?? folder)) void this.loadLastOutput();
+        if (m.kind === 'Completed' && sameFolder(m.folder ?? folder, folder))
+          void this.loadLastOutput();
       }),
     ];
     const awaitStatus = { baseline: 'await' } as const;
@@ -151,13 +161,11 @@ export class ProjectStore {
 
   /**
    * Reads detail + status again, staying in the group: viewing a History step, or going back to
-   * current, changes what every read answers (`?at=`). The item status is taken from the live
-   * snapshot again, since a viewing tab dropped its deltas.
+   * current, changes what every read answers (`?at=`).
    */
   async reload(): Promise<void> {
     const folder = this._folder();
     if (folder === null) return;
-    this.seedItemsFromLive();
     await this.load(folder);
   }
 
@@ -179,14 +187,12 @@ export class ProjectStore {
     }
   }
 
-  /** Leaves the group and drops pending refetches. Safe to call when nothing is open. */
+  /** Stops following, which leaves the group, and drops pending refetches. Safe when nothing is open. */
   close(): void {
     for (const unsubscribe of this.subscriptions) unsubscribe();
     this.subscriptions = [];
     for (const handle of this.following) handle.close();
     this.following = [];
-    const folder = this._folder();
-    if (folder) void this.live.leaveProject(folder);
     this._folder.set(null);
   }
 
@@ -224,67 +230,8 @@ export class ProjectStore {
 
   private applyStatus(status: ProjectStatusDto): void {
     this._status.set(status);
-    this._nodes.set(status.nodes);
-    this._folderAudioRemaining.set(status.audio.remaining);
     for (const handle of this.following) handle.baseline(status.revision);
   }
-
-  /** A viewing tab shows the past project: live status deltas would move its pills on with today's. */
-  private applyNodeStatus(m: NodeStatusMessage): void {
-    if (!this.isMine(m.folder) || this.readOnly() !== null) return;
-    this._nodes.update((nodes) => mergeDeltas(nodes, m.nodes));
-    this._folderAudioRemaining.set(m.folderAudioRemaining);
-  }
-
-  private applyItemStatus(m: ItemStatusMessage): void {
-    if (!this.isMine(m.folder) || this.readOnly() !== null) return;
-    this._paragraphs.update((p) => mergeDeltas(p, m.paragraphs));
-    this._items.update((i) => mergeDeltas(i, m.items));
-  }
-
-  private seedItemsFromSnapshot(snapshot: LiveSnapshot): void {
-    const project = this.projectIn(snapshot.projects);
-    if (project) this.seedItems(project.paragraphs, project.items);
-  }
-
-  private seedItemsFromLive(): void {
-    const project = this.projectIn(this.live.projects());
-    if (project) this.seedItems(project.paragraphs, project.items);
-  }
-
-  private seedItems(
-    paragraphs: StatusMap<ParagraphStatusEntry> | undefined,
-    items: StatusMap<ItemStatusEntry> | undefined,
-  ): void {
-    if (paragraphs) this._paragraphs.set(paragraphs);
-    if (items) this._items.set(items);
-  }
-
-  private projectIn<T>(projects: Record<string, T> | undefined): T | undefined {
-    const folder = this._folder();
-    if (!folder || !projects) return undefined;
-    const key = Object.keys(projects).find((k) => sameFolder(k, folder));
-    return key === undefined ? undefined : projects[key];
-  }
-
-  private isMine(folder: string): boolean {
-    const mine = this._folder();
-    return mine !== null && sameFolder(mine, folder);
-  }
-}
-
-/** The hub compares folders case-insensitively. */
-function sameFolder(a: string, b: string): boolean {
-  return a.toLowerCase() === b.toLowerCase();
-}
-
-function mergeDeltas<T>(current: StatusMap<T>, deltas: StatusMap<T>): StatusMap<T> {
-  const next = { ...current };
-  for (const [key, value] of Object.entries(deltas)) {
-    if (value === null) delete next[key];
-    else next[key] = value;
-  }
-  return next;
 }
 
 /** `formatDate(…, 'mediumDate')`: "19 Sep 2026" in the browser's locale. */

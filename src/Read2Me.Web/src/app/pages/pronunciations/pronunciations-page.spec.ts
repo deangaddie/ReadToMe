@@ -296,6 +296,7 @@ describe('r2m-pronunciations-page', () => {
 
   it('turns delete off while audio generation runs for the project, and tells the editor', async () => {
     const page = await render();
+    liveFake.seed('the-adventures-of-sherlock-holmes');
     liveFake.emit('itemStatus', {
       folder: 'the-adventures-of-sherlock-holmes',
       paragraphs: {},
