@@ -40,7 +40,7 @@ const CH2: LoadedChapter = {
 };
 
 function ctx(overrides: Partial<ReceiptContext> = {}): ReceiptContext {
-  return { lastRevision: 5, loaded: [CH1, CH2], visibleChapterId: 'c1', ...overrides };
+  return { gap: false, loaded: [CH1, CH2], visibleChapterId: 'c1', ...overrides };
 }
 
 describe('planReceipt', () => {
@@ -188,8 +188,8 @@ describe('planReceipt', () => {
   });
 
   describe('revision gap', () => {
-    it('a skipped revision reloads the overview, reviews and the visible chapter', () => {
-      const plan = planReceipt(receipt({ revision: 8, facets: [] }), ctx());
+    it('a gap reloads the overview, reviews and the visible chapter', () => {
+      const plan = planReceipt(receipt({ revision: 8, facets: [] }), ctx({ gap: true }));
       expect(plan).toMatchObject({
         gap: true,
         reloadOverview: true,
@@ -199,23 +199,15 @@ describe('planReceipt', () => {
       });
     });
 
-    it('the next revision is not a gap', () => {
-      expect(planReceipt(receipt({ revision: 6 }), ctx()).gap).toBe(false);
-    });
-
-    it('an old or repeated revision is not a gap', () => {
-      expect(planReceipt(receipt({ revision: 5 }), ctx()).gap).toBe(false);
-      expect(planReceipt(receipt({ revision: 3 }), ctx()).gap).toBe(false);
-    });
-
-    it('no baseline yet (revision unknown) is not a gap', () => {
-      expect(planReceipt(receipt({ revision: 40 }), ctx({ lastRevision: null })).gap).toBe(false);
+    it('a revision far ahead is no gap unless the feed says so', () => {
+      const plan = planReceipt(receipt({ revision: 40, facets: [] }), ctx());
+      expect(plan).toMatchObject({ gap: false, reloadOverview: false, reloadChapters: [] });
     });
 
     it('a gap still honours the receipt own facets', () => {
       const plan = planReceipt(
         receipt({ revision: 9, facets: ['ItemText'], paragraphIds: ['p3'] }),
-        ctx(),
+        ctx({ gap: true }),
       );
       expect(plan.reloadChapters).toEqual(['c1', 'c2']);
     });

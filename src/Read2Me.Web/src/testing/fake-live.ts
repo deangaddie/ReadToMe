@@ -36,8 +36,10 @@ export class FakeLive {
   readonly watchdog = signal<WatchdogState>({});
   readonly serviceStatus = signal<ServiceStatusState>({});
   readonly throughput = signal<ThroughputSnapshot | null>(null);
+  /** Project groups joined and left: reference-counted by folder, as `LiveService` does. */
   readonly joined: string[] = [];
   readonly left: string[] = [];
+  readonly #projectRefs = new Map<string, number>();
   readonly joinedStreams: StreamKind[] = [];
   readonly leftStreams: StreamKind[] = [];
 
@@ -89,9 +91,20 @@ export class FakeLive {
     return 'fake-connection';
   }
   async joinProject(folder: string) {
-    this.joined.push(folder);
+    const key = folder.toLowerCase();
+    const count = (this.#projectRefs.get(key) ?? 0) + 1;
+    this.#projectRefs.set(key, count);
+    if (count === 1) this.joined.push(folder);
   }
   async leaveProject(folder: string) {
+    const key = folder.toLowerCase();
+    const count = this.#projectRefs.get(key);
+    if (!count) return;
+    if (count > 1) {
+      this.#projectRefs.set(key, count - 1);
+      return;
+    }
+    this.#projectRefs.delete(key);
     this.left.push(folder);
   }
   async joinStream(kind: StreamKind) {

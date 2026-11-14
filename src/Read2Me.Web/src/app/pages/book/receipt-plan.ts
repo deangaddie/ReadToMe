@@ -9,8 +9,8 @@ export interface LoadedChapter {
 }
 
 export interface ReceiptContext {
-  /** Highest revision the reader has accounted for; null before any baseline is known. */
-  lastRevision: number | null;
+  /** The receipt skips a revision past the one the reader has seen (the Project feed decides). */
+  gap: boolean;
   /** Loaded chapters, in reading order. */
   loaded: readonly LoadedChapter[];
   /** The chapter at the top of the viewport. */
@@ -60,8 +60,7 @@ const VOICE_FACETS: readonly BookFacets[] = ['Voices', 'VoiceRules', 'Characters
  */
 export function planReceipt(receipt: Receipt, context: ReceiptContext): ReceiptPlan {
   const { effects } = receipt;
-  const last = context.lastRevision;
-  const gap = last !== null && receipt.revision > last + 1;
+  const { gap } = context;
   const any = (facets: readonly BookFacets[]) => facets.some((f) => hasFacet(effects.facets, f));
 
   const plan: ReceiptPlan = {

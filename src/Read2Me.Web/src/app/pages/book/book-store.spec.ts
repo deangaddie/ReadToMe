@@ -6,14 +6,13 @@ import type {
   BookFacets,
   LiveSnapshot,
 } from '@app/api';
-import { Emitter } from '@app/core/emitter';
 import { override, resetServices } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import type { Receipt } from '@app/live/live-messages';
-import { LiveService } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast';
 import { STRUCTURE_RULES } from '../../../testing/structure-rules';
 import { FakeApi, problem } from '../../../testing/fake-api';
+import { FakeLive } from '../../../testing/fake-live';
 import type { ProjectStore } from '../project/project-store';
 import { BookStore, RECEIPT_BATCH_MS, WINDOW_CAP } from './book-store';
 import type { TreeNode } from './book-tree';
@@ -83,18 +82,6 @@ function receipt(
   };
 }
 
-/** The receipt and resync streams the store subscribes to. */
-class FakeBookLive {
-  readonly receiptStream = new Emitter<Receipt>();
-  readonly resyncStream = new Emitter<LiveSnapshot>();
-  receipts(_folder: string, listener: (r: Receipt) => void) {
-    return this.receiptStream.subscribe(listener);
-  }
-  resynced(listener: (s: LiveSnapshot) => void) {
-    return this.resyncStream.subscribe(listener);
-  }
-}
-
 const chapterList = (ids: string[]) => ({
   chapters: ids.map((id) => ({ id, title: id.toUpperCase() })),
 });
@@ -106,7 +93,7 @@ const chapterList = (ids: string[]) => ({
  */
 describe('BookStore', () => {
   let api: FakeApi;
-  let live: FakeBookLive;
+  let live: FakeLive;
   let store: BookStore;
   let toasts: string[];
   /** The project's read-only reason: set while a History step is viewed. */
@@ -119,8 +106,7 @@ describe('BookStore', () => {
     resetServices();
     api = new FakeApi();
     api.install();
-    live = new FakeBookLive();
-    override(LiveService, live as unknown as LiveService);
+    live = new FakeLive().install();
     toasts = [];
     override(ToastService, { info: (m: string) => toasts.push(m) } as unknown as ToastService);
     readOnly = signal<string | null>(null);
@@ -323,8 +309,8 @@ describe('BookStore', () => {
 
       const own = store.expectOwnReceipt(1000);
       const foreign = store.expectOwnReceipt(1000);
-      live.receiptStream.emit(receipt(6, ['NodeTitle'], {}, false));
-      live.receiptStream.emit(receipt(7, ['NodeTitle'], {}, true));
+      live.emit('receipt', receipt(6, ['NodeTitle'], {}, false));
+      live.emit('receipt', receipt(7, ['NodeTitle'], {}, true));
       expect(await own.settled).toBe(true);
       expect(await foreign.settled).toBe(true);
 
@@ -345,8 +331,8 @@ describe('BookStore', () => {
       await store.openFirstChapter();
       api.on('GET', `${BASE}/nodes/Chapter/c1/children`, paragraphs('a', 'b', 'z'));
 
-      live.receiptStream.emit(receipt(6, ['Attribution'], { paragraphIds: ['a'] }));
-      live.receiptStream.emit(receipt(7, ['Attribution'], { paragraphItemIds: ['b-i'] }));
+      live.emit('receipt', receipt(6, ['Attribution'], { paragraphIds: ['a'] }));
+      live.emit('receipt', receipt(7, ['Attribution'], { paragraphItemIds: ['b-i'] }));
       expect(calls('/nodes/Chapter/c1/children')).toBe(1);
       await settle(RECEIPT_BATCH_MS + 20);
 
@@ -361,8 +347,8 @@ describe('BookStore', () => {
       await store.openFirstChapter();
       api.on('GET', `${BASE}/nodes/Chapter/c1/children`, paragraphs('a', 'a2'));
 
-      live.receiptStream.emit(receipt(6, ['Structure'], { paragraphIds: ['a'] }));
-      live.receiptStream.emit(receipt(7, ['Structure'], { paragraphIds: ['a'] }));
+      live.emit('receipt', receipt(6, ['Structure'], { paragraphIds: ['a'] }));
+      live.emit('receipt', receipt(7, ['Structure'], { paragraphIds: ['a'] }));
       expect(toasts).toEqual(['Book updated elsewhere']);
       await settle(RECEIPT_BATCH_MS + 20);
 
@@ -378,7 +364,7 @@ describe('BookStore', () => {
       await store.openFirstChapter();
       readOnly.set('Viewing a past step');
 
-      live.receiptStream.emit(receipt(6, ['Structure'], { paragraphIds: ['a'] }));
+      live.emit('receipt', receipt(6, ['Structure'], { paragraphIds: ['a'] }));
       await settle(RECEIPT_BATCH_MS + 20);
 
       expect(toasts).toEqual([]);
@@ -389,7 +375,7 @@ describe('BookStore', () => {
       await store.open('dracula');
       await expand('p1');
       await store.openFirstChapter();
-      live.receiptStream.emit(receipt(6, ['Structure'], { paragraphIds: ['a'] }, true));
+      live.emit('receipt', receipt(6, ['Structure'], { paragraphIds: ['a'] }, true));
       expect(toasts).toEqual([]);
       await settle(RECEIPT_BATCH_MS + 20);
     });
@@ -400,7 +386,7 @@ describe('BookStore', () => {
       await store.openFirstChapter();
       api.on('GET', `${BASE}/audio/reviews`, { 'a-i': { state: 'NeedsReview' } });
 
-      live.receiptStream.emit(receipt(9, ['VoiceRules']));
+      live.emit('receipt', receipt(9, ['VoiceRules']));
       await settle(RECEIPT_BATCH_MS + 20);
 
       expect(calls('/book')).toBe(2);
@@ -413,7 +399,7 @@ describe('BookStore', () => {
       await store.open('dracula');
       await expand('p1');
       await store.openFirstChapter();
-      live.resyncStream.emit({
+      live.resync({
         projects: { DRACULA: { revision: 12 } },
       } as unknown as LiveSnapshot);
       await settle(RECEIPT_BATCH_MS + 20);
@@ -425,7 +411,7 @@ describe('BookStore', () => {
     it('a resync at the revision /book read against reads nothing again', async () => {
       await store.open('dracula');
       await store.openFirstChapter();
-      live.resyncStream.emit({ projects: { dracula: { revision: 5 } } } as unknown as LiveSnapshot);
+      live.resync({ projects: { dracula: { revision: 5 } } } as unknown as LiveSnapshot);
       await settle(RECEIPT_BATCH_MS + 20);
       expect(calls('/book')).toBe(1);
       expect(calls('/audio/reviews')).toBe(1);
@@ -443,7 +429,7 @@ describe('BookStore', () => {
       });
 
       async function snapshotThenBook(snapshot: number, book: number) {
-        live.resyncStream.emit({
+        live.resync({
           projects: { dracula: { revision: snapshot } },
         } as unknown as LiveSnapshot);
         answer({ ...OVERVIEW, revision: book });
@@ -453,21 +439,6 @@ describe('BookStore', () => {
         await settle(RECEIPT_BATCH_MS + 20);
       }
 
-      it('waits for the baseline and reads nothing again when the book already holds that revision', async () => {
-        await snapshotThenBook(5, 5);
-        expect(calls('/book')).toBe(1);
-        expect(calls('/audio/reviews')).toBe(1);
-        expect(calls('/nodes/Chapter/c1/children')).toBe(1);
-      });
-
-      it('reloads when the snapshot is ahead of the book, even if a later receipt came meanwhile', async () => {
-        // Commit 6 landed before the hub joined (no receipt); the receipt for 7 is not a gap yet.
-        live.receiptStream.emit(receipt(7, ['VoiceRules']));
-        await snapshotThenBook(6, 5);
-        expect(calls('/book')).toBe(2);
-        expect(calls('/audio/reviews')).toBe(2);
-      });
-
       it('reloads in place, keeping the window, when the snapshot is ahead of the book', async () => {
         await snapshotThenBook(6, 5);
         expect(calls('/book')).toBe(2);
@@ -475,7 +446,7 @@ describe('BookStore', () => {
         expect(store.window()).toEqual(['c1']);
         expect(store.currentChapterId()).toBe('c1');
         // The snapshot's revision is the baseline from now on: the next one is not a gap.
-        live.receiptStream.emit(receipt(7, ['Attribution'], { paragraphIds: ['a'] }));
+        live.emit('receipt', receipt(7, ['Attribution'], { paragraphIds: ['a'] }));
         await settle(RECEIPT_BATCH_MS + 20);
         expect(calls('/book')).toBe(2);
       });
@@ -485,14 +456,14 @@ describe('BookStore', () => {
       api.on('GET', `${BASE}/book`, () => problem(500, 'db locked'));
       await store.open('dracula');
       expect(store.stale()).toBeTruthy();
-      live.resyncStream.emit({ projects: { dracula: { revision: 5 } } } as unknown as LiveSnapshot);
+      live.resync({ projects: { dracula: { revision: 5 } } } as unknown as LiveSnapshot);
 
       api.on('GET', `${BASE}/book`, OVERVIEW);
       await store.refresh();
       await settle(RECEIPT_BATCH_MS + 20);
       expect(calls('/book')).toBe(2);
 
-      live.resyncStream.emit({ projects: { dracula: { revision: 6 } } } as unknown as LiveSnapshot);
+      live.resync({ projects: { dracula: { revision: 6 } } } as unknown as LiveSnapshot);
       await settle(RECEIPT_BATCH_MS + 20);
       expect(calls('/book')).toBe(3);
     });
@@ -518,7 +489,7 @@ describe('BookStore', () => {
       await store.openFirstChapter();
       api.on('GET', `${BASE}/nodes/Chapter/c1/children`, () => problem(500, 'db locked'));
 
-      live.receiptStream.emit(receipt(6, ['ItemText'], { paragraphIds: ['a'] }));
+      live.emit('receipt', receipt(6, ['ItemText'], { paragraphIds: ['a'] }));
       await settle(RECEIPT_BATCH_MS + 20);
       expect(store.stale()).toBeTruthy();
 
@@ -550,21 +521,9 @@ describe('BookStore', () => {
       await expand('p1');
       await store.openFirstChapter();
 
-      live.receiptStream.emit(receipt(2, ['VoiceRules']));
+      live.emit('receipt', receipt(2, ['VoiceRules']));
       await settle(RECEIPT_BATCH_MS + 20);
       expect(calls('/book')).toBe(2);
-    });
-
-    it('before /book answers there is no baseline, so the first receipt is not a gap', async () => {
-      let answer!: (body: unknown) => void;
-      api.on('GET', `${BASE}/book`, () => new Promise((r) => (answer = r)));
-      const opened = store.open('dracula');
-      await settle();
-      live.receiptStream.emit(receipt(40, ['VoiceRules']));
-      answer(OVERVIEW);
-      await opened;
-      await settle(RECEIPT_BATCH_MS + 20);
-      expect(calls('/book')).toBe(1);
     });
 
     async function windowOfTwo() {
@@ -578,7 +537,7 @@ describe('BookStore', () => {
       api.on('GET', `${BASE}/nodes/Part/p1/children`, {
         chapters: chapters.map((id) => ({ id, title: id })),
       });
-      live.receiptStream.emit(receipt(6, ['Structure'], { nodeIds: [nodeId] }));
+      live.emit('receipt', receipt(6, ['Structure'], { nodeIds: [nodeId] }));
       await settle(RECEIPT_BATCH_MS + 20);
     }
 
@@ -601,7 +560,7 @@ describe('BookStore', () => {
       await store.openChapter('c3');
       const before = calls('/nodes/Part/p1/children');
 
-      live.receiptStream.emit(receipt(6, ['Structure'], { nodeIds: ['c3'] }));
+      live.emit('receipt', receipt(6, ['Structure'], { nodeIds: ['c3'] }));
       await settle(RECEIPT_BATCH_MS + 20);
 
       // p1 was never read, so c3 is not in the chapter sequence yet: read on rather than drop it.
@@ -631,7 +590,7 @@ describe('BookStore', () => {
       await store.openFirstChapter();
       api.on('GET', `${BASE}/nodes/Chapter/c3/children`, paragraphs('new'));
 
-      live.receiptStream.emit(created('new', 'c3'));
+      live.emit('receipt', created('new', 'c3'));
       await settle(RECEIPT_BATCH_MS + 20);
 
       expect(store.window()).toEqual(['c3']);
@@ -646,7 +605,7 @@ describe('BookStore', () => {
       const scroll = store.scrollRequest();
       api.on('GET', `${BASE}/nodes/Chapter/c2/children`, paragraphs('c', 'new'));
 
-      live.receiptStream.emit(created('new', 'c2'));
+      live.emit('receipt', created('new', 'c2'));
       await settle(RECEIPT_BATCH_MS + 20);
 
       expect(store.window()).toEqual(['c1', 'c2']);
@@ -659,7 +618,7 @@ describe('BookStore', () => {
       await store.openFirstChapter();
       const before = calls('/nodes/Chapter/c3/children');
 
-      live.receiptStream.emit(created('new', 'c3', false));
+      live.emit('receipt', created('new', 'c3', false));
       await settle(RECEIPT_BATCH_MS + 20);
 
       expect(store.window()).toEqual(['c1']);
@@ -672,7 +631,8 @@ describe('BookStore', () => {
       const scroll = store.scrollRequest();
       const before = calls('/nodes/Chapter/c1/children');
 
-      live.receiptStream.emit(
+      live.emit(
+        'receipt',
         receipt(
           6,
           ['Structure'],

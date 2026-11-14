@@ -113,17 +113,26 @@ export class ProjectFeed {
   /**
    * One debounced refetch whenever `folder` changes in a way the view shows: a receipt carrying
    * any of `facets` (a function when the set changes over time), a gap, or a catch-up. It never
-   * runs the opening read; the caller keeps its own first load.
+   * runs the opening read; the caller keeps its own first load. `options` as for {@link follow}.
    */
-  refetchOn(folder: string, facets: RefetchFacets, refetch: () => Promise<void>): FollowHandle {
+  refetchOn(
+    folder: string,
+    facets: RefetchFacets,
+    refetch: () => Promise<void>,
+    options: FollowOptions = {},
+  ): FollowHandle {
     const debounced = new Debounced(refetch);
     const wanted = typeof facets === 'function' ? facets : () => facets;
-    const handle = this.follow(folder, {
-      receipt: (r, { gap }) => {
-        if (gap || wanted().some((f) => hasFacet(r.effects.facets, f))) debounced.schedule();
+    const handle = this.follow(
+      folder,
+      {
+        receipt: (r, { gap }) => {
+          if (gap || wanted().some((f) => hasFacet(r.effects.facets, f))) debounced.schedule();
+        },
+        catchUp: () => debounced.schedule(),
       },
-      catchUp: () => debounced.schedule(),
-    });
+      options,
+    );
     return {
       baseline: (revision) => handle.baseline(revision),
       close: () => {
