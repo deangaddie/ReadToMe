@@ -35,6 +35,7 @@ import {
   applyItemStatus,
   applyNodeStatus,
   applyVoiceBatch,
+  type LiveProject,
   emptyProject,
 } from './live-state';
 
@@ -87,7 +88,7 @@ export class LiveService {
   private readonly _watchdog = signal<WatchdogState>({});
   private readonly _serviceStatus = signal<ServiceStatusState>({});
   private readonly _throughput = signal<ThroughputSnapshot | null>(null);
-  private readonly _projects = signal<Record<string, ProjectSnapshot>>({});
+  private readonly _projects = signal<Record<string, LiveProject>>({});
   private readonly _latest = signal<Partial<Record<LiveFamily, unknown>>>({});
 
   readonly state = this._state.asReadonly();
@@ -120,7 +121,10 @@ export class LiveService {
   /** Last observed `AiServiceStatus` per service (probes, lifecycle ops, watchdog transitions). */
   readonly serviceStatus = this._serviceStatus.asReadonly();
   readonly throughput = this._throughput.asReadonly();
-  /** Current status maps per joined project (snapshot + applied deltas), keyed by folder as joined. */
+  /**
+   * Current status maps per joined project (snapshot + applied deltas), keyed by folder as joined;
+   * an entry is `seeded` once the hub has answered for it.
+   */
   readonly projects = this._projects.asReadonly();
   /** Latest message per family — the style guide's "Live" section. */
   readonly latest = this._latest.asReadonly();
@@ -420,10 +424,10 @@ export class LiveService {
   private setProject(folder: string, snapshot: ProjectSnapshot): void {
     const key = this.projectKeyFor(folder);
     if (!key) return;
-    this._projects.update((all) => ({ ...all, [key]: snapshot }));
+    this._projects.update((all) => ({ ...all, [key]: { ...snapshot, seeded: true } }));
   }
 
-  private updateProject(folder: string, change: (p: ProjectSnapshot) => ProjectSnapshot): void {
+  private updateProject(folder: string, change: (p: LiveProject) => LiveProject): void {
     const key = this.projectKeyFor(folder);
     if (!key) return;
     this._projects.update((all) => ({ ...all, [key]: change(all[key] ?? emptyProject(key)) }));

@@ -212,6 +212,30 @@ describe('LiveService', () => {
     expect(service.projects()['pride-and-prejudice']?.revision).toBe(9);
   });
 
+  it('marks a joined project seeded once the hub answers for it: JoinProject, then a snapshot', async () => {
+    await service.joinProject('pride-and-prejudice');
+    expect(service.projects()['pride-and-prejudice']?.seeded).toBe(false);
+
+    let answer: (snapshot: unknown) => void = () => {};
+    service.start();
+    current().results.set('JoinProject', () => new Promise((resolve) => (answer = resolve)));
+    await settle();
+    expect(service.projects()['pride-and-prejudice']?.seeded).toBe(false);
+
+    answer(projectSnapshot('pride-and-prejudice', 4));
+    await settle();
+    expect(service.projects()['pride-and-prejudice']).toMatchObject({ revision: 4, seeded: true });
+
+    current().results.set('JoinProject', () => undefined);
+    current().results.set('GetSnapshot', () =>
+      hubSnapshot({ 'pride-and-prejudice': projectSnapshot('pride-and-prejudice', 6) }),
+    );
+    current().drop();
+    current().recover();
+    await settle();
+    expect(service.projects()['pride-and-prejudice']).toMatchObject({ revision: 6, seeded: true });
+  });
+
   it('reference-counts project membership and joins only while connected', async () => {
     await service.joinProject('pride-and-prejudice'); // before start: remembered, not invoked
     service.start();

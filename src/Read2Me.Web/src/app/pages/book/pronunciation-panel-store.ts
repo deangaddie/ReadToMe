@@ -2,8 +2,7 @@ import { type Guid, type PronunciationEntry, PronunciationsApi } from '@app/api'
 import { ActivityStore } from '@app/activity/activity-store';
 import { use } from '@app/core/services';
 import { computed, effect, signal, untracked } from '@app/core/signals';
-import { hasFacet } from '@app/live/live-messages';
-import { LiveService, type Unsubscribe } from '@app/live/live.service';
+import { type FollowHandle, ProjectFeed } from '@app/live/project-feed';
 import { Debounced } from '@app/shared/debounced';
 import { confirmDiscard } from '@app/shared/unsaved-changes';
 import { ConfirmService } from '@app/ui/dialogs';
@@ -31,7 +30,7 @@ export interface PanelSession {
  */
 export class PronunciationPanelState {
   private readonly api = use(PronunciationsApi);
-  private readonly live = use(LiveService);
+  private readonly feed = use(ProjectFeed);
   private readonly activity = use(ActivityStore);
   private readonly confirm = use(ConfirmService);
 
@@ -52,7 +51,7 @@ export class PronunciationPanelState {
   });
 
   private folder: string | null = null;
-  private unsubscribe: Unsubscribe | null = null;
+  private following: FollowHandle | null = null;
   private keys = 0;
   private seq = 0;
   private readonly refetch = new Debounced(() => this.load());
@@ -69,9 +68,7 @@ export class PronunciationPanelState {
     if (folder === this.folder) return;
     this.unfollow();
     this.folder = folder;
-    this.unsubscribe = this.live.receipts(folder, (r) => {
-      if (hasFacet(r.effects.facets, 'Pronunciations')) this.refetch.schedule();
-    });
+    this.following = this.feed.refetchOn(folder, ['Pronunciations'], () => this.load());
     this.refetch.schedule();
   }
 
@@ -81,8 +78,8 @@ export class PronunciationPanelState {
   }
 
   private unfollow(): void {
-    this.unsubscribe?.();
-    this.unsubscribe = null;
+    this.following?.close();
+    this.following = null;
     this.refetch.cancel();
     this.folder = null;
     this.seq++;
