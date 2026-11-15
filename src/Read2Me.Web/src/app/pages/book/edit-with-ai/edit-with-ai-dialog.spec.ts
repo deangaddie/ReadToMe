@@ -457,7 +457,7 @@ describe('r2m-edit-with-ai-dialog', () => {
       await openRow(0);
 
       expect(button('retry-row').disabled).toBe(true);
-      expect(button('retry-row').getAttribute('data-tooltip')).toBe(
+      expect(button('retry-row').closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(
         'p1 is missing: the chapter has no paragraphs',
       );
       // Typing a value by hand still makes the row appliable.

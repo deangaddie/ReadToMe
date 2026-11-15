@@ -58,9 +58,9 @@ describe('r2m-file-drop', () => {
     expect(files.map((f) => f.name)).toEqual(['a.epub']);
   });
 
-  it('a read-only reason turns the picker off with the reason and ignores a drop', async () => {
+  it('a blocked gate turns the picker off with the reason and ignores a drop', async () => {
     const { zone, files, rejected } = await mount();
-    zone.readOnly = 'Viewing a past step';
+    zone.block = { reason: 'Viewing a past step' };
     await zone.rendered();
 
     const button = zone.querySelector('button')!;
@@ -73,7 +73,7 @@ describe('r2m-file-drop', () => {
     expect(files).toEqual([]);
     expect(rejected).toEqual([]);
 
-    zone.readOnly = null;
+    zone.block = null;
     await zone.rendered();
     drop(zone, [new File(['x'], 'book.epub')]);
     expect(files.map((f) => f.name)).toEqual(['book.epub']);

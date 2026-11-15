@@ -1,22 +1,19 @@
 import { html, nothing } from 'lit-html';
 import {
+  type Block,
   type PronunciationDraftRequest,
   type PronunciationMatchInBook,
   PronunciationsApi,
+  withLocal,
 } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import { LiveService } from '@app/live/live.service';
-import { blockable, icon, spinner } from '@app/ui/partials';
+import { gated, icon, spinner } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
-import {
-  gpuBusyReason,
-  playBlockedReason,
-  playView,
-  spokenPlayBlockedReason,
-} from './try-out-logic';
+import { gpuBusyReason, playView, spokenPlayBlockedReason } from './try-out-logic';
 import { TryOutPlayer } from './try-out-player';
 import css from './pronunciation-sentence.css' with { type: 'text' };
 
@@ -58,13 +55,13 @@ export class PronunciationSentence extends R2mElement {
     this.#draft.set(value);
   }
 
-  /** `StepView.readOnly`: why nothing plays while a step is viewed, or null. */
-  readonly #readOnly = signal<string | null>(null);
-  get readOnly() {
-    return this.#readOnly();
+  /** `ProjectStore.block`: the project's Edit gate; nothing plays while a step is viewed. */
+  readonly #block = signal<Block | null>(null);
+  get block() {
+    return this.#block();
   }
-  set readOnly(value: string | null) {
-    this.#readOnly.set(value);
+  set block(value: Block | null) {
+    this.#block.set(value);
   }
 
   readonly player = new TryOutPlayer({
@@ -72,8 +69,9 @@ export class PronunciationSentence extends R2mElement {
     failed: (error) => this.toast.problem(error.toProblem()),
   });
 
-  private readonly blocked = computed(() =>
-    playBlockedReason(this.#readOnly(), gpuBusyReason(this.live.queue(), this.live.voiceBatch())),
+  /** The play gate: viewing a step first, then the GPU. */
+  private readonly playBlock = computed(() =>
+    withLocal(this.#block(), gpuBusyReason(this.live.queue(), this.live.voiceBatch()) ?? false),
   );
 
   protected override connected(): void {
@@ -83,35 +81,37 @@ export class PronunciationSentence extends R2mElement {
 
   private play(m: PronunciationMatchInBook, asWritten: boolean, label: string) {
     const key = asWritten ? 'written' : 'spoken';
-    const view = playView(key, this.blocked(), this.player.playing());
-    const reason =
-      view.reason ??
-      (asWritten ? null : spokenPlayBlockedReason(this.#draft()?.spokenForm ?? null));
-    return blockable(
-      reason,
-      html`<button
-        type="button"
-        class="r2m-button r2m-button--text"
-        data-action="play-${key}"
-        aria-pressed=${view.phase === 'idle' ? 'false' : 'true'}
-        ?disabled=${reason !== null}
-        @click=${() =>
-          this.player.toggle(key, [
-            {
-              itemId: m.itemId,
-              sentenceStart: m.sentenceStart,
-              draft: this.#draft(),
-              asWritten,
-              voice: 'item',
-            },
-          ])}
-      >
-        ${
-          view.phase === 'generating'
-            ? html`${spinner(16)} Generating…`
-            : html`${icon(view.phase === 'playing' ? 'stop' : 'play_arrow')} ${label}`
-        }
-      </button>`,
+    const view = playView(key, this.playBlock(), this.player.playing());
+    const block = withLocal(
+      view.block,
+      asWritten ? false : (spokenPlayBlockedReason(this.#draft()?.spokenForm ?? null) ?? false),
+    );
+    return gated(
+      block,
+      (disabled) =>
+        html`<button
+          type="button"
+          class="r2m-button r2m-button--text"
+          data-action="play-${key}"
+          aria-pressed=${view.phase === 'idle' ? 'false' : 'true'}
+          ?disabled=${disabled}
+          @click=${() =>
+            this.player.toggle(key, [
+              {
+                itemId: m.itemId,
+                sentenceStart: m.sentenceStart,
+                draft: this.#draft(),
+                asWritten,
+                voice: 'item',
+              },
+            ])}
+        >
+          ${
+            view.phase === 'generating'
+              ? html`${spinner(16)} Generating…`
+              : html`${icon(view.phase === 'playing' ? 'stop' : 'play_arrow')} ${label}`
+          }
+        </button>`,
     );
   }
 

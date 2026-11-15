@@ -36,9 +36,9 @@ describe('r2m-inline-edit', () => {
     expect(el.classList.contains('r2m-inline-edit--editing')).toBe(true);
   });
 
-  it('read-only, it shows the value with its button off and the reason, and never opens', async () => {
+  it('blocked, it shows the value with its button off and the reason, and never opens', async () => {
     const { el, display, field } = await mount();
-    el.readOnly = 'Viewing a past step';
+    el.block = { reason: 'Viewing a past step' };
     await el.rendered();
 
     expect(display()?.textContent).toContain('Chapter 1');

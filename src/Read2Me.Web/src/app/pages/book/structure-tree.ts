@@ -113,7 +113,7 @@ export class StructureTree extends R2mElement {
   }
 
   /**
-   * The edit gate's answer (`BookEditor.blocked()`): non-null turns every node menu off, its
+   * The edit gate's answer (`BookEditor.block()`): non-null turns every node menu off, its
    * reason the tooltip.
    */
   #blocked = signal<Block | null>(null);

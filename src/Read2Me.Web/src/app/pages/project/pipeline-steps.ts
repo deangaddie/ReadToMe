@@ -4,7 +4,7 @@ import type {
   ProjectStatusDto,
   StepCheckpointDto,
 } from '@app/api';
-import type { NodeStatusSummaryDto } from '@app/api';
+import type { Block, NodeStatusSummaryDto } from '@app/api';
 import type { StatusKind } from '@app/ui/partials';
 import type { PipelineAction, PipelineCheckpointPill, PipelineStepView } from '@app/ui/pipeline';
 
@@ -513,10 +513,12 @@ const BROWSING_ACTIONS: ReadonlySet<StepActionId> = new Set([
 ]);
 
 /**
- * The Pipeline while a History step is viewed (ticket 32): every action and checkpoint pill that
- * would change the project is blocked with `reason`; the actions that only open a page stay.
+ * The Pipeline behind a blocked Edit gate (a History step is viewed, ticket 32): every action and
+ * checkpoint pill that would change the project is blocked with the gate's reason (empty when it
+ * has none); the actions that only open a page stay.
  */
-export function readOnlyPipeline(steps: readonly PipelineStep[], reason: string): PipelineStep[] {
+export function readOnlyPipeline(steps: readonly PipelineStep[], block: Block): PipelineStep[] {
+  const reason = block.reason ?? '';
   return steps.map((step) => ({
     ...step,
     actions: step.actions.map((a) =>

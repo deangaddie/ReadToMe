@@ -65,7 +65,7 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
     narratorOnlyMode: false,
     ancestry: { c1: { partId: 'pt1', volumeId: 'v1' } },
     blocked: null,
-    viewing: false,
+    playBlock: null,
     generating: false,
     marks: {},
     litMarks: new Set(),
@@ -100,7 +100,7 @@ async function mount(context: RowContext, paragraph = PARAGRAPH) {
   return host.firstElementChild as HTMLElement;
 }
 
-/** A blocked book: the page's `editor.blocked()` while a History step is viewed. */
+/** A blocked book: the page's `editor.block()` while a History step is viewed. */
 const BLOCKED = { reason: VIEWING_READ_ONLY };
 const tooltip = (el: Element | null) =>
   el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;

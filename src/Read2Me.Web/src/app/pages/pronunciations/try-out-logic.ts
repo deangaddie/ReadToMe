@@ -8,6 +8,7 @@ import type {
   VoiceBatchState,
 } from '@app/api';
 import { isAttributionActive, isAudioActive } from '@app/activity/activity-jobs';
+import type { Block } from '@app/api';
 import type { TryOutPlaying } from './try-out-player';
 
 /**
@@ -219,25 +220,19 @@ export function gpuBusyReason(
   return holder === null ? null : `Can't play while ${holder} is running: it has the GPU`;
 }
 
-/** Why a play button is off: viewing a step first, then the GPU. */
-export function playBlockedReason(readOnly: string | null, gpu: string | null): string | null {
-  return readOnly ?? gpu;
-}
-
-/** The card's ▶ This sentence: idle, generating or playing; off with its reason unless it is the one playing. */
+/** The card's ▶ This sentence: idle, generating or playing; behind its Edit gate unless it is the one playing. */
 export interface PlayView {
   phase: 'idle' | 'generating' | 'playing';
-  disabled: boolean;
-  reason: string | null;
+  block: Block | null;
 }
 
 export function playView(
   key: string,
-  blocked: string | null,
+  block: Block | null,
   playing: TryOutPlaying | null,
 ): PlayView {
-  if (playing?.key === key) return { phase: playing.phase, disabled: false, reason: null };
-  return { phase: 'idle', disabled: blocked !== null, reason: blocked };
+  if (playing?.key === key) return { phase: playing.phase, block: null };
+  return { phase: 'idle', block };
 }
 
 function range(from: number, to: number): number[] {

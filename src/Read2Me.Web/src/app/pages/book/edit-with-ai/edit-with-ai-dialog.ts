@@ -1,14 +1,14 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
 import { LlmStreamFeed } from '@app/activity/stream-feed';
-import type { Guid } from '@app/api';
+import { type Guid, withLocal } from '@app/api';
 import { openDialog } from '@app/core/dialog';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import { ConfirmService } from '@app/ui/dialogs';
-import { callout, icon, statusChip } from '@app/ui/partials';
+import { callout, gated, icon, statusChip } from '@app/ui/partials';
 import type { BookEditor } from '../book-editor';
 import { type EditPhase, EditWithAiWorkflow } from './edit-with-ai-workflow';
 import {
@@ -418,16 +418,19 @@ export class EditWithAiDialog extends R2mElement {
         </button>
         ${
           view.llm
-            ? html`<button
-                type="button"
-                class="r2m-button r2m-button--stroked"
-                data-action="retry-row"
-                ?disabled=${view.retryingRowId !== null || blocked !== null}
-                data-tooltip=${blocked ?? nothing}
-                @click=${() => void this.retry(row)}
-              >
-                ${icon('refresh')} Ask AI again
-              </button>`
+            ? gated(
+                withLocal(withLocal(null, view.retryingRowId !== null), blocked ?? false),
+                (disabled) =>
+                  html`<button
+                    type="button"
+                    class="r2m-button r2m-button--stroked"
+                    data-action="retry-row"
+                    ?disabled=${disabled}
+                    @click=${() => void this.retry(row)}
+                  >
+                    ${icon('refresh')} Ask AI again
+                  </button>`,
+              )
             : nothing
         }
         <span class="edit__spacer"></span>

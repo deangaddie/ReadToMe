@@ -52,7 +52,7 @@ beforeEach(async () => {
   card = document.createElement('r2m-pronunciation-card') as PronunciationCard;
   card.folder = 'the-adventures-of-sherlock-holmes';
   card.marks = marks;
-  card.readOnly = null;
+  card.block = null;
   host.append(card);
   document.body.append(host);
   await settle();
@@ -117,7 +117,7 @@ describe('the Pronunciation hover card', () => {
   });
 
   it('is off while viewing a step', async () => {
-    card.readOnly = VIEWING_READ_ONLY;
+    card.block = { reason: VIEWING_READ_ONLY };
     await focusMark();
 
     expect(play().disabled).toBe(true);
@@ -137,7 +137,7 @@ describe('the Pronunciation hover card', () => {
   });
 
   it('Edit is off with the viewing reason while a step is viewed', async () => {
-    card.readOnly = VIEWING_READ_ONLY;
+    card.block = { reason: VIEWING_READ_ONLY };
     await focusMark();
 
     const edit = card.querySelector<HTMLButtonElement>('[data-action=edit-pronunciation]')!;

@@ -50,7 +50,7 @@ interface Crumb {
  * docked beside the content (both read {@link HistorySheetState}). While the project is viewed at a
  * History step, the amber banner sits above the body, the page is greyed and the next-step pill is
  * hidden; the page stays browsable, and each edit control reads the project's read-only flag
- * (`ProjectStore.readOnly`) to render disabled (ticket 32). Below 900 px the rail becomes a modal drawer, the History sheet covers
+ * (`ProjectStore.block`) to render disabled (ticket 32). Below 900 px the rail becomes a modal drawer, the History sheet covers
  * the page body (the banner stays above it) and the activity bar collapses to one summary pill.
  */
 export class AppShell extends R2mElement {

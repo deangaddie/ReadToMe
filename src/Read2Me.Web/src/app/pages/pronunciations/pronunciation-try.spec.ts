@@ -1,4 +1,4 @@
-import type { QueueMessage, VoiceBatchState } from '@app/api';
+import type { Block, QueueMessage, VoiceBatchState } from '@app/api';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   type CharacterSummaryDto,
@@ -85,12 +85,12 @@ beforeEach(() => {
 
 afterEach(() => el?.remove());
 
-async function mount(matches: PronunciationMatchInBook[], readOnly: string | null = null) {
+async function mount(matches: PronunciationMatchInBook[], block: Block | null = null) {
   el = document.createElement('r2m-pronunciation-try') as PronunciationTry;
   el.folder = 'the-adventures-of-sherlock-holmes';
   el.matchesInBook = matches;
   el.draft = { id: 'k1', writtenForm: 'Watson', spokenForm: 'WOT-sun', delete: false };
-  el.readOnly = readOnly;
+  el.block = block;
   document.body.append(el);
   await settle();
   return el;
@@ -226,7 +226,7 @@ describe('Try it', () => {
     }
 
     el.remove();
-    await mount([match(0)], VIEWING_READ_ONLY);
+    await mount([match(0)], { reason: VIEWING_READ_ONLY });
     expect(play('i0:4:3|written').disabled).toBe(true);
     expect(reasonOf(play('i0:4:3|written'))).toBe(VIEWING_READ_ONLY);
   });

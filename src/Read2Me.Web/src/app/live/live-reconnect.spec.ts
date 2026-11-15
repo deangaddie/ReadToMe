@@ -102,7 +102,7 @@ describe('an open book across a lost hub connection', () => {
     override(LiveService, live);
     live.start();
     await live.joinProject(FOLDER);
-    const project = { detail: signal({} as ProjectDetailDto), readOnly: signal(null) };
+    const project = { detail: signal({} as ProjectDetailDto), block: signal(null) };
     book = new BookStore(project as unknown as ProjectStore);
     await book.open(FOLDER);
     await book.openFirstChapter();

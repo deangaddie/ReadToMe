@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { render } from 'lit-html';
-import {
-  type Block,
-  ITEM_AUDIO_NOT_KEPT,
-  type ParagraphItemDto,
-  VIEWING_READ_ONLY,
-} from '@app/api';
+import { ITEM_AUDIO_NOT_KEPT, type ParagraphItemDto, VIEWING_READ_ONLY } from '@app/api';
 import { provide } from '@app/core/services';
 import {
   type ConfirmOptions,
@@ -68,7 +63,7 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
     narratorOnlyMode: false,
     ancestry: { c1: { partId: 'pt1', volumeId: 'v1' } },
     blocked: null,
-    viewing: false,
+    playBlock: null,
     generating: false,
     marks: {},
     litMarks: new Set(),
@@ -81,7 +76,7 @@ function ctx(overrides: Partial<RowContext> = {}): RowContext {
 let selection: AudioSelectionStore;
 let assigner: { assign: ReturnType<typeof mock>; createAndAssign: ReturnType<typeof mock> };
 let generator: { retry: ReturnType<typeof mock>; dismissReview: ReturnType<typeof mock> };
-let editor: { blocked: () => Block | null; run: ReturnType<typeof mock> };
+let editor: { run: ReturnType<typeof mock> };
 let prompt: { text: ReturnType<typeof mock>; answer: string | null };
 let confirm: { confirm: ReturnType<typeof mock> };
 
@@ -113,7 +108,7 @@ beforeEach(() => {
   selection = new AudioSelectionStore();
   assigner = { assign: mock(async () => undefined), createAndAssign: mock(async () => undefined) };
   generator = { retry: mock(async () => true), dismissReview: mock(async () => true) };
-  editor = { blocked: () => null, run: mock(async () => true) };
+  editor = { run: mock(async () => true) };
   confirm = { confirm: mock(async (_options: ConfirmOptions) => false) };
   prompt = {
     answer: 'shouting',
@@ -416,7 +411,7 @@ describe('itemRow (audio)', () => {
   });
 
   describe('a blocked book', () => {
-    /** The page's `editor.blocked()` while a History step is viewed. */
+    /** The page's `editor.block()` while a History step is viewed. */
     const blocked = (overrides: Partial<RowContext> = {}) =>
       ctx({ blocked: { reason: VIEWING_READ_ONLY }, ...overrides });
     const tooltip = (el: Element | null) =>
@@ -424,7 +419,10 @@ describe('itemRow (audio)', () => {
 
     it('while viewing a step, item play is off and says item audio is not kept', async () => {
       const el = await mount(
-        blocked({ viewing: true, itemStatus: { d: itemEntry({ audioVersion: 3 }) } }),
+        blocked({
+          playBlock: { reason: ITEM_AUDIO_NOT_KEPT },
+          itemStatus: { d: itemEntry({ audioVersion: 3 }) },
+        }),
         DIALOG,
       );
       const player = el.querySelector('r2m-audio-player')!;

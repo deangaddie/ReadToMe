@@ -462,7 +462,7 @@ describe('disabled with a reason', () => {
   });
 
   it('turns the inputs, Save and Delete off while a step is viewed, and asks no impact', async () => {
-    await mount(WATSON, (e) => (e.readOnly = VIEWING_READ_ONLY));
+    await mount(WATSON, (e) => (e.block = { reason: VIEWING_READ_ONLY }));
     expect(q<HTMLInputElement>('[data-field=written]')!.disabled).toBe(true);
     expect(q<HTMLInputElement>('[data-field=spoken]')!.disabled).toBe(true);
     expect(q('[data-field=written]')!.closest('.r2m-blockable')!.getAttribute('data-tooltip')).toBe(

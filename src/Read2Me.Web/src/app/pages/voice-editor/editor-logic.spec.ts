@@ -180,7 +180,7 @@ describe('sameRender', () => {
 });
 
 describe('applyBlockedReason', () => {
-  const ok = { readOnly: null, anyTicked: true, hasRender: true, stale: false, busy: false };
+  const ok = { anyTicked: true, hasRender: true, stale: false, busy: false };
 
   it('allows apply when the render matches the current ticks and dials', () => {
     expect(applyBlockedReason(ok)).toBeNull();
@@ -191,10 +191,6 @@ describe('applyBlockedReason', () => {
     expect(applyBlockedReason({ ...ok, hasRender: false })).toMatch(/preview/i);
     expect(applyBlockedReason({ ...ok, stale: true })).toMatch(/changed.*preview again/i);
     expect(applyBlockedReason({ ...ok, busy: true })).toMatch(/wait/i);
-  });
-
-  it('a viewed History step blocks it with its reason before anything else (ticket 32)', () => {
-    expect(applyBlockedReason({ ...ok, readOnly: 'Viewing', busy: true })).toBe('Viewing');
   });
 });
 

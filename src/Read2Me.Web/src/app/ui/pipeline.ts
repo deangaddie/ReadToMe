@@ -1,3 +1,4 @@
+import { withLocal } from '@app/api';
 import { type TemplateResult, html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
 import type { IconName } from './icons';
@@ -5,8 +6,8 @@ import {
   type Callout,
   type StatusKind,
   adviceLine,
-  blockable,
   callout,
+  gated,
   icon,
   spinner,
   statusChip,
@@ -20,7 +21,10 @@ export interface PipelineAction {
   primary: boolean;
   /** Red, for actions that discard work (reread). */
   destructive?: boolean;
-  /** Why the action is disabled, as its tooltip; null when it can be clicked. */
+  /**
+   * Why the action is disabled, as its tooltip; null when it can be clicked, empty when it is off
+   * with no reason. Folded into the action's Edit gate with `withLocal`.
+   */
   blockedReason: string | null;
 }
 
@@ -28,7 +32,7 @@ export interface PipelineAction {
 export interface PipelineCheckpointPill {
   id: string;
   label: string;
-  /** Why the pill is off (a History step is viewed), shown as its tooltip; absent or null when on. */
+  /** Why the pill is off (a History step is viewed), shown as its tooltip; absent or null when on, empty when off with no reason. */
   blockedReason?: string | null;
 }
 
@@ -69,7 +73,7 @@ function laterDoneHint(n: number): string {
  * Production pipeline stepper (design §6.2, guidance-primitives spec §3 "variant B"): one row per
  * step with a numbered marker (a check once done) and a body of head row (title · chip ·
  * checkpoint pills · later-done hint · spacer · `?`), optional inline help, detail line, callout
- * slot, the step's actions each wrapped in `blockable`, and the advice line. Presentational: the
+ * slot, the step's actions each rendered through `gated`, and the advice line. Presentational: the
  * overview derives the steps and handles `onAct`, `onCheckpoint` and `onHelp`. `helpOpen` names
  * the one step whose `?` is on; its `renderHelp` result sits after the head row (the page's CSS
  * decides whether that placement or a side panel shows). `busyAction` (`step:action` or
@@ -90,6 +94,9 @@ export function pipeline<S extends PipelineStepView>(options: {
   const busyAction = options.busyAction ?? null;
   const helpOpen = options.helpOpen ?? null;
   const last = steps.length - 1;
+  /** A control's Edit gate: its own reason, else blocked without one while any action runs. */
+  const gate = (reason: string | null | undefined) =>
+    withLocal(busyAction === null ? null : { reason: null }, reason ?? false);
   const action = (step: PipelineStepView, a: PipelineAction) => {
     const busy = busyAction === `${step.id}:${a.id}`;
     const cls = [
@@ -97,33 +104,35 @@ export function pipeline<S extends PipelineStepView>(options: {
       a.primary ? 'r2m-button--filled r2m-pipeline__action--primary' : '',
       a.destructive ? 'r2m-pipeline__action--destructive' : '',
     ].join(' ');
-    return blockable(
-      a.blockedReason,
-      html`<button
-        type="button"
-        class=${cls}
-        data-action=${a.id}
-        ?disabled=${a.blockedReason !== null || busyAction !== null}
-        @click=${() => onAct({ step: step.id, action: a.id })}
-      >
-        ${busy ? spinner(16, 'r2m-pipeline__spinner') : icon(a.icon)} ${a.label}
-      </button>`,
+    return gated(
+      gate(a.blockedReason),
+      (disabled) =>
+        html`<button
+          type="button"
+          class=${cls}
+          data-action=${a.id}
+          ?disabled=${disabled}
+          @click=${() => onAct({ step: step.id, action: a.id })}
+        >
+          ${busy ? spinner(16, 'r2m-pipeline__spinner') : icon(a.icon)} ${a.label}
+        </button>`,
     );
   };
-  const pill = (step: PipelineStepView, p: PipelineCheckpointPill) => {
-    const blocked = p.blockedReason ?? null;
-    const button = html`<button
-      type="button"
-      class="r2m-button r2m-button--stroked r2m-pipeline__pill"
-      data-checkpoint=${p.id}
-      ?disabled=${blocked !== null || busyAction !== null}
-      @click=${() => onCheckpoint?.({ step: step.id, pill: p.id })}
-    >
-      ${busyAction === `${step.id}:${p.id}` ? spinner(14, 'r2m-pipeline__spinner') : nothing}
-      ${p.label}
-    </button>`;
-    return blocked === null ? button : blockable(blocked, button);
-  };
+  const pill = (step: PipelineStepView, p: PipelineCheckpointPill) =>
+    gated(
+      gate(p.blockedReason),
+      (disabled) =>
+        html`<button
+          type="button"
+          class="r2m-button r2m-button--stroked r2m-pipeline__pill"
+          data-checkpoint=${p.id}
+          ?disabled=${disabled}
+          @click=${() => onCheckpoint?.({ step: step.id, pill: p.id })}
+        >
+          ${busyAction === `${step.id}:${p.id}` ? spinner(14, 'r2m-pipeline__spinner') : nothing}
+          ${p.label}
+        </button>`,
+    );
   const checkpointGroup = (step: PipelineStepView) =>
     step.checkpoint.length === 0 && step.laterDone === 0
       ? nothing

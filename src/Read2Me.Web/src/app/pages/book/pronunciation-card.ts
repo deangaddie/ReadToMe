@@ -1,18 +1,19 @@
 import { html, nothing } from 'lit-html';
-import { type Guid, type PronunciationRef, PronunciationsApi } from '@app/api';
+import {
+  type Block,
+  type Guid,
+  type PronunciationRef,
+  PronunciationsApi,
+  withLocal,
+} from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import { LiveService } from '@app/live/live.service';
-import { blockable, icon, spinner } from '@app/ui/partials';
+import { gated, icon, spinner } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
-import {
-  type TextPlace,
-  gpuBusyReason,
-  playBlockedReason,
-  playView,
-} from '../pronunciations/try-out-logic';
+import { type TextPlace, gpuBusyReason, playView } from '../pronunciations/try-out-logic';
 import { TryOutPlayer } from '../pronunciations/try-out-player';
 import { type IndexedMarks, NO_MARKS } from './pronunciation-marks';
 import css from './pronunciation-card.css' with { type: 'text' };
@@ -74,13 +75,13 @@ export class PronunciationCard extends R2mElement {
     this.#marks.set(value);
   }
 
-  readonly #readOnly = signal<string | null>(null);
-  get readOnly() {
-    return this.#readOnly();
+  readonly #block = signal<Block | null>(null);
+  get block() {
+    return this.#block();
   }
-  /** `StepView.readOnly`: why nothing plays while a step is viewed, or null. */
-  set readOnly(value: string | null) {
-    this.#readOnly.set(value);
+  /** `ProjectStore.block`: the project's Edit gate; nothing plays or edits while a step is viewed. */
+  set block(value: Block | null) {
+    this.#block.set(value);
   }
 
   readonly #open = signal<OpenMark | null>(null);
@@ -91,8 +92,9 @@ export class PronunciationCard extends R2mElement {
     failed: (error) => this.toast.problem(error.toProblem()),
   });
 
-  private readonly blocked = computed(() =>
-    playBlockedReason(this.#readOnly(), gpuBusyReason(this.live.queue(), this.live.voiceBatch())),
+  /** The play gate: viewing a step first, then the GPU. */
+  private readonly playBlock = computed(() =>
+    withLocal(this.#block(), gpuBusyReason(this.live.queue(), this.live.voiceBatch()) ?? undefined),
   );
 
   #showTimer: ReturnType<typeof setTimeout> | undefined;
@@ -260,8 +262,8 @@ export class PronunciationCard extends R2mElement {
 
   #body(open: OpenMark, entry: PronunciationRef) {
     const key = `${open.itemId}:${open.sentenceStart}`;
-    const readOnly = this.#readOnly();
-    const view = playView(key, this.blocked(), this.player.playing());
+    const block = this.#block();
+    const view = playView(key, this.playBlock(), this.player.playing());
     const request = {
       itemId: open.itemId,
       sentenceStart: open.sentenceStart,
@@ -275,36 +277,38 @@ export class PronunciationCard extends R2mElement {
         <span class="pron-card__spoken">${entry.spokenForm}</span>
       </p>
       <div class="pron-card__actions">
-        ${blockable(
-          view.reason,
-          html`<button
-            type="button"
-            class="r2m-button r2m-button--text"
-            data-action="play-sentence"
-            aria-pressed=${view.phase === 'idle' ? 'false' : 'true'}
-            ?disabled=${view.disabled}
-            @click=${() => this.player.toggle(key, [request])}
-          >
-            ${
-              view.phase === 'generating'
-                ? html`${spinner(16)} Generating…`
-                : html`${icon(view.phase === 'playing' ? 'stop' : 'play_arrow')} This sentence`
-            }
-          </button>`,
+        ${gated(
+          view.block,
+          (disabled) =>
+            html`<button
+              type="button"
+              class="r2m-button r2m-button--text"
+              data-action="play-sentence"
+              aria-pressed=${view.phase === 'idle' ? 'false' : 'true'}
+              ?disabled=${disabled}
+              @click=${() => this.player.toggle(key, [request])}
+            >
+              ${
+                view.phase === 'generating'
+                  ? html`${spinner(16)} Generating…`
+                  : html`${icon(view.phase === 'playing' ? 'stop' : 'play_arrow')} This sentence`
+              }
+            </button>`,
         )}
-        ${blockable(
-          readOnly,
-          html`<button
-            type="button"
-            class="r2m-icon-button"
-            data-action="edit-pronunciation"
-            aria-label=${`Edit pronunciation of ${entry.writtenForm}`}
-            data-tooltip=${readOnly === null ? 'Edit pronunciation' : nothing}
-            ?disabled=${readOnly !== null}
-            @click=${() => this.#edit(open)}
-          >
-            ${icon('edit')}
-          </button>`,
+        ${gated(
+          block,
+          (disabled) =>
+            html`<button
+              type="button"
+              class="r2m-icon-button"
+              data-action="edit-pronunciation"
+              aria-label=${`Edit pronunciation of ${entry.writtenForm}`}
+              data-tooltip=${disabled ? nothing : 'Edit pronunciation'}
+              ?disabled=${disabled}
+              @click=${() => this.#edit(open)}
+            >
+              ${icon('edit')}
+            </button>`,
         )}
       </div>`;
   }

@@ -114,7 +114,7 @@ describe('r2m-character-detail', () => {
     const reason = (el: Element | null) =>
       el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
 
-    expect(detail.querySelector('r2m-inline-edit')?.readOnly).toBe(VIEWING_READ_ONLY);
+    expect(detail.querySelector('r2m-inline-edit')?.block).toEqual({ reason: VIEWING_READ_ONLY });
     const removeAlias = detail.querySelector<HTMLButtonElement>('.character-detail__alias-remove')!;
     for (const control of [
       button(detail, 'merge'),

@@ -10,24 +10,30 @@ export const VIEWING_READ_ONLY = 'Viewing a past step. Restore it to change anyt
 export const STALE_READ_ONLY = 'This view may be out of date. Refresh to change anything';
 
 /**
- * A control's edit gate answer when it is off: `reason` is its **Blocked reason** (context/web.md),
- * or null when it is blocked without one (a save in flight, a plain local busy flag). Open is null.
+ * A control's **Edit gate** (context/web.md) when it is off: `reason` is its **Blocked reason**, or
+ * null when it is blocked without one (a save in flight, a plain local busy flag). Open is null.
+ * `Block | null` is the web app's only gate shape; render it with `gated` (`ui/partials.ts`).
  */
 export interface Block {
   reason: string | null;
 }
 
-/** The page-wide states that block a book write. */
+/** The states that block an edit, beyond the control's own. */
 export interface BlockingState {
+  /** A History step is viewed. */
   viewing: boolean;
-  stale: boolean;
-  saving: boolean;
+  /** The view may be out of date (the Book page). */
+  stale?: boolean;
+  /** A reason that holds for the whole section, such as a character's series Voices. */
+  section?: string | null;
+  /** A write is in flight: blocked, with no reason. */
+  saving?: boolean;
 }
 
 /**
  * A caller's local busy folded into `block`: `true` blocks without a reason, a string blocks with
- * that reason (an empty one as none). The local reason only fills a block that has none, so viewing
- * and stale win.
+ * that reason (an empty one as none). The local reason only fills a block that has none, so
+ * viewing, stale and a section reason win.
  */
 export function withLocal(block: Block | null, local?: boolean | string): Block | null {
   if (local === undefined || local === false) return block;
@@ -37,15 +43,17 @@ export function withLocal(block: Block | null, local?: boolean | string): Block 
 }
 
 /**
- * The edit gate's one answer: whether a book write control is off and why, at most one reason in
- * the order viewing a step > stale > the caller's local reason > none.
+ * The Edit gate's one fold: whether a control is off and why, at most one reason in the order
+ * viewing a step > stale > section reason > local reason > reasonless busy (saving, or a local
+ * `true`). Every store's `block` signal is built through it.
  */
 export function blockedReason(
-  { viewing, stale, saving }: BlockingState,
+  { viewing, stale = false, section = null, saving = false }: BlockingState,
   local?: boolean | string,
 ): Block | null {
   if (viewing) return { reason: VIEWING_READ_ONLY };
   if (stale) return { reason: STALE_READ_ONLY };
+  if (section !== null && section !== '') return { reason: section };
   return withLocal(saving ? { reason: null } : null, local);
 }
 
@@ -86,11 +94,11 @@ export class StepView {
   }
 
   /**
-   * The shared read-only flag every edit control reads: why `folder` can't be changed right now
-   * ({@link VIEWING_READ_ONLY} while it is viewed at a step), or null on the current project.
+   * The Edit gate every Project-state edit control starts from: blocked with {@link VIEWING_READ_ONLY}
+   * while `folder` is viewed at a step, open on the current project.
    */
-  readOnly(folder: string | null): string | null {
-    return folder !== null && this.at(folder) !== null ? VIEWING_READ_ONLY : null;
+  readOnly(folder: string | null): Block | null {
+    return blockedReason({ viewing: folder !== null && this.at(folder) !== null });
   }
 }
 

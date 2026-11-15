@@ -99,7 +99,7 @@ describe('pipeline()', () => {
     openCast.click();
     expect(events).toEqual([{ step: 'speakers', action: 'openCast' }]);
     expect(openCast.disabled).toBe(false);
-    expect(openCast.closest('.r2m-blockable')?.hasAttribute('data-tooltip')).toBe(false);
+    expect(openCast.closest('.r2m-blockable')).toBeNull();
 
     expect(attribute.disabled).toBe(true);
     const wrapper = attribute.closest('.r2m-blockable')!;
@@ -119,12 +119,7 @@ describe('pipeline()', () => {
     expect(buttons.every((b) => b.disabled)).toBe(true);
     expect(el.querySelector('[data-action="openCast"] .r2m-spinner')).not.toBeNull();
     expect(el.querySelector('[data-action="reread"] .r2m-spinner')).toBeNull();
-    expect(
-      el
-        .querySelector('[data-action="openCast"]')!
-        .closest('.r2m-blockable')!
-        .hasAttribute('data-tooltip'),
-    ).toBe(false);
+    expect(el.querySelector('[data-action="openCast"]')!.closest('.r2m-blockable')).toBeNull();
   });
 
   it('row anatomy (variant B): pills and the hint beside the chip, callout under the detail, advice under the actions', () => {
