@@ -1,11 +1,17 @@
 import { html, nothing } from 'lit-html';
 import { live } from 'lit-html/directives/live.js';
-import type { CharacterSummaryDto, Guid, NarratorDto } from '@app/api';
+import {
+  type Block,
+  type CharacterSummaryDto,
+  type Guid,
+  type NarratorDto,
+  withLocal,
+} from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import { ConfirmService } from '@app/ui/dialogs';
-import { blockable, statusChip } from '@app/ui/partials';
+import { gated, statusChip } from '@app/ui/partials';
 
 /** The unlink confirm (research §4): rendered narration will not match until regenerated. */
 export function unlinkWarning(linkedCharacterName: string): string {
@@ -49,14 +55,17 @@ export class NarratorBanner extends R2mElement {
     this.#busy.set(value);
   }
 
-  /** Why the link can't change: a History step is viewed. Its controls are off with this reason. */
-  readonly #readOnly = signal<string | null>(null);
-  get readOnly() {
-    return this.#readOnly();
+  /** The Cast's Edit gate (a History step viewed); {@link busy} is folded in here. */
+  readonly #block = signal<Block | null>(null);
+  get block() {
+    return this.#block();
   }
-  set readOnly(value: string | null) {
-    this.#readOnly.set(value);
+  set block(value: Block | null) {
+    this.#block.set(value);
   }
+
+  /** The gate of every control here: {@link block} with a write in flight folded in. */
+  private readonly off = computed(() => withLocal(this.#block(), this.#busy()));
 
   readonly changing = signal(false);
 
@@ -93,8 +102,7 @@ export class NarratorBanner extends R2mElement {
       </div>`;
     }
     const ready = this.ready();
-    const readOnly = this.#readOnly();
-    const off = this.#busy() || readOnly !== null;
+    const off = this.off();
     return html`<div class="narrator-banner__row">
       <div class="narrator-banner__title">Narrated by <strong>${narrator.displayName}</strong></div>
       ${statusChip({
@@ -104,27 +112,29 @@ export class NarratorBanner extends R2mElement {
         compact: true,
       })}
       <span class="narrator-banner__spacer"></span>
-      ${blockable(
-        readOnly,
-        html`<button
-          type="button"
-          class="r2m-button"
-          ?disabled=${off}
-          @click=${() => this.changing.set(true)}
-        >
-          Change
-        </button>`,
+      ${gated(
+        off,
+        (disabled) =>
+          html`<button
+            type="button"
+            class="r2m-button"
+            ?disabled=${disabled}
+            @click=${() => this.changing.set(true)}
+          >
+            Change
+          </button>`,
       )}
-      ${blockable(
-        readOnly,
-        html`<button
-          type="button"
-          class="r2m-button narrator-banner__unlink"
-          ?disabled=${off}
-          @click=${() => void this.unlink()}
-        >
-          Unlink
-        </button>`,
+      ${gated(
+        off,
+        (disabled) =>
+          html`<button
+            type="button"
+            class="r2m-button narrator-banner__unlink"
+            ?disabled=${disabled}
+            @click=${() => void this.unlink()}
+          >
+            Unlink
+          </button>`,
       )}
     </div>`;
   }
@@ -133,20 +143,20 @@ export class NarratorBanner extends R2mElement {
    * link does not leave the name showing and the same name can be picked again. */
   private picker() {
     const eligible = this.eligible();
-    const readOnly = this.#readOnly();
-    return blockable(
-      readOnly,
-      html`<label class="r2m-field narrator-banner__picker">
-        <span class="r2m-field__label">Narrated by</span>
-        <select
-          .value=${live('')}
-          ?disabled=${this.#busy() || readOnly !== null || eligible.length === 0}
-          @change=${(e: Event) => this.pick((e.target as HTMLSelectElement).value)}
-        >
-          <option value="" selected disabled hidden></option>
-          ${eligible.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
-        </select>
-      </label>`,
+    return gated(
+      withLocal(this.off(), eligible.length === 0),
+      (disabled) =>
+        html`<label class="r2m-field narrator-banner__picker">
+          <span class="r2m-field__label">Narrated by</span>
+          <select
+            .value=${live('')}
+            ?disabled=${disabled}
+            @change=${(e: Event) => this.pick((e.target as HTMLSelectElement).value)}
+          >
+            <option value="" selected disabled hidden></option>
+            ${eligible.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
+          </select>
+        </label>`,
     );
   }
 

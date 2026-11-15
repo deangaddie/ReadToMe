@@ -152,7 +152,7 @@ describe('r2m-voices-section', () => {
     it('its shared Voices are read-only, with the way to the series cast board', async () => {
       const section = await mountLinked();
 
-      expect(store.voicesReadOnly()).toBe(SERIES_VOICES_READ_ONLY);
+      expect(store.voicesBlock()).toEqual({ reason: SERIES_VOICES_READ_ONLY });
       expect(section.querySelector('[data-action=edit-on-board]')?.getAttribute('href')).toBe(
         'projects?series=h&character=sc-alice',
       );
@@ -164,7 +164,9 @@ describe('r2m-voices-section', () => {
         expect(card.querySelector<HTMLButtonElement>('[data-action=delete-voice]')!.disabled).toBe(
           true,
         );
-        expect(card.querySelector('r2m-inline-edit')?.readOnly).toBe(SERIES_VOICES_READ_ONLY);
+        expect(card.querySelector('r2m-inline-edit')?.block).toEqual({
+          reason: SERIES_VOICES_READ_ONLY,
+        });
       }
       // The full audio editor isn't offered here either.
       expect(section.querySelector('[data-action=edit-audio]')).toBeNull();
@@ -186,7 +188,7 @@ describe('r2m-voices-section', () => {
 
     it('an unlinked Character’s Voices stay editable, with no board link', async () => {
       const section = await mount([voice('v1', 'Main')], 'v1');
-      expect(store.voicesReadOnly()).toBeNull();
+      expect(store.voicesBlock()).toBeNull();
       expect(section.querySelector('[data-action=edit-on-board]')).toBeNull();
       expect(section.querySelector<HTMLButtonElement>('[data-action=add-voice]')!.disabled).toBe(
         false,
@@ -196,7 +198,7 @@ describe('r2m-voices-section', () => {
     it('the series editor’s own store is not read-only', async () => {
       store.seriesEditor = true;
       const section = await mountLinked();
-      expect(store.voicesReadOnly()).toBeNull();
+      expect(store.voicesBlock()).toBeNull();
       expect(section.querySelector('[data-action=edit-on-board]')).toBeNull();
       expect(section.querySelector<HTMLButtonElement>('[data-action=add-voice]')!.disabled).toBe(
         false,

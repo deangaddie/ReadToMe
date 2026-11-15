@@ -170,12 +170,15 @@ export interface RowContext {
   /** What the speaker menus offer; empty until the roster is known. */
   roster: readonly SpeakerRosterEntry[];
   /**
-   * The page's edit gate, `editor.blocked()` (design §8): non-null turns every row write off, with
+   * The page's Edit gate, `editor.block()` (design §8): non-null turns every row write off, with
    * its **Blocked reason** as the tooltip. A row folds its own busy in with `withLocal`.
    */
   blocked: Block | null;
-  /** A History step is viewed (ticket 32): item play is off, as takes aren't kept in History. */
-  viewing: boolean;
+  /**
+   * Item play's own gate (ticket 32): blocked with `ITEM_AUDIO_NOT_KEPT` while a History step is
+   * viewed, as takes aren't kept in History. Not {@link blocked}: play stays on while stale.
+   */
+  playBlock: Block | null;
   /** An audio preflight or enqueue is in flight (ticket 13): the row's Retry waits for it. */
   generating: boolean;
   /** Pronunciation spans per item (pronunciation ticket 15): marked in every mode. */

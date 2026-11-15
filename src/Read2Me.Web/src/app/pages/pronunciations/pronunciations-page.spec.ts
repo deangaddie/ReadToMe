@@ -325,7 +325,7 @@ describe('r2m-pronunciations-page', () => {
 
     page.querySelector<HTMLElement>('.pron__row[data-id=watson]')!.click();
     await rerender(page);
-    expect(editorOf(page)!.readOnly).toBe(VIEWING_READ_ONLY);
+    expect(editorOf(page)!.block).toEqual({ reason: VIEWING_READ_ONLY });
   });
 
   it('guards leaving with an unsaved draft', async () => {

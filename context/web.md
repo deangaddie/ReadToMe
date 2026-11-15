@@ -19,3 +19,5 @@ Use these terms exactly in code, tests, and discussion. Background: [ADR 0014](.
 - **Web E2E** — the browser tests under `src/Read2Me.E2eTests/Tests/Web` on `E2eTestBase`: the in-proc host with fake AI and seeders, driving `/app/...`; skipped, never failed, when no bundle has been built.
 - **Blocked reason** — the one line a disabled control shows on hover saying why it can't be used now: viewing a past step, a stale view, or the control's own wait (e.g. Bulk assign waiting for attribution). At most one shows, in that order; a brief block (a save in flight, a queued row with its own lock) shows none.
   _Avoid_: "locked message", "read-only tooltip"
+- **Edit gate** — the one answer to whether a control may be used right now: **open**, **blocked** with no reason shown (a brief busy, such as a save in flight), or **blocked** with a Blocked reason. The reasons rank: viewing a past step, then a stale view, then a reason that holds for the whole section (a character's Voices that belong to its Series), then the control's own wait. A control's tooltip and its disabled state come from the same Edit gate, so they always agree.
+  _Avoid_: read-only flag, lock

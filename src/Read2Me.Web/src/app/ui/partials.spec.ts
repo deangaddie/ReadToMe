@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
+import type { Block } from '@app/api';
 import { html, render } from 'lit-html';
 import {
   adviceLine,
-  blockable,
+  gated,
   callout,
   countBadge,
   emptyState,
@@ -106,31 +107,69 @@ describe('emptyState', () => {
   });
 });
 
-describe('blockable', () => {
-  it('carries the reason as a focusable tooltip while blocked', () => {
-    const wrap = mount(blockable('Preview first', html`<button disabled>Apply</button>`))
-      .firstElementChild as HTMLElement;
-    expect(wrap.classList.contains('r2m-blockable')).toBe(true);
-    expect(wrap.getAttribute('data-tooltip')).toBe('Preview first');
-    expect(wrap.getAttribute('tabindex')).toBe('0');
-    expect(wrap.querySelector('button')?.textContent).toBe('Apply');
+describe('gated', () => {
+  const apply = (block: Block | null, options?: { tabbable?: boolean }) =>
+    mount(gated(block, (disabled) => html`<button ?disabled=${disabled}>Apply</button>`, options));
+
+  /** What a viewer sees: the tooltip, whether a wrapper holds the control, and `disabled`. */
+  function seen(host: HTMLElement) {
+    const button = host.querySelector('button')!;
+    const wrap = button.closest('.r2m-blockable');
+    return {
+      tooltip: wrap?.getAttribute('data-tooltip') ?? null,
+      wrapped: wrap !== null,
+      tabindex: wrap?.getAttribute('tabindex') ?? null,
+      disabled: button.disabled,
+    };
+  }
+
+  it('renders the control bare and enabled while open', () => {
+    expect(seen(apply(null))).toEqual({
+      tooltip: null,
+      wrapped: false,
+      tabindex: null,
+      disabled: false,
+    });
   });
 
-  it('is inert and out of the tab order when not blocked', () => {
-    const wrap = mount(blockable(null, html`<button>Apply</button>`))
-      .firstElementChild as HTMLElement;
-    expect(wrap.hasAttribute('data-tooltip')).toBe(false);
-    expect(wrap.hasAttribute('tabindex')).toBe(false);
+  it('renders it bare but disabled while blocked without a reason', () => {
+    expect(seen(apply({ reason: null }))).toEqual({
+      tooltip: null,
+      wrapped: false,
+      tabindex: null,
+      disabled: true,
+    });
+  });
+
+  it('wraps it in a focusable tooltip, disabled, while blocked with a reason', () => {
+    expect(seen(apply({ reason: 'Preview first' }))).toEqual({
+      tooltip: 'Preview first',
+      wrapped: true,
+      tabindex: '0',
+      disabled: true,
+    });
+  });
+
+  it('keeps the tooltip and disabled in step as the gate changes', () => {
+    const host = document.createElement('div');
+    for (const block of [null, { reason: 'Preview first' }, { reason: null }, null]) {
+      render(
+        gated(block, (disabled) => html`<button ?disabled=${disabled}>Apply</button>`),
+        host,
+      );
+      const { tooltip, disabled } = seen(host);
+      expect(disabled).toBe(block !== null);
+      expect(tooltip).toBe(block?.reason ?? null);
+    }
   });
 
   it('keeps the reason but stays out of the tab order when not tabbable, as a tree node’s trigger', () => {
-    const wrap = mount(
-      blockable('Viewing a past step', html`<button disabled tabindex="-1">⋮</button>`, {
-        tabbable: false,
-      }),
-    ).firstElementChild as HTMLElement;
-    expect(wrap.getAttribute('data-tooltip')).toBe('Viewing a past step');
-    expect(wrap.hasAttribute('tabindex')).toBe(false);
+    expect(seen(apply({ reason: 'Viewing a past step' }, { tabbable: false }))).toEqual({
+      tooltip: 'Viewing a past step',
+      wrapped: true,
+      tabindex: null,
+      disabled: true,
+    });
   });
 });
 

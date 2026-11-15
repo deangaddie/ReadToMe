@@ -266,7 +266,7 @@ describe('r2m-voice-editor-page', () => {
       expect(t.disabled).toBe(true);
       expect(t.closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(VIEWING_READ_ONLY);
     }
-    expect(page.querySelector('r2m-settings-form')?.readOnly).toBe(VIEWING_READ_ONLY);
+    expect(page.querySelector('r2m-settings-form')?.block).toEqual({ reason: VIEWING_READ_ONLY });
   });
 
   it('renders the ticked steps in catalog order and stacks an After player per stage', async () => {

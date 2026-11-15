@@ -1,5 +1,5 @@
 import { html, nothing } from 'lit-html';
-import type { BookNodeLevel } from '@app/api';
+import { type BookNodeLevel, ITEM_AUDIO_NOT_KEPT, withLocal } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
@@ -10,7 +10,7 @@ import { ConfirmService, confirmPermanent } from '@app/ui/dialogs';
 import type { IconName } from '@app/ui/icons';
 import type { MeasuredList } from '@app/ui/measured-list';
 import { menuHeading, menuItem } from '@app/ui/menu';
-import { adviceLine, blockable, emptyState, icon, statusChip } from '@app/ui/partials';
+import { adviceLine, emptyState, gated, icon, statusChip } from '@app/ui/partials';
 import type { SpeakerMenu } from '@app/ui/speaker-menu';
 import { ToastService } from '@app/ui/toast';
 import { type StepActionId, adviceFor } from '../project/pipeline-steps';
@@ -170,7 +170,7 @@ export class BookPage extends R2mElement {
     });
     // The panel is off while a step is viewed.
     this.effect(() => {
-      if (project.readOnly() !== null) untracked(() => pronunciations.hide());
+      if (project.block() !== null) untracked(() => pronunciations.hide());
     });
 
     this.noContent = computed(() => store.overview()?.hasContent === false);
@@ -195,8 +195,8 @@ export class BookPage extends R2mElement {
       narratorOnlyMode: workflow.narratorOnlyMode(),
       ancestry: store.ancestry(),
       roster: this.roster(),
-      blocked: editor.blocked(),
-      viewing: project.readOnly() !== null,
+      blocked: editor.block(),
+      playBlock: project.block() === null ? null : { reason: ITEM_AUDIO_NOT_KEPT },
       generating: generator.working(),
       marks: this.marks.marks().byItem,
       litMarks: pronunciations.open() ? pronunciations.lit() : NO_LIT,
@@ -207,7 +207,7 @@ export class BookPage extends R2mElement {
       const folder = store.folder();
       const chapterIds = store.chapters().map((c) => c.id);
       // Viewing a step (or going back to current) rereads the marks at that step.
-      project.readOnly();
+      project.block();
       if (folder) untracked(() => this.marks.follow(folder, chapterIds));
     });
     this.onDisconnect(() => this.marks.close());
@@ -230,8 +230,8 @@ export class BookPage extends R2mElement {
         action: this.router.query().get('action'),
         overview: store.overview(),
         pipelineLoaded: project.pipeline() !== null,
-        viewing: project.readOnly() !== null,
-        blocked: editor.blocked() !== null,
+        viewing: project.block() !== null,
+        blocked: editor.block() !== null,
       });
       if (outcome === 'wait') return;
       untracked(() => {
@@ -389,7 +389,7 @@ export class BookPage extends R2mElement {
                           .expandedIds=${store.expanded()}
                           .selection=${this.workflow.kind()}
                           .nodeStates=${this.workflow.nodeStates()}
-                          .blocked=${this.editor.blocked()}
+                          .blocked=${this.editor.block()}
                           @expanded-change=${this.onExpandedChange}
                           @select-chapter=${this.onSelectChapter}
                           @toggle-node=${this.onToggleNode}
@@ -438,7 +438,7 @@ export class BookPage extends R2mElement {
                 .folder=${store.folder()}
                 .marks=${this.marks.marks()}
                 .itemsWithAudio=${this.itemsWithAudio()}
-                .readOnly=${this.project.readOnly()}
+                .block=${this.project.block()}
                 .audioInFlight=${this.project.audioInFlight()}
               ></r2m-pronunciation-panel>
             </div>`
@@ -447,12 +447,12 @@ export class BookPage extends R2mElement {
       <r2m-pronunciation-card
         .folder=${store.folder()}
         .marks=${this.marks.marks()}
-        .readOnly=${this.project.readOnly()}
+        .block=${this.project.block()}
         @pronunciation-edit=${this.onPronunciationEdit}
       ></r2m-pronunciation-card>
       <r2m-pronunciation-pill
         .state=${this.pronunciations}
-        .readOnly=${this.project.readOnly()}
+        .block=${this.project.block()}
       ></r2m-pronunciation-pill>
     `;
   }
@@ -460,19 +460,19 @@ export class BookPage extends R2mElement {
   /** The toolbar's Pronunciations toggle (pronunciation ticket 16): off while a step is viewed. */
   private pronunciationsToggle() {
     const open = this.pronunciations.open();
-    const readOnly = this.project.readOnly();
-    return blockable(
-      readOnly,
-      html`<button
-        type="button"
-        class="r2m-button book__pron-toggle ${open ? 'book__pron-toggle--on' : ''}"
-        data-action="toggle-pronunciations"
-        aria-pressed=${open ? 'true' : 'false'}
-        ?disabled=${readOnly !== null}
-        @click=${() => this.pronunciations.toggle()}
-      >
-        ${icon('text_to_speech')} Pronunciations
-      </button>`,
+    return gated(
+      this.project.block(),
+      (disabled) =>
+        html`<button
+          type="button"
+          class="r2m-button book__pron-toggle ${open ? 'book__pron-toggle--on' : ''}"
+          data-action="toggle-pronunciations"
+          aria-pressed=${open ? 'true' : 'false'}
+          ?disabled=${disabled}
+          @click=${() => this.pronunciations.toggle()}
+        >
+          ${icon('text_to_speech')} Pronunciations
+        </button>`,
     );
   }
 
@@ -485,11 +485,10 @@ export class BookPage extends R2mElement {
   /** The paragraph selection's action bar (ticket 12): count, Attribute, Bulk assign speaker, Clear. */
   private selectionBar() {
     const count = this.selection.count();
-    const attribute = this.editor.blocked(this.workflow.working());
-    // A busy queue gives Bulk assign its own reason; viewing and stale still win.
-    const bulk = this.editor.blocked(
-      this.queueBusy() ? BULK_WAITS_REASON : this.workflow.working(),
-    );
+    const block = this.editor.block();
+    const attribute = withLocal(block, this.workflow.working());
+    // A busy queue gives Bulk assign its own local reason; viewing and stale still win.
+    const bulk = withLocal(attribute, this.queueBusy() && BULK_WAITS_REASON);
     return html`<div
       class="book__selection"
       role="group"
@@ -499,31 +498,33 @@ export class BookPage extends R2mElement {
       <span class="book__selection-count" data-testid="selection-count"
         >${count} paragraph${count === 1 ? '' : 's'}</span
       >
-      ${blockable(
-        attribute?.reason ?? null,
-        html`<button
-          type="button"
-          class="r2m-button r2m-button--filled"
-          data-action="attribute-selection"
-          ?disabled=${attribute !== null}
-          @click=${() => void this.workflow.attribute()}
-        >
-          ${icon('auto_awesome')} Attribute
-        </button>`,
-      )}
-      <span class="book__bulk">
-        ${blockable(
-          bulk?.reason ?? null,
+      ${gated(
+        attribute,
+        (disabled) =>
           html`<button
             type="button"
-            class="r2m-button r2m-button--stroked"
-            data-action="bulk-assign"
-            popovertarget=${BULK_MENU_ID}
-            aria-haspopup="listbox"
-            ?disabled=${bulk !== null}
+            class="r2m-button r2m-button--filled"
+            data-action="attribute-selection"
+            ?disabled=${disabled}
+            @click=${() => void this.workflow.attribute()}
           >
-            ${icon('groups')} Bulk assign speaker ${icon('expand_more')}
+            ${icon('auto_awesome')} Attribute
           </button>`,
+      )}
+      <span class="book__bulk">
+        ${gated(
+          bulk,
+          (disabled) =>
+            html`<button
+              type="button"
+              class="r2m-button r2m-button--stroked"
+              data-action="bulk-assign"
+              popovertarget=${BULK_MENU_ID}
+              aria-haspopup="listbox"
+              ?disabled=${disabled}
+            >
+              ${icon('groups')} Bulk assign speaker ${icon('expand_more')}
+            </button>`,
         )}
         <div
           id=${BULK_MENU_ID}
@@ -555,7 +556,10 @@ export class BookPage extends R2mElement {
   /** The item selection's action bar (ticket 13): count, Generate audio, Clear. */
   private audioSelectionBar() {
     const count = this.audioSelection.count();
-    const generate = this.editor.blocked(this.workflow.working() || this.generator.working());
+    const generate = withLocal(
+      this.editor.block(),
+      this.workflow.working() || this.generator.working(),
+    );
     return html`<div
       class="book__selection"
       role="group"
@@ -565,17 +569,18 @@ export class BookPage extends R2mElement {
       <span class="book__selection-count" data-testid="selection-count"
         >${count} item${count === 1 ? '' : 's'}</span
       >
-      ${blockable(
-        generate?.reason ?? null,
-        html`<button
-          type="button"
-          class="r2m-button r2m-button--filled"
-          data-action="generate-audio-selection"
-          ?disabled=${generate !== null}
-          @click=${() => void this.workflow.generate()}
-        >
-          ${icon('graphic_eq')} Generate audio
-        </button>`,
+      ${gated(
+        generate,
+        (disabled) =>
+          html`<button
+            type="button"
+            class="r2m-button r2m-button--filled"
+            data-action="generate-audio-selection"
+            ?disabled=${disabled}
+            @click=${() => void this.workflow.generate()}
+          >
+            ${icon('graphic_eq')} Generate audio
+          </button>`,
       )}
       ${adviceLine(this.advice('generateAudio'))}
       <button
@@ -601,20 +606,21 @@ export class BookPage extends R2mElement {
       run: () => void,
       hint: string | null = null,
     ) => menuItem({ action, label, icon: glyph, run, ...(hint === null ? {} : { hint }) });
-    const block = this.editor.blocked(!this.store.overview());
-    return html`${blockable(
-        block?.reason ?? null,
-        html`<button
-          type="button"
-          class="r2m-icon-button"
-          aria-label="Book actions"
-          aria-haspopup="menu"
-          data-testid="book-actions"
-          popovertarget=${ACTIONS_MENU_ID}
-          ?disabled=${block !== null}
-        >
-          ${icon('more_vert')}
-        </button>`,
+    const block = withLocal(this.editor.block(), !this.store.overview());
+    return html`${gated(
+        block,
+        (disabled) =>
+          html`<button
+            type="button"
+            class="r2m-icon-button"
+            aria-label="Book actions"
+            aria-haspopup="menu"
+            data-testid="book-actions"
+            popovertarget=${ACTIONS_MENU_ID}
+            ?disabled=${disabled}
+          >
+            ${icon('more_vert')}
+          </button>`,
       )}
       <div id=${ACTIONS_MENU_ID} popover class="r2m-menu" role="menu" aria-label="Book actions">
         ${menuHeading('Structure')}
@@ -934,7 +940,7 @@ const EMPTY_CONTEXT: RowContext = {
   ancestry: {},
   roster: [],
   blocked: null,
-  viewing: false,
+  playBlock: null,
   generating: false,
   marks: {},
   litMarks: NO_LIT,

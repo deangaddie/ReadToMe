@@ -9,13 +9,14 @@ import {
   type SeriesCharacterDto,
   type VoiceDto,
   toApiError,
+  withLocal,
 } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { provide, use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { SeriesStore, rereads } from '@app/series/series-store';
 import { ConfirmService, PromptService } from '@app/ui/dialogs';
-import { blockable, callout, icon, statusChip } from '@app/ui/partials';
+import { callout, gated, icon, statusChip } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
 import { CastStore } from '../cast/cast-store';
 import { openAddVoiceDialog } from '../cast/voices/add-voice-dialog';
@@ -377,19 +378,20 @@ export class SeriesVoiceEditor extends R2mElement {
           >
             ${icon('edit')}
           </button>
-          ${blockable(
-            note,
-            html`<button
-              type="button"
-              class="r2m-icon-button"
-              data-action="delete"
-              aria-label=${`Delete ${voice.name}`}
-              data-tooltip=${note ? nothing : 'Delete'}
-              ?disabled=${busy || note !== null}
-              @click=${() => void this.deleteVoice(voice)}
-            >
-              ${icon('delete')}
-            </button>`,
+          ${gated(
+            withLocal(withLocal(null, busy), note ?? false),
+            (disabled) =>
+              html`<button
+                type="button"
+                class="r2m-icon-button"
+                data-action="delete"
+                aria-label=${`Delete ${voice.name}`}
+                data-tooltip=${note ? nothing : 'Delete'}
+                ?disabled=${disabled}
+                @click=${() => void this.deleteVoice(voice)}
+              >
+                ${icon('delete')}
+              </button>`,
           )}
         </td>
       </tr>

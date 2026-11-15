@@ -6,6 +6,7 @@ import {
   STALE_READ_ONLY,
   StepView,
   VIEWING_READ_ONLY,
+  withLocal,
 } from '@app/api';
 import { override, resetServices, use } from '@app/core/services';
 import { signal } from '@app/core/signals';
@@ -82,7 +83,7 @@ describe('BookEditor', () => {
     await flush();
     expect(execute.calls).toEqual([['dracula', { type: 'AddPauses' }]]);
     expect(editor.saving()).toBe(true);
-    expect(editor.blocked()).not.toBeNull();
+    expect(editor.block()).not.toBeNull();
 
     store.settle(true);
     expect(await run).toBe(true);
@@ -140,7 +141,7 @@ describe('BookEditor', () => {
 
   it('is blocked while stale even when idle, and refuses to overlap writes', async () => {
     store.stale.set('boom');
-    expect(editor.blocked()).not.toBeNull();
+    expect(editor.block()).not.toBeNull();
     store.stale.set(null);
 
     const first = editor.run({ type: 'AddPauses' });
@@ -167,38 +168,38 @@ describe('BookEditor', () => {
 
   it('is blocked while a History step is viewed, and sends nothing', async () => {
     use(StepView).view('dracula', 's8');
-    expect(editor.blocked()).toEqual({ reason: VIEWING_READ_ONLY });
+    expect(editor.block()).toEqual({ reason: VIEWING_READ_ONLY });
 
     expect(await editor.run({ type: 'AddPauses' })).toBe(false);
     expect(execute.calls).toEqual([]);
 
     use(StepView).clear('dracula');
-    expect(editor.blocked()).toBeNull();
+    expect(editor.block()).toBeNull();
   });
 
-  it('blocked() answers the blocked reason for viewing, stale and saving, and is open otherwise', async () => {
-    expect(editor.blocked()).toBeNull();
+  it('block answers the blocked reason for viewing, stale and saving, and is open otherwise', async () => {
+    expect(editor.block()).toBeNull();
 
     store.stale.set('boom');
-    expect(editor.blocked()).toEqual({ reason: STALE_READ_ONLY });
+    expect(editor.block()).toEqual({ reason: STALE_READ_ONLY });
     use(StepView).view('dracula', 's8');
-    expect(editor.blocked()).toEqual({ reason: VIEWING_READ_ONLY });
+    expect(editor.block()).toEqual({ reason: VIEWING_READ_ONLY });
     use(StepView).clear('dracula');
     store.stale.set(null);
 
     const run = editor.run({ type: 'AddPauses' });
     await flush();
-    expect(editor.blocked()).toEqual({ reason: null });
+    expect(editor.block()).toEqual({ reason: null });
     store.settle(true);
     await run;
-    expect(editor.blocked()).toBeNull();
+    expect(editor.block()).toBeNull();
   });
 
-  it('blocked() folds in the caller local busy, behind viewing and stale', () => {
-    expect(editor.blocked(true)).toEqual({ reason: null });
-    expect(editor.blocked('Bulk assign waits')).toEqual({ reason: 'Bulk assign waits' });
+  it('block takes the caller local busy through withLocal, behind viewing and stale', () => {
+    expect(withLocal(editor.block(), true)).toEqual({ reason: null });
+    expect(withLocal(editor.block(), 'Bulk assign waits')).toEqual({ reason: 'Bulk assign waits' });
     store.stale.set('boom');
-    expect(editor.blocked('Bulk assign waits')).toEqual({ reason: STALE_READ_ONLY });
+    expect(withLocal(editor.block(), 'Bulk assign waits')).toEqual({ reason: STALE_READ_ONLY });
   });
 
   it('reread and manual reread go through the same wait', async () => {

@@ -1,11 +1,11 @@
 import { html, nothing } from 'lit-html';
-import type { SetupCheckRow, SetupFullRun } from '@app/api';
+import { type SetupCheckRow, type SetupFullRun, withLocal } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { adoptStyles } from '@app/core/styles';
 import { SetupCheckStore } from '@app/setup-check/setup-check-store';
 import { fullRunLabel } from '@app/setup-check/surfacing';
-import { blockable, callout, emptyState, icon, spinner, statusChip } from '@app/ui/partials';
+import { callout, emptyState, gated, icon, spinner, statusChip } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
 import { fixHint } from './fix-hint';
 import {
@@ -168,19 +168,24 @@ export class SetupCheckPage extends R2mElement {
 
   /** Re-run on a Full-tier row, its blocked reason on hover; a Quick check in flight just disables it. */
   private rerunButton(row: SetupCheckRow) {
-    const reason = rerunBlockedReason(row, this.store.report());
-    return blockable(
-      reason,
-      html`<button
-        type="button"
-        class="r2m-button r2m-button--stroked"
-        data-action="rerun"
-        aria-label=${`Re-run ${row.name}`}
-        ?disabled=${reason !== null || this.store.checking()}
-        @click=${() => void this.store.rerun(row)}
-      >
-        ${icon('refresh')} Re-run
-      </button>`,
+    // Its own reason first; a Quick check in flight only blocks, with none.
+    const block = withLocal(
+      withLocal(null, rerunBlockedReason(row, this.store.report()) ?? false),
+      this.store.checking(),
+    );
+    return gated(
+      block,
+      (disabled) =>
+        html`<button
+          type="button"
+          class="r2m-button r2m-button--stroked"
+          data-action="rerun"
+          aria-label=${`Re-run ${row.name}`}
+          ?disabled=${disabled}
+          @click=${() => void this.store.rerun(row)}
+        >
+          ${icon('refresh')} Re-run
+        </button>`,
     );
   }
 

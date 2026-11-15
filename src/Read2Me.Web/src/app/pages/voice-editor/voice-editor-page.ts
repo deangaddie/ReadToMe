@@ -1,6 +1,7 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
 import {
+  type Block,
   type PreviewResponse,
   type PreviewStepRequest,
   type StepCatalogEntryDto,
@@ -8,6 +9,7 @@ import {
   type VoiceDto,
   VoicesApi,
   toApiError,
+  withLocal,
 } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
@@ -21,7 +23,7 @@ import {
 } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import { ConfirmService } from '@app/ui/dialogs';
-import { blockable, emptyState, icon, spinner, statusChip } from '@app/ui/partials';
+import { emptyState, gated, icon, spinner, statusChip } from '@app/ui/partials';
 import type { SettingsValues } from '@app/ui/settings-form';
 import { castPath } from '../cast/cast-path';
 import { ProjectStore } from '../project/project-store';
@@ -89,14 +91,17 @@ export class VoiceEditorPage extends R2mElement {
     const last = this.lastRender();
     return last !== null && !sameRender(last.request, this.currentRequest());
   });
+  /** Apply's Edit gate: a viewed History step first, then its own reason. */
   readonly applyBlocked = computed(() =>
-    applyBlockedReason({
-      readOnly: this.project.readOnly(),
-      anyTicked: this.anyTicked(),
-      hasRender: this.lastRender() !== null,
-      stale: this.stale(),
-      busy: this.busy(),
-    }),
+    withLocal(
+      this.project.block(),
+      applyBlockedReason({
+        anyTicked: this.anyTicked(),
+        hasRender: this.lastRender() !== null,
+        stale: this.stale(),
+        busy: this.busy(),
+      }) ?? false,
+    ),
   );
   readonly hissRedundant = computed(() => hissRedundant(this.ticks()));
   readonly stages = computed(() => this.lastRender()?.response.stages ?? []);
@@ -154,35 +159,37 @@ export class VoiceEditorPage extends R2mElement {
     const busy = this.busy();
     // Viewing a History step: Preview would render today's audio, and Apply and Restore change it.
     // The ticks and dials are off too: a past voice plays but is not shaped.
-    const readOnly = this.project.readOnly();
+    const block = this.project.block();
     const applyBlocked = this.applyBlocked();
     const actionError = this.actionError();
     const actionNote = this.actionNote();
     return html`
       <div class="voice-editor__toolbar">
-        ${blockable(
-          readOnly,
-          html`<button
-            type="button"
-            class="r2m-button r2m-button--filled"
-            data-action="preview"
-            ?disabled=${!this.anyTicked() || busy || readOnly !== null}
-            @click=${() => void this.preview()}
-          >
-            ${this.rendering() ? spinner(18) : icon('play_circle')} Preview
-          </button>`,
+        ${gated(
+          withLocal(block, !this.anyTicked() || busy),
+          (disabled) =>
+            html`<button
+              type="button"
+              class="r2m-button r2m-button--filled"
+              data-action="preview"
+              ?disabled=${disabled}
+              @click=${() => void this.preview()}
+            >
+              ${this.rendering() ? spinner(18) : icon('play_circle')} Preview
+            </button>`,
         )}
-        ${blockable(
+        ${gated(
           applyBlocked,
-          html`<button
-            type="button"
-            class="r2m-button r2m-button--stroked"
-            data-action="apply"
-            ?disabled=${applyBlocked !== null}
-            @click=${() => void this.apply()}
-          >
-            ${icon('check')} Apply
-          </button>`,
+          (disabled) =>
+            html`<button
+              type="button"
+              class="r2m-button r2m-button--stroked"
+              data-action="apply"
+              ?disabled=${disabled}
+              @click=${() => void this.apply()}
+            >
+              ${icon('check')} Apply
+            </button>`,
         )}
         ${
           voice.referenceWarning
@@ -202,17 +209,18 @@ export class VoiceEditorPage extends R2mElement {
             ? html`<span data-testid="edited-chip"
                   >${statusChip({ status: 'warn', label: 'Edited', icon: 'tune', compact: true })}</span
                 >
-                ${blockable(
-                  readOnly,
-                  html`<button
-                    type="button"
-                    class="r2m-button voice-editor__danger"
-                    data-action="restore"
-                    ?disabled=${busy || readOnly !== null}
-                    @click=${() => void this.restore()}
-                  >
-                    ${icon('history')} Restore original
-                  </button>`,
+                ${gated(
+                  withLocal(block, busy),
+                  (disabled) =>
+                    html`<button
+                      type="button"
+                      class="r2m-button voice-editor__danger"
+                      data-action="restore"
+                      ?disabled=${disabled}
+                      @click=${() => void this.restore()}
+                    >
+                      ${icon('history')} Restore original
+                    </button>`,
                 )}`
             : nothing
         }
@@ -234,12 +242,12 @@ export class VoiceEditorPage extends R2mElement {
           ${repeat(
             this.catalog(),
             (entry) => entry.stepId,
-            (entry) => this.stepTemplate(entry, busy, readOnly),
+            (entry) => this.stepTemplate(entry, withLocal(block, busy)),
           )}
         </section>
 
         <section class="voice-editor__dials" aria-label="Dials">
-          ${this.dialsTemplate(busy, readOnly)}
+          ${this.dialsTemplate(busy, block)}
         </section>
       </div>
 
@@ -272,7 +280,8 @@ export class VoiceEditorPage extends R2mElement {
     `;
   }
 
-  private stepTemplate(entry: StepCatalogEntryDto, busy: boolean, readOnly: string | null) {
+  /** One step's row; `block` gates its tick (a viewed step, or a render or write in flight). */
+  private stepTemplate(entry: StepCatalogEntryDto, block: Block | null) {
     const stage = stageFor(this.stages(), entry.stepId);
     const select = () => this.selectedStepId.set(entry.stepId);
     return html`<div
@@ -285,19 +294,20 @@ export class VoiceEditorPage extends R2mElement {
         if (e.key === 'Enter') select();
       }}
     >
-      ${blockable(
-        readOnly,
-        html`<label class="voice-editor__tick" @click=${(e: Event) => e.stopPropagation()}>
-          <input
-            type="checkbox"
-            class="r2m-checkbox"
-            data-tick=${entry.stepId}
-            .checked=${!!this.ticks()[entry.stepId]}
-            ?disabled=${busy || readOnly !== null}
-            @change=${(e: Event) => this.tick(entry.stepId, (e.target as HTMLInputElement).checked)}
-          />
-          ${entry.label}
-        </label>`,
+      ${gated(
+        block,
+        (disabled) =>
+          html`<label class="voice-editor__tick" @click=${(e: Event) => e.stopPropagation()}>
+            <input
+              type="checkbox"
+              class="r2m-checkbox"
+              data-tick=${entry.stepId}
+              .checked=${!!this.ticks()[entry.stepId]}
+              ?disabled=${disabled}
+              @change=${(e: Event) => this.tick(entry.stepId, (e.target as HTMLInputElement).checked)}
+            />
+            ${entry.label}
+          </label>`,
       )}
       <p class="voice-editor__blurb">${entry.blurb}</p>
       ${
@@ -322,7 +332,7 @@ export class VoiceEditorPage extends R2mElement {
     </div>`;
   }
 
-  private dialsTemplate(busy: boolean, readOnly: string | null) {
+  private dialsTemplate(busy: boolean, block: Block | null) {
     const entry = this.selected();
     if (!entry) return html`<p class="voice-editor__blurb">Select a step to adjust its dials.</p>`;
     return html`<h3>${entry.label}</h3>
@@ -334,7 +344,7 @@ export class VoiceEditorPage extends R2mElement {
               .schema=${toStepSchema(entry)}
               .values=${this.values()[entry.stepId] ?? {}}
               .disabled=${busy}
-              .readOnly=${readOnly}
+              .block=${block}
               @values-change=${(e: CustomEvent<SettingsValues>) =>
                 this.setValues(entry.stepId, e.detail)}
             ></r2m-settings-form>`

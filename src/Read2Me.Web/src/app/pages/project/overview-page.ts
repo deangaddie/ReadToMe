@@ -38,13 +38,11 @@ export class OverviewPage extends R2mElement {
   protected template() {
     const detail = this.store.detail();
     const error = this.store.error();
-    const readOnly = this.store.readOnly();
+    const block = this.store.block();
     const pipelineSteps = this.store.pipeline();
     // Viewing a History step: the rows still open pages, but nothing on them changes the project.
     const steps =
-      pipelineSteps && readOnly !== null
-        ? readOnlyPipeline(pipelineSteps, readOnly)
-        : pipelineSteps;
+      pipelineSteps && block !== null ? readOnlyPipeline(pipelineSteps, block) : pipelineSteps;
     const author = detail?.author;
     const helpStep = steps?.find((s) => s.id === this.helpOpen()) ?? null;
     const closeHelp = () => this.helpOpen.set(null);

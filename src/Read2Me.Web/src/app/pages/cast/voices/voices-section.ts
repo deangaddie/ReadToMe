@@ -1,6 +1,11 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
-import { type CharacterSeriesLinkDto, type CharacterSummaryDto, toApiError } from '@app/api';
+import {
+  type CharacterSeriesLinkDto,
+  type CharacterSummaryDto,
+  toApiError,
+  withLocal,
+} from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
@@ -8,7 +13,7 @@ import { ConfirmService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
 import { SeriesStore } from '@app/series/series-store';
 import { castDiffersText, resolveConfirm } from '../../projects/series-voices';
-import { blockable, callout, emptyState, icon } from '@app/ui/partials';
+import { callout, emptyState, gated, icon } from '@app/ui/partials';
 import { CastStore } from '../cast-store';
 import { openAddVoiceDialog } from './add-voice-dialog';
 import { seriesBoardPath } from '../cast-path';
@@ -43,8 +48,7 @@ export class VoicesSection extends R2mElement {
     const character = this.#character();
     if (!character) return nothing;
     const voices = this.store.voices();
-    const busy = this.store.busy();
-    const readOnly = this.store.voicesReadOnly();
+    const addBlock = withLocal(this.store.voicesBlock(), this.store.busy());
     const link = this.store.seriesEditor ? null : character.seriesLink;
     return html`
       <div class="voices-section__header">
@@ -62,17 +66,18 @@ export class VoicesSection extends R2mElement {
               </a>`
             : nothing
         }
-        ${blockable(
-          readOnly,
-          html`<button
-            type="button"
-            class="r2m-button"
-            data-action="add-voice"
-            ?disabled=${busy || readOnly !== null}
-            @click=${() => void this.addVoice()}
-          >
-            ${icon('add')} Add voice
-          </button>`,
+        ${gated(
+          addBlock,
+          (disabled) =>
+            html`<button
+              type="button"
+              class="r2m-button"
+              data-action="add-voice"
+              ?disabled=${disabled}
+              @click=${() => void this.addVoice()}
+            >
+              ${icon('add')} Add voice
+            </button>`,
         )}
       </div>
       ${link?.differs ? this.differsCallout(character.name, link) : nothing}

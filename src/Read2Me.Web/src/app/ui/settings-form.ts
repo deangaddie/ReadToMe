@@ -1,3 +1,4 @@
+import { type Block, withLocal } from '@app/api';
 import { html, nothing } from 'lit-html';
 import { R2mElement, define } from '@app/core/element';
 import { computed, signal, untracked } from '@app/core/signals';
@@ -110,15 +111,16 @@ export class SettingsForm extends R2mElement {
   }
 
   /**
-   * Why nothing may change (viewing a History step), or null: every field is off and shows the
-   * reason as its tooltip, focusable so a tap or Tab reaches it, as `blockable` does for a button.
+   * The form's Edit gate (viewing a History step, say): while blocked every field is off, and with
+   * a Blocked reason each field shows it as its tooltip, focusable so a tap or Tab reaches it, as
+   * `gated` does for a button. {@link disabled} folds in as a reasonless busy.
    */
-  readonly #readOnly = signal<string | null>(null);
-  get readOnly() {
-    return this.#readOnly();
+  readonly #block = signal<Block | null>(null);
+  get block() {
+    return this.#block();
   }
-  set readOnly(value: string | null) {
-    this.#readOnly.set(value);
+  set block(value: Block | null) {
+    this.#block.set(value);
   }
 
   /** Local working copy; re-seeded whenever the host hands in new values. */
@@ -147,8 +149,9 @@ export class SettingsForm extends R2mElement {
   protected template() {
     const override = this.#mode() === 'override';
     this.classList.toggle('r2m-settings-form--override', override);
-    const readOnly = this.#readOnly();
-    const disabled = this.#disabled() || readOnly !== null;
+    const block = withLocal(this.#block(), this.#disabled());
+    const disabled = block !== null;
+    const reason = block?.reason ?? null;
     // Read eagerly, not inside a lazy directive, so the element's effect tracks every signal.
     return this.#schema().fields.map((field) => {
       const overridden = this.isOverridden(field);
@@ -158,8 +161,8 @@ export class SettingsForm extends R2mElement {
           valid ? '' : 'r2m-settings-form__field--invalid'
         }"
         data-key=${field.key}
-        data-tooltip=${readOnly ?? nothing}
-        tabindex=${readOnly === null ? nothing : '0'}
+        data-tooltip=${reason ?? nothing}
+        tabindex=${reason === null ? nothing : '0'}
       >
         <div class="r2m-settings-form__label-row">
           ${

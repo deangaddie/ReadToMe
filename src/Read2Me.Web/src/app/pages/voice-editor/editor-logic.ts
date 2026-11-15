@@ -49,18 +49,16 @@ export function sameRender(
   return rendered !== null && JSON.stringify(rendered) === JSON.stringify(current);
 }
 
+/** Apply's own conditions; a viewed History step comes from the project's Edit gate (ticket 32). */
 export interface ApplyGate {
-  /** Why the voice can't change: a History step is viewed (ticket 32); null on the current project. */
-  readOnly: string | null;
   anyTicked: boolean;
   hasRender: boolean;
   stale: boolean;
   busy: boolean;
 }
 
-/** Why Apply is disabled, for its tooltip; null when it may run. */
+/** Why Apply is disabled for its own reason, for its tooltip; null when it may run. */
 export function applyBlockedReason(gate: ApplyGate): string | null {
-  if (gate.readOnly !== null) return gate.readOnly;
   if (gate.busy) return 'Wait for the current render or write to finish.';
   if (!gate.anyTicked) return 'Tick at least one step.';
   if (!gate.hasRender) return 'Preview first — you apply what you heard.';

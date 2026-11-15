@@ -4,7 +4,8 @@ import { type ParagraphDto, withLocal } from '@app/api';
 import { use } from '@app/core/services';
 import { speakerHue } from '@app/shared/speaker-color';
 import { icon } from '@app/ui/partials';
-import { chipOf, itemRow, speakerChipEvents, withReason } from './item-row';
+import { gated } from '@app/ui/partials';
+import { chipOf, itemRow, speakerChipEvents } from './item-row';
 import { nodeMenuTrigger } from './node-menu';
 import { proseOf } from './pronunciation-marks';
 import type { NodeMenuTarget } from './node-menu-entries';
@@ -65,7 +66,7 @@ export function paragraphRow(
   // The paragraph's menu and its Read chip: off while the queue holds it.
   const block = withLocal(ctx.blocked, queued);
   // The Read chip assigns the whole paragraph; a queued one is the server's to stamp, a blocked book nobody's.
-  const assignable = selectable && block === null && ctx.roster.length > 0;
+  const assignable = selectable && ctx.roster.length > 0;
   const classes = [
     'r2m-paragraph',
     `r2m-paragraph--${speaker.state}`,
@@ -115,18 +116,19 @@ export function paragraphRow(
       ${
         ctx.mode === 'read'
           ? html`<div class="r2m-paragraph__meta">
-                ${withReason(
+                ${gated(
                   block,
-                  html`<r2m-speaker-chip
-                    .compact=${true}
-                    .state=${speaker.state}
-                    .name=${speaker.name}
-                    .characterId=${speaker.characterId}
-                    .roster=${assignable ? ctx.roster : undefined}
-                    @pick=${chip.pick}
-                    @clear=${chip.clear}
-                    @create=${chip.create}
-                  ></r2m-speaker-chip>`,
+                  (disabled) =>
+                    html`<r2m-speaker-chip
+                      .compact=${true}
+                      .state=${speaker.state}
+                      .name=${speaker.name}
+                      .characterId=${speaker.characterId}
+                      .roster=${assignable && !disabled ? ctx.roster : undefined}
+                      @pick=${chip.pick}
+                      @clear=${chip.clear}
+                      @create=${chip.create}
+                    ></r2m-speaker-chip>`,
                 )}
               </div>
               <p class="r2m-paragraph__prose">${proseOf(paragraph, ctx.marks, ctx.litMarks)}</p>`
@@ -148,21 +150,22 @@ export function paragraphRow(
     <div class="r2m-paragraph__status">
       ${
         queue && outcome
-          ? withReason(
+          ? gated(
               block,
-              html`<button
-                type="button"
-                class="r2m-paragraph__outcome"
-                data-tooltip=${
-                  block === null
-                    ? `${queue.tooltip ? `${queue.tooltip} — ` : ''}Click to clear`
-                    : nothing
-                }
-                ?disabled=${block !== null}
-                @click=${clearOutcome}
-              >
-                ${chipOf({ ...queue, tooltip: undefined })}
-              </button>`,
+              (disabled) =>
+                html`<button
+                  type="button"
+                  class="r2m-paragraph__outcome"
+                  data-tooltip=${
+                    disabled
+                      ? nothing
+                      : `${queue.tooltip ? `${queue.tooltip} — ` : ''}Click to clear`
+                  }
+                  ?disabled=${disabled}
+                  @click=${clearOutcome}
+                >
+                  ${chipOf({ ...queue, tooltip: undefined })}
+                </button>`,
             )
           : queue
             ? chipOf(queue)

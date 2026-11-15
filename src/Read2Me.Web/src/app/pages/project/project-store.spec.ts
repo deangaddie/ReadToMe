@@ -399,13 +399,13 @@ describe('ProjectStore', () => {
   });
 
   describe('viewing a History step (ticket 32)', () => {
-    it('is read-only with the viewing reason, and not on the current project', async () => {
+    it('blocks with the viewing reason, and not on the current project', async () => {
       await open();
-      expect(store.readOnly()).toBeNull();
+      expect(store.block()).toBeNull();
       use(StepView).view('dracula', 's8');
-      expect(store.readOnly()).toBe(VIEWING_READ_ONLY);
+      expect(store.block()).toEqual({ reason: VIEWING_READ_ONLY });
       use(StepView).view('emma', 's8');
-      expect(store.readOnly()).toBeNull();
+      expect(store.block()).toBeNull();
     });
 
     it('holds the step’s /status values against live deltas, and follows live again on return', async () => {

@@ -1,17 +1,19 @@
 import { html, nothing } from 'lit-html';
 import { live } from 'lit-html/directives/live.js';
 import {
+  type Block,
   type PronunciationDraftRequest,
   type PronunciationEntry,
   type PronunciationImpactReport,
   PronunciationsApi,
   toApiError,
+  withLocal,
 } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
-import { adviceLine, blockable, icon } from '@app/ui/partials';
+import { adviceLine, gated, icon } from '@app/ui/partials';
 import {
   type Forms,
   countLine,
@@ -102,13 +104,13 @@ export class PronunciationEditor extends R2mElement {
     this.#origin.set(value);
   }
 
-  /** `StepView.readOnly`: why nothing can change while a step is viewed, or null. */
-  readonly #readOnly = signal<string | null>(null);
-  get readOnly() {
-    return this.#readOnly();
+  /** `ProjectStore.block`: the project's Edit gate; nothing can change while a step is viewed. */
+  readonly #block = signal<Block | null>(null);
+  get block() {
+    return this.#block();
   }
-  set readOnly(value: string | null) {
-    this.#readOnly.set(value);
+  set block(value: Block | null) {
+    this.#block.set(value);
   }
 
   /** Items queued or processing for audio in this project: Save and Delete wait for them. */
@@ -137,7 +139,6 @@ export class PronunciationEditor extends R2mElement {
 
   private readonly saveReason = computed(() =>
     saveBlockedReason({
-      readOnly: this.#readOnly(),
       audioInFlight: this.#audioInFlight(),
       duplicateOf: this.impact()?.duplicateOf ?? null,
       invalid: this.invalid(),
@@ -146,7 +147,6 @@ export class PronunciationEditor extends R2mElement {
 
   private readonly deleteReason = computed(() =>
     deleteBlockedReason({
-      readOnly: this.#readOnly(),
       audioInFlight: this.#audioInFlight(),
     }),
   );
@@ -177,7 +177,7 @@ export class PronunciationEditor extends R2mElement {
   /** Asks what the draft would do; nothing while a step is viewed (the impact reads today's book). */
   private async askImpact(): Promise<void> {
     const folder = this.#folder();
-    if (folder === null || this.#readOnly() !== null) return;
+    if (folder === null || this.#block() !== null) return;
     if (this.written().trim() === '') {
       this.impact.set(null);
       this.invalid.set(null);
@@ -246,7 +246,7 @@ export class PronunciationEditor extends R2mElement {
     origin: TextPlace,
     impact: PronunciationImpactReport | null,
     draft: PronunciationDraftRequest,
-    readOnly: string | null,
+    block: Block | null,
   ) {
     if (!impact) return nothing;
     const match = originMatch(impact.matches, origin);
@@ -255,7 +255,7 @@ export class PronunciationEditor extends R2mElement {
           .folder=${this.#folder()}
           .match=${match}
           .draft=${draft}
-          .readOnly=${readOnly}
+          .block=${block}
         ></r2m-pronunciation-sentence>`
       : html`<p class="pron-editor__note" data-role="no-sentence">
           ${icon('info')} The written form no longer matches in the sentence it was opened from.
@@ -263,13 +263,16 @@ export class PronunciationEditor extends R2mElement {
   }
   protected template() {
     const entry = this.#entry();
-    const readOnly = this.#readOnly();
+    const block = this.#block();
     const impact = this.impact();
     const dirty = this.dirty();
     const complete = this.written().trim() !== '' && this.spoken().trim() !== '';
     const writing = this.writing();
-    const saveReason = this.saveReason();
-    const deleteReason = this.deleteReason();
+    const saveBlock = withLocal(
+      withLocal(block, this.saveReason() ?? false),
+      !dirty || !complete || writing,
+    );
+    const deleteBlock = withLocal(withLocal(block, this.deleteReason() ?? false), writing);
     // Until the host answers, an unchanged entry's own reach stands in.
     const reach = impact ?? (entry && !dirty ? entry : null);
     const duplicate = duplicateWarning(impact?.duplicateOf ?? null);
@@ -299,31 +302,33 @@ export class PronunciationEditor extends R2mElement {
       <div class="pron-editor__fields">
         <label class="r2m-field">
           <span class="r2m-field__label">Written form</span>
-          ${blockable(
-            readOnly,
-            html`<input
-              data-field="written"
-              maxlength=${WRITTEN_FORM_MAX}
-              placeholder="Watson"
-              .value=${live(this.written())}
-              ?disabled=${readOnly !== null}
-              @input=${(e: Event) => this.edit('written', e)}
-            />`,
+          ${gated(
+            block,
+            (disabled) =>
+              html`<input
+                data-field="written"
+                maxlength=${WRITTEN_FORM_MAX}
+                placeholder="Watson"
+                .value=${live(this.written())}
+                ?disabled=${disabled}
+                @input=${(e: Event) => this.edit('written', e)}
+              />`,
           )}
         </label>
         <span class="pron-editor__arrow" aria-hidden="true">${icon('arrow_forward')}</span>
         <label class="r2m-field">
           <span class="r2m-field__label">Spoken form</span>
-          ${blockable(
-            readOnly,
-            html`<input
-              data-field="spoken"
-              maxlength="200"
-              placeholder="KULL-gun"
-              .value=${live(this.spoken())}
-              ?disabled=${readOnly !== null}
-              @input=${(e: Event) => this.edit('spoken', e)}
-            />`,
+          ${gated(
+            block,
+            (disabled) =>
+              html`<input
+                data-field="spoken"
+                maxlength="200"
+                placeholder="KULL-gun"
+                .value=${live(this.spoken())}
+                ?disabled=${disabled}
+                @input=${(e: Event) => this.edit('spoken', e)}
+              />`,
           )}
         </label>
       </div>
@@ -360,30 +365,31 @@ export class PronunciationEditor extends R2mElement {
       }
       ${
         origin !== null
-          ? this.originTry(origin, impact, draft, readOnly)
+          ? this.originTry(origin, impact, draft, block)
           : impact && impact.matches.length > 0
             ? html`<r2m-pronunciation-try
                 .folder=${this.#folder()}
                 .matchesInBook=${impact.matches}
                 .draft=${draft}
-                .readOnly=${readOnly}
+                .block=${block}
               ></r2m-pronunciation-try>`
             : nothing
       }
       <div class="pron-editor__actions">
         ${
           entry
-            ? blockable(
-                deleteReason,
-                html`<button
-                  type="button"
-                  class="r2m-button pron-editor__delete"
-                  data-action="delete"
-                  ?disabled=${deleteReason !== null || writing}
-                  @click=${() => void this.delete()}
-                >
-                  ${icon('delete')} Delete
-                </button>`,
+            ? gated(
+                deleteBlock,
+                (disabled) =>
+                  html`<button
+                    type="button"
+                    class="r2m-button pron-editor__delete"
+                    data-action="delete"
+                    ?disabled=${disabled}
+                    @click=${() => void this.delete()}
+                  >
+                    ${icon('delete')} Delete
+                  </button>`,
               )
             : nothing
         }
@@ -396,20 +402,21 @@ export class PronunciationEditor extends R2mElement {
         >
           Cancel
         </button>
-        ${blockable(
-          saveReason,
-          html`<button
-            type="button"
-            class="r2m-button r2m-button--filled"
-            data-action="save"
-            ?disabled=${saveReason !== null || !dirty || !complete || writing}
-            @click=${() => void this.save()}
-          >
-            ${icon('save')} ${entry ? 'Save' : 'Add'}
-          </button>`,
+        ${gated(
+          saveBlock,
+          (disabled) =>
+            html`<button
+              type="button"
+              class="r2m-button r2m-button--filled"
+              data-action="save"
+              ?disabled=${disabled}
+              @click=${() => void this.save()}
+            >
+              ${icon('save')} ${entry ? 'Save' : 'Add'}
+            </button>`,
         )}
       </div>
-      ${readOnly === null && dirty ? adviceLine(discardAdvice(impact?.audioDiscardCount ?? 0)) : nothing}
+      ${block === null && dirty ? adviceLine(discardAdvice(impact?.audioDiscardCount ?? 0)) : nothing}
     `;
   }
 }

@@ -1,13 +1,7 @@
 import { type TemplateResult, html, nothing } from 'lit-html';
-import {
-  type Block,
-  ITEM_AUDIO_NOT_KEPT,
-  type ParagraphItemDto,
-  withLocal,
-  workspaceUrl,
-} from '@app/api';
+import { type Block, type ParagraphItemDto, withLocal, workspaceUrl } from '@app/api';
 import { use } from '@app/core/services';
-import { blockable, icon, statusChip } from '@app/ui/partials';
+import { gated, icon, statusChip } from '@app/ui/partials';
 import { nodeMenuTrigger, runMenuEntry } from './node-menu';
 import type { NodeMenuTarget } from './node-menu-entries';
 import {
@@ -81,7 +75,7 @@ export function itemRow(
   const voiced = isVoicedItem(item, ctx.narratorOnlyMode);
   const selected = ctx.itemSelectable && ctx.selectedItems.has(item.id);
   // Speakers mode only; a paragraph the queue holds is the server's to stamp, a blocked book nobody's.
-  const assignable = ctx.mode === 'speakers' && block === null && ctx.roster.length > 0;
+  const assignable = ctx.mode === 'speakers' && ctx.roster.length > 0;
   const classes = [
     'r2m-item',
     speaker.state === 'unknown' ? 'r2m-item--unknown' : '',
@@ -113,19 +107,20 @@ export function itemRow(
             />`
           : nothing
       }
-      ${withReason(
+      ${gated(
         block,
-        html`<r2m-speaker-chip
-          class="r2m-item__speaker"
-          .compact=${true}
-          .state=${speaker.state}
-          .name=${speaker.name}
-          .characterId=${speaker.characterId}
-          .roster=${assignable ? ctx.roster : undefined}
-          @pick=${chip.pick}
-          @clear=${chip.clear}
-          @create=${chip.create}
-        ></r2m-speaker-chip>`,
+        (disabled) =>
+          html`<r2m-speaker-chip
+            class="r2m-item__speaker"
+            .compact=${true}
+            .state=${speaker.state}
+            .name=${speaker.name}
+            .characterId=${speaker.characterId}
+            .roster=${assignable && !disabled ? ctx.roster : undefined}
+            @pick=${chip.pick}
+            @clear=${chip.clear}
+            @create=${chip.create}
+          ></r2m-speaker-chip>`,
       )}
       <span class="r2m-item__text" data-item-text=${item.id}
         >${markedText(item.id, item.text ?? '', ctx.marks[item.id], { lit: ctx.litMarks })}</span
@@ -207,58 +202,59 @@ function audioLine(
                 >${reviewView.icon}</span
               >`
             : html`${chipOf(reviewView)}
-              ${withReason(
+              ${gated(
                 block,
-                html`<button
-                  type="button"
-                  class="r2m-item__action"
-                  data-action="dismiss-review"
-                  ?disabled=${block !== null}
-                  @click=${(e: Event) => void generator(e).dismissReview(item.id)}
-                >
-                  Dismiss
-                </button>`,
+                (disabled) =>
+                  html`<button
+                    type="button"
+                    class="r2m-item__action"
+                    data-action="dismiss-review"
+                    ?disabled=${disabled}
+                    @click=${(e: Event) => void generator(e).dismissReview(item.id)}
+                  >
+                    Dismiss
+                  </button>`,
               )}`
           : nothing
       }
       ${queue ? chipOf(queue) : nothing}
       ${
         queue && outcome && voiced
-          ? withReason(
+          ? gated(
               retryBlock,
-              html`<button
-                type="button"
-                class="r2m-item__action"
-                data-action="retry-audio"
-                ?disabled=${retryBlock !== null}
-                @click=${(e: Event) => void generator(e).retry(item.id)}
-              >
-                Retry
-              </button>`,
+              (disabled) =>
+                html`<button
+                  type="button"
+                  class="r2m-item__action"
+                  data-action="retry-audio"
+                  ?disabled=${disabled}
+                  @click=${(e: Event) => void generator(e).retry(item.id)}
+                >
+                  Retry
+                </button>`,
             )
           : nothing
       }
     </span>
-    ${audioSrc ? itemPlayer(audioSrc, status?.audioVersion, ctx.viewing) : nothing}
+    ${audioSrc ? itemPlayer(audioSrc, status?.audioVersion, ctx.playBlock) : nothing}
   </div>`;
 }
 
 /**
  * The generated take's player. Takes aren't Project state, so while a History step is viewed a
- * past item would play today's take: the player shows with its play button off and says why.
+ * past item would play today's take: `playBlock` shows the player with no source, its play button
+ * off, and says why.
  */
-function itemPlayer(src: string, audioVersion: number | null | undefined, viewing: boolean) {
-  if (viewing) {
-    return blockable(
-      ITEM_AUDIO_NOT_KEPT,
-      html`<r2m-audio-player .compact=${true} .src=${null}></r2m-audio-player>`,
-    );
-  }
-  return html`<r2m-audio-player
-    .compact=${true}
-    .src=${src}
-    .cacheKey=${audioVersion ?? undefined}
-  ></r2m-audio-player>`;
+function itemPlayer(src: string, audioVersion: number | null | undefined, playBlock: Block | null) {
+  return gated(
+    playBlock,
+    (disabled) =>
+      html`<r2m-audio-player
+        .compact=${true}
+        .src=${disabled ? null : src}
+        .cacheKey=${disabled ? undefined : (audioVersion ?? undefined)}
+      ></r2m-audio-player>`,
+  );
 }
 
 type DeliveryCueView = TemplateResult | typeof nothing;
@@ -272,24 +268,19 @@ type DeliveryCueView = TemplateResult | typeof nothing;
 function deliveryCue(target: NodeMenuTarget, block: Block | null): DeliveryCueView {
   const cue = target.cue;
   if (!cue) return nothing;
-  const button = html`<button
-    type="button"
-    class="r2m-item__instructions"
-    data-testid="delivery-cue"
-    aria-label=${`Edit delivery cue: ${cue}`}
-    ?disabled=${block !== null}
-    @click=${(e: Event) => void runMenuEntry('edit-cue', target, e.currentTarget as Element)}
-  >
-    ${cue}
-  </button>`;
-  return withReason(block, button);
-}
-
-/**
- * `control` with its **Blocked reason** as the tooltip when `block` has one; bare otherwise, so
- * an inline control keeps its layout while open or blocked without a reason.
- */
-export function withReason<T>(block: Block | null, control: T): T | TemplateResult {
-  const reason = block?.reason ?? null;
-  return reason === null ? control : blockable(reason, control);
+  return gated(
+    block,
+    (disabled) =>
+      html`<button
+        type="button"
+        class="r2m-item__instructions"
+        data-testid="delivery-cue"
+        aria-label=${`Edit delivery cue: ${cue}`}
+        ?disabled=${disabled}
+        @click=${(e: Event) =>
+          void runMenuEntry('edit-cue', target, e.currentTarget as Element, block)}
+      >
+        ${cue}
+      </button>`,
+  );
 }

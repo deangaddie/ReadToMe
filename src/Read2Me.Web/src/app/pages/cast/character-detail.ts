@@ -1,11 +1,17 @@
 import { html, nothing } from 'lit-html';
-import type { CharacterLineDto, CharacterSeriesLinkDto, CharacterSummaryDto } from '@app/api';
+import {
+  type Block,
+  type CharacterLineDto,
+  type CharacterSeriesLinkDto,
+  type CharacterSummaryDto,
+  withLocal,
+} from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
 import { type ReadonlySignal, computed, signal } from '@app/core/signals';
 import { ConfirmService } from '@app/ui/dialogs';
-import { blockable, icon, statusChip } from '@app/ui/partials';
+import { gated, icon, statusChip } from '@app/ui/partials';
 import { castPath, seriesBoardPath } from './cast-path';
 import { CastStore } from './cast-store';
 import { openMergeDialog } from './merge-dialog';
@@ -74,9 +80,8 @@ export class CharacterDetail extends R2mElement {
   protected template() {
     const character = this.#character();
     if (!character) return nothing;
-    const busy = this.store.busy();
-    const readOnly = this.store.readOnly();
-    const off = busy || readOnly !== null;
+    const block = this.store.block();
+    const off = withLocal(block, this.store.busy());
     return html`
       <header class="character-detail__header">
         ${
@@ -87,32 +92,34 @@ export class CharacterDetail extends R2mElement {
                   .value=${character.name}
                   .placeholder=${'Character name'}
                   .required=${true}
-                  .readOnly=${readOnly}
+                  .block=${block}
                   @save=${(e: Event) => void this.rename((e as CustomEvent<string>).detail)}
                 ></r2m-inline-edit>
-                ${blockable(
-                  readOnly,
-                  html`<button
-                    type="button"
-                    class="r2m-button r2m-button--stroked"
-                    data-action="merge"
-                    ?disabled=${off || this.mergeTargets() === 0}
-                    @click=${() => void this.merge()}
-                  >
-                    ${icon('merge')} Merge
-                  </button>`,
+                ${gated(
+                  withLocal(off, this.mergeTargets() === 0),
+                  (disabled) =>
+                    html`<button
+                      type="button"
+                      class="r2m-button r2m-button--stroked"
+                      data-action="merge"
+                      ?disabled=${disabled}
+                      @click=${() => void this.merge()}
+                    >
+                      ${icon('merge')} Merge
+                    </button>`,
                 )}
-                ${blockable(
-                  readOnly,
-                  html`<button
-                    type="button"
-                    class="r2m-button r2m-button--stroked character-detail__delete"
-                    data-action="delete"
-                    ?disabled=${off}
-                    @click=${() => void this.deleteCharacter()}
-                  >
-                    ${icon('delete')} Delete
-                  </button>`,
+                ${gated(
+                  off,
+                  (disabled) =>
+                    html`<button
+                      type="button"
+                      class="r2m-button r2m-button--stroked character-detail__delete"
+                      data-action="delete"
+                      ?disabled=${disabled}
+                      @click=${() => void this.deleteCharacter()}
+                    >
+                      ${icon('delete')} Delete
+                    </button>`,
                 )}`
         }
       </header>
@@ -128,7 +135,7 @@ export class CharacterDetail extends R2mElement {
           : nothing
       }
       ${character.seriesLink ? this.seriesLine(character.seriesLink) : nothing}
-      ${character.isNarrator ? nothing : this.aliases(character, off, readOnly)}
+      ${character.isNarrator ? nothing : this.aliases(character, off)}
 
       <section class="character-detail__section" aria-label="Voices">
         <r2m-voices-section .character=${character}></r2m-voices-section>
@@ -151,7 +158,7 @@ export class CharacterDetail extends R2mElement {
     `;
   }
 
-  private aliases(character: CharacterSummaryDto, busy: boolean, readOnly: string | null) {
+  private aliases(character: CharacterSummaryDto, block: Block | null) {
     return html`<section class="character-detail__section" aria-label="Aliases">
       <h3 class="character-detail__heading">Aliases</h3>
       <div class="character-detail__aliases">
@@ -159,17 +166,18 @@ export class CharacterDetail extends R2mElement {
           (alias) =>
             html`<span class="character-detail__alias" data-alias=${alias.name}>
               ${alias.name}
-              ${blockable(
-                readOnly,
-                html`<button
-                  type="button"
-                  class="character-detail__alias-remove"
-                  aria-label=${`Remove alias ${alias.name}`}
-                  ?disabled=${busy}
-                  @click=${() => void this.removeAlias(alias.id)}
-                >
-                  ${icon('close')}
-                </button>`,
+              ${gated(
+                block,
+                (disabled) =>
+                  html`<button
+                    type="button"
+                    class="character-detail__alias-remove"
+                    aria-label=${`Remove alias ${alias.name}`}
+                    ?disabled=${disabled}
+                    @click=${() => void this.removeAlias(alias.id)}
+                  >
+                    ${icon('close')}
+                  </button>`,
               )}
             </span>`,
         )}
@@ -183,17 +191,18 @@ export class CharacterDetail extends R2mElement {
                 @keydown=${this.#onAliasKeydown}
                 @blur=${(e: Event) => void this.commitAlias(e)}
               />`
-            : blockable(
-                readOnly,
-                html`<button
-                  type="button"
-                  class="r2m-button"
-                  data-action="add-alias"
-                  ?disabled=${busy}
-                  @click=${() => this.beginAlias()}
-                >
-                  ${icon('add')} Add alias
-                </button>`,
+            : gated(
+                block,
+                (disabled) =>
+                  html`<button
+                    type="button"
+                    class="r2m-button"
+                    data-action="add-alias"
+                    ?disabled=${disabled}
+                    @click=${() => this.beginAlias()}
+                  >
+                    ${icon('add')} Add alias
+                  </button>`,
               )
         }
       </div>

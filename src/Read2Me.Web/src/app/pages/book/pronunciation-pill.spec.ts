@@ -46,7 +46,7 @@ beforeEach(async () => {
   host.append(text);
   pill = document.createElement('r2m-pronunciation-pill') as PronunciationPill;
   pill.state = state;
-  pill.readOnly = null;
+  pill.block = null;
   host.append(pill);
   document.body.append(host);
   await pill.rendered();
@@ -104,7 +104,7 @@ describe('the selection pill', () => {
   });
 
   it('offers nothing while a step is viewed', async () => {
-    pill.readOnly = VIEWING_READ_ONLY;
+    pill.block = { reason: VIEWING_READ_ONLY };
     await select('Watson');
     expect(button()).toBeNull();
   });

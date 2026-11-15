@@ -1,11 +1,11 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
-import type { CharacterSummaryDto, VoiceRuleDto } from '@app/api';
+import { type Block, type CharacterSummaryDto, type VoiceRuleDto, withLocal } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { type ReadonlySignal, computed, signal } from '@app/core/signals';
 import { ConfirmService } from '@app/ui/dialogs';
-import { blockable, icon } from '@app/ui/partials';
+import { gated, icon } from '@app/ui/partials';
 import { ProjectStore } from '../../project/project-store';
 import { CastStore } from '../cast-store';
 import { openAddVoiceRuleDialog } from './add-voice-rule-dialog';
@@ -51,8 +51,7 @@ export class VoiceRulesSection extends R2mElement {
     const character = this.#character();
     const rules = this.store.voiceRules();
     if (!character || rules.length === 0) return nothing;
-    const readOnly = this.store.readOnly();
-    const busy = this.store.busy() || readOnly !== null;
+    const block = withLocal(this.store.block(), this.store.busy());
     const preview = this.store.voiceRulePreview();
     const linked = this.linkedNarrator();
     return html`
@@ -63,17 +62,18 @@ export class VoiceRulesSection extends R2mElement {
         ${
           character.isNarrator
             ? nothing
-            : blockable(
-                readOnly,
-                html`<button
-                  type="button"
-                  class="r2m-button"
-                  data-action="add-rule"
-                  ?disabled=${busy || this.store.voices().voices.length === 0}
-                  @click=${() => void this.addRule()}
-                >
-                  ${icon('add')} Add rule
-                </button>`,
+            : gated(
+                withLocal(block, this.store.voices().voices.length === 0),
+                (disabled) =>
+                  html`<button
+                    type="button"
+                    class="r2m-button"
+                    data-action="add-rule"
+                    ?disabled=${disabled}
+                    @click=${() => void this.addRule()}
+                  >
+                    ${icon('add')} Add rule
+                  </button>`,
               )
         }
       </div>
@@ -82,7 +82,7 @@ export class VoiceRulesSection extends R2mElement {
         ${repeat(
           rules,
           (rule) => rule.ruleId,
-          (rule) => this.row(rule, rules, busy, linked, readOnly),
+          (rule) => this.row(rule, rules, block, linked),
         )}
       </ul>
 
@@ -115,45 +115,56 @@ export class VoiceRulesSection extends R2mElement {
   private row(
     rule: VoiceRuleDto,
     rules: readonly VoiceRuleDto[],
-    busy: boolean,
+    block: Block | null,
     linked: boolean,
-    readOnly: string | null,
   ) {
     const dangling = isDangling(rule);
     const ability = moveAbility(rules, rule.ruleId);
-    const controls = html`<button
-        type="button"
-        class="r2m-icon-button"
-        data-action="move-up"
-        data-tooltip="Move up"
-        aria-label="Move rule up"
-        ?disabled=${busy || !ability.up}
-        @click=${() => void this.move(rule, 'Up')}
-      >
-        ${icon('arrow_upward')}
-      </button>
-      <button
-        type="button"
-        class="r2m-icon-button"
-        data-action="move-down"
-        data-tooltip="Move down"
-        aria-label="Move rule down"
-        ?disabled=${busy || !ability.down}
-        @click=${() => void this.move(rule, 'Down')}
-      >
-        ${icon('arrow_downward')}
-      </button>
-      <button
-        type="button"
-        class="r2m-icon-button voice-rules__delete"
-        data-action="delete-rule"
-        data-tooltip="Delete rule"
-        aria-label="Delete rule"
-        ?disabled=${busy}
-        @click=${() => void this.deleteRule(rule)}
-      >
-        ${icon('delete')}
-      </button>`;
+    const controls = html`${gated(
+      withLocal(block, !ability.up),
+      (disabled) =>
+        html`<button
+          type="button"
+          class="r2m-icon-button"
+          data-action="move-up"
+          data-tooltip="Move up"
+          aria-label="Move rule up"
+          ?disabled=${disabled}
+          @click=${() => void this.move(rule, 'Up')}
+        >
+          ${icon('arrow_upward')}
+        </button>`,
+    )}
+    ${gated(
+      withLocal(block, !ability.down),
+      (disabled) =>
+        html`<button
+          type="button"
+          class="r2m-icon-button"
+          data-action="move-down"
+          data-tooltip="Move down"
+          aria-label="Move rule down"
+          ?disabled=${disabled}
+          @click=${() => void this.move(rule, 'Down')}
+        >
+          ${icon('arrow_downward')}
+        </button>`,
+    )}
+    ${gated(
+      block,
+      (disabled) =>
+        html`<button
+          type="button"
+          class="r2m-icon-button voice-rules__delete"
+          data-action="delete-rule"
+          data-tooltip="Delete rule"
+          aria-label="Delete rule"
+          ?disabled=${disabled}
+          @click=${() => void this.deleteRule(rule)}
+        >
+          ${icon('delete')}
+        </button>`,
+    )}`;
     return html`<li
       class="voice-rules__row ${dangling ? 'voice-rules__row--dangling' : ''}"
       data-rule-id=${rule.ruleId}
@@ -172,13 +183,7 @@ export class VoiceRulesSection extends R2mElement {
           : nothing
       }
       <span class="voice-rules__text">${describeRule(rule)}</span>
-      ${
-        showRuleControls(rule, linked)
-          ? readOnly === null
-            ? controls
-            : blockable(readOnly, controls)
-          : nothing
-      }
+      ${showRuleControls(rule, linked) ? controls : nothing}
     </li>`;
   }
 

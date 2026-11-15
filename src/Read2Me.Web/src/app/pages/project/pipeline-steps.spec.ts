@@ -554,7 +554,7 @@ describe('derivePipeline', () => {
 });
 
 describe('readOnlyPipeline (ticket 32)', () => {
-  const steps = () => readOnlyPipeline(derivePipeline(settled()), 'Viewing');
+  const steps = () => readOnlyPipeline(derivePipeline(settled()), { reason: 'Viewing' });
 
   it.each<[StepActionId, string | null]>([
     ['reread', 'Viewing'],

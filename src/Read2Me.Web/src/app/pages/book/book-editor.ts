@@ -11,7 +11,7 @@ import {
   toApiError,
 } from '@app/api';
 import { use } from '@app/core/services';
-import { signal } from '@app/core/signals';
+import { computed, signal } from '@app/core/signals';
 import { ToastService } from '@app/ui/toast';
 import { rereadAction } from './book-actions';
 import type { BookStore } from './book-store';
@@ -42,20 +42,17 @@ export class BookEditor {
   constructor(private readonly store: BookStore) {}
 
   /**
-   * The edit gate for a book write: null when open, else the control's **Blocked reason** (null
-   * while saving). Blocked by a viewed History step, a stale view (design §6.3), a write in flight,
-   * or the caller's `local` busy (`true`, or a string with its own reason). `settle` declines on it.
+   * The **Edit gate** for a book write: blocked by a viewed History step, a stale view (design
+   * §6.3), or a write in flight (no reason). A control folds its own busy in with `withLocal`;
+   * `settle` declines on it.
    */
-  blocked(local?: boolean | string): Block | null {
-    return blockedReason(
-      {
-        viewing: this.stepView.readOnly(this.store.folder()) !== null,
-        stale: this.store.stale() !== null,
-        saving: this._saving(),
-      },
-      local,
-    );
-  }
+  readonly block = computed<Block | null>(() =>
+    blockedReason({
+      viewing: this.stepView.readOnly(this.store.folder()) !== null,
+      stale: this.store.stale() !== null,
+      saving: this._saving(),
+    }),
+  );
 
   /** Posts one command. Resolves true when the host accepted it. */
   async run(command: BookCommand): Promise<boolean> {
@@ -87,7 +84,7 @@ export class BookEditor {
   /** Why a write would not be sent right now, or null when it would. */
   private declineReason(): string | null {
     if (!this.store.folder()) return 'No project is open.';
-    const block = this.blocked();
+    const block = this.block();
     return block === null ? null : (block.reason ?? 'Another change is still being saved.');
   }
 
@@ -114,7 +111,7 @@ export class BookEditor {
     quiet = false,
   ): Promise<{ value?: T; error: ApiError | null } | null> {
     const folder = this.store.folder();
-    if (!folder || this.blocked() !== null) return null;
+    if (!folder || this.block() !== null) return null;
 
     // Armed before the request: the receipt can arrive before the HTTP response does.
     const receipt = this.store.expectOwnReceipt(OWN_RECEIPT_TIMEOUT_MS);

@@ -165,9 +165,9 @@ describe('r2m-settings-form', () => {
     expect(valid.at(-1)).toBe(true);
   });
 
-  it('a read-only reason turns every field off and shows the reason on each', async () => {
+  it('a blocked gate turns every field off and shows the reason on each', async () => {
     const { form } = await mount('override', { cfg: 3 });
-    form.readOnly = 'Viewing a past step';
+    form.block = { reason: 'Viewing a past step' };
     await form.rendered();
 
     const controls = form.querySelectorAll<HTMLInputElement>('input, select, textarea, button');
@@ -177,7 +177,7 @@ describe('r2m-settings-form', () => {
       expect(field(form, key).getAttribute('data-tooltip')).toBe('Viewing a past step');
     }
 
-    form.readOnly = null;
+    form.block = null;
     await form.rendered();
     expect(form.querySelector<HTMLInputElement>('.r2m-settings-form__number')!.disabled).toBe(
       false,

@@ -83,7 +83,7 @@ beforeEach(async () => {
   panel.folder = 'the-adventures-of-sherlock-holmes';
   panel.marks = marks;
   panel.itemsWithAudio = new Set(['i2']);
-  panel.readOnly = null;
+  panel.block = null;
   panel.audioInFlight = 0;
   document.body.append(panel);
   state.show();

@@ -1,4 +1,4 @@
-import type { QueueMessage } from '@app/api';
+import type { Block, QueueMessage } from '@app/api';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { type PronunciationMatchInBook, VIEWING_READ_ONLY } from '@app/api';
 import { override, resetServices } from '@app/core/services';
@@ -46,7 +46,7 @@ beforeEach(() => {
 
 afterEach(() => el?.remove());
 
-async function mount(readOnly: string | null = null) {
+async function mount(block: Block | null = null) {
   el = document.createElement('r2m-pronunciation-sentence') as PronunciationSentence;
   el.folder = 'the-adventures-of-sherlock-holmes';
   el.match = MATCH;
@@ -56,7 +56,7 @@ async function mount(readOnly: string | null = null) {
     spokenForm: 'WAT-sun',
     delete: false,
   };
-  el.readOnly = readOnly;
+  el.block = block;
   document.body.append(el);
   await settle();
 }
@@ -112,7 +112,7 @@ describe('the try-out of the sentence the editor was opened from', () => {
   });
 
   it('is off with the viewing reason while a step is viewed', async () => {
-    await mount(VIEWING_READ_ONLY);
+    await mount({ reason: VIEWING_READ_ONLY });
     expect(button('play-spoken').disabled).toBe(true);
     expect(button('play-spoken').closest('.r2m-blockable')!.getAttribute('data-tooltip')).toBe(
       VIEWING_READ_ONLY,

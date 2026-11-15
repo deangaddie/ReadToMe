@@ -5,7 +5,7 @@ import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import { ConfirmService, PromptService } from '@app/ui/dialogs';
-import { blockable, icon } from '@app/ui/partials';
+import { gated, icon } from '@app/ui/partials';
 import { TypeAhead, rovingKeydown, typeAheadTarget } from '@app/ui/roving';
 import { BookEditor } from './book-editor';
 import { BookStore } from './book-store';
@@ -31,6 +31,8 @@ export interface NodeMenuRequest {
   /** The element the panel is anchored to (the trigger button). */
   anchor: HTMLElement;
   target: NodeMenuTarget;
+  /** The Edit gate its trigger rendered with; the menu refuses to open while it is blocked. */
+  block: Block | null;
   /** Where focus goes when the menu closes; the anchor when unset. */
   returnTo?: HTMLElement;
   /**
@@ -49,7 +51,7 @@ type PauseSide = 'before' | 'after';
  * The per-row and per-node menu trigger (the `mat-icon-button` of the Angular `NodeMenu`): a
  * click asks the nearest shared {@link NodeMenu} to open for `target`, anchored here. Off while
  * `block` is non-null (the edit gate with the row's own busy folded in), its **Blocked reason**
- * shown as the tooltip; the menu checks the editor itself on open. A trigger kept out of the tab
+ * shown as the tooltip; the open request carries it, so the menu and the trigger agree. A trigger kept out of the tab
  * order (a tree node's) keeps its wrapper out too.
  */
 export function nodeMenuTrigger(
@@ -59,27 +61,29 @@ export function nodeMenuTrigger(
     tabIndex?: number;
   } = {},
 ) {
+  const block = options.block ?? null;
   const open = (e: Event) => {
     e.stopPropagation();
     const anchor = e.currentTarget as HTMLElement;
-    const detail: NodeMenuRequest = { anchor, target };
+    const detail: NodeMenuRequest = { anchor, target, block };
     anchor.dispatchEvent(new CustomEvent(NODE_MENU_OPEN, { detail, bubbles: true }));
   };
-  const block = options.block ?? null;
-  const reason = block?.reason ?? null;
-  const trigger = html`<button
-    type="button"
-    class="r2m-icon-button r2m-node-menu__trigger"
-    aria-label=${menuLabel(target)}
-    aria-haspopup="menu"
-    tabindex=${options.tabIndex ?? nothing}
-    ?disabled=${block !== null}
-    @click=${open}
-  >
-    ${icon('more_vert')}
-  </button>`;
-  if (reason === null) return trigger;
-  return blockable(reason, trigger, { tabbable: options.tabIndex === undefined });
+  return gated(
+    block,
+    (disabled) =>
+      html`<button
+        type="button"
+        class="r2m-icon-button r2m-node-menu__trigger"
+        aria-label=${menuLabel(target)}
+        aria-haspopup="menu"
+        tabindex=${options.tabIndex ?? nothing}
+        ?disabled=${disabled}
+        @click=${open}
+      >
+        ${icon('more_vert')}
+      </button>`,
+    { tabbable: options.tabIndex === undefined },
+  );
 }
 
 /** What the menu reads of the open book: its Structure rules and volume count, from the overview. */
@@ -95,16 +99,17 @@ export function menuLabel(target: NodeMenuTarget): string {
 /**
  * Runs one command entry for `target` as the menu would: asks what the entry needs through the
  * shared dialogs, then posts the command through the {@link BookEditor} above `from`. Also how a
- * row runs an entry without the menu (clicking a delivery cue edits it). Nothing while the editor
- * is blocked.
+ * row runs an entry without the menu (clicking a delivery cue edits it). Nothing while `block`, the
+ * Edit gate the caller's control rendered with, is blocked; the editor rechecks when it sends.
  */
 export async function runMenuEntry(
   entry: MenuEntryId,
   target: NodeMenuTarget,
   from: Element,
+  block: Block | null,
 ): Promise<void> {
+  if (block !== null) return;
   const editor = use(BookEditor, from);
-  if (editor.blocked() !== null) return;
   const prompt = use(PromptService, from);
   const confirm = use(ConfirmService, from);
   const rules = use(BookStore, from).overview()?.structureRules ?? [];
@@ -128,11 +133,10 @@ export async function runMenuEntry(
  * {@link NODE_MENU_OPEN} there and re-anchors its popover to the trigger of each open, so a tree
  * re-render under an open menu keeps the anchor (lit keeps the trigger element by id). The panel
  * lives outside the tree and the rows, so its keys never reach theirs; Escape and a chosen entry
- * hand focus back to `returnTo`. Refuses to open while the editor is blocked (a step viewed, stale
- * or mid-write).
+ * hand focus back to `returnTo`. Refuses to open while the request's Edit gate is blocked (a
+ * step viewed, stale, mid-write, or the row's own busy).
  */
 export class NodeMenu extends R2mElement {
-  private editor!: BookEditor;
   private store!: BookStore;
 
   readonly #request = signal<NodeMenuRequest | null>(null);
@@ -164,7 +168,6 @@ export class NodeMenu extends R2mElement {
   }
 
   protected override connected(): void {
-    this.editor = use(BookEditor, this);
     this.store = use(BookStore, this);
     const scope = this.parentElement;
     if (scope) {
@@ -177,7 +180,7 @@ export class NodeMenu extends R2mElement {
 
   /** Opens the menu for `request`, anchored to its trigger; a second open re-anchors. */
   openFor(request: NodeMenuRequest): void {
-    if (this.editor.blocked() !== null) return;
+    if (request.block !== null) return;
     this.#release();
     request.anchor.style.setProperty('anchor-name', ANCHOR);
     request.anchor.setAttribute('aria-expanded', 'true');
@@ -302,7 +305,7 @@ export class NodeMenu extends R2mElement {
       request.onAction?.(id);
       return;
     }
-    await runMenuEntry(id, request.target, this);
+    await runMenuEntry(id, request.target, this, request.block);
   }
 
   #openSub(side: PauseSide, trigger: HTMLElement): void {

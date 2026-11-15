@@ -75,9 +75,8 @@ export function isDirty(saved: Forms | null, draft: Forms): boolean {
   return written !== saved.writtenForm || spoken !== saved.spokenForm;
 }
 
+/** Delete's own conditions; a viewed History step comes from the project's Edit gate. */
 export interface DeleteGate {
-  /** `StepView.readOnly`: the viewing reason, or null. */
-  readOnly: string | null;
   /** Items queued or processing for audio in this project. */
   audioInFlight: number;
 }
@@ -88,9 +87,8 @@ export interface SaveGate extends DeleteGate {
   invalid: string | null;
 }
 
-/** Why Delete is off, or null. */
+/** Why Delete is off for its own reason, or null: the local reason folded into the project's block. */
 export function deleteBlockedReason(gate: DeleteGate): string | null {
-  if (gate.readOnly !== null) return gate.readOnly;
   return gate.audioInFlight > 0 ? AUDIO_RUNNING : null;
 }
 

@@ -1,3 +1,4 @@
+import type { Block } from '@app/api';
 import { html, nothing } from 'lit-html';
 import { R2mElement, define } from '@app/core/element';
 import { signal } from '@app/core/signals';
@@ -35,13 +36,13 @@ export class PronunciationPill extends R2mElement {
     this.#state.set(value);
   }
 
-  readonly #readOnly = signal<string | null>(null);
-  get readOnly() {
-    return this.#readOnly();
+  readonly #block = signal<Block | null>(null);
+  get block() {
+    return this.#block();
   }
-  /** `StepView.readOnly`: nothing is offered while a step is viewed. */
-  set readOnly(value: string | null) {
-    this.#readOnly.set(value);
+  /** `ProjectStore.block`: nothing is offered while a step is viewed. */
+  set block(value: Block | null) {
+    this.#block.set(value);
     if (value !== null) this.shown.set(null);
   }
 
@@ -70,7 +71,7 @@ export class PronunciationPill extends R2mElement {
     const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
     const root = this.parentElement;
     const place =
-      state && this.#readOnly() === null && range && root?.contains(range.commonAncestorContainer)
+      state && this.#block() === null && range && root?.contains(range.commonAncestorContainer)
         ? selectedPlace(range)
         : null;
     const pill = place ? selectionPill(place.text, state!.entries()) : null;

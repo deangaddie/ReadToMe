@@ -8,13 +8,14 @@ import {
   type UpdateProjectRequest,
   toApiError,
   stateFileUrl,
+  withLocal,
 } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { type ReadonlySignal, computed, signal } from '@app/core/signals';
 import type { RejectedFile } from '@app/ui/file-drop';
 import { keyValue } from '@app/ui/key-value';
-import { blockable, icon, statusChip } from '@app/ui/partials';
+import { gated, icon, statusChip } from '@app/ui/partials';
 import { placeholderGradient, projectInitials } from '@app/ui/project-card';
 import { confirmPermanent } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
@@ -55,8 +56,8 @@ export class ProjectDetailsPanel extends R2mElement {
     if (!d) return nothing;
     const coverUrl = this.coverUrl();
     // Viewing a History step: the past cover and fields show, but none of them can change.
-    const readOnly = this.store.readOnly();
-    const busy = this.busy() || readOnly !== null;
+    const block = this.store.block();
+    const busy = withLocal(block, this.busy());
     const castBase = `projects/${encodeURIComponent(d.folderName)}/cast`;
     const castLink = d.narrator.isLinked
       ? `${castBase}/${encodeURIComponent(d.narrator.characterId)}`
@@ -81,22 +82,23 @@ export class ProjectDetailsPanel extends R2mElement {
           .maxBytes=${COVER_MAX_BYTES}
           .label=${d.coverImage ? 'Replace cover' : 'Add a cover'}
           .hint=${'JPG, PNG or WebP, up to 10 MB'}
-          .readOnly=${readOnly}
+          .block=${block}
           @files=${(e: Event) => void this.uploadCover((e as CustomEvent<File[]>).detail)}
           @rejected=${(e: Event) => this.rejectCover((e as CustomEvent<RejectedFile[]>).detail)}
         ></r2m-file-drop>
         ${
           d.coverImage
-            ? blockable(
-                readOnly,
-                html`<button
-                  type="button"
-                  class="r2m-button details__remove-cover"
-                  ?disabled=${busy}
-                  @click=${() => void this.removeCover()}
-                >
-                  ${icon('hide_image')} Remove cover
-                </button>`,
+            ? gated(
+                busy,
+                (disabled) =>
+                  html`<button
+                    type="button"
+                    class="r2m-button details__remove-cover"
+                    ?disabled=${disabled}
+                    @click=${() => void this.removeCover()}
+                  >
+                    ${icon('hide_image')} Remove cover
+                  </button>`,
               )
             : nothing
         }
@@ -109,7 +111,7 @@ export class ProjectDetailsPanel extends R2mElement {
           .value=${d.title}
           .placeholder=${'Title'}
           .required=${true}
-          .readOnly=${readOnly}
+          .block=${block}
           @save=${(e: Event) => void this.update({ title: (e as CustomEvent<string>).detail })}
         ></r2m-inline-edit>
       </div>
@@ -119,7 +121,7 @@ export class ProjectDetailsPanel extends R2mElement {
           class="details__author"
           .value=${d.author}
           .placeholder=${'Author'}
-          .readOnly=${readOnly}
+          .block=${block}
           @save=${(e: Event) => void this.update({ author: (e as CustomEvent<string>).detail })}
         ></r2m-inline-edit>
       </div>
@@ -136,19 +138,20 @@ export class ProjectDetailsPanel extends R2mElement {
       >
 
       <!-- live(): a refused PUT refetches the same value, and the box must still snap back. -->
-      ${blockable(
-        readOnly,
-        html`<label class="r2m-switch details__narrator-only">
-          <input
-            type="checkbox"
-            role="switch"
-            name="narratorOnly"
-            .checked=${live(d.narratorOnlyMode)}
-            ?disabled=${busy}
-            @change=${(e: Event) => void this.setNarratorOnly((e.target as HTMLInputElement).checked)}
-          />
-          Narrator only
-        </label>`,
+      ${gated(
+        busy,
+        (disabled) =>
+          html`<label class="r2m-switch details__narrator-only">
+            <input
+              type="checkbox"
+              role="switch"
+              name="narratorOnly"
+              .checked=${live(d.narratorOnlyMode)}
+              ?disabled=${disabled}
+              @change=${(e: Event) => void this.setNarratorOnly((e.target as HTMLInputElement).checked)}
+            />
+            Narrator only
+          </label>`,
       )}
       <p class="details__hint">Only narration gets audio; dialog is read by the narrator.</p>
 

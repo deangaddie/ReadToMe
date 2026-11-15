@@ -181,8 +181,10 @@ describe('r2m-voice-card', () => {
         expect(button(card, action).disabled).toBe(true);
         expect(reason(button(card, action))).toBe(VIEWING_READ_ONLY);
       }
-      expect(card.querySelector('r2m-file-drop')?.readOnly).toBe(VIEWING_READ_ONLY);
-      expect(card.querySelector('r2m-voice-override-editor')?.readOnly).toBe(VIEWING_READ_ONLY);
+      expect(card.querySelector('r2m-file-drop')?.block).toEqual({ reason: VIEWING_READ_ONLY });
+      expect(card.querySelector('r2m-voice-override-editor')?.block).toEqual({
+        reason: VIEWING_READ_ONLY,
+      });
       expect(textarea(card, 'Voice description').readOnly).toBe(true);
       expect(textarea(card, 'Transcript').readOnly).toBe(true);
       expect(
@@ -190,7 +192,7 @@ describe('r2m-voice-card', () => {
           (r) => r.disabled,
         ),
       ).toBe(true);
-      expect(card.querySelector('r2m-inline-edit')?.readOnly).toBe(VIEWING_READ_ONLY);
+      expect(card.querySelector('r2m-inline-edit')?.block).toEqual({ reason: VIEWING_READ_ONLY });
     });
 
     it('a prompt voice keeps its player but Save, Regenerate and Generate audio are off', async () => {

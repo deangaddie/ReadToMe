@@ -19,7 +19,7 @@ export interface StructureNodeMenuInput {
   selection: SelectionKind | null;
   /** The node's roll-up; null when it has none. */
   status: NodeStatusSummaryDto | null;
-  /** The edit gate's answer for the page (`BookEditor.blocked()`); null while edits are open. */
+  /** The edit gate's answer for the page (`BookEditor.block()`); null while edits are open. */
   blocked: Block | null;
 }
 

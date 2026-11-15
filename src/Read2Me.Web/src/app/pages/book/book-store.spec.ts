@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type {
+  Block,
   BookOverviewDto,
   ParagraphDto,
   ProjectDetailDto,
@@ -96,8 +97,8 @@ describe('BookStore', () => {
   let live: FakeLive;
   let store: BookStore;
   let toasts: string[];
-  /** The project's read-only reason: set while a History step is viewed. */
-  let readOnly: ReturnType<typeof signal<string | null>>;
+  /** The project's Edit gate: blocked while a History step is viewed. */
+  let block: ReturnType<typeof signal<Block | null>>;
 
   const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
   const calls = (path: string) => api.calls('GET', `${BASE}${path}`).length;
@@ -109,8 +110,8 @@ describe('BookStore', () => {
     live = new FakeLive().install();
     toasts = [];
     override(ToastService, { info: (m: string) => toasts.push(m) } as unknown as ToastService);
-    readOnly = signal<string | null>(null);
-    const project = { detail: signal(DETAIL), readOnly } as unknown as ProjectStore;
+    block = signal<Block | null>(null);
+    const project = { detail: signal(DETAIL), block } as unknown as ProjectStore;
     store = new BookStore(project);
 
     api
@@ -362,7 +363,7 @@ describe('BookStore', () => {
       await store.open('dracula');
       await expand('p1');
       await store.openFirstChapter();
-      readOnly.set('Viewing a past step');
+      block.set({ reason: 'Viewing a past step' });
 
       live.emit('receipt', receipt(6, ['Structure'], { paragraphIds: ['a'] }));
       await settle(RECEIPT_BATCH_MS + 20);

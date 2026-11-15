@@ -1,7 +1,7 @@
 import { html, nothing } from 'lit-html';
 import { keyed } from 'lit-html/directives/keyed.js';
 import { repeat } from 'lit-html/directives/repeat.js';
-import type { Guid } from '@app/api';
+import type { Block, Guid } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
@@ -59,13 +59,13 @@ export class PronunciationPanel extends R2mElement {
     this.#itemsWithAudio.set(value);
   }
 
-  readonly #readOnly = signal<string | null>(null);
-  get readOnly() {
-    return this.#readOnly();
+  readonly #block = signal<Block | null>(null);
+  get block() {
+    return this.#block();
   }
-  /** `StepView.readOnly`, for the editor. */
-  set readOnly(value: string | null) {
-    this.#readOnly.set(value);
+  /** `ProjectStore.block`, for the editor. */
+  set block(value: Block | null) {
+    this.#block.set(value);
   }
 
   readonly #audioInFlight = signal(0);
@@ -125,7 +125,7 @@ export class PronunciationPanel extends R2mElement {
                 .entry=${entry}
                 .prefill=${session.forms}
                 .origin=${session.origin}
-                .readOnly=${this.#readOnly()}
+                .block=${this.#block()}
                 .audioInFlight=${this.#audioInFlight()}
                 @editor-close=${() => state.endSession()}
               ></r2m-pronunciation-editor>`,

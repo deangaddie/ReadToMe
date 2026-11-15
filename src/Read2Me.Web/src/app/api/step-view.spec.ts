@@ -116,14 +116,50 @@ describe('blockedReason', () => {
     expect(blockedReason(open, true)).toEqual({ reason: null });
   });
 
-  it('gives one reason, in the order viewing > stale > local reason > none', () => {
-    const all = { viewing: true, stale: true, saving: true };
+  it('gives one reason, in the order viewing > stale > section > local reason > none', () => {
+    const all = { viewing: true, stale: true, section: 'Series Voices', saving: true };
     expect(blockedReason(all, 'local')).toEqual({ reason: VIEWING_READ_ONLY });
     expect(blockedReason({ ...all, viewing: false }, 'local')).toEqual({
       reason: STALE_READ_ONLY,
     });
+    expect(blockedReason({ ...all, viewing: false, stale: false }, 'local')).toEqual({
+      reason: 'Series Voices',
+    });
     expect(blockedReason({ ...open, saving: true }, 'local')).toEqual({ reason: 'local' });
     expect(blockedReason({ ...open, saving: true }, true)).toEqual({ reason: null });
+  });
+
+  it('blocks a series Voice with its section reason, which a local busy cannot replace', () => {
+    const series = { viewing: false, section: 'Series Voices' };
+    expect(blockedReason(series)).toEqual({ reason: 'Series Voices' });
+    expect(withLocal(blockedReason(series), 'Generating')).toEqual({ reason: 'Series Voices' });
+    expect(withLocal(blockedReason(series), true)).toEqual({ reason: 'Series Voices' });
+    expect(blockedReason({ viewing: true, section: 'Series Voices' })).toEqual({
+      reason: VIEWING_READ_ONLY,
+    });
+    expect(blockedReason({ viewing: false, section: null })).toBeNull();
+  });
+
+  it('folds a local busy given later with withLocal the same as one passed in', () => {
+    const saving = { ...open, saving: true };
+    for (const local of [undefined, false, true, '', 'local'] as const) {
+      expect(withLocal(blockedReason(saving), local)).toEqual(blockedReason(saving, local));
+      expect(withLocal(blockedReason(open), local)).toEqual(blockedReason(open, local));
+    }
+  });
+
+  it('blocks every edit of a project viewed at a History step, and only that project', () => {
+    const view = use(StepView);
+    expect(view.readOnly('dracula')).toBeNull();
+    view.view('dracula', 's8');
+    expect(view.readOnly('dracula')).toEqual({ reason: VIEWING_READ_ONLY });
+    expect(withLocal(view.readOnly('dracula'), 'Preview first')).toEqual({
+      reason: VIEWING_READ_ONLY,
+    });
+    expect(view.readOnly('emma')).toBeNull();
+    expect(view.readOnly(null)).toBeNull();
+    view.clear('dracula');
+    expect(view.readOnly('dracula')).toBeNull();
   });
 });
 

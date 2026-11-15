@@ -176,12 +176,12 @@ describe('r2m-overview-page', () => {
 
     const details = page.querySelector('r2m-project-details-panel')!;
     expect(details.querySelector('img.details__image')?.getAttribute('src')).toContain('at=s8');
-    expect(details.querySelector('r2m-file-drop')?.readOnly).toBe(VIEWING_READ_ONLY);
+    expect(details.querySelector('r2m-file-drop')?.block).toEqual({ reason: VIEWING_READ_ONLY });
     const remove = details.querySelector<HTMLButtonElement>('.details__remove-cover')!;
     expect(remove.disabled).toBe(true);
     expect(reason(remove)).toBe(VIEWING_READ_ONLY);
     for (const edit of details.querySelectorAll('r2m-inline-edit')) {
-      expect(edit.readOnly).toBe(VIEWING_READ_ONLY);
+      expect(edit.block).toEqual({ reason: VIEWING_READ_ONLY });
     }
     expect(details.querySelector<HTMLInputElement>('input[name=narratorOnly]')?.disabled).toBe(
       true,

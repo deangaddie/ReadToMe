@@ -1,6 +1,12 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
-import { type Guid, type PronunciationEntry, PronunciationsApi, toApiError } from '@app/api';
+import {
+  type Guid,
+  type PronunciationEntry,
+  PronunciationsApi,
+  toApiError,
+  withLocal,
+} from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
@@ -9,7 +15,7 @@ import { adoptStyles } from '@app/core/styles';
 import { ProjectFeed } from '@app/live/project-feed';
 import { confirmDiscard } from '@app/shared/unsaved-changes';
 import { ConfirmService } from '@app/ui/dialogs';
-import { blockable, emptyState, icon, spinner, statusChip } from '@app/ui/partials';
+import { emptyState, gated, icon, spinner, statusChip } from '@app/ui/partials';
 import { ProjectStore } from '../project/project-store';
 import type { PronunciationEditor } from './pronunciation-editor';
 import { deleteBlockedReason, filterEntries } from './pronunciation-logic';
@@ -123,9 +129,9 @@ export class PronunciationsPage extends R2mElement {
 
   protected template() {
     const folder = this.project.folder();
-    const readOnly = this.project.readOnly();
+    const block = this.project.block();
     const audioInFlight = this.project.audioInFlight();
-    const deleteReason = deleteBlockedReason({ readOnly, audioInFlight });
+    const deleteBlock = withLocal(block, deleteBlockedReason({ audioInFlight }) ?? false);
     const editing = this.editing();
     const openEntry = this.openEntry();
     const entries = this.entries();
@@ -152,17 +158,18 @@ export class PronunciationsPage extends R2mElement {
       <div class="pron ${editing ? 'pron--editing' : ''}">
         <section class="pron__list" aria-label="Pronunciation list">
           <div class="pron__toolbar">
-            ${blockable(
-              readOnly,
-              html`<button
-                type="button"
-                class="r2m-button r2m-button--filled"
-                data-action="add"
-                ?disabled=${readOnly !== null}
-                @click=${() => void this.open({ kind: 'new' })}
-              >
-                ${icon('add')} Add pronunciation
-              </button>`,
+            ${gated(
+              block,
+              (disabled) =>
+                html`<button
+                  type="button"
+                  class="r2m-button r2m-button--filled"
+                  data-action="add"
+                  ?disabled=${disabled}
+                  @click=${() => void this.open({ kind: 'new' })}
+                >
+                  ${icon('add')} Add pronunciation
+                </button>`,
             )}
             <label class="r2m-field pron__search">
               <input
@@ -185,7 +192,7 @@ export class PronunciationsPage extends R2mElement {
                       hint: 'Add a word the TTS gets wrong, written as the book spells it and spoken as it should sound.',
                       compact: true,
                     },
-                    readOnly === null
+                    block === null
                       ? [
                           {
                             label: 'Add pronunciation',
@@ -239,18 +246,19 @@ export class PronunciationsPage extends R2mElement {
                                 class="pron__delete"
                                 @click=${(ev: Event) => ev.stopPropagation()}
                               >
-                                ${blockable(
-                                  deleteReason,
-                                  html`<button
-                                    type="button"
-                                    class="r2m-icon-button"
-                                    data-action="delete-row"
-                                    aria-label="Delete ${e.writtenForm}"
-                                    ?disabled=${deleteReason !== null}
-                                    @click=${() => void this.deleteEntry(e)}
-                                  >
-                                    ${icon('delete')}
-                                  </button>`,
+                                ${gated(
+                                  deleteBlock,
+                                  (disabled) =>
+                                    html`<button
+                                      type="button"
+                                      class="r2m-icon-button"
+                                      data-action="delete-row"
+                                      aria-label="Delete ${e.writtenForm}"
+                                      ?disabled=${disabled}
+                                      @click=${() => void this.deleteEntry(e)}
+                                    >
+                                      ${icon('delete')}
+                                    </button>`,
                                 )}
                               </td>
                             </tr>`,
@@ -265,7 +273,7 @@ export class PronunciationsPage extends R2mElement {
               ? html`<r2m-pronunciation-editor
                   .folder=${folder}
                   .entry=${openEntry}
-                  .readOnly=${readOnly}
+                  .block=${block}
                   .audioInFlight=${audioInFlight}
                   @editor-close=${() => this.editing.set(null)}
                 ></r2m-pronunciation-editor>`

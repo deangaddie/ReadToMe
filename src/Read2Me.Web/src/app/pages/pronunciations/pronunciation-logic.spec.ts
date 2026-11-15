@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'bun:test';
-import { VIEWING_READ_ONLY } from '@app/api';
 import {
   AUDIO_RUNNING,
   countLine,
@@ -102,7 +101,6 @@ describe('isDirty', () => {
 
 describe('saveBlockedReason', () => {
   const free = {
-    readOnly: null,
     audioInFlight: 0,
     duplicateOf: null,
     invalid: null,
@@ -113,7 +111,6 @@ describe('saveBlockedReason', () => {
   });
 
   it.each([
-    [{ ...free, readOnly: VIEWING_READ_ONLY, audioInFlight: 3 }, VIEWING_READ_ONLY],
     [{ ...free, audioInFlight: 3 }, AUDIO_RUNNING],
     [
       {
@@ -133,9 +130,8 @@ describe('saveBlockedReason', () => {
 
 describe('deleteBlockedReason', () => {
   it.each([
-    [{ readOnly: null, audioInFlight: 0 }, null],
-    [{ readOnly: null, audioInFlight: 1 }, AUDIO_RUNNING],
-    [{ readOnly: VIEWING_READ_ONLY, audioInFlight: 1 }, VIEWING_READ_ONLY],
+    [{ audioInFlight: 0 }, null],
+    [{ audioInFlight: 1 }, AUDIO_RUNNING],
   ])('%o → %p', (gate, reason) => {
     expect(deleteBlockedReason(gate)).toBe(reason);
   });

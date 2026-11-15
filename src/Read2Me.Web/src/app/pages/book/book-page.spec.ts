@@ -920,8 +920,10 @@ describe('r2m-book-page', () => {
 
       live.queue.set({ attribution: { isBusy: true } } as unknown as QueueMessage);
       await page.rendered();
-      expect(bulk.disabled).toBe(true);
-      expect(bulk.closest('.r2m-blockable')!.getAttribute('data-tooltip')).toBe(
+      // A reason wraps the button, so it is a new element.
+      const waiting = page.querySelector<HTMLButtonElement>('[data-action=bulk-assign]')!;
+      expect(waiting.disabled).toBe(true);
+      expect(waiting.closest('.r2m-blockable')!.getAttribute('data-tooltip')).toBe(
         'Bulk assign waits until attribution has finished',
       );
     });

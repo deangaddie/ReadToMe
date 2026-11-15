@@ -1,6 +1,7 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
 import {
+  type Block,
   CharactersApi,
   type CharacterVoicesDto,
   type Guid,
@@ -10,13 +11,14 @@ import {
   type TryPronunciationRequest,
   type TryVoice,
   VoicesApi,
+  withLocal,
 } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { computed, signal, untracked } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import { LiveService } from '@app/live/live.service';
-import { blockable, icon, spinner } from '@app/ui/partials';
+import { gated, icon, spinner } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
 import {
   ITEM_VOICE,
@@ -26,7 +28,6 @@ import {
   gpuBusyReason,
   matchKey,
   otherSampleBlockedReason,
-  playBlockedReason,
   reshuffle,
   spokenPlayBlockedReason,
   swap,
@@ -43,7 +44,8 @@ adoptStyles(css);
 /** What every play button reads, read once per render. */
 interface PlayView {
   playing: TryOutPlaying | null;
-  blocked: string | null;
+  /** The play gate: viewing a step first, then the GPU. */
+  block: Block | null;
 }
 
 /**
@@ -86,13 +88,13 @@ export class PronunciationTry extends R2mElement {
     this.#draft.set(value);
   }
 
-  /** `StepView.readOnly`: why nothing plays while a step is viewed, or null. */
-  readonly #readOnly = signal<string | null>(null);
-  get readOnly() {
-    return this.#readOnly();
+  /** `ProjectStore.block`: the project's Edit gate; nothing plays while a step is viewed. */
+  readonly #block = signal<Block | null>(null);
+  get block() {
+    return this.#block();
   }
-  set readOnly(value: string | null) {
-    this.#readOnly.set(value);
+  set block(value: Block | null) {
+    this.#block.set(value);
   }
 
   /** The project's voices for the pickers; null until read. */
@@ -105,8 +107,8 @@ export class PronunciationTry extends R2mElement {
     failed: (error) => this.toast.problem(error.toProblem()),
   });
 
-  private readonly blocked = computed(() =>
-    playBlockedReason(this.#readOnly(), gpuBusyReason(this.live.queue(), this.live.voiceBatch())),
+  private readonly playBlock = computed(() =>
+    withLocal(this.#block(), gpuBusyReason(this.live.queue(), this.live.voiceBatch()) ?? false),
   );
 
   protected override connected(): void {
@@ -180,23 +182,23 @@ export class PronunciationTry extends R2mElement {
     extra: string | null = null,
   ) {
     const mine = view.playing?.key === key;
-    const reason = view.blocked ?? extra;
-    return blockable(
-      reason,
-      html`<button
-        type="button"
-        class="r2m-button r2m-button--text pron-try__play"
-        data-play=${key}
-        aria-pressed=${mine ? 'true' : 'false'}
-        ?disabled=${reason !== null}
-        @click=${() => this.player.toggle(key, requests())}
-      >
-        ${
-          mine && view.playing?.phase === 'generating'
-            ? html`${spinner(16)} Generating…`
-            : html`${icon(mine ? 'stop' : 'play_arrow')} ${label}`
-        }
-      </button>`,
+    return gated(
+      withLocal(view.block, extra ?? false),
+      (disabled) =>
+        html`<button
+          type="button"
+          class="r2m-button r2m-button--text pron-try__play"
+          data-play=${key}
+          aria-pressed=${mine ? 'true' : 'false'}
+          ?disabled=${disabled}
+          @click=${() => this.player.toggle(key, requests())}
+        >
+          ${
+            mine && view.playing?.phase === 'generating'
+              ? html`${spinner(16)} Generating…`
+              : html`${icon(mine ? 'stop' : 'play_arrow')} ${label}`
+          }
+        </button>`,
     );
   }
 
@@ -243,11 +245,14 @@ export class PronunciationTry extends R2mElement {
     const matches = this.#matches();
     if (matches.length === 0) return nothing;
     // Read once here: `repeat` item templates must not read signals themselves (docs/agents/web/conventions.md, Gotchas).
-    const view: PlayView = { playing: this.player.playing(), blocked: this.blocked() };
+    const view: PlayView = { playing: this.player.playing(), block: this.playBlock() };
     const noSpoken = spokenPlayBlockedReason(this.#draft()?.spokenForm ?? null);
     const byKey = new Map(matches.map((m) => [matchKey(m), m]));
     const cards = this.cards().filter((c) => byKey.has(c.key));
-    const noOther = otherSampleBlockedReason(matches.length, cards.length);
+    const noOther = withLocal(
+      null,
+      otherSampleBlockedReason(matches.length, cards.length) ?? false,
+    );
     const shown = new Set(cards.map((c) => c.key));
     const showAll = this.showAll();
     const rowVoice = picker?.defaultVoice ?? 'item';
@@ -279,36 +284,38 @@ export class PronunciationTry extends R2mElement {
               ${this.playButton(view, `${card.key}|spoken`, 'Spoken form', () => [this.request(m, false, card.voice)], noSpoken)}
               ${this.playButton(view, `${card.key}|written`, 'As written', () => [this.request(m, true, card.voice)])}
               <span class="pron-try__spacer"></span>
-              ${blockable(
+              ${gated(
                 noOther,
-                html`<button
-                  type="button"
-                  class="r2m-icon-button"
-                  data-action="swap"
-                  aria-label="Swap for another sentence"
-                  data-tooltip=${noOther === null ? 'Swap for another sentence' : nothing}
-                  ?disabled=${noOther !== null}
-                  @click=${() => this.cards.set(swap(matches, this.cards(), index))}
-                >
-                  ${icon('refresh')}
-                </button>`,
+                (disabled) =>
+                  html`<button
+                    type="button"
+                    class="r2m-icon-button"
+                    data-action="swap"
+                    aria-label="Swap for another sentence"
+                    data-tooltip=${disabled ? nothing : 'Swap for another sentence'}
+                    ?disabled=${disabled}
+                    @click=${() => this.cards.set(swap(matches, this.cards(), index))}
+                  >
+                    ${icon('refresh')}
+                  </button>`,
               )}
             </div>
           </article>`;
         },
       )}
       <div class="pron-try__more">
-        ${blockable(
+        ${gated(
           noOther,
-          html`<button
-            type="button"
-            class="r2m-button r2m-button--text"
-            data-action="other-samples"
-            ?disabled=${noOther !== null}
-            @click=${() => this.cards.set(reshuffle(matches, this.cards()))}
-          >
-            ${icon('restart_alt')} Other samples
-          </button>`,
+          (disabled) =>
+            html`<button
+              type="button"
+              class="r2m-button r2m-button--text"
+              data-action="other-samples"
+              ?disabled=${disabled}
+              @click=${() => this.cards.set(reshuffle(matches, this.cards()))}
+            >
+              ${icon('restart_alt')} Other samples
+            </button>`,
         )}
         <button
           type="button"

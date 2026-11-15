@@ -12,6 +12,7 @@ import {
   type VoiceRuleDto,
   StepView,
   VoicesApi,
+  blockedReason,
   toApiError,
 } from '@app/api';
 import { use } from '@app/core/services';
@@ -101,10 +102,10 @@ export class CastStore {
   /** A write is in flight; mutation affordances are off. */
   readonly busy = this._busy.asReadonly();
   /**
-   * Why nothing can be changed (ticket 32): a History step is viewed. Every mutation affordance is
-   * off with this as its reason; null on the current project.
+   * The Cast's **Edit gate** (ticket 32): blocked while a History step is viewed, open on the
+   * current project. Controls fold {@link busy} and their own conditions in with `withLocal`.
    */
-  readonly readOnly = computed(() => this.stepView.readOnly(this._folder()));
+  readonly block = computed(() => this.stepView.readOnly(this._folder()));
 
   /**
    * The store behind the inline series Voice editor (#221) rather than the Cast page: series
@@ -113,14 +114,18 @@ export class CastStore {
   seriesEditor = false;
 
   /**
-   * Why the selected character's Voices can't be edited here: a viewed History step, or — on the
-   * Cast page — they are series Voices, edited on the series cast board (#221). Its default and
-   * Voice Rules stay the book's own, so they follow {@link readOnly} instead.
+   * The Edit gate of the selected character's Voices: a viewed History step, or — on the Cast
+   * page — they are series Voices, edited on the series cast board (#221), as their section reason.
+   * Its default and Voice Rules stay the book's own, so they follow {@link block} instead.
    */
-  readonly voicesReadOnly = computed(
-    () =>
-      this.readOnly() ??
-      (!this.seriesEditor && this.selected()?.seriesLink ? SERIES_VOICES_READ_ONLY : null),
+  /** The selected character's Voices are series Voices, edited on the series cast board (#221). */
+  readonly seriesVoices = computed(() => !this.seriesEditor && !!this.selected()?.seriesLink);
+
+  readonly voicesBlock = computed(() =>
+    blockedReason({
+      viewing: this.block() !== null,
+      section: this.seriesVoices() ? SERIES_VOICES_READ_ONLY : null,
+    }),
   );
 
   /** The roster as collision-check owners (what the discovery dialog folds rows onto). */
@@ -212,7 +217,7 @@ export class CastStore {
    */
   async run(command: BookCommand): Promise<CommandResponse | undefined> {
     const folder = this._folder();
-    if (!folder || this._busy() || this.readOnly() !== null) return undefined;
+    if (!folder || this._busy() || this.block() !== null) return undefined;
     this._busy.set(true);
     try {
       const response = await this.book.execute(folder, command);

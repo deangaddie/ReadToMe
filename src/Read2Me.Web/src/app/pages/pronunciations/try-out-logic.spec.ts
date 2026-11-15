@@ -15,7 +15,6 @@ import {
   matchKey,
   otherSampleBlockedReason,
   pickSamples,
-  playBlockedReason,
   reshuffle,
   type SampleCard,
   spokenPlayBlockedReason,
@@ -217,12 +216,6 @@ describe('why playing is off', () => {
     expect(gpuBusyReason(queue(0, 0), IDLE_VOICE_BATCH)).toBeNull();
     expect(gpuBusyReason(null, IDLE_VOICE_BATCH)).toBeNull();
   });
-
-  it('says viewing a step before the GPU', () => {
-    expect(playBlockedReason('Viewing a step', 'GPU')).toBe('Viewing a step');
-    expect(playBlockedReason(null, 'GPU')).toBe('GPU');
-    expect(playBlockedReason(null, null)).toBeNull();
-  });
 });
 
 describe('why the other controls are off', () => {
@@ -239,19 +232,18 @@ describe('why the other controls are off', () => {
 });
 
 describe('playView', () => {
-  const reason = "Can't play while Attribution is running: it has the GPU";
+  const blocked = { reason: "Can't play while Attribution is running: it has the GPU" };
 
   it('plays when nothing blocks it, and is off with the reason while blocked', () => {
-    expect(playView('k', null, null)).toEqual({ phase: 'idle', disabled: false, reason: null });
-    expect(playView('k', reason, null)).toEqual({ phase: 'idle', disabled: true, reason });
+    expect(playView('k', null, null)).toEqual({ phase: 'idle', block: null });
+    expect(playView('k', blocked, null)).toEqual({ phase: 'idle', block: blocked });
   });
 
   it('follows its own sentence through generating and playing, stoppable though blocked since', () => {
     expect(playView('k', null, { key: 'k', phase: 'generating' }).phase).toBe('generating');
-    expect(playView('k', reason, { key: 'k', phase: 'playing' })).toEqual({
+    expect(playView('k', blocked, { key: 'k', phase: 'playing' })).toEqual({
       phase: 'playing',
-      disabled: false,
-      reason: null,
+      block: null,
     });
     expect(playView('k', null, { key: 'other', phase: 'playing' }).phase).toBe('idle');
   });

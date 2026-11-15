@@ -84,10 +84,11 @@ export class ProjectStore {
   readonly loading = this._loading.asReadonly();
   readonly error = this._error.asReadonly();
   /**
-   * Why nothing in the project can be changed (ticket 32): it is viewed at a History step. Null on
-   * the current project. Every edit control renders disabled with this as its reason.
+   * The project's **Edit gate** (ticket 32): blocked while it is viewed at a History step, open on
+   * the current project. Every edit control renders through `gated` from this, its own conditions
+   * folded in with `withLocal`.
    */
-  readonly readOnly = computed(() => this.stepView.readOnly(this._folder()));
+  readonly block = computed(() => this.stepView.readOnly(this._folder()));
 
   /**
    * Where the status maps come from. At a History step, the last `/status` read, which read `?at=`
@@ -98,7 +99,7 @@ export class ProjectStore {
   private readonly statusMaps = computed<StatusMaps>(() => {
     const folder = this._folder();
     const entry = folder === null ? undefined : entryFor(this.live.projects(), folder);
-    if (this.readOnly() === null && entry?.seeded) return entry;
+    if (this.block() === null && entry?.seeded) return entry;
     const status = this._status();
     if (!status) return NO_STATUS;
     return { ...NO_STATUS, nodes: status.nodes, folderAudioRemaining: status.audio.remaining };
