@@ -36,7 +36,6 @@ public sealed class BookMutations(
     IOptions<BookMutationOptions> options,
     EventBroadcaster<BookMutationReceipt> receipts,
     MutationOrigin origin,
-    ProjectHistory history,
     HistoryStepScope stepScope,
     ProjectActivity activity,
     ILogger<BookMutations> logger)
@@ -88,7 +87,8 @@ public sealed class BookMutations(
         }
 
         BookMutationReceipt receipt;
-        RecordedStep? step;
+        HistoryCapture? capture;
+        HistoryStep? step = null;
         try
         {
             // Again under the lock: a Restore may have begun while this waited for it.
@@ -103,10 +103,10 @@ public sealed class BookMutations(
             {
                 OriginId = mutation.OriginId,
             };
-            step = committed.Step;
-            // Under the lock, so the snapshot is the state after the step just committed.
-            if (step is not null)
-                await SnapshotIfDueAsync(mutation.FolderId);
+            // Under the lock, so the scope moves and the snapshot is taken before any later commit.
+            capture = committed.Capture;
+            if (capture is not null)
+                await AfterCommit(mutation, "Recording the History step", async () => step = await capture.CommittedAsync());
         }
         catch (OperationCanceledException)
         {
@@ -125,12 +125,44 @@ public sealed class BookMutations(
             writeLock.Dispose();
         }
 
-        Publish(receipt);
-        if (step is not null)
-            Announce(mutation.FolderId, step);
-        var landed = step?.Landed ?? step?.Changed;
-        await FollowUpAsync(mutation, plans, new CommittedBookChange(receipt, landed?.Label, landed?.Action));
+        // Outside the lock. A subscriber that throws or blocks must never be able to fail — or slow —
+        // another producer's commit. Publishing here means two receipts can reach a subscriber out of
+        // revision order; that is deliberate and safe, since revisions exist precisely so a reader can
+        // reject a receipt older than the snapshot it already published.
+        await AfterCommit(mutation, "Publishing the receipt", () =>
+        {
+            receipts.Publish(receipt);
+            return Task.CompletedTask;
+        });
+        if (capture is not null)
+            await AfterCommit(mutation, "Announcing the History step", () =>
+            {
+                capture.Announce();
+                return Task.CompletedTask;
+            });
+        var change = new CommittedBookChange(receipt, step?.Label, step?.Action);
+        foreach (var plan in plans)
+            if (plan.AfterCommit is { } after)
+                await AfterCommit(mutation, "A follow-up", () => after(change));
         return new BookMutationOutcome.Committed(receipt);
+    }
+
+    /// <summary>
+    /// Everything past the commit runs through here: the commit stands whatever
+    /// <paramref name="work"/> does, so a failure is logged and the mutation still reported as
+    /// committed. Nothing past the commit fails the commit.
+    /// </summary>
+    private async Task AfterCommit(BookMutation mutation, string what, Func<Task> work)
+    {
+        try
+        {
+            await work();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "{What} after {Mutation} on {Folder} failed; the commit stands.",
+                what, mutation.Name, mutation.FolderId.Value);
+        }
     }
 
     /// <summary>Each registered <see cref="IBookCommitHook"/>'s plan, read before the lock.</summary>
@@ -143,33 +175,12 @@ public sealed class BookMutations(
     }
 
     /// <summary>
-    /// Past the commit, so best-effort like <see cref="Publish"/>: a follow-up that throws is
-    /// logged, and the commit is still reported as committed.
-    /// </summary>
-    private async Task FollowUpAsync(BookMutation mutation, IReadOnlyList<BookCommitPlan> plans, CommittedBookChange change)
-    {
-        foreach (var plan in plans)
-        {
-            if (plan.AfterCommit is not { } after) continue;
-            try
-            {
-                await after(change);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex,
-                    "A follow-up to {Mutation} on {Folder} failed; the mutation is committed.",
-                    mutation.Name, mutation.FolderId.Value);
-            }
-        }
-    }
-
-    /// <summary>
     /// Runs the implementation, saves, and commits — or rolls back. Returns the applied effects and
-    /// the History step recorded with them, or null when the implementation changed nothing.
+    /// the History capture that recorded them, or null when the implementation changed nothing.
     /// <para>
     /// A state mutation is captured by History in the same transaction (ADR 0016), so a step and
     /// the change it records commit or roll back together. A results-only one opens no capture.
+    /// The capture comes back disposed: what is left to call on it reads only what it recorded.
     /// </para>
     /// </summary>
     private async Task<CommittedChange?> ApplyInOneTransactionAsync(
@@ -178,8 +189,7 @@ public sealed class BookMutations(
         var db = await session.OpenAsync(mutation.FolderId);
         // Declared before the transaction so it is disposed after it: the capture attaches
         // history.db, which cannot be detached while a transaction is open.
-        await using var capture = mutation.ChangesProjectState ? await history.BeginCaptureAsync(mutation.FolderId, db, ct) : null;
-        var scope = stepScope.For(mutation.FolderId, out var runKind);
+        await using var capture = mutation.ChangesProjectState ? await stepScope.BeginCaptureAsync(mutation.FolderId, db, ct) : null;
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
         var effects = await implementation(mutation, db, ct);
@@ -193,56 +203,18 @@ public sealed class BookMutations(
 
         effects = await MarkCheckpointsStaleAsync(mutation, effects, db, ct);
         await db.SaveChangesAsync(ct);
-        var step = capture is null || mutation is not ProjectStateMutation state ? null : await capture.RecordAsync(
-            scope, runKind, state, effects, ct);
+        if (capture is not null && mutation is ProjectStateMutation state)
+            await capture.RecordAsync(state, effects, ct);
 
         // The last point at which cancellation is still honourable. Past it the change is real, so
         // the commit runs to completion regardless: a committed mutation must never be reported as
         // uncommitted.
         ct.ThrowIfCancellationRequested();
         await transaction.CommitAsync(CancellationToken.None);
-        if (scope is not null && step is not null)
-        {
-            // Only once the commit stands: a rolled-back chunk must not count toward the step.
-            scope.StepId = step.StepId;
-            scope.Part = step.Part;
-            scope.Changes = step.Changes;
-            scope.Kinds = step.Kinds;
-        }
-        return new CommittedChange(effects, step);
+        return new CommittedChange(effects, capture);
     }
 
-    private sealed record CommittedChange(BookMutationEffects Effects, RecordedStep? Step);
-
-    /// <summary>
-    /// Past the commit, so best-effort: a snapshot that fails is only a slower open of later steps,
-    /// and the next due commit takes one. A committed mutation is never reported as uncommitted.
-    /// </summary>
-    private async Task SnapshotIfDueAsync(ProjectFolderId folder)
-    {
-        try
-        {
-            await history.SnapshotIfDueAsync(folder);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Snapshotting History of {Folder} after a commit failed; the commit stands.", folder.Value);
-        }
-    }
-
-    /// <summary>Best-effort, like <see cref="Publish"/>: the step is committed whatever a subscriber does.</summary>
-    private void Announce(ProjectFolderId folder, RecordedStep step)
-    {
-        try
-        {
-            history.Announce(folder, step);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex,
-                "Announcing History step {Step} on {Folder} failed; the step is committed.", step.StepId, folder.Value);
-        }
-    }
+    private sealed record CommittedChange(BookMutationEffects Effects, HistoryCapture? Capture);
 
     /// <summary>
     /// Stales the confirmed checkpoints this mutation disturbed, inside its transaction, so a commit
@@ -261,30 +233,6 @@ public sealed class BookMutations(
             .Where(c => steps.Contains(c.Step) && !c.Stale)
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.Stale, true), ct);
         return staled == 0 ? effects : effects with { Facets = effects.Facets | BookFacets.Checkpoints };
-    }
-
-    /// <summary>
-    /// Best-effort, after the commit and after the lock is released. A subscriber that throws or
-    /// blocks must never be able to fail — or slow — another producer's commit.
-    /// <para>
-    /// Publishing outside the lock means two receipts can reach a subscriber out of revision order.
-    /// That is deliberate and safe: revisions exist precisely so a reader can reject a receipt older
-    /// than the snapshot it already published, and holding the lock across publication would put
-    /// every subscriber's work on another producer's commit path.
-    /// </para>
-    /// </summary>
-    private void Publish(BookMutationReceipt receipt)
-    {
-        try
-        {
-            receipts.Publish(receipt);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex,
-                "Publishing the receipt for {Mutation} on {Folder} failed; the mutation is committed.",
-                receipt.MutationName, receipt.FolderId.Value);
-        }
     }
 
     /// <summary>

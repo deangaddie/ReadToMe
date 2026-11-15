@@ -1,4 +1,5 @@
 using Read2Me.Core.Models;
+using Read2Me.Data;
 using Read2Me.Services.Mutations;
 
 namespace Read2Me.Services.History;
@@ -66,11 +67,23 @@ public sealed class HistoryStepScope(ProjectHistory history, BackgroundRuns runs
     public void JoinBackgroundRuns(BackgroundRunKind kind) => _runKind = kind;
 
     /// <summary>
+    /// Begins recording one state commit to <paramref name="folder"/> on <paramref name="db"/>'s
+    /// connection: into this DI scope's open step scope, its project's Background run, or a step of
+    /// its own. The caller holds the project's write lock and has not yet begun its transaction;
+    /// <see cref="HistoryCapture"/> says what to call when.
+    /// </summary>
+    internal Task<HistoryCapture> BeginCaptureAsync(ProjectFolderId folder, ProjectDbContext db, CancellationToken ct)
+    {
+        var scope = For(folder, out var runKind);
+        return _history.BeginCaptureAsync(folder, db, scope, runKind, ct);
+    }
+
+    /// <summary>
     /// The scope open for <paramref name="folder"/>, or null when a commit to it is a step of its
     /// own. <paramref name="runKind"/> is the kind of Background run work the commit is, when it
     /// lands in the project's run.
     /// </summary>
-    internal OpenScope? For(ProjectFolderId folder, out BackgroundRunKind? runKind)
+    private OpenScope? For(ProjectFolderId folder, out BackgroundRunKind? runKind)
     {
         runKind = null;
         if (_open is { } open && open.Folder == folder)
@@ -82,10 +95,14 @@ public sealed class HistoryStepScope(ProjectHistory history, BackgroundRuns runs
     }
 
     /// <summary>
-    /// The state of one open scope: its step and which part of the scope that step is, once a
-    /// commit has created it, everything the step's commits changed so far, which its "what
-    /// changed" describes, and the Background run work in it, which a run's label names. They are
-    /// written only under the project's write lock, by the commit that moves them.
+    /// The step a scope's commits so far have moved it onto, and which part of the scope that step
+    /// is; everything the step's commits changed so far, which its "what changed" describes; and
+    /// the Background run work in it, which a run's label names.
+    /// </summary>
+    internal sealed record ScopeStep(Guid StepId, int Part, StepChanges Changes, IReadOnlySet<BackgroundRunKind> Kinds);
+
+    /// <summary>
+    /// One open scope: what it names its steps, and <see cref="Current"/>, the step it is on.
     /// </summary>
     internal sealed class OpenScope(ProjectFolderId folder, string label, HistoryStepKind kind, StepAction? action)
     {
@@ -100,12 +117,18 @@ public sealed class HistoryStepScope(ProjectHistory history, BackgroundRuns runs
         /// <summary>A request's action. A Background run's comes from the run work in it instead.</summary>
         public StepAction? Action { get; } = action;
 
-        public Guid? StepId { get; set; }
-        public int Part { get; set; }
-        public StepChanges Changes { get; set; } = StepChanges.None;
+        /// <summary>
+        /// The step the scope is on: null until its first state commit stands. Read and moved only
+        /// under the project's write lock, and replaced whole, so a reader never sees half a move.
+        /// </summary>
+        public ScopeStep? Current { get; private set; }
 
-        /// <summary>The Background run kinds whose work the current step holds; none for a request's.</summary>
-        public IReadOnlySet<BackgroundRunKind> Kinds { get; set; } = new HashSet<BackgroundRunKind>();
+        /// <summary>
+        /// Moves the scope onto the step <paramref name="step"/> landed in or extended. Only a
+        /// commit that stands moves it (<see cref="HistoryCapture.CommittedAsync"/>): a rolled-back
+        /// chunk must not count toward the step.
+        /// </summary>
+        internal void Moved(RecordedStep step) => Current = new ScopeStep(step.StepId, step.Part, step.Changes, step.Kinds);
     }
 
     private sealed class Closer(HistoryStepScope owner, OpenScope scope) : IAsyncDisposable

@@ -1,33 +1,54 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Read2Me.Core.Models;
 using Read2Me.Data;
 using Read2Me.Services.Mutations;
 
 namespace Read2Me.Services.History;
 
 /// <summary>
-/// Records one state mutation as a History step, on the mutation's own connection (ADR 0016).
-/// <para>
-/// Begun before the mutation's transaction: ATTACH cannot run inside one, and the session must be
-/// recording before the first write. <see cref="RecordAsync"/> runs after <c>SaveChanges</c> and
-/// before the commit, so the step and the change it records commit or roll back together — the
-/// attached history.db shares the transaction. Disposed after the transaction ends.
-/// </para>
+/// Records one state commit as a History step, on the mutation's own connection (ADR 0016): the
+/// one History operation a commit is, in its phases.
+/// <list type="number">
+/// <item>Begun (<see cref="HistoryStepScope.BeginCaptureAsync"/>) under the project's write lock,
+/// before the mutation's transaction: ATTACH cannot run inside one, and the session must be
+/// recording before the first write.</item>
+/// <item><see cref="RecordAsync"/> inside the transaction, after <c>SaveChanges</c>, so the step and
+/// the change it records commit or roll back together — the attached history.db shares the
+/// transaction.</item>
+/// <item>Disposed after the transaction ends, which detaches history.db.</item>
+/// <item><see cref="CommittedAsync"/> once the commit stands, still under the lock: only then does
+/// the step scope move. A capture whose transaction rolled back, or that threw before its commit, is
+/// never told, and moves nothing.</item>
+/// <item><see cref="Announce"/> after the lock is released.</item>
+/// </list>
+/// The last two read only what was recorded, so they run after disposal.
 /// </summary>
 internal sealed class HistoryCapture : IAsyncDisposable
 {
+    private readonly ProjectHistory _history;
+    private readonly ProjectFolderId _folder;
+    private readonly HistoryStepScope.OpenScope? _scope;
+    private readonly BackgroundRunKind? _runKind;
     private readonly ProjectDbContext _db;
     private readonly SqliteConnection _connection;
     private readonly SqliteSession _session;
     private readonly string _author;
     private readonly TimeProvider _clock;
     private readonly FileList _tipFiles;
+    private RecordedStep? _recorded;
+    private bool _committed;
 
     private HistoryCapture(
+        ProjectHistory history, ProjectFolderId folder, HistoryStepScope.OpenScope? scope, BackgroundRunKind? runKind,
         ProjectDbContext db, SqliteConnection connection, SqliteSession session, string author, TimeProvider clock,
         FileList tipFiles)
     {
+        _history = history;
+        _folder = folder;
+        _scope = scope;
+        _runKind = runKind;
         _db = db;
         _connection = connection;
         _session = session;
@@ -40,9 +61,12 @@ internal sealed class HistoryCapture : IAsyncDisposable
     /// Attaches <paramref name="historyFile"/> and starts a session over every project table except
     /// <paramref name="notState"/> and SQLite's and EF's own bookkeeping. The connection is held open
     /// until disposal, because a session lives on one native handle. <paramref name="tipFiles"/> is the
-    /// state files' list at the tip, which the commit's file changes are taken against.
+    /// state files' list at the tip, which the commit's file changes are taken against. What is
+    /// recorded lands in <paramref name="scope"/>, as Background run work of <paramref name="runKind"/>
+    /// when it is a run, or is a step of its own when no scope holds it.
     /// </summary>
     public static async Task<HistoryCapture> BeginAsync(
+        ProjectHistory history, ProjectFolderId folder, HistoryStepScope.OpenScope? scope, BackgroundRunKind? runKind,
         ProjectDbContext db, string historyFile, IReadOnlyCollection<string> notState, string author, TimeProvider clock,
         FileList tipFiles, CancellationToken ct)
     {
@@ -62,7 +86,7 @@ internal sealed class HistoryCapture : IAsyncDisposable
             session = SqliteSession.Create(connection);
             foreach (var table in stateTables)
                 session.Attach(table);
-            return new HistoryCapture(db, connection, session, author, clock, tipFiles);
+            return new HistoryCapture(history, folder, scope, runKind, db, connection, session, author, clock, tipFiles);
         }
         catch
         {
@@ -73,8 +97,9 @@ internal sealed class HistoryCapture : IAsyncDisposable
     }
 
     /// <summary>
-    /// Records what the session captured, inside the mutation's transaction, and answers the step it
-    /// landed in — or null, recording nothing, when no state table changed.
+    /// Records what the session captured, inside the mutation's transaction — or nothing, when no
+    /// state table and no state file changed. The scope is not moved yet: that waits for
+    /// <see cref="CommittedAsync"/>.
     /// <para>
     /// Inside a step scope whose step is still the open tip, the change is that step's next chunk.
     /// Otherwise it starts a new step at the tip: open for the scope to extend and close, or closed
@@ -89,10 +114,41 @@ internal sealed class HistoryCapture : IAsyncDisposable
     /// step. A Restore records its own (<see cref="ProjectStateMutation.RecordsFileChanges"/>).
     /// </para>
     /// </summary>
-    public async Task<RecordedStep?> RecordAsync(
-        HistoryStepScope.OpenScope? scope, BackgroundRunKind? runKind, ProjectStateMutation mutation,
-        BookMutationEffects effects, CancellationToken ct)
+    public async Task RecordAsync(ProjectStateMutation mutation, BookMutationEffects effects, CancellationToken ct) =>
+        _recorded = await RecordStepAsync(mutation, effects, ct);
+
+    /// <summary>
+    /// The commit stands: moves the step scope onto the step it landed in or extended, then takes a
+    /// snapshot if one is due, and answers that step, whose label and action name the commit. Null,
+    /// with no snapshot, when nothing was recorded. The caller still holds the project's write lock,
+    /// so the snapshot is the state after this commit. Throws as History does; the caller decides
+    /// that a commit outlives it.
+    /// </summary>
+    public async Task<HistoryStep?> CommittedAsync()
     {
+        if (_recorded is not { } recorded || _committed)
+            return null;
+        _committed = true;
+        _scope?.Moved(recorded);
+        await _history.SnapshotIfDueAsync(_folder);
+        return recorded.Landed ?? recorded.Changed;
+    }
+
+    /// <summary>
+    /// Announces what the commit did to History: the steps it closed, then the step it changed or
+    /// landed. After the lock is released, and only once <see cref="CommittedAsync"/> ran.
+    /// </summary>
+    public void Announce()
+    {
+        if (_committed && _recorded is { } recorded)
+            _history.Announce(_folder, recorded);
+    }
+
+    private async Task<RecordedStep?> RecordStepAsync(
+        ProjectStateMutation mutation, BookMutationEffects effects, CancellationToken ct)
+    {
+        var (scope, runKind) = (_scope, _runKind);
+        var current = scope?.Current;
         var patchset = _session.Patchset();
         var projectFolder = Path.GetDirectoryName(_connection.DataSource)!;
         var files = mutation.RecordsFileChanges ?? await StateFiles.ChangesAsync(
@@ -118,15 +174,15 @@ internal sealed class HistoryCapture : IAsyncDisposable
         }
 
         var now = _clock.GetUtcNow();
-        if (scope?.StepId is { } scoped && scoped == head && headOpen)
+        if (scope is not null && current is { } on && on.StepId == head && headOpen)
         {
-            var extended = scope.Changes.With(effects);
-            var extendedKinds = Including(scope.Kinds, runKind);
+            var extended = on.Changes.With(effects);
+            var extendedKinds = Including(on.Kinds, runKind);
             var extendedSummary = mutation.StepSummary ?? await StepSummary.DescribeAsync(_db, extended, ct);
             var row = await HistoryDatabase.ExtendStepAsync(
-                _connection, Transaction, h, scoped, LabelOf(scope, extendedKinds), ActionOf(scope, extendedKinds),
+                _connection, Transaction, h, on.StepId, LabelOf(scope, extendedKinds), ActionOf(scope, extendedKinds),
                 extendedSummary, now, chunk, ct);
-            return new RecordedStep(scoped, extended, extendedKinds, scope.Part, Landed: null, Changed: row, Closed: []);
+            return new RecordedStep(on.StepId, extended, extendedKinds, on.Part, Landed: null, Changed: row, Closed: []);
         }
 
         // A new step describes only what it holds, even when a scope carries on in it: its changes,
@@ -142,11 +198,11 @@ internal sealed class HistoryCapture : IAsyncDisposable
         // A scope that already has a step was interrupted, and carries on as its next part. Its
         // first part is named only now, so a scope never split has no note.
         var part = 1;
-        if (scope is { StepId: { } previous })
+        if (current is { } previous)
         {
-            part = scope.Part + 1;
+            part = previous.Part + 1;
             if (part == 2
-                && await HistoryDatabase.CloseStepAsync(_connection, Transaction, h, previous, now, StepNotes.Part(1), ct) is { } first)
+                && await HistoryDatabase.CloseStepAsync(_connection, Transaction, h, previous.StepId, now, StepNotes.Part(1), ct) is { } first)
                 closed.Add(first);
         }
 

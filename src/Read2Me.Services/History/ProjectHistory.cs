@@ -90,10 +90,15 @@ public sealed partial class ProjectHistory(
     }
 
     /// <summary>
-    /// Starts History if needed, then begins capturing one state mutation on its connection. The
-    /// caller holds the project's write lock and has not yet begun its transaction.
+    /// Starts History if needed, then begins capturing one state mutation on its connection, into
+    /// <paramref name="scope"/> — as Background run work of <paramref name="runKind"/>, when it is a
+    /// run — or a step of its own when null. Reached through
+    /// <see cref="HistoryStepScope.BeginCaptureAsync"/>. The caller holds the project's write lock
+    /// and has not yet begun its transaction.
     /// </summary>
-    internal async Task<HistoryCapture> BeginCaptureAsync(ProjectFolderId folder, ProjectDbContext db, CancellationToken ct)
+    internal async Task<HistoryCapture> BeginCaptureAsync(
+        ProjectFolderId folder, ProjectDbContext db, HistoryStepScope.OpenScope? scope, BackgroundRunKind? runKind,
+        CancellationToken ct)
     {
         await StartUnderLockAsync(db, ct);
         await SnapshotIfMigratedAsync(folder, db, ct);
@@ -101,7 +106,8 @@ public sealed partial class ProjectHistory(
         // Read before the transaction and under the lock, so no commit can move the tip meanwhile.
         var tipFiles = await TipFilesAsync(historyFolder, ct);
         return await HistoryCapture.BeginAsync(
-            db, HistoryDatabase.FileIn(historyFolder), NotStateTables(db), Author, clock, tipFiles, ct);
+            this, folder, scope, runKind, db, HistoryDatabase.FileIn(historyFolder), NotStateTables(db), Author, clock,
+            tipFiles, ct);
     }
 
     /// <summary>
@@ -121,14 +127,15 @@ public sealed partial class ProjectHistory(
         {
             logger.LogWarning(
                 "History step {Step} on {Folder} stays open, without its ending {Ending}: the write lock was busy past {Budget}. The next commit closes it.",
-                scope.StepId, folder.Value, ending, mutationOptions.Value.LockWaitBudget);
+                scope.Current?.StepId, folder.Value, ending, mutationOptions.Value.LockWaitBudget);
             return;
         }
         // Read under the lock: a commit holding it may still be moving the scope onto a new step.
-        if (scope.StepId is not { } stepId)
+        if (scope.Current is not { } current)
             return;
 
-        var note = ending is null ? null : StepNotes.Of(scope.Part, ending);
+        var stepId = current.StepId;
+        var note = ending is null ? null : StepNotes.Of(current.Part, ending);
         HistoryStep? closed;
         await using (var connection = HistoryDatabase.Open(HistoryFileOf(folder), SqliteOpenMode.ReadWrite))
         {
