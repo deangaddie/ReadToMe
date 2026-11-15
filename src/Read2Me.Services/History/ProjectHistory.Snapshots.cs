@@ -44,8 +44,10 @@ public sealed partial class ProjectHistory
 
             await TakeSnapshotAsync(Path.Combine(projectFolder, ProjectDbContextProvider.DbFileName), historyFolder, head, files, CancellationToken.None);
         }
-        catch (Exception ex) when (ex is SqliteException or IOException or UnauthorizedAccessException)
+        catch (Exception ex)
         {
+            // Whatever the failure: a snapshot is only a faster open of later steps, so it must not
+            // cost the commit or close that asked for it its step.
             logger.LogWarning(ex, "Taking a History snapshot of {Folder} failed; the next closed step tries again.", folder.Value);
         }
     }

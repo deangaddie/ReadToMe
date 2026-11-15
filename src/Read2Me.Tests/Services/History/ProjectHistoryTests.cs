@@ -17,8 +17,9 @@ namespace Read2Me.Tests.Services.History;
 /// <summary>
 /// History over a real migrated project: real mutations commit through
 /// <see cref="BookMutations.CommitAsync"/>, and what History lists is asserted through the module
-/// (ADR 0016). A step scope makes everything it commits one step; outside one, each state mutation
-/// is a step of its own.
+/// (ADR 0016): starting History, what a Book mutation records or leaves out, and the "what changed"
+/// that real mutations' effects describe. How a step scope extends, splits and closes its step is
+/// <see cref="HistoryRecordingTests"/>.
 /// </summary>
 public class ProjectHistoryTests : ProjectDbTestBase
 {
@@ -34,7 +35,6 @@ public class ProjectHistoryTests : ProjectDbTestBase
         services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
         services.AddScoped<IBookMutationImplementation<RejectedAfterWritingMutation>, RejectedAfterWritingImplementation>();
         services.AddScoped<IBookMutationImplementation<ThrowsAfterWritingMutation>, ThrowsAfterWritingImplementation>();
-        services.AddScoped<IBookMutationImplementation<ResultsTablesOnlyMutation>, ResultsTablesOnlyImplementation>();
         _root = services.BuildServiceProvider();
 
         _folder = new ProjectFolderId(FolderName);
@@ -96,46 +96,21 @@ public class ProjectHistoryTests : ProjectDbTestBase
         Assert.Equal(["Import book content"], (await _history.ListAsync(_folder)).Steps.Select(s => s.Label));
     }
 
-    [Fact]
-    public async Task AnImportsScope_RecordsAnImportStep()
-    {
-        await SeedProjectRowAsync();
-
-        await using (var scope = _root.CreateAsyncScope())
-        await using (scope.ServiceProvider.GetRequiredService<HistoryStepScope>().OpenImport(_folder, "Import book"))
-            await scope.ServiceProvider.GetRequiredService<BookMutations>()
-                .CommitAsync(new ImportBookContentMutation(_folder, OneChapterBook(), ReplaceExisting: false));
-
-        var import = Assert.Single((await _history.ListAsync(_folder)).Steps);
-        Assert.Equal("Import book", import.Label);
-        Assert.Equal(HistoryStepKind.Import, import.Kind);
-        Assert.Null(import.Action);
-    }
-
-    // ── one step per state mutation ─────────────────────────────────────────
+    // ── what a Book mutation records (the step scope itself: HistoryRecordingTests) ──
 
     [Fact]
-    public async Task EachStateMutation_RecordsOneClosedStep_AtTheTip()
+    public async Task ACommittedStateMutation_LandsAClosedStepAtTheTip()
     {
         var b = await SeedOneItemAsync();
+        var before = await _history.ListAsync(_folder);
 
         await CommitAsync(new InsertParagraphItemMutation(_folder, b.ItemId("item"), InsertPosition.After, "One."));
-        await CommitAsync(new CreateCharacterMutation(_folder, "Alice"));
 
         var list = await _history.ListAsync(_folder);
-        Assert.Equal(["Create character", "Insert paragraph item", "History started"], list.Steps.Select(s => s.Label));
-        Assert.Equal([3, 2, 1], list.Steps.Select(s => s.Sequence));
-        Assert.Equal(list.Steps[1].StepId, list.Steps[0].ParentStepId);
-        Assert.Equal(list.Steps[2].StepId, list.Steps[1].ParentStepId);
+        Assert.Equal(["Insert paragraph item", "History started"], list.Steps.Select(s => s.Label));
+        Assert.Equal(before.HeadStepId, list.Steps[0].ParentStepId);
         Assert.Equal(list.Steps[0].StepId, list.HeadStepId);
-
-        var tip = list.Steps[0];
-        Assert.Equal(HistoryStepKind.Request, tip.Kind); // no scope names it: a request's edit of its own
-        Assert.Equal(StepAction.Edit, tip.Action);
-        Assert.False(tip.IsOpen);
-        Assert.False(string.IsNullOrWhiteSpace(tip.Author));
-        Assert.NotNull(tip.EndedAt);
-        Assert.True(tip.StartedAt <= tip.EndedAt);
+        Assert.False(list.Steps[0].IsOpen);
     }
 
     [Fact]
@@ -145,33 +120,6 @@ public class ProjectHistoryTests : ProjectDbTestBase
         var before = await _history.ListAsync(_folder);
 
         var outcome = await CommitAsync(new SetParagraphItemAudioMutation(_folder, b.ItemId("item"), "audio/take.wav"));
-
-        Assert.IsType<BookMutationOutcome.Committed>(outcome);
-        Assert.Equal(before.Steps, (await _history.ListAsync(_folder)).Steps);
-    }
-
-    [Fact]
-    public async Task NoChangeCommits_RecordNothing()
-    {
-        await SeedOneItemAsync();
-        await CommitAsync(new CreateCharacterMutation(_folder, "Alice"));
-        var before = await _history.ListAsync(_folder);
-
-        var outcome = await CommitAsync(new SetNarratorOnlyModeMutation(_folder, false));
-
-        Assert.IsType<BookMutationOutcome.NoChange>(outcome);
-        Assert.Equal(before.Steps, (await _history.ListAsync(_folder)).Steps);
-    }
-
-    [Fact]
-    public async Task AStateMutationThatOnlyWritesResultTables_RecordsNothing()
-    {
-        // AudioReviews and StepCheckpoints are results and progress, not Project state: the session
-        // never watches them, so a commit touching only them leaves History as it was.
-        var b = await SeedOneItemAsync();
-        var before = await _history.ListAsync(_folder);
-
-        var outcome = await CommitAsync(new ResultsTablesOnlyMutation(_folder, b.ItemId("item")));
 
         Assert.IsType<BookMutationOutcome.Committed>(outcome);
         Assert.Equal(before.Steps, (await _history.ListAsync(_folder)).Steps);
@@ -205,94 +153,6 @@ public class ProjectHistoryTests : ProjectDbTestBase
         Assert.Equal(before.HeadStepId, after.Steps[0].ParentStepId);
     }
 
-    // ── step scopes ─────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task EverythingCommittedInsideOneScope_IsOneClosedStep_WithTheScopesLabel()
-    {
-        await SeedOneItemAsync();
-        var before = await _history.ListAsync(_folder);
-
-        await InScopeAsync("New character", async mutations =>
-        {
-            await mutations.CommitAsync(new CreateCharacterMutation(_folder, "Alice"));
-            await mutations.CommitAsync(new CreateCharacterMutation(_folder, "Bob"));
-        });
-
-        var list = await _history.ListAsync(_folder);
-        Assert.Equal(["New character", "History started"], list.Steps.Select(s => s.Label));
-        var step = list.Steps[0];
-        Assert.Equal(HistoryStepKind.Request, step.Kind);
-        Assert.Equal(StepAction.Character, step.Action);
-        Assert.False(step.IsOpen);
-        Assert.NotNull(step.EndedAt);
-        Assert.Equal(before.HeadStepId, step.ParentStepId);
-        Assert.Equal(step.StepId, list.HeadStepId);
-    }
-
-    [Fact]
-    public async Task AScopeThatCommitsNothing_RecordsNothing()
-    {
-        await SeedOneItemAsync();
-        await CommitAsync(new CreateCharacterMutation(_folder, "Alice"));
-        var before = await _history.ListAsync(_folder);
-
-        await InScopeAsync("New character", async mutations =>
-        {
-            await mutations.CommitAsync(new CreateCharacterMutation(_folder, "Alice")); // NoChange: Alice exists
-        });
-
-        Assert.Equal(before.Steps, (await _history.ListAsync(_folder)).Steps);
-    }
-
-    [Fact]
-    public async Task AMutationCommittedOutsideAnOpenScope_IsAStepOfItsOwn_AndTheScopeCarriesOnInANewStep()
-    {
-        await SeedOneItemAsync();
-
-        await InScopeAsync("Discover characters", async mutations =>
-        {
-            await mutations.CommitAsync(new CreateCharacterMutation(_folder, "Alice"));
-            await CommitAsync(new CreateCharacterMutation(_folder, "Mallory")); // another request, no scope
-            await mutations.CommitAsync(new CreateCharacterMutation(_folder, "Bob"));
-        });
-
-        var list = await _history.ListAsync(_folder);
-        Assert.Equal(
-            ["Discover characters", "Create character", "Discover characters", "History started"],
-            list.Steps.Select(s => s.Label));
-        Assert.All(list.Steps, s => Assert.False(s.IsOpen));
-        Assert.Equal(list.Steps[1].StepId, list.Steps[0].ParentStepId);
-    }
-
-    [Fact]
-    public async Task AScopedStep_IsAnnouncedLandedOpen_ChangedByEachLaterCommit_ThenClosedWhenTheScopeEnds()
-    {
-        await SeedOneItemAsync();
-        await _history.ListAsync(_folder);
-        var announced = new List<HistoryStepEvent>();
-        var events = _root.GetRequiredService<EventBroadcaster<HistoryStepEvent>>();
-        void OnEvent(HistoryStepEvent e) => announced.Add(e);
-        events.Event += OnEvent;
-
-        try
-        {
-            await InScopeAsync("New character", async mutations =>
-            {
-                await mutations.CommitAsync(new CreateCharacterMutation(_folder, "Alice"));
-                await mutations.CommitAsync(new CreateCharacterMutation(_folder, "Bob"));
-            });
-        }
-        finally { events.Event -= OnEvent; }
-
-        Assert.Equal(
-            [HistoryStepEventKind.Landed, HistoryStepEventKind.Changed, HistoryStepEventKind.Closed],
-            announced.Select(e => e.Kind));
-        Assert.True(announced[0].Step.IsOpen);
-        Assert.True(announced[1].Step.IsOpen);
-        Assert.Equal((await _history.ListAsync(_folder)).Steps[0], announced[2].Step);
-    }
-
     // ── what changed ────────────────────────────────────────────────────────
 
     [Fact]
@@ -309,37 +169,6 @@ public class ProjectHistoryTests : ProjectDbTestBase
         var step = (await _history.ListAsync(_folder)).Steps[0];
         Assert.Equal("Edit with AI", step.Label);
         Assert.Equal("2 paragraphs in Chapter 3", step.Summary);
-    }
-
-    [Fact]
-    public async Task AStepAcrossChapters_SaysHowManyChapters_AndAddsUpEveryCommitInTheScope()
-    {
-        var b = await SeedTwoChaptersAsync();
-
-        await InScopeAsync("Edit text", async mutations =>
-        {
-            await mutations.CommitAsync(new UpdateParagraphItemTextMutation(_folder, b.ItemId("a1"), "One."));
-            await mutations.CommitAsync(new UpdateParagraphItemTextMutation(_folder, b.ItemId("b1"), "Two."));
-        });
-
-        Assert.Equal("2 paragraphs across 2 chapters", (await _history.ListAsync(_folder)).Steps[0].Summary);
-    }
-
-    [Fact]
-    public async Task AScopeCarryingOnInANewStep_DescribesOnlyWhatThatStepChanged()
-    {
-        var b = await SeedTwoChaptersAsync();
-
-        await InScopeAsync("Edit text", async mutations =>
-        {
-            await mutations.CommitAsync(new UpdateParagraphItemTextMutation(_folder, b.ItemId("b1"), "One."));
-            await CommitAsync(new CreateCharacterMutation(_folder, "Mallory")); // another request, no scope
-            await mutations.CommitAsync(new UpdateParagraphItemTextMutation(_folder, b.ItemId("a1"), "Two."));
-        });
-
-        var steps = (await _history.ListAsync(_folder)).Steps;
-        Assert.Equal("1 paragraph in Chapter 3", steps[0].Summary);
-        Assert.Equal("1 paragraph in Chapter 4", steps[2].Summary);
     }
 
     [Fact]
@@ -374,27 +203,6 @@ public class ProjectHistoryTests : ProjectDbTestBase
         await CommitAsync(new CreateCharacterMutation(_folder, "Alice"));
 
         Assert.Null((await _history.ListAsync(_folder)).Steps[0].Summary);
-    }
-
-    // ── announcing steps ────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task ARecordedStep_IsAnnouncedAsLandedThenClosed_WithItsRow()
-    {
-        await SeedOneItemAsync();
-        await _history.ListAsync(_folder);
-        var announced = new List<HistoryStepEvent>();
-        var events = _root.GetRequiredService<EventBroadcaster<HistoryStepEvent>>();
-        void OnEvent(HistoryStepEvent e) => announced.Add(e);
-        events.Event += OnEvent;
-
-        try { await CommitAsync(new CreateCharacterMutation(_folder, "Alice")); }
-        finally { events.Event -= OnEvent; }
-
-        var tip = (await _history.ListAsync(_folder)).Steps[0];
-        Assert.Equal([HistoryStepEventKind.Landed, HistoryStepEventKind.Closed], announced.Select(e => e.Kind));
-        Assert.All(announced, e => Assert.Equal(_folder, e.FolderId));
-        Assert.All(announced, e => Assert.Equal(tip, e.Step));
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────
@@ -480,19 +288,6 @@ public class ProjectHistoryTests : ProjectDbTestBase
         {
             await StageItemAsync(db, mutation.ParagraphId, ct);
             throw new InvalidOperationException("A defect after writing.");
-        }
-    }
-
-    /// <summary>Writes rows only to the result tables, yet reports a change, so the commit goes through.</summary>
-    private sealed record ResultsTablesOnlyMutation(ProjectFolderId FolderId, Guid ItemId) : ProjectStateMutation(FolderId);
-
-    private sealed class ResultsTablesOnlyImplementation : IBookMutationImplementation<ResultsTablesOnlyMutation>
-    {
-        public Task<BookMutationEffects> ApplyAsync(ResultsTablesOnlyMutation mutation, ProjectDbContext db, CancellationToken ct)
-        {
-            db.AudioReviews.Add(new AudioReview { ParagraphItemId = mutation.ItemId });
-            db.StepCheckpoints.Add(new StepCheckpoint { Step = PipelineStep.Speakers, State = CheckpointState.Confirmed, At = DateTimeOffset.UnixEpoch });
-            return Task.FromResult(new BookMutationEffects { Scope = BookMutationScope.WholeProject, Facets = BookFacets.Checkpoints });
         }
     }
 
