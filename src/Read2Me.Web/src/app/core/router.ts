@@ -88,6 +88,15 @@ export class Router {
     }
     navigation.navigate(url.href, { history: options.replace ? 'replace' : 'push' });
   }
+
+  /**
+   * Patches the current page's query in place: the current query with `patch` applied (null
+   * deletes a key), navigated with replace, so the other keys survive and Back skips the change.
+   */
+  replaceQuery(patch: Record<string, string | null>): void {
+    const query = { ...Object.fromEntries(this.query()), ...patch };
+    this.navigate(this.path(), { replace: true, query });
+  }
   /** Whether the current leaf is guarded and its element holds unsaved edits. */
   #leafIsDirty(): boolean {
     const leaf = this.match()?.chain.at(-1);

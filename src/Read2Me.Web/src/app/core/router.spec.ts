@@ -125,6 +125,15 @@ describe('Router', () => {
     expect(router.url().search).toBe('?sort=name&page=2');
   });
 
+  it('replaceQuery() patches the current query in place, keeping the other keys', async () => {
+    const { nav, router } = start('projects/dracula/book?mode=audio&chapter=c1&action=titles');
+    router.replaceQuery({ action: null, chapter: 'c2' });
+    await settle();
+    expect(router.url().search).toBe('?mode=audio&chapter=c2');
+    expect(nav.calls.at(-1)?.history).toBe('replace');
+    expect(router.path()).toBe('projects/dracula/book');
+  });
+
   it('a query-only navigation keeps focus and scroll where they are; a page change lets the browser reset them', async () => {
     const { nav, router } = start('projects/dracula/book');
     router.navigate('projects/dracula/book', { replace: true, query: { chapter: 'c2' } });

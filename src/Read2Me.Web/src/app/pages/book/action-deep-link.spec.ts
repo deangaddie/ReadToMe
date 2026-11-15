@@ -31,7 +31,7 @@ describe('decideActionDeepLink (an Action deep link, ?action=)', () => {
     ['a History step is viewed', { viewing: true }],
     ['a History step is viewed, even while the editor is locked', { viewing: true, blocked: true }],
     ['the book has no content', { overview: { hasContent: false } }],
-    ['the name is unknown', { action: 'pauses' }],
+    ['the name is unknown', { action: 'unknown' }],
   ])('only drops the parameter when %s', (_, change) => {
     expect(decideActionDeepLink({ ...READY, ...change })).toBe('drop');
   });

@@ -7,8 +7,20 @@ import { ConfirmService, confirmPermanent } from '@app/ui/dialogs';
 import type { PipelineActionEvent, PipelineCheckpointEvent } from '@app/ui/pipeline';
 import { ToastService } from '@app/ui/toast';
 import { addPausesAction, rereadAction } from '../book/book-actions';
+import { type BookAddress, bookLink } from '../book/book-address';
 import type { StepActionId, StepId } from './pipeline-steps';
 import type { ProjectStore } from './project-store';
+
+/** Where each step action that opens the Book page lands: its Book address. */
+export const STEP_BOOK_ADDRESSES = {
+  checkStructure: {},
+  reviewText: {},
+  manualReread: { action: 'manual-reread' },
+  editWithAi: { action: 'edit-ai' },
+  addTitles: { action: 'titles' },
+  openSpeakers: { mode: 'speakers' },
+  openAudioMode: { mode: 'audio' },
+} as const satisfies Partial<Record<StepActionId, BookAddress>>;
 
 /**
  * Runs a Pipeline step's actions and checkpoint pills (guidance-primitives spec §2, §4), for the
@@ -37,6 +49,11 @@ export class StepRunner {
     const folder = this.store.folder();
     if (!folder) return;
     const base = `projects/${encodeURIComponent(folder)}`;
+    if (Object.hasOwn(STEP_BOOK_ADDRESSES, action)) {
+      const address: BookAddress = STEP_BOOK_ADDRESSES[action as keyof typeof STEP_BOOK_ADDRESSES];
+      this.router.navigate(bookLink(folder, address));
+      return;
+    }
     switch (action as StepActionId) {
       case 'readBook':
         return this.run(step, action, async () => {
@@ -54,29 +71,10 @@ export class StepRunner {
           await rereadAction.command(this.projects, folder);
           this.toast.success('Book reread');
         });
-      case 'checkStructure':
-      case 'reviewText':
-        this.router.navigate(`${base}/book`, { query: { mode: 'read' } });
-        return;
-      case 'manualReread':
-        this.router.navigate(`${base}/book`, { query: { action: 'manual-reread' } });
-        return;
-      case 'editWithAi':
-        this.router.navigate(`${base}/book`, { query: { action: 'edit-ai' } });
-        return;
-      case 'addTitles':
-        this.router.navigate(`${base}/book`, { query: { action: 'titles' } });
-        return;
       case 'addPauses':
         return this.addPauses(folder, step, action);
       case 'openCast':
         this.router.navigate(`${base}/cast`);
-        return;
-      case 'openSpeakers':
-        this.router.navigate(`${base}/book`, { query: { mode: 'speakers' } });
-        return;
-      case 'openAudioMode':
-        this.router.navigate(`${base}/book`, { query: { mode: 'audio' } });
         return;
       case 'assemble':
         this.router.navigate(`${base}/export`);

@@ -12,6 +12,7 @@ import { use } from '@app/core/services';
 import { type ReadonlySignal, computed, signal } from '@app/core/signals';
 import { ConfirmService } from '@app/ui/dialogs';
 import { gated, icon, statusChip } from '@app/ui/partials';
+import { bookLink } from '../book/book-address';
 import { castPath, seriesBoardPath } from './cast-path';
 import { CastStore } from './cast-store';
 import { openMergeDialog } from './merge-dialog';
@@ -307,9 +308,7 @@ export class CharacterDetail extends R2mElement {
 
   /** Open the reader at the line's chapter in Speakers mode. */
   openInReader(line: CharacterLineDto): void {
-    this.router.navigate(`projects/${encodeURIComponent(this.folder())}/book`, {
-      query: { mode: 'speakers', chapter: line.chapterId },
-    });
+    this.router.navigate(bookLink(this.folder(), { mode: 'speakers', chapter: line.chapterId }));
   }
 
   private goTo(id: string | null): void {

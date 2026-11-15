@@ -2,6 +2,7 @@ import type { HistoryMessage } from '@app/api';
 import { type Guid, HistoryApi, type HistoryStep, StepView, toApiError } from '@app/api';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
+import { bookLink } from '@app/pages/book/book-address';
 import { computed, signal } from '@app/core/signals';
 import { LiveService, type Unsubscribe } from '@app/live/live.service';
 import { ToastService } from '@app/ui/toast';
@@ -191,7 +192,7 @@ export class HistoryStore {
         [
           {
             label: 'Show in Book',
-            run: () => use(Router).navigate(`projects/${encodeURIComponent(folder)}/book`),
+            run: () => use(Router).navigate(bookLink(folder)),
           },
           ...(previousTip === null
             ? []

@@ -24,10 +24,6 @@ import type { MarkIndex } from './pronunciation-marks';
 export const READER_MODES = ['read', 'speakers', 'audio'] as const;
 export type ReaderMode = (typeof READER_MODES)[number];
 
-export function parseMode(value: string | null | undefined): ReaderMode {
-  return READER_MODES.find((m) => m === value) ?? 'read';
-}
-
 // ---- speakers -----------------------------------------------------------------------------------
 
 export interface SpeakerContext {
