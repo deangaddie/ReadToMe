@@ -1,11 +1,9 @@
-/** The `?action=` values the Book page opens: each the same as its overflow entry (spec §5). */
-const ACTION_DEEP_LINK_NAMES = ['titles', 'edit-ai', 'manual-reread'] as const;
-export type ActionDeepLinkName = (typeof ACTION_DEEP_LINK_NAMES)[number];
+import type { ActionDeepLinkName, ParsedBookAddress } from './book-address';
 
 /** What the Book page reads to decide an Action deep link (`?action=`, from the Overview's rows). */
 export interface ActionDeepLinkInput {
-  /** The `?action=` value, or null when the URL has none. */
-  readonly action: string | null;
+  /** The parsed `?action=`: null when the URL has none, `unknown` for a name the page doesn't know. */
+  readonly action: ParsedBookAddress['action'];
   /** The book's overview, or null until it has loaded. */
   readonly overview: { readonly hasContent: boolean } | null;
   /** Whether the project's Pipeline steps have loaded: the dialog shows their advice. */
@@ -36,10 +34,6 @@ export function decideActionDeepLink({
 }: ActionDeepLinkInput): ActionDeepLinkOutcome {
   if (action === null || !overview || !pipelineLoaded) return 'wait';
   if (blocked && !viewing) return 'wait';
-  if (viewing || !overview.hasContent || !isActionDeepLinkName(action)) return 'drop';
+  if (viewing || !overview.hasContent || action === 'unknown') return 'drop';
   return { open: action };
-}
-
-function isActionDeepLinkName(action: string): action is ActionDeepLinkName {
-  return (ACTION_DEEP_LINK_NAMES as readonly string[]).includes(action);
 }

@@ -7,7 +7,6 @@ import {
   itemSpeaker,
   paragraphSpeaker,
   paragraphText,
-  parseMode,
   queueChip,
   reviewChip,
   voiceLine,
@@ -48,16 +47,6 @@ const para = (id: string, items: ParagraphItemDto[], isPauseParagraph = false): 
 const ctx = (narrator: NarratorDto = UNLINKED): SpeakerContext => ({
   names: { h: 'Elizabeth', p: 'Bingley', w: 'Watson' },
   narrator,
-});
-
-describe('parseMode', () => {
-  it('accepts the three modes and falls back to read', () => {
-    expect(parseMode('speakers')).toBe('speakers');
-    expect(parseMode('audio')).toBe('audio');
-    expect(parseMode('read')).toBe('read');
-    expect(parseMode('combined')).toBe('read');
-    expect(parseMode(undefined)).toBe('read');
-  });
 });
 
 describe('itemSpeaker', () => {

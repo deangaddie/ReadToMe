@@ -8,6 +8,7 @@ import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
 import { ConfirmService } from '@app/ui/dialogs';
 import { ToastService } from '@app/ui/toast';
+import { bookLink } from '../book/book-address';
 import { deleteConfirm } from './permanent-changes';
 import { savedToast } from './pronunciation-logic';
 
@@ -71,10 +72,7 @@ export class PronunciationWriter {
     this.toast.info(message, [
       {
         label: 'Show in Book',
-        run: () =>
-          use(Router).navigate(`projects/${encodeURIComponent(folder)}/book`, {
-            query: { mode: 'audio' },
-          }),
+        run: () => use(Router).navigate(bookLink(folder, { mode: 'audio' })),
       },
     ]);
   }

@@ -360,11 +360,11 @@ describe('r2m-overview-page', () => {
   it('navigation actions route to cast, the Book page (modes and ?action= deep links) and export', async () => {
     // Each navigation leaves the overview, so every action starts from a fresh page.
     const routes: [string, string][] = [
-      ['checkStructure', 'projects/dracula/book?mode=read'],
+      ['checkStructure', 'projects/dracula/book'],
       ['manualReread', 'projects/dracula/book?action=manual-reread'],
       ['openSpeakers', 'projects/dracula/book?mode=speakers'],
       ['openCast', 'projects/dracula/cast'],
-      ['reviewText', 'projects/dracula/book?mode=read'],
+      ['reviewText', 'projects/dracula/book'],
       ['editWithAi', 'projects/dracula/book?action=edit-ai'],
       ['addTitles', 'projects/dracula/book?action=titles'],
       ['openAudioMode', 'projects/dracula/book?mode=audio'],

@@ -123,7 +123,7 @@ export class CastPage extends R2mElement {
     this.effect(() => {
       if (this.discover() !== '1' || !this.store.folder() || this.store.loading()) return;
       untracked(() => {
-        this.router.navigate(this.router.path(), { query: { discover: null }, replace: true });
+        this.router.replaceQuery({ discover: null });
         void this.runDiscovery();
       });
     });

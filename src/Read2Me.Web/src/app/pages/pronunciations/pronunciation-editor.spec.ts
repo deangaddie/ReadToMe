@@ -258,7 +258,7 @@ describe('a new pronunciation', () => {
     expect(toasts[0]!.actions!.map((a) => a.label)).toEqual(['Show in Book']);
     toasts[0]!.actions![0]!.run();
     expect(navigated).toEqual([
-      { path: 'projects/the-adventures-of-sherlock-holmes/book', query: { mode: 'audio' } },
+      { path: 'projects/the-adventures-of-sherlock-holmes/book?mode=audio' },
     ]);
     expect(closes).toBe(1);
   });

@@ -22,7 +22,8 @@ import { addPausesAction, rereadAction } from './book-actions';
 import { BookEditor } from './book-editor';
 import { BookStore } from './book-store';
 import { type HeadingRef, type TreeNode, placeholderTitleClass } from './book-tree';
-import { type ActionDeepLinkName, decideActionDeepLink } from './action-deep-link';
+import { decideActionDeepLink } from './action-deep-link';
+import { type ActionDeepLinkName, bookQuery, parseBookAddress } from './book-address';
 import { openEditWithAiDialog } from './edit-with-ai/edit-with-ai-dialog';
 import { openManualRereadDialog } from './manual-reread-dialog';
 import { type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
@@ -46,7 +47,6 @@ import {
   type ReaderRow,
   type RowContext,
   buildRows,
-  parseMode,
 } from './reader-rows';
 import { AudioSelectionStore, SelectionStore } from './selection-store';
 import { type ActionNode, SelectionWorkflow } from './selection-workflow';
@@ -213,7 +213,7 @@ export class BookPage extends R2mElement {
     this.onDisconnect(() => this.marks.close());
 
     this.effect(() => {
-      const mode = parseMode(this.router.query().get('mode'));
+      const { mode } = parseBookAddress(this.router.query());
       untracked(() => store.setMode(mode));
     });
 
@@ -227,7 +227,7 @@ export class BookPage extends R2mElement {
     // before it opens the dialog, so the link opens exactly once.
     this.effect(() => {
       const outcome = decideActionDeepLink({
-        action: this.router.query().get('action'),
+        action: parseBookAddress(this.router.query()).action,
         overview: store.overview(),
         pipelineLoaded: project.pipeline() !== null,
         viewing: project.block() !== null,
@@ -235,11 +235,7 @@ export class BookPage extends R2mElement {
       });
       if (outcome === 'wait') return;
       untracked(() => {
-        const query = Object.fromEntries(this.router.query());
-        this.router.navigate(this.router.path(), {
-          replace: true,
-          query: { ...query, action: null },
-        });
+        this.router.replaceQuery(bookQuery({ action: null }));
         if (outcome !== 'drop') void this.actionDeepLinks[outcome.open]();
       });
     });
@@ -662,11 +658,7 @@ export class BookPage extends R2mElement {
   private readonly onSelectChapter = (e: Event): void => {
     const chapterId = (e as CustomEvent<string>).detail;
     void this.store.openChapter(chapterId);
-    const query = Object.fromEntries(this.router.query());
-    this.router.navigate(this.router.path(), {
-      replace: true,
-      query: { ...query, chapter: chapterId },
-    });
+    this.router.replaceQuery(bookQuery({ chapter: chapterId }));
   };
 
   /** Reads {@link ctx} inside the list's effect, so status deltas re-render only the rows. */
@@ -731,11 +723,7 @@ export class BookPage extends R2mElement {
 
   private setMode(mode: ReaderMode): void {
     this.store.setMode(mode);
-    const query = Object.fromEntries(this.router.query());
-    this.router.navigate(this.router.path(), {
-      replace: true,
-      query: { ...query, mode: mode === 'read' ? null : mode },
-    });
+    this.router.replaceQuery(bookQuery({ mode }));
   }
 
   private readonly onTopRow = (e: Event): void => this.topRow(e, false);
@@ -905,7 +893,7 @@ export class BookPage extends R2mElement {
     if (this.noContent()) return;
     // `?chapter=` wins over whatever the window holds: a reload may have opened the first chapter
     // while the overview was still loading.
-    const chapter = this.router.query().get('chapter');
+    const { chapter } = parseBookAddress(this.router.query());
     if (chapter && !this.store.window().includes(chapter)) await this.store.openChapter(chapter);
     else if (this.store.window().length === 0) await this.store.openFirstChapter();
   }
