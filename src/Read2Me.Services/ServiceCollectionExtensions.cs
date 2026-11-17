@@ -149,236 +149,13 @@ public static class ServiceCollectionExtensions
         // Restore: the run and its started/finished signal; the restoring flag lives in the gate.
         services.TryAddSingleton<Events.EventBroadcaster<History.RestoreEvent>>();
         services.AddScoped<History.HistoryRestore>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<History.RestoreStepMutation>,
-            Mutations.Implementations.RestoreStepMutationImplementation>();
         // Process-wide, not request-scoped: the HTTP API plans in one request and proposes/applies
         // in others, and a Restore drops a project's sessions.
         services.TryAddSingleton<BookEdits.IBookEditSessionStore>(_ => new BookEdits.BookEditSessionStore(TimeProvider.System));
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.InsertParagraphItemMutation>,
-            Mutations.Implementations.InsertParagraphItemMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.InsertNodeMutation>,
-            Mutations.Implementations.InsertNodeMutationImplementation>();
-        // Additive structural mutations
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SplitAtPartMutation>,
-            Mutations.Implementations.SplitAtPartMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SplitAtChapterMutation>,
-            Mutations.Implementations.SplitAtChapterMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SplitAtParagraphMutation>,
-            Mutations.Implementations.SplitAtParagraphMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SplitAtItemMutation>,
-            Mutations.Implementations.SplitAtItemMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.AddBookTitleMutation>,
-            Mutations.Implementations.AddBookTitleMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.AddVolumeTitlesMutation>,
-            Mutations.Implementations.AddVolumeTitlesMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.AddPartTitlesMutation>,
-            Mutations.Implementations.AddPartTitlesMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.AddChapterTitlesMutation>,
-            Mutations.Implementations.AddChapterTitlesMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.AddPausesMutation>,
-            Mutations.Implementations.AddPausesMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.InsertPauseParagraphMutation>,
-            Mutations.Implementations.InsertPauseParagraphMutationImplementation>();
-        // Destructive structural mutations
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.MergeVolumeMutation>,
-            Mutations.Implementations.MergeVolumeMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.MergePartMutation>,
-            Mutations.Implementations.MergePartMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.MergeChapterMutation>,
-            Mutations.Implementations.MergeChapterMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.MergeParagraphMutation>,
-            Mutations.Implementations.MergeParagraphMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.MergeParagraphItemMutation>,
-            Mutations.Implementations.MergeParagraphItemMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.DeleteVolumeMutation>,
-            Mutations.Implementations.DeleteVolumeMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.DeletePartMutation>,
-            Mutations.Implementations.DeletePartMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.DeleteChapterMutation>,
-            Mutations.Implementations.DeleteChapterMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.DeleteParagraphMutation>,
-            Mutations.Implementations.DeleteParagraphMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.DeleteParagraphItemMutation>,
-            Mutations.Implementations.DeleteParagraphItemMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.ClearBookContentMutation>,
-            Mutations.Implementations.ClearBookContentMutationImplementation>();
-        // Speaker attribution — the exact, high-frequency family
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetItemSpeakerMutation>,
-            Mutations.Implementations.SetItemSpeakerMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetParagraphSpeakerMutation>,
-            Mutations.Implementations.SetParagraphSpeakerMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetParagraphsSpeakerMutation>,
-            Mutations.Implementations.SetParagraphsSpeakerMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.ReleaseNarrationMutation>,
-            Mutations.Implementations.ReleaseNarrationMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.AttributeParagraphItemsMutation>,
-            Mutations.Implementations.AttributeParagraphItemsMutationImplementation>();
-        // Audio assignment and reviews — the Audio Queue's exact, high-frequency family
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.RecordParagraphItemAudioMutation>,
-            Mutations.Implementations.RecordParagraphItemAudioMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetParagraphItemAudioMutation>,
-            Mutations.Implementations.SetParagraphItemAudioMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetAudioReviewMutation>,
-            Mutations.Implementations.SetAudioReviewMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.DismissAudioReviewMutation>,
-            Mutations.Implementations.DismissAudioReviewMutationImplementation>();
-        // Character, narrator and policy lifecycles — Book-wide by reach, however small the write
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.CreateCharacterMutation>,
-            Mutations.Implementations.CreateCharacterMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.RenameCharacterMutation>,
-            Mutations.Implementations.RenameCharacterMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.AddCharacterAliasMutation>,
-            Mutations.Implementations.AddCharacterAliasMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.RemoveCharacterAliasMutation>,
-            Mutations.Implementations.RemoveCharacterAliasMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.MergeCharactersMutation>,
-            Mutations.Implementations.MergeCharactersMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.DeleteCharacterMutation>,
-            Mutations.Implementations.DeleteCharacterMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetNarratorCharacterMutation>,
-            Mutations.Implementations.SetNarratorCharacterMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetNarratorOnlyModeMutation>,
-            Mutations.Implementations.SetNarratorOnlyModeMutationImplementation>();
-        // Pipeline step checkpoints — one row per confirmed or skipped step
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetCheckpointMutation>,
-            Mutations.Implementations.SetCheckpointMutationImplementation>();
-        // Project details — the project row's title, book title, author and cover
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.UpdateProjectMetadataMutation>,
-            Mutations.Implementations.UpdateProjectMetadataMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetCoverImageMutation>,
-            Mutations.Implementations.SetCoverImageMutationImplementation>();
-        // The Pronunciation list — what TTS is asked to say, never the book text
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetPronunciationMutation>,
-            Mutations.Implementations.SetPronunciationMutationImplementation>();
+        AddBookMutationImplementations(services);
         services.AddScoped<Pronunciations.PronunciationTryOut>();
-        // Voice and Voice Rule lifecycles — Voice rows and rule rows only, previews everywhere
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.CreateVoiceMutation>,
-            Mutations.Implementations.CreateVoiceMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetVoiceDefaultMutation>,
-            Mutations.Implementations.SetVoiceDefaultMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.UpdateVoiceMutation>,
-            Mutations.Implementations.UpdateVoiceMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetVoiceDesignPromptMutation>,
-            Mutations.Implementations.SetVoiceDesignPromptMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetVoiceDesignSettingsOverrideMutation>,
-            Mutations.Implementations.SetVoiceDesignSettingsOverrideMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetVoiceTtsSettingsOverrideMutation>,
-            Mutations.Implementations.SetVoiceTtsSettingsOverrideMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetVoiceTranscriptMutation>,
-            Mutations.Implementations.SetVoiceTranscriptMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetVoiceAudioMutation>,
-            Mutations.Implementations.SetVoiceAudioMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetVoiceGeneratedMutation>,
-            Mutations.Implementations.SetVoiceGeneratedMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.ApplyVoiceAudioEditMutation>,
-            Mutations.Implementations.ApplyVoiceAudioEditMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.RestoreVoiceAudioOriginalMutation>,
-            Mutations.Implementations.RestoreVoiceAudioOriginalMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetVoiceSourceMutation>,
-            Mutations.Implementations.SetVoiceSourceMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.DeleteVoiceMutation>,
-            Mutations.Implementations.DeleteVoiceMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.GainSeriesVoicesMutation>,
-            Mutations.Implementations.GainSeriesVoicesMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.CopySeriesVoiceMutation>,
-            Mutations.Implementations.CopySeriesVoiceMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.ReplaceSeriesVoicesMutation>,
-            Mutations.Implementations.ReplaceSeriesVoicesMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.CreateVoiceRuleMutation>,
-            Mutations.Implementations.CreateVoiceRuleMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.DeleteVoiceRuleMutation>,
-            Mutations.Implementations.DeleteVoiceRuleMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.MoveVoiceRuleMutation>,
-            Mutations.Implementations.MoveVoiceRuleMutationImplementation>();
-        // Imports and rereads — clearing and repopulating as one commit, never two.
+        // Imports and rereads clear and repopulate as one commit, never two.
         services.TryAddScoped<IBookContentPersister, BookContentPersister>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.ImportBookContentMutation>,
-            Mutations.Implementations.ImportBookContentMutationImplementation>();
-        // Manual and AI book edits — node titles and item text, and the stale audio that goes with
-        // a rewrite.
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.UpdateVolumeTitleMutation>,
-            Mutations.Implementations.UpdateVolumeTitleMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.UpdatePartTitleMutation>,
-            Mutations.Implementations.UpdatePartTitleMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.UpdateChapterTitleMutation>,
-            Mutations.Implementations.UpdateChapterTitleMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.UpdateParagraphItemTextMutation>,
-            Mutations.Implementations.UpdateParagraphItemTextMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.SetItemDeliveryCueMutation>,
-            Mutations.Implementations.SetItemDeliveryCueMutationImplementation>();
-        services.AddScoped<
-            Mutations.IBookMutationImplementation<Mutations.ApplyBookEditsMutation>,
-            Mutations.Implementations.ApplyBookEditsMutationImplementation>();
         // Removing a Voice takes its audio with it, after the commit. The arriving half needs the
         // audio pipeline and so is registered by the application.
         services.TryAddScoped<Audio.IVoiceAudioRemover, Audio.VoiceAudioRemover>();
@@ -387,5 +164,22 @@ public static class ServiceCollectionExtensions
         services.AddScoped<BookCommandDispatcher>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Registers every closed <see cref="Mutations.IBookMutationImplementation{TMutation}"/> in this
+    /// assembly, scoped, so a new Book mutation needs no registration line. A test that registers a
+    /// fake after <see cref="AddBookCommandHandlers"/> still wins: the last registration resolves.
+    /// </summary>
+    private static void AddBookMutationImplementations(IServiceCollection services)
+    {
+        var contract = typeof(Mutations.IBookMutationImplementation<>);
+        var registrations = typeof(ServiceCollectionExtensions).Assembly.GetTypes()
+            .Where(t => t is { IsClass: true, IsAbstract: false, IsGenericTypeDefinition: false })
+            .SelectMany(t => t.GetInterfaces()
+                .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == contract)
+                .Select(i => (Service: i, Implementation: t)));
+        foreach (var (service, implementation) in registrations)
+            services.AddScoped(service, implementation);
     }
 }
