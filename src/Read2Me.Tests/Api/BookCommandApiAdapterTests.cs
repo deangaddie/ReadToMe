@@ -95,7 +95,7 @@ namespace Read2Me.Tests.Api
         public void ARefusalTheCommandSoftens_IsSuccessWithNoIdentity(BookMutationRejection reason)
         {
             var softened = BookCommandWireContract.AsCommandResult(
-                new BookMutationOutcome.Rejected(reason, "nope"), reason);
+                new BookMutationOutcome.Rejected(reason, "nope"), reason.Kind());
 
             Assert.Null(IdOf(BookCommandApiAdapter.ToResult(softened, CancellationToken.None)));
         }

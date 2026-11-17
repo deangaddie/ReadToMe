@@ -17,6 +17,8 @@ the project's state refuses it (another write holds it, it is restoring or being
 book can't take the write); some commands answer an unknown target as a no-op instead
 (the API README, "Refused mutations").
 
+To add or change a command, edit its row in `Services/Commands/BookCommandTable.<Family>.cs`; a command with logic of its own gets a handler class and a `Handler<…>` row.
+
 Every command is in the OpenAPI document (#328): the operation's body is `BookCommand`, a
 `oneOf` over one component per record (`DeleteVolumeCommand`, `InsertNodeCommand`, …)
 discriminated on `type`, and the web client's union is generated from it into `schema.d.ts`.

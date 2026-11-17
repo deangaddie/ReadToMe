@@ -8,7 +8,7 @@ using Read2Me.Data;
 using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
-using Read2Me.Services.Commands.Handlers;
+using Read2Me.Services.Commands;
 using Read2Me.Services.IO;
 using Read2Me.Services.Mutations;
 using Read2Me.Tests.Infrastructure;
@@ -25,7 +25,7 @@ namespace Read2Me.Tests.Services.Characters
     public class SetParagraphsCharacterHandlerTests : ProjectDbTestBase
     {
         private readonly ServiceProvider _root;
-        private readonly SetParagraphsCharacterHandler _handler;
+        private readonly BookCommandDispatcher _dispatcher;
         private readonly ProjectFolderId _folder;
 
         public SetParagraphsCharacterHandlerTests()
@@ -36,7 +36,7 @@ namespace Read2Me.Tests.Services.Characters
             services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
             _root = services.BuildServiceProvider();
 
-            _handler = new SetParagraphsCharacterHandler(_root.GetRequiredService<BookMutations>());
+            _dispatcher = _root.GetRequiredService<BookCommandDispatcher>();
             _folder = new ProjectFolderId(FolderName);
         }
 
@@ -84,7 +84,7 @@ namespace Read2Me.Tests.Services.Characters
         {
             var b = await SeedAsync();
 
-            await _handler.HandleAsync(
+            await _dispatcher.ExecuteAsync(
                 new SetParagraphsCharacterCommand(_folder, [b.ParagraphId("p1"), b.ParagraphId("p2")], BobId),
                 CancellationToken.None);
 
@@ -101,7 +101,7 @@ namespace Read2Me.Tests.Services.Characters
         {
             var b = await SeedAsync();
 
-            await _handler.HandleAsync(
+            await _dispatcher.ExecuteAsync(
                 new SetParagraphsCharacterCommand(_folder, [b.ParagraphId("p1")], null),
                 CancellationToken.None);
 
@@ -114,7 +114,7 @@ namespace Read2Me.Tests.Services.Characters
         {
             var b = await SeedAsync();
 
-            await _handler.HandleAsync(
+            await _dispatcher.ExecuteAsync(
                 new SetParagraphsCharacterCommand(_folder, [b.ParagraphId("p1")], BobId),
                 CancellationToken.None);
 
@@ -127,7 +127,7 @@ namespace Read2Me.Tests.Services.Characters
         {
             var b = await SeedAsync();
 
-            var ex = await Record.ExceptionAsync(() => _handler.HandleAsync(
+            var ex = await Record.ExceptionAsync(() => _dispatcher.ExecuteAsync(
                 new SetParagraphsCharacterCommand(_folder, [], BobId),
                 CancellationToken.None));
 
@@ -158,7 +158,7 @@ namespace Read2Me.Tests.Services.Characters
             })).BuildAsync();
 
             var paragraphIds = Enumerable.Range(0, paragraphCount).Select(i => b.ParagraphId($"p{i}")).ToList();
-            await _handler.HandleAsync(
+            await _dispatcher.ExecuteAsync(
                 new SetParagraphsCharacterCommand(_folder, paragraphIds, BobId),
                 CancellationToken.None);
 
@@ -174,7 +174,7 @@ namespace Read2Me.Tests.Services.Characters
         {
             var b = await SeedAsync();
 
-            await _handler.HandleAsync(
+            await _dispatcher.ExecuteAsync(
                 new SetParagraphsCharacterCommand(_folder, [b.ParagraphId("p1"), b.ParagraphId("p2")], ProjectDbContext.NarratorId),
                 CancellationToken.None);
 
@@ -196,7 +196,7 @@ namespace Read2Me.Tests.Services.Characters
                 await seed.SaveChangesAsync();
             }
 
-            await _handler.HandleAsync(
+            await _dispatcher.ExecuteAsync(
                 new SetParagraphsCharacterCommand(_folder, [b.ParagraphId("p1")], BobId),
                 CancellationToken.None);
 
@@ -212,7 +212,7 @@ namespace Read2Me.Tests.Services.Characters
         {
             var b = await SeedAsync();
 
-            var result = await _handler.HandleAsync(
+            var result = await _dispatcher.ExecuteAsync(
                 new SetParagraphsCharacterCommand(_folder, [b.ParagraphId("p1")], BobId),
                 CancellationToken.None);
 

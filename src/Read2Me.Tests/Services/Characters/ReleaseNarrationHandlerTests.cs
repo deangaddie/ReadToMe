@@ -8,7 +8,6 @@ using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Commands;
-using Read2Me.Services.Commands.Handlers;
 using Read2Me.Services.IO;
 using Read2Me.Services.Mutations;
 using Read2Me.Tests.Infrastructure;
@@ -25,7 +24,7 @@ namespace Read2Me.Tests.Services.Characters
     public class ReleaseNarrationHandlerTests : ProjectDbTestBase
     {
         private readonly ServiceProvider _root;
-        private readonly ReleaseNarrationHandler _handler;
+        private readonly BookCommandDispatcher _dispatcher;
         private readonly ProjectReader _reader;
         private readonly ProjectFolderId _folder;
 
@@ -39,7 +38,7 @@ namespace Read2Me.Tests.Services.Characters
             services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
             _root = services.BuildServiceProvider();
 
-            _handler = new ReleaseNarrationHandler(_root.GetRequiredService<BookMutations>());
+            _dispatcher = _root.GetRequiredService<BookCommandDispatcher>();
             _folder = new ProjectFolderId(FolderName);
 
             var fs = new FileSystemService(Options.Create(new WorkspaceOptions { FolderPath = TempDir }));
@@ -109,7 +108,7 @@ namespace Read2Me.Tests.Services.Characters
         private static readonly string[] TranscriptItems = [.. Names("q", 5, "-item"), .. Names("a", 5, "-item")];
 
         private Task<BookCommandResult> ReleaseAsync(NarrationReleaseScope scope, Guid nodeId) =>
-            _handler.HandleAsync(new ReleaseNarrationCommand(_folder, scope, nodeId), CancellationToken.None);
+            _dispatcher.ExecuteAsync(new ReleaseNarrationCommand(_folder, scope, nodeId), CancellationToken.None);
 
         private async Task<ParagraphItem> ItemAsync(BookHierarchyBuilder b, string name)
         {

@@ -8,7 +8,7 @@ using Read2Me.Data.Entities;
 using Read2Me.Data.Enums;
 using Read2Me.Services;
 using Read2Me.Services.Characters;
-using Read2Me.Services.Commands.Handlers;
+using Read2Me.Services.Commands;
 using Read2Me.Services.IO;
 using Read2Me.Services.Mutations;
 using Read2Me.Tests.Infrastructure;
@@ -150,8 +150,8 @@ namespace Read2Me.Tests.Services.Characters
                 before = db.ParagraphItems.Select(i => new { i.Id, HadAudio = i.AudioFileName != null })
                     .AsEnumerable().Select(i => (i.Id, i.HadAudio)).ToList();
 
-            var handler = new ReleaseNarrationHandler(_root.GetRequiredService<BookMutations>());
-            var result = await handler.HandleAsync(new ReleaseNarrationCommand(_folder, scope, nodeId), CancellationToken.None);
+            var dispatcher = _root.GetRequiredService<BookCommandDispatcher>();
+            var result = await dispatcher.ExecuteAsync(new ReleaseNarrationCommand(_folder, scope, nodeId), CancellationToken.None);
 
             var effects = Assert.IsType<BookMutationOutcome.Committed>(result.Outcome).Receipt.Effects;
             var released = effects.ParagraphItemIds.ToHashSet();
@@ -192,8 +192,8 @@ namespace Read2Me.Tests.Services.Characters
 
             Assert.Equal([new SpeechMarkerCount("Q.", 10), new SpeechMarkerCount("A.", 6)], preview.SpeechMarkers);
 
-            var handler = new ReleaseNarrationHandler(_root.GetRequiredService<BookMutations>());
-            var result = await handler.HandleAsync(
+            var dispatcher = _root.GetRequiredService<BookCommandDispatcher>();
+            var result = await dispatcher.ExecuteAsync(
                 new ReleaseNarrationCommand(_folder, NarrationReleaseScope.Part, partId), CancellationToken.None);
             var effects = Assert.IsType<BookMutationOutcome.Committed>(result.Outcome).Receipt.Effects;
             Assert.Equal(16, effects.ParagraphIds.Count);

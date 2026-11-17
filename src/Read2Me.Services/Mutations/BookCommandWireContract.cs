@@ -6,14 +6,12 @@ namespace Read2Me.Services.Mutations;
 /// Turns a mutation outcome into the answer <c>POST /api/projects/{folder}/commands</c> has always
 /// given for that command, without losing the outcome itself.
 /// <para>
-/// The endpoint keeps its existing responses (ADR 0007), and which refusals a command has always
-/// answered with <c>200 { "newEntityId": null }</c> differs per command: a
-/// command aimed at a node the Book does not contain no-ops nearly everywhere, the Character roster
-/// and Voice Rule commands have always answered a protected-narrator or default-rule gesture the
-/// same way, and <see cref="Commands.Handlers.SetNarratorCharacterHandler"/> answers none of them
-/// that way. So each handler names its own, here, in the one line that translates its command — and
-/// what reaches <c>BookCommandApiAdapter</c> is a result it can map without knowing any command's
-/// name.
+/// The endpoint keeps its existing responses (ADR 0007), and which Refusal kinds a command has
+/// always answered with <c>200 { "newEntityId": null }</c> differs per command: <c>missing</c>
+/// nearly everywhere, <c>missing</c> and <c>invalid</c> for the Character roster and Voice Rule
+/// commands, and none for a strict command. Each command's row in <see cref="BookCommandTable"/>
+/// names its own, so what reaches <c>BookCommandApiAdapter</c> is a result it can map without
+/// knowing any command's name.
 /// </para>
 /// <para>
 /// A refusal a command has always answered as null is reported as
@@ -23,36 +21,21 @@ namespace Read2Me.Services.Mutations;
 /// reads the outcome from <see cref="BookMutations"/> directly.
 /// </para>
 /// <para>
-/// This is not scaffolding any more, which is why it is no longer named as such: the command layer
-/// is a permanent wire contract, and this is where a typed outcome is spoken in its terms. Nothing
-/// above the command handlers uses it — every other producer, the Book View, the Characters tab,
-/// the queues, imports and AI edits alike, commits through <see cref="BookMutations"/> and reads
-/// the outcome, so the flattening reaches exactly the one contract that predates it.
+/// The command layer is a permanent wire contract, and this is where a typed outcome is spoken in
+/// its terms. Nothing above the command table uses it — every other producer, the Book View, the
+/// Characters tab, the queues, imports and AI edits alike, commits through
+/// <see cref="BookMutations"/> and reads the outcome, so the flattening reaches exactly the one
+/// contract that predates it.
 /// </para>
 /// </summary>
 public static class BookCommandWireContract
 {
-    /// <summary>The common shape: a command naming something the Book does not contain answers null.</summary>
-    public static Task<BookCommandResult> ExecuteCommandAsync(
-        this BookMutations mutations, BookMutation mutation, CancellationToken ct) =>
-        mutations.ExecuteCommandAsync(mutation, ct, BookMutationRejection.NotFound);
-
-    /// <summary>
-    /// The strict shape: every expected refusal stays a refusal, so an agent sees a 422 rather than a
-    /// success-shaped null. <c>SetNarratorCharacter</c>, <c>SetItemDeliveryCue</c> and <c>InsertNode</c> are the
-    /// commands written this way — <c>docs/agents/api/book-commands.md</c> calls that out as what makes them unusual.
-    /// <c>CreateCharacterAndAssign</c> and <c>AddTitles</c> are strict too, but commit more than one
-    /// mutation per request, so their handlers build the result themselves rather than through here.
-    /// </summary>
-    public static Task<BookCommandResult> ExecuteCommandStrictAsync(
-        this BookMutations mutations, BookMutation mutation, CancellationToken ct) =>
-        mutations.ExecuteCommandAsync(mutation, ct, answeredAsNull: []);
-
+    /// <summary>Commits the mutation and answers it as the command does.</summary>
     public static async Task<BookCommandResult> ExecuteCommandAsync(
         this BookMutations mutations,
         BookMutation mutation,
         CancellationToken ct,
-        params BookMutationRejection[] answeredAsNull) =>
+        params BookMutationRefusalKind[] answeredAsNull) =>
         AsCommandResult(await mutations.CommitAsync(mutation, ct), answeredAsNull);
 
     /// <summary>
@@ -60,11 +43,11 @@ public static class BookCommandWireContract
     /// than straight to <see cref="BookMutations"/>, and so already hold the outcome.
     /// </summary>
     public static BookCommandResult AsCommandResult(
-        BookMutationOutcome outcome, params BookMutationRejection[] answeredAsNull) =>
+        BookMutationOutcome outcome, params BookMutationRefusalKind[] answeredAsNull) =>
         outcome switch
         {
             BookMutationOutcome.Committed committed => new(committed, committed.Receipt.Effects.CreatedId),
-            BookMutationOutcome.Rejected rejected when answeredAsNull.Contains(rejected.Reason)
+            BookMutationOutcome.Rejected rejected when answeredAsNull.Contains(rejected.Kind)
                 => new(new BookMutationOutcome.NoChange(), null),
             _ => new(outcome, null),
         };

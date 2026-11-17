@@ -41,7 +41,7 @@ namespace Read2Me.App.Api
 
             // The request scope is this command's scope: whatever the handler commits carries the origin.
             OriginHeader.Apply(request, origin);
-            var step = CommandStepLabels.Of(command!);
+            var step = BookCommandTable.Of(command!);
             await using (steps.Open(folderId, step.Label, step.Action))
                 return await commands.ExecuteAsync(command!, ct);
         }
