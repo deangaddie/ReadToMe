@@ -1,13 +1,10 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
-using Microsoft.Extensions.DependencyInjection;
 using Read2Me.App.Live;
-using Read2Me.Core.Configuration;
 using Read2Me.Data;
 using Read2Me.Services;
 using Read2Me.Services.Events;
 using Read2Me.Services.Mutations;
-using Read2Me.Tests.Infrastructure;
 using Xunit;
 
 namespace Read2Me.Tests.Architecture;
@@ -15,50 +12,17 @@ namespace Read2Me.Tests.Architecture;
 /// <summary>
 /// The rules that keep ADR 0007's one consistency model from quietly growing a second one. Every
 /// producer-family slice retired its own legacy path; this file is what stops the next change from
-/// putting one back — a mutation implementation nobody registered, a second subscriber reconciling
-/// Book state from receipts, or a persisted-state reconciliation event reappearing beside the
+/// putting one back — a second subscriber reconciling Book state from receipts, a Project write
+/// outside a Book mutation, or a persisted-state reconciliation event reappearing beside the
 /// receipt that replaced it.
 /// <para>
-/// The matching forward rule — every <see cref="BookMutation"/> has an implementation — lives in
+/// Implementations are registered by scanning the Services assembly, so none can go unregistered;
+/// the rule that every <see cref="BookMutation"/> has an implementation lives in
 /// <see cref="Services.Mutations.BookMutationRegistryTests"/>.
 /// </para>
 /// </summary>
-public class OneConsistencyModelTests : ProjectDbTestBase
+public class OneConsistencyModelTests
 {
-    private ServiceProvider BuildContainer()
-    {
-        var services = new ServiceCollection();
-        services.AddBookCommandHandlers();
-        services.Configure<WorkspaceOptions>(o => o.FolderPath = TempDir);
-        services.AddSingleton<IProjectDbContextFactory, ProjectDbContextProvider>();
-        return services.BuildServiceProvider();
-    }
-
-    /// <summary>
-    /// Written from the implementations rather than from the mutations, so an implementation added
-    /// without a registration is caught even when its mutation is served by a different one.
-    /// </summary>
-    [Fact]
-    public void EveryMutationImplementation_IsRegisteredForItsMutation()
-    {
-        using var sp = BuildContainer();
-
-        var implementations = typeof(BookMutations).Assembly.GetTypes()
-            .Where(t => t is { IsAbstract: false, IsInterface: false })
-            .SelectMany(t => t.GetInterfaces()
-                .Where(i => i.IsGenericType &&
-                            i.GetGenericTypeDefinition() == typeof(IBookMutationImplementation<>))
-                .Select(i => (Implementation: t, Contract: i)))
-            .ToList();
-
-        Assert.NotEmpty(implementations);
-
-        foreach (var (implementation, contract) in implementations)
-            Assert.True(
-                sp.GetServices(contract).Any(s => s?.GetType() == implementation),
-                $"{implementation.Name} is not registered for {contract.GetGenericArguments()[0].Name}.");
-    }
-
     /// <summary>
     /// The one channel persisted Book state reconciles through: <see cref="BookMutations"/>
     /// publishes a <see cref="BookMutationReceipt"/>, and <see cref="LiveRelay"/> forwards it
