@@ -37,7 +37,7 @@ public class HistoryApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             new StringContent("""{ "type": "CreateCharacter", "name": "Ganondorf" }""", Encoding.UTF8, "application/json"));
         Assert.Equal(HttpStatusCode.OK, created.StatusCode);
 
-        // The label the command's step metadata names (CommandStepLabels), with its enums by name.
+        // The label the command's step metadata names (BookCommandTable), with its enums by name.
         var history = await HistoryAsync(folder);
         var steps = history.GetProperty("steps").EnumerateArray().ToList();
         var tip = steps[0];
