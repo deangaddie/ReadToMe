@@ -1,12 +1,6 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
-import {
-  type Guid,
-  type PronunciationEntry,
-  PronunciationsApi,
-  toApiError,
-  withLocal,
-} from '@app/api';
+import { type Guid, type PronunciationEntry, PronunciationsApi, toApiError } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
@@ -18,7 +12,7 @@ import { ConfirmService } from '@app/ui/dialogs';
 import { emptyState, gated, icon, spinner, statusChip } from '@app/ui/partials';
 import { ProjectStore } from '../project/project-store';
 import type { PronunciationEditor } from './pronunciation-editor';
-import { deleteBlockedReason, filterEntries } from './pronunciation-logic';
+import { filterEntries } from './pronunciation-logic';
 import { PronunciationWriter } from './pronunciation-writer';
 import css from './pronunciations-page.css' with { type: 'text' };
 import './pronunciation-editor';
@@ -130,8 +124,6 @@ export class PronunciationsPage extends R2mElement {
   protected template() {
     const folder = this.project.folder();
     const block = this.project.block();
-    const audioInFlight = this.project.audioInFlight();
-    const deleteBlock = withLocal(block, deleteBlockedReason({ audioInFlight }) ?? false);
     const editing = this.editing();
     const openEntry = this.openEntry();
     const entries = this.entries();
@@ -247,7 +239,7 @@ export class PronunciationsPage extends R2mElement {
                                 @click=${(ev: Event) => ev.stopPropagation()}
                               >
                                 ${gated(
-                                  deleteBlock,
+                                  block,
                                   (disabled) =>
                                     html`<button
                                       type="button"
@@ -274,7 +266,6 @@ export class PronunciationsPage extends R2mElement {
                   .folder=${folder}
                   .entry=${openEntry}
                   .block=${block}
-                  .audioInFlight=${audioInFlight}
                   @editor-close=${() => this.editing.set(null)}
                 ></r2m-pronunciation-editor>`
               : html`<p class="pron__hint">Pick a pronunciation to edit it, or add one.</p>`

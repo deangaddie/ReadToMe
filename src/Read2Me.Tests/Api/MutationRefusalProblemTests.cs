@@ -20,6 +20,7 @@ namespace Read2Me.Tests.Api
             { BookMutationRejection.Conflict, BookMutationRefusalKind.Contention },
             { BookMutationRejection.Activity, BookMutationRefusalKind.Contention },
             { BookMutationRejection.Blocked, BookMutationRefusalKind.Contention },
+            { BookMutationRejection.Stale, BookMutationRefusalKind.Contention },
             { BookMutationRejection.NotFound, BookMutationRefusalKind.Missing },
             { BookMutationRejection.Validation, BookMutationRefusalKind.Invalid },
         };

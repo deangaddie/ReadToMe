@@ -17,7 +17,6 @@ import { FakeApi } from '../../../testing/fake-api';
 import { FakeLive } from '../../../testing/fake-live';
 import { installNavigation, settle } from '../../../testing/fake-navigation';
 import type { PronunciationEditor } from './pronunciation-editor';
-import { AUDIO_RUNNING } from './pronunciation-logic';
 import type { PronunciationsPage } from './pronunciations-page';
 import '../project/project-shell';
 import './pronunciations-page';
@@ -294,7 +293,7 @@ describe('r2m-pronunciations-page', () => {
     expect(editorOf(page)).toBeNull();
   });
 
-  it('turns delete off while audio generation runs for the project, and tells the editor', async () => {
+  it('keeps delete on while audio generation runs for the project', async () => {
     const page = await render();
     liveFake.seed('the-adventures-of-sherlock-holmes');
     liveFake.emit('itemStatus', {
@@ -307,9 +306,7 @@ describe('r2m-pronunciations-page', () => {
     const del = page.querySelector<HTMLButtonElement>(
       '.pron__row[data-id=watson] [data-action=delete-row]',
     )!;
-    expect(del.disabled).toBe(true);
-    expect(del.closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(AUDIO_RUNNING);
-    expect(editorOf(page)!.audioInFlight).toBe(1);
+    expect(del.disabled).toBe(false);
   });
 
   it('shows the viewed step’s list read-only', async () => {

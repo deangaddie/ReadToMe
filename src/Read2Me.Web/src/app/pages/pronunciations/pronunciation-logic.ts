@@ -59,9 +59,6 @@ export interface Forms {
 /** A written form's longest: the host's limit. */
 export const WRITTEN_FORM_MAX = 100;
 
-/** Why Save and Delete are off while audio generation is queued or running (the host's 409 wording). */
-export const AUDIO_RUNNING = 'Audio generation is running: wait for it or cancel it';
-
 /** Trimmed, inner whitespace runs as one space: how the host stores a form. */
 function normalise(form: string): string {
   return form.trim().replace(/\s+/g, ' ');
@@ -75,26 +72,16 @@ export function isDirty(saved: Forms | null, draft: Forms): boolean {
   return written !== saved.writtenForm || spoken !== saved.spokenForm;
 }
 
-/** Delete's own conditions; a viewed History step comes from the project's Edit gate. */
-export interface DeleteGate {
-  /** Items queued or processing for audio in this project. */
-  audioInFlight: number;
-}
-
-export interface SaveGate extends DeleteGate {
+/** Save's own conditions; a viewed History step comes from the project's Edit gate. */
+export interface SaveGate {
   duplicateOf: PronunciationRef | null;
   /** The host’s 422 detail for the draft, or null. */
   invalid: string | null;
 }
 
-/** Why Delete is off for its own reason, or null: the local reason folded into the project's block. */
-export function deleteBlockedReason(gate: DeleteGate): string | null {
-  return gate.audioInFlight > 0 ? AUDIO_RUNNING : null;
-}
-
 /** Why Save is off for a reason worth saying (an unchanged draft is off too, without one), or null. */
 export function saveBlockedReason(gate: SaveGate): string | null {
-  return deleteBlockedReason(gate) ?? duplicateWarning(gate.duplicateOf) ?? gate.invalid;
+  return duplicateWarning(gate.duplicateOf) ?? gate.invalid;
 }
 
 /** The entries whose written or spoken form holds the query, ignoring case and surrounding space. */

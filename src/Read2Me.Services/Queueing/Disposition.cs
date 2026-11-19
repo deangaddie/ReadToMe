@@ -8,7 +8,7 @@ namespace Read2Me.Services.Queueing
     /// <c>Apply</c> can run any of them, no arm throws. "Apply the work first, then decide" is not a
     /// transition, so it lives on <see cref="Plan"/> instead of here.
     /// <para>
-    /// Five distinct cases rather than a settle-kind enum: each carries exactly its own data.
+    /// Distinct cases rather than a settle-kind enum: each carries exactly its own data.
     /// <see cref="Failed"/> has no elapsed because it records none (it does not feed the rolling
     /// average); <see cref="Complete"/> has no reason because there is nothing to report.
     /// </para>
@@ -55,6 +55,13 @@ namespace Read2Me.Services.Queueing
         /// the provider did nothing wrong.
         /// </summary>
         public sealed record RetryAfterRestore : Disposition;
+
+        /// <summary>
+        /// The work answered for an item that changed while it ran — the Audio Queue's answer to a
+        /// <b>Stale take</b>: put it straight back on the queue to run against what the item says now.
+        /// Spends neither budget, unlike <see cref="RetryOnce"/>: nothing went wrong.
+        /// </summary>
+        public sealed record Regenerate : Disposition;
     }
 
     /// <summary>

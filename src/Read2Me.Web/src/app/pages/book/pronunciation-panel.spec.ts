@@ -84,7 +84,6 @@ beforeEach(async () => {
   panel.marks = marks;
   panel.itemsWithAudio = new Set(['i2']);
   panel.block = null;
-  panel.audioInFlight = 0;
   document.body.append(panel);
   state.show();
   await sleep(REFETCH_DEBOUNCE_MS + 30);

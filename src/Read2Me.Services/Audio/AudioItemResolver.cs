@@ -107,8 +107,7 @@ namespace Read2Me.Services.Audio
 
             // The book's Pronunciation list applies to what TTS says, not to the book text or the
             // reference transcript (that one describes the reference audio).
-            var pronunciations = await db.Pronunciations.AsNoTracking().ToListAsync(ct);
-            var spokenText = new PronunciationMatcher(pronunciations).SpokenTextOf(sourceText);
+            var spokenText = (await PronunciationMatcher.LoadAsync(db, ct)).SpokenTextOf(sourceText);
 
             var request = new PipelineRequest(
                 Folder: folder,
@@ -123,7 +122,8 @@ namespace Read2Me.Services.Audio
                 WerThreshold: processingSettings.WerThreshold,
                 FfmpegPath: processingSettings.FfmpegPath,
                 ReferenceTranscript: referenceTranscript,
-                SpokenText: spokenText);
+                SpokenText: spokenText,
+                CharacterId: row.CharacterId);
 
             return new ResolutionResult(speaker, sourceText, request, null);
         }

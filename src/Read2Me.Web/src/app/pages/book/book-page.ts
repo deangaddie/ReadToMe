@@ -435,7 +435,6 @@ export class BookPage extends R2mElement {
                 .marks=${this.marks.marks()}
                 .itemsWithAudio=${this.itemsWithAudio()}
                 .block=${this.project.block()}
-                .audioInFlight=${this.project.audioInFlight()}
               ></r2m-pronunciation-panel>
             </div>`
       }

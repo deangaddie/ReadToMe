@@ -288,17 +288,31 @@ public sealed record AudioReviewVerdict(
     string? OriginalTextSnapshot);
 
 /// <summary>
+/// What a take was generated from: the item's <b>Spoken text</b> (its text with the Pronunciation
+/// list applied), its speaker and its delivery cue, as they stood when the take was resolved. Each
+/// of these changing discards an item's audio, so a take whose item no longer matches them is a
+/// <b>Stale take</b> (<c>context/audio-pipeline.md</c>).
+/// </summary>
+public sealed record TakeInputs(string SpokenText, Guid? CharacterId, string? VoiceInstructions);
+
+/// <summary>
 /// Records one generated take: the item's audio reference and the verdict on it, together.
 /// <para>
 /// The WAV is staged on disk before this commits and moved into place after it, so the persisted
 /// Book never names an artifact that is not finished (ADR 0007).
+/// </para>
+/// <para>
+/// <paramref name="ResolvedFrom"/> is compared, inside the commit, with what the item says now: a
+/// take whose item changed while it generated is refused as <see cref="BookMutationRejection.Stale"/>
+/// and the item keeps what it had.
 /// </para>
 /// </summary>
 public sealed record RecordParagraphItemAudioMutation(
     ProjectFolderId FolderId,
     Guid ItemId,
     string RelativePath,
-    AudioReviewVerdict Verdict) : ResultsOnlyMutation(FolderId);
+    AudioReviewVerdict Verdict,
+    TakeInputs ResolvedFrom) : ResultsOnlyMutation(FolderId);
 
 /// <summary>Points one item at an audio file, with no verdict — the generic command endpoint's half.</summary>
 public sealed record SetParagraphItemAudioMutation(

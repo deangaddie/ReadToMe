@@ -1,5 +1,6 @@
 using Read2Me.AppData.Entities;
 using Read2Me.Core.Models;
+using Read2Me.Services.Mutations;
 using Read2Me.Services.Queueing;
 
 namespace Read2Me.Services.Audio
@@ -26,6 +27,7 @@ namespace Read2Me.Services.Audio
     /// The item's <b>Spoken text</b> (its text with the book's Pronunciation list applied): what TTS is
     /// asked to say. Null means the same as <paramref name="SourceText"/>.
     /// </param>
+    /// <param name="CharacterId">The item's speaker as the book has it, for <see cref="Inputs"/>.</param>
     public record PipelineRequest(
         ProjectFolderId Folder,
         Guid ParagraphItemId,
@@ -39,7 +41,12 @@ namespace Read2Me.Services.Audio
         string? FfmpegPath,
         string? Speaker,
         string? ReferenceTranscript = null,
-        string? SpokenText = null);
+        string? SpokenText = null,
+        Guid? CharacterId = null)
+    {
+        /// <summary>What the take is generated from, for the recorder to check it is still current.</summary>
+        public TakeInputs Inputs => new(SpokenText ?? SourceText, CharacterId, VoiceInstructions);
+    }
 
     public interface IAudioItemPipeline
     {

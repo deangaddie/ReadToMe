@@ -71,6 +71,9 @@ namespace Read2Me.Tests.Services.Audio
             return b.ItemId("item");
         }
 
+        /// <summary>What the seeded narration item says: a take resolved from it is current.</summary>
+        private static readonly TakeInputs Take = new("Pieces of eight!", ProjectDbContext.NarratorId, null);
+
         private static PipelineResult Clean(byte[]? audio = null) => new(
             AudioBytes: audio ?? [0x52, 0x49, 0x46, 0x46],
             Normalize: new NormalizeOutcome(Ok: true, Reason: null),
@@ -103,7 +106,7 @@ namespace Read2Me.Tests.Services.Audio
         {
             var itemId = await SeedItemAsync();
 
-            var relativePath = await Sut().RecordAsync(_folder, itemId, Clean(), "Pieces of eight!", TestContext.Current.CancellationToken);
+            var relativePath = Assert.IsType<TakeRecording.Recorded>(await Sut().RecordAsync(_folder, itemId, Clean(), "Pieces of eight!", Take, TestContext.Current.CancellationToken)).RelativePath;
 
             Assert.Equal($"audio/{itemId}.wav", relativePath);
             Assert.Equal(relativePath, (await ItemAsync(itemId)).AudioFileName);
@@ -127,7 +130,7 @@ namespace Read2Me.Tests.Services.Audio
                     ? Encoding.Latin1.GetString(_fs.GetFileContent(PathOf(itemId)))
                     : null;
 
-            await Sut().RecordAsync(_folder, itemId, Clean(audio), "Pieces of eight!", TestContext.Current.CancellationToken);
+            await Sut().RecordAsync(_folder, itemId, Clean(audio), "Pieces of eight!", Take, TestContext.Current.CancellationToken);
 
             Assert.Equal(Encoding.Latin1.GetString(audio), whenTheBookWasWritten);
         }
@@ -137,7 +140,7 @@ namespace Read2Me.Tests.Services.Audio
         {
             var itemId = await SeedItemAsync();
 
-            await Sut().RecordAsync(_folder, itemId, FailedVerify(), "Pieces of eight!", TestContext.Current.CancellationToken);
+            await Sut().RecordAsync(_folder, itemId, FailedVerify(), "Pieces of eight!", Take, TestContext.Current.CancellationToken);
 
             var review = await ReviewAsync(itemId);
             Assert.NotNull(review);
@@ -150,9 +153,9 @@ namespace Read2Me.Tests.Services.Audio
         public async Task ACleanTake_RemovesThePreviousTakesReview()
         {
             var itemId = await SeedItemAsync();
-            await Sut().RecordAsync(_folder, itemId, FailedVerify(), "Pieces of eight!", TestContext.Current.CancellationToken);
+            await Sut().RecordAsync(_folder, itemId, FailedVerify(), "Pieces of eight!", Take, TestContext.Current.CancellationToken);
 
-            await Sut().RecordAsync(_folder, itemId, Clean(), "Pieces of eight!", TestContext.Current.CancellationToken);
+            await Sut().RecordAsync(_folder, itemId, Clean(), "Pieces of eight!", Take, TestContext.Current.CancellationToken);
 
             Assert.Null(await ReviewAsync(itemId));
         }
@@ -165,10 +168,10 @@ namespace Read2Me.Tests.Services.Audio
         public async Task ARetakeThatMovesNoColumn_StillReplacesTheAudioOnDisk()
         {
             var itemId = await SeedItemAsync();
-            await Sut().RecordAsync(_folder, itemId, Clean(), "Pieces of eight!", TestContext.Current.CancellationToken);
+            await Sut().RecordAsync(_folder, itemId, Clean(), "Pieces of eight!", Take, TestContext.Current.CancellationToken);
 
             byte[] retake = [0x52, 0x49, 0x46, 0x46, 0x99];
-            await Sut().RecordAsync(_folder, itemId, Clean(retake), "Pieces of eight!", TestContext.Current.CancellationToken);
+            await Sut().RecordAsync(_folder, itemId, Clean(retake), "Pieces of eight!", Take, TestContext.Current.CancellationToken);
 
             Assert.Equal(retake, _fs.GetFileContent(PathOf(itemId)));
         }
@@ -184,7 +187,7 @@ namespace Read2Me.Tests.Services.Audio
             var ghost = Guid.NewGuid();
 
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                Sut().RecordAsync(_folder, ghost, Clean(), "gone", TestContext.Current.CancellationToken));
+                Sut().RecordAsync(_folder, ghost, Clean(), "gone", Take, TestContext.Current.CancellationToken));
 
             Assert.Empty(_fs.GetAllPaths());
         }
@@ -197,7 +200,7 @@ namespace Read2Me.Tests.Services.Audio
         public async Task AnUncommittedRecording_LeavesTheItemsExistingAudioAlone()
         {
             var itemId = await SeedItemAsync();
-            await Sut().RecordAsync(_folder, itemId, Clean(), "Pieces of eight!", TestContext.Current.CancellationToken);
+            await Sut().RecordAsync(_folder, itemId, Clean(), "Pieces of eight!", Take, TestContext.Current.CancellationToken);
             var recorded = _fs.GetFileContent(PathOf(itemId));
 
             await using (var db = await OpenDbAsync())
@@ -207,9 +210,34 @@ namespace Read2Me.Tests.Services.Audio
             }
 
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                Sut().RecordAsync(_folder, itemId, Clean([0x52, 0x49, 0x46, 0x46, 0x01]), "gone", TestContext.Current.CancellationToken));
+                Sut().RecordAsync(_folder, itemId, Clean([0x52, 0x49, 0x46, 0x46, 0x01]), "gone", Take, TestContext.Current.CancellationToken));
 
             Assert.Equal(recorded, _fs.GetFileContent(PathOf(itemId)));
+        }
+
+        /// <summary>
+        /// The item's text was edited while its take generated. That is an answer, not a failure: the
+        /// recorder says the take is stale, and the item keeps the audio and review it had.
+        /// </summary>
+        [Fact]
+        public async Task AStaleTake_IsAnsweredNotThrown_AndPutsBackWhatTheItemHad()
+        {
+            var itemId = await SeedItemAsync();
+            await Sut().RecordAsync(_folder, itemId, FailedVerify(), "Pieces of eight!", Take, TestContext.Current.CancellationToken);
+            var recorded = _fs.GetFileContent(PathOf(itemId));
+            await using (var db = await OpenDbAsync())
+            {
+                (await db.ParagraphItems.SingleAsync(i => i.Id == itemId, TestContext.Current.CancellationToken)).Text = "Pieces of nine!";
+                await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+            }
+
+            var recording = await Sut().RecordAsync(
+                _folder, itemId, Clean([0x52, 0x49, 0x46, 0x46, 0x01]), "Pieces of eight!", Take, TestContext.Current.CancellationToken);
+
+            Assert.IsType<TakeRecording.Stale>(recording);
+            Assert.Equal(recorded, _fs.GetFileContent(PathOf(itemId)));
+            Assert.Equal([PathOf(itemId)], _fs.GetAllPaths());
+            Assert.Equal(0.42, (await ReviewAsync(itemId))!.Wer);
         }
     }
 }

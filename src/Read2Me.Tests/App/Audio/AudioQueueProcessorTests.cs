@@ -211,6 +211,42 @@ namespace Read2Me.Tests.App.Audio
         }
 
         /// <summary>
+        /// The item changed while its take generated: the recorder refused the Stale take, so the
+        /// item goes back on the queue to be generated from what it says now, and a watching page is
+        /// told why on the existing Failed event.
+        /// </summary>
+        [Fact]
+        public async Task AStaleTake_IsGeneratedAgain_AndTellsTheWatchingPageWhy()
+        {
+            var itemId = Guid.NewGuid();
+            _resolver.Result = SuccessResolution(itemId);
+            _recorder.StaleTakes = 1;
+            var queued = MakeItem(itemId);
+
+            await _sut.ProcessItemAsync(queued, TestContext.Current.CancellationToken);
+
+            DispositionFor<Disposition.Regenerate>(queued);
+            Assert.Equal(
+                "Its text changed while generating; generating it again",
+                Assert.Single(_events.OfType<Failed>()).Reason);
+        }
+
+        /// <summary>The recorder is told what the take was resolved from, to check it against the item.</summary>
+        [Fact]
+        public async Task TheRecorderIsGivenWhatTheTakeWasResolvedFrom()
+        {
+            var characterId = Guid.NewGuid();
+            _resolver.Result = SuccessResolution() with
+            {
+                Request = DefaultRequest with { SpokenText = "Pieces of ate!", CharacterId = characterId },
+            };
+
+            await _sut.ProcessItemAsync(MakeItem(), TestContext.Current.CancellationToken);
+
+            Assert.Equal(new TakeInputs("Pieces of ate!", characterId, "whispered"), _recorder.LastResolvedFrom);
+        }
+
+        /// <summary>
         /// Resolution reads the book and voice settings, not an AI service. A throw there used to
         /// escape to the worker and leave the item stuck in Processing.
         /// </summary>

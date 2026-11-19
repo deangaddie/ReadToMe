@@ -3854,7 +3854,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** Add a Pronunciation { writtenForm, spokenForm }. Both are trimmed and inner whitespace collapsed to one space. Written form: 1–100 characters, starting and ending with a letter or digit; spoken form: 1–200 characters. 201 with the entry, its reach and what it cost; 422 invalid; 409 when another entry has the written form, ignoring case. One History step, labelled Pronunciation: add "<written>". Items with audio whose Spoken text the change alters lose it (WAV reference and audio review), as a text edit does; audioDiscardCount counts them, needsAudioCount the spoken items without audio after it. 409 while audio generation is queued or running for the project, or a Restore runs. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
+        /** Add a Pronunciation { writtenForm, spokenForm }. Both are trimmed and inner whitespace collapsed to one space. Written form: 1–100 characters, starting and ending with a letter or digit; spoken form: 1–200 characters. 201 with the entry, its reach and what it cost; 422 invalid; 409 when another entry has the written form, ignoring case. One History step, labelled Pronunciation: add "<written>". Items with audio whose Spoken text the change alters lose it (WAV reference and audio review), as a text edit does; audioDiscardCount counts them, needsAudioCount the spoken items without audio after it. 409 while a Restore runs. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
         post: {
             parameters: {
                 query?: never;
@@ -4085,7 +4085,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Edit a Pronunciation's { writtenForm, spokenForm }, checked as an add. 200 with the entry, its reach and what it cost; 422 invalid; 404 unknown id; 409 when another entry has the written form. Saving it unchanged writes nothing and lands no step; otherwise one History step, labelled Pronunciation: edit "<written>". Items with audio whose Spoken text the change alters lose it (WAV reference and audio review), as a text edit does; audioDiscardCount counts them, needsAudioCount the spoken items without audio after it. 409 while audio generation is queued or running for the project, or a Restore runs. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
+        /** Edit a Pronunciation's { writtenForm, spokenForm }, checked as an add. 200 with the entry, its reach and what it cost; 422 invalid; 404 unknown id; 409 when another entry has the written form. Saving it unchanged writes nothing and lands no step; otherwise one History step, labelled Pronunciation: edit "<written>". Items with audio whose Spoken text the change alters lose it (WAV reference and audio review), as a text edit does; audioDiscardCount counts them, needsAudioCount the spoken items without audio after it. 409 while a Restore runs. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
         put: {
             parameters: {
                 query?: never;
@@ -4130,7 +4130,7 @@ export interface paths {
             };
         };
         post?: never;
-        /** Delete a Pronunciation: its word goes back to how the provider reads it. 404 unknown id. One History step, labelled Pronunciation: delete "<written>". Items with audio whose Spoken text the change alters lose it (WAV reference and audio review), as a text edit does; audioDiscardCount counts them, needsAudioCount the spoken items without audio after it. 409 while audio generation is queued or running for the project, or a Restore runs. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
+        /** Delete a Pronunciation: its word goes back to how the provider reads it. 404 unknown id. One History step, labelled Pronunciation: delete "<written>". Items with audio whose Spoken text the change alters lose it (WAV reference and audio review), as a text edit does; audioDiscardCount counts them, needsAudioCount the spoken items without audio after it. 409 while a Restore runs. An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes. */
         delete: {
             parameters: {
                 query?: never;

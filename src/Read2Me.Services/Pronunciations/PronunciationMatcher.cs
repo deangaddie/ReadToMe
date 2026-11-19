@@ -1,5 +1,7 @@
+using Microsoft.EntityFrameworkCore;
 using System.Text;
 using System.Text.RegularExpressions;
+using Read2Me.Data;
 using Read2Me.Data.Entities;
 
 namespace Read2Me.Services.Pronunciations;
@@ -48,6 +50,10 @@ public sealed class PronunciationMatcher
             $"(?<!{WordCharacter})(?:{string.Join('|', alternatives)})(?!{WordCharacter})",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture);
     }
+
+    /// <summary>A matcher over the book's Pronunciation list as <paramref name="db"/> holds it now.</summary>
+    public static async Task<PronunciationMatcher> LoadAsync(ProjectDbContext db, CancellationToken ct) =>
+        new(await db.Pronunciations.AsNoTracking().ToListAsync(ct));
 
     /// <summary>The text with the list applied, and where it matched, from one pass.</summary>
     public SpokenText Apply(string text)

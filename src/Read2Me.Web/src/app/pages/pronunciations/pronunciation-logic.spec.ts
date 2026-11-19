@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  AUDIO_RUNNING,
   countLine,
-  deleteBlockedReason,
   filterEntries,
   isDirty,
   saveBlockedReason,
@@ -101,7 +99,6 @@ describe('isDirty', () => {
 
 describe('saveBlockedReason', () => {
   const free = {
-    audioInFlight: 0,
     duplicateOf: null,
     invalid: null,
   };
@@ -111,7 +108,6 @@ describe('saveBlockedReason', () => {
   });
 
   it.each([
-    [{ ...free, audioInFlight: 3 }, AUDIO_RUNNING],
     [
       {
         ...free,
@@ -125,19 +121,6 @@ describe('saveBlockedReason', () => {
     ],
   ])('%o → %p', (gate, reason) => {
     expect(saveBlockedReason(gate)).toBe(reason);
-  });
-});
-
-describe('deleteBlockedReason', () => {
-  it.each([
-    [{ audioInFlight: 0 }, null],
-    [{ audioInFlight: 1 }, AUDIO_RUNNING],
-  ])('%o → %p', (gate, reason) => {
-    expect(deleteBlockedReason(gate)).toBe(reason);
-  });
-
-  it('names audio generation as the host does', () => {
-    expect(AUDIO_RUNNING).toBe('Audio generation is running: wait for it or cancel it');
   });
 });
 

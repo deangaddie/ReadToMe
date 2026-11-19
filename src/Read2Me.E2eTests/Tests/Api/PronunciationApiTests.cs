@@ -264,15 +264,22 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
         Assert.Equal(HttpStatusCode.UnprocessableEntity, (await EditAsync(folder, night, "night!", "x")).StatusCode);
     }
 
+    /// <summary>
+    /// A save while audio generation runs is accepted (#372). The take already generating from the
+    /// old Spoken text is a Stale take: the recorder refuses it, and the item is generated again
+    /// with the respelling.
+    /// </summary>
     [Fact]
-    public async Task A_write_is_409_while_audio_generation_is_running_for_the_project()
+    public async Task A_write_while_audio_generation_runs_is_accepted_and_the_take_in_flight_is_generated_again()
     {
         app.FakeAi.Reset();
         var folder = $"api-pronunciations-{Guid.NewGuid():N}";
         var book = await app.SeedProjectAsync(folder, "Pronunciation Book", "Author");
         await app.SeedNarratorVoiceAsync(folder);
-        var rain = await AddedIdAsync(folder, "Rain", "RAYN");
         var before = (await StepsAsync(folder)).Count;
+        string inFlight = "";
+        string respelled = "";
+        List<string> inputs;
 
         app.FakeAi.HoldSpeech = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         try
@@ -281,18 +288,40 @@ public class PronunciationApiTests(E2eAppFixture app) : IClassFixture<E2eAppFixt
                 new { level = "Chapter", nodeId = book.ChapterId("ch1"), needsAudioOnly = true });
             Assert.Equal(HttpStatusCode.Accepted, enqueue.StatusCode);
 
-            var edit = await EditAsync(folder, rain, "Rain", "rane");
+            // The first take is in flight, held at the TTS call: respell a word it says.
+            inFlight = await FirstSpeechInputAsync();
+            var (written, spoken) = inFlight.Contains("stormy") ? ("stormy", "storm-ee") : ("rain", "rane");
+            respelled = inFlight.Replace(written, spoken);
 
-            Assert.Equal(HttpStatusCode.Conflict, edit.StatusCode);
-            Assert.StartsWith("Audio generation is running", (await JsonOf(edit)).GetProperty("detail").GetString());
+            Assert.Equal(HttpStatusCode.Created, (await AddAsync(folder, written, spoken)).StatusCode);
         }
         finally
         {
             app.FakeAi.HoldSpeech.TrySetResult();
             await app.WaitForQueueDrainAsync("/api/audio/queue", timeoutSeconds: 60);
+            lock (app.FakeAi.AudioCppSpeechBodies)
+                inputs = [.. app.FakeAi.AudioCppSpeechBodies.Select(b => b["input"]!.GetValue<string>())];
             app.FakeAi.Reset();
         }
-        Assert.Equal(before, (await StepsAsync(folder)).Count);
+        Assert.Equal(before + 1, (await StepsAsync(folder)).Count);
+        Assert.Equal(["n1", "n2"], await WithAudioAsync(folder, book, 2));
+        // Generated again with the respelling: without the stale check the old take would have been
+        // recorded, and the add, finding no audio to discard, would have left it.
+        Assert.Contains(respelled, inputs);
+    }
+
+    /// <summary>The input of the first TTS request to arrive, waiting for it.</summary>
+    private async Task<string> FirstSpeechInputAsync()
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        while (DateTime.UtcNow < deadline)
+        {
+            lock (app.FakeAi.AudioCppSpeechBodies)
+                if (app.FakeAi.AudioCppSpeechBodies.Count > 0)
+                    return app.FakeAi.AudioCppSpeechBodies[0]["input"]!.GetValue<string>();
+            await Task.Delay(20, TestContext.Current.CancellationToken);
+        }
+        throw new TimeoutException("No TTS request arrived.");
     }
 
     // ── the impact of a draft ───────────────────────────────────────────────

@@ -13,8 +13,8 @@ import type { Guid, TryPronunciationRequest } from './dtos';
 
 /**
  * `PronunciationEndpoints.cs`: a book's Pronunciation list. Each write is one History step and
- * discards the audio of the items whose Spoken text it changes; 409 while audio generation is
- * queued or running for the project, or another entry has the written form.
+ * discards the audio of the items whose Spoken text it changes; 409 while a Restore
+ * runs, or when another entry has the written form.
  */
 export class PronunciationsApi {
   private readonly api = use(ApiClient);

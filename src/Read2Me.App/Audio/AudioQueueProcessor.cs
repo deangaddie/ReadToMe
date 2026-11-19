@@ -17,6 +17,9 @@ namespace Read2Me.App.Audio
         EventBroadcaster<AudioGenEvent> broadcaster,
         ILogger<AudioQueueProcessor> logger) : IAudioQueueProcessor
     {
+        /// <summary>What a watching page is told when a Stale take sends its item back on the queue.</summary>
+        public const string StaleTakeMessage = "Its text changed while generating; generating it again";
+
         public async Task ProcessItemAsync(QueuedAudioItem queued, CancellationToken hostCt)
         {
             // Cancel all stops the item in flight as well as the waiting ones.
@@ -122,8 +125,8 @@ namespace Read2Me.App.Audio
             {
                 try
                 {
-                    var relativePath = await recorder.RecordAsync(queued.Folder, itemId, result, req.SourceText, ct);
-                    return AudioDisposition.DecideApplied(relativePath);
+                    var recording = await recorder.RecordAsync(queued.Folder, itemId, result, req.SourceText, req.Inputs, ct);
+                    return AudioDisposition.DecideApplied(recording);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
@@ -175,6 +178,12 @@ namespace Read2Me.App.Audio
 
                 case Disposition.RetryAfterRestore:
                     logger.LogInformation("Audio item {ItemId} project is restoring — requeuing after the Restore", itemId);
+                    break;
+
+                // The existing Failed event, so a watching page shows why the item runs again without a wire change.
+                case Disposition.Regenerate:
+                    logger.LogInformation("Audio item {ItemId} changed while generating — requeuing", itemId);
+                    broadcaster.Publish(new Failed(itemId, Attempt: 1, StaleTakeMessage));
                     break;
             }
         }

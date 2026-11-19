@@ -34,6 +34,11 @@ public enum BookMutationRejection
     /// wrong.
     /// </summary>
     Blocked,
+    /// <summary>
+    /// The write was based on what the Book no longer holds: a <b>Stale take</b>, generated from an
+    /// item whose Spoken text, speaker or delivery cue changed while it generated.
+    /// </summary>
+    Stale,
 }
 
 /// <summary>
@@ -61,6 +66,7 @@ public static class BookMutationRefusal
     {
         BookMutationRejection.Cancelled => BookMutationRefusalKind.Cancelled,
         BookMutationRejection.Conflict or BookMutationRejection.Activity or BookMutationRejection.Blocked
+            or BookMutationRejection.Stale
             => BookMutationRefusalKind.Contention,
         BookMutationRejection.NotFound => BookMutationRefusalKind.Missing,
         BookMutationRejection.Validation => BookMutationRefusalKind.Invalid,

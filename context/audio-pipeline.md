@@ -43,3 +43,5 @@ Use these terms exactly in code, tests, and discussion.
 - **Pronunciation list** — a project's set of Pronunciations: one per book, shared by every voice and TTS provider. It is separate from a provider config's **Text substitution steps**, which fix one provider's quirks across every book.
 - **Spoken text** — an item's text with its book's Pronunciation list applied: what the TTS provider is asked to say, before the provider's own Text substitution steps. When a change to the Pronunciation list changes an item's spoken text, the item's audio is discarded, just as when its text is edited.
   _Avoid_: "TTS text", "replaced text"
+- **Stale take** — a take whose item changed while it was generating: its Spoken text (a text edit or a Pronunciation change), its speaker, or its delivery cue. A stale take is never recorded: the item keeps what it had, and it is generated again from what the item says now. Changes that don't discard an item's audio (Voice Rules, a voice's reference audio, Series links) don't make a take stale.
+  _Avoid_: "outdated audio", "old take"
