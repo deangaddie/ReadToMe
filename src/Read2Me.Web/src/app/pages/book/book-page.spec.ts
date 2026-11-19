@@ -1094,6 +1094,25 @@ describe('r2m-book-page', () => {
         false,
       );
     });
+
+    it('the item selection bar keeps Clear but Generate audio is off', async () => {
+      use(StepView).view('dracula', 's8');
+      const { page } = await start('projects/dracula/book?mode=audio');
+      use(AudioSelectionStore, page).toggle(
+        'p1-i',
+        { chapterId: 'c1', partId: 'p1', volumeId: 'v1' },
+        true,
+      );
+      await page.rendered();
+
+      const generate = page.querySelector<HTMLButtonElement>(
+        '[data-action=generate-audio-selection]',
+      )!;
+      expect(generate.disabled).toBe(true);
+      expect(page.querySelector<HTMLButtonElement>('[data-action=clear-selection]')!.disabled).toBe(
+        false,
+      );
+    });
   });
 
   describe('a stale view (edit gate)', () => {
