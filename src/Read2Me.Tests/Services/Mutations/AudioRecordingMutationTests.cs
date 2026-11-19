@@ -78,8 +78,20 @@ namespace Read2Me.Tests.Services.Mutations
             await _book.AddVolume("vol", v => v.AddChapter(configure: c => c
                     .AddParagraph("para", p => p.AddNarration("item", "Hello"))))
                 .BuildAsync();
-            return _book.ItemId("item");
+            var itemId = _book.ItemId("item");
+            _take = await CurrentTakeAsync(itemId);
+            return itemId;
         }
+
+        /// <summary>The take inputs the item has now: what a current take was resolved from.</summary>
+        private async Task<TakeInputs> CurrentTakeAsync(Guid itemId)
+        {
+            await using var db = await OpenDbAsync();
+            var item = await db.ParagraphItems.AsNoTracking().SingleAsync(i => i.Id == itemId);
+            return new TakeInputs(item.Text ?? string.Empty, item.CharacterId, item.VoiceInstructions);
+        }
+
+        private TakeInputs _take = null!;
 
         private static AudioReviewVerdict Failure(double wer = 0.42) => new(
             NormalizeOk: true, NormalizeReason: null,
@@ -111,7 +123,7 @@ namespace Read2Me.Tests.Services.Mutations
             var itemId = await SeedItemAsync();
 
             await CommitAsync(new RecordParagraphItemAudioMutation(
-                _folder, itemId, "audio/one.wav", Failure()));
+                _folder, itemId, "audio/one.wav", Failure(), _take));
 
             Assert.Equal("audio/one.wav", await AudioOfAsync(itemId));
             var review = await ReviewAsync(itemId);
@@ -125,7 +137,7 @@ namespace Read2Me.Tests.Services.Mutations
             var itemId = await SeedItemAsync();
 
             var receipt = await CommittedAsync(new RecordParagraphItemAudioMutation(
-                _folder, itemId, "audio/one.wav", Failure()));
+                _folder, itemId, "audio/one.wav", Failure(), _take));
 
             Assert.Equal(BookMutationScope.Exact, receipt.Effects.Scope);
             Assert.Equal(BookFacets.Audio | BookFacets.Reviews, receipt.Effects.Facets);
@@ -143,7 +155,7 @@ namespace Read2Me.Tests.Services.Mutations
             var itemId = await SeedItemAsync();
 
             var receipt = await CommittedAsync(new RecordParagraphItemAudioMutation(
-                _folder, itemId, "audio/one.wav", Clean()));
+                _folder, itemId, "audio/one.wav", Clean(), _take));
 
             Assert.Equal(BookFacets.Audio, receipt.Effects.Facets);
             Assert.Null(await ReviewAsync(itemId));
@@ -153,10 +165,10 @@ namespace Read2Me.Tests.Services.Mutations
         public async Task ACleanTake_RemovesThePreviousTakesReview()
         {
             var itemId = await SeedItemAsync();
-            await CommitAsync(new RecordParagraphItemAudioMutation(_folder, itemId, "audio/one.wav", Failure()));
+            await CommitAsync(new RecordParagraphItemAudioMutation(_folder, itemId, "audio/one.wav", Failure(), _take));
 
             var receipt = await CommittedAsync(new RecordParagraphItemAudioMutation(
-                _folder, itemId, "audio/one.wav", Clean()));
+                _folder, itemId, "audio/one.wav", Clean(), _take));
 
             Assert.Equal(BookFacets.Audio | BookFacets.Reviews, receipt.Effects.Facets);
             Assert.Null(await ReviewAsync(itemId));
@@ -170,10 +182,10 @@ namespace Read2Me.Tests.Services.Mutations
         public async Task ARetakeThatMovesNoColumn_StillCommits()
         {
             var itemId = await SeedItemAsync();
-            await CommitAsync(new RecordParagraphItemAudioMutation(_folder, itemId, "audio/one.wav", Clean()));
+            await CommitAsync(new RecordParagraphItemAudioMutation(_folder, itemId, "audio/one.wav", Clean(), _take));
 
             var receipt = await CommittedAsync(new RecordParagraphItemAudioMutation(
-                _folder, itemId, "audio/one.wav", Clean()));
+                _folder, itemId, "audio/one.wav", Clean(), _take));
 
             Assert.Equal(BookFacets.Audio, receipt.Effects.Facets);
         }
@@ -184,10 +196,73 @@ namespace Read2Me.Tests.Services.Mutations
             await SeedItemAsync();
 
             var outcome = await CommitAsync(new RecordParagraphItemAudioMutation(
-                _folder, Guid.NewGuid(), "audio/ghost.wav", Clean()));
+                _folder, Guid.NewGuid(), "audio/ghost.wav", Clean(), _take));
 
             var rejected = Assert.IsType<BookMutationOutcome.Rejected>(outcome);
             Assert.Equal(BookMutationRejection.NotFound, rejected.Reason);
+        }
+
+        // ── a Stale take ─────────────────────────────────────────────────────
+
+        /// <summary>Changes the item behind the take's back, as an edit committed mid-generation does.</summary>
+        private async Task ChangeItemAsync(Guid itemId, Action<ParagraphItem> change)
+        {
+            await using var db = await OpenDbAsync();
+            change(await db.ParagraphItems.SingleAsync(i => i.Id == itemId));
+            await db.SaveChangesAsync();
+        }
+
+        public static TheoryData<string> InFlightChanges => ["text", "pronunciation", "speaker", "delivery cue"];
+
+        /// <summary>
+        /// Whatever moved — the text or the Pronunciation list (its Spoken text), the speaker, the
+        /// delivery cue — the take describes an item that is gone: it is refused, and the item keeps
+        /// the take and review it had.
+        /// </summary>
+        [Theory]
+        [MemberData(nameof(InFlightChanges))]
+        public async Task ATakeWhoseItemChangedInFlight_IsRefusedAsStale_AndTheItemKeepsWhatItHad(string change)
+        {
+            var itemId = await SeedItemAsync();
+            await CommittedAsync(new RecordParagraphItemAudioMutation(_folder, itemId, "audio/one.wav", Failure(), _take));
+            switch (change)
+            {
+                case "text": await ChangeItemAsync(itemId, i => i.Text = "Hello there"); break;
+                case "speaker": await ChangeItemAsync(itemId, i => i.CharacterId = null); break;
+                case "delivery cue": await ChangeItemAsync(itemId, i => i.VoiceInstructions = "whispered"); break;
+                case "pronunciation":
+                    await using (var db = await OpenDbAsync())
+                    {
+                        db.Pronunciations.Add(new Pronunciation { Id = Guid.NewGuid(), WrittenForm = "Hello", SpokenForm = "Hullo" });
+                        await db.SaveChangesAsync();
+                    }
+                    break;
+            }
+
+            var outcome = await CommitAsync(new RecordParagraphItemAudioMutation(_folder, itemId, "audio/two.wav", Clean(), _take));
+
+            var rejected = Assert.IsType<BookMutationOutcome.Rejected>(outcome);
+            Assert.Equal(BookMutationRejection.Stale, rejected.Reason);
+            Assert.Equal(BookMutationRefusalKind.Contention, rejected.Kind);
+            Assert.Equal("audio/one.wav", await AudioOfAsync(itemId));
+            Assert.Equal(0.42, (await ReviewAsync(itemId))!.Wer);
+        }
+
+        /// <summary>The take is compared by its Spoken text, so a Pronunciation it was generated with is current.</summary>
+        [Fact]
+        public async Task ATakeResolvedWithThePronunciationListItHasNow_IsRecorded()
+        {
+            var itemId = await SeedItemAsync();
+            await using (var db = await OpenDbAsync())
+            {
+                db.Pronunciations.Add(new Pronunciation { Id = Guid.NewGuid(), WrittenForm = "Hello", SpokenForm = "Hullo" });
+                await db.SaveChangesAsync();
+            }
+
+            await CommittedAsync(new RecordParagraphItemAudioMutation(
+                _folder, itemId, "audio/one.wav", Clean(), _take with { SpokenText = "Hullo" }));
+
+            Assert.Equal("audio/one.wav", await AudioOfAsync(itemId));
         }
 
         // ── verdicts on audio already recorded ───────────────────────────────

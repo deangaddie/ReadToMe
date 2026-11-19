@@ -11,12 +11,32 @@ namespace Read2Me.Services.Audio
 {
     public interface IAudioResultRecorder
     {
-        Task<string> RecordAsync(
+        /// <summary>
+        /// Records the take, or answers that it is a <b>Stale take</b>: its item changed while it
+        /// generated, so the Book keeps what it had and nothing is recorded.
+        /// </summary>
+        Task<TakeRecording> RecordAsync(
             ProjectFolderId folder,
             Guid paragraphItemId,
             PipelineResult result,
             string sourceText,
+            TakeInputs resolvedFrom,
             CancellationToken ct);
+    }
+
+    /// <summary>What recording a take did: an expected answer, unlike an uncommitted write, which throws.</summary>
+    public abstract record TakeRecording
+    {
+        private TakeRecording() { }
+
+        /// <summary>The take is recorded; the Book names it at <paramref name="RelativePath"/>.</summary>
+        public sealed record Recorded(string RelativePath) : TakeRecording;
+
+        /// <summary>
+        /// A Stale take: not recorded, and what the item had is back in place. <paramref name="Reason"/>
+        /// is for the operator log.
+        /// </summary>
+        public sealed record Stale(string Reason) : TakeRecording;
     }
 
     /// <summary>
@@ -32,7 +52,8 @@ namespace Read2Me.Services.Audio
     /// <para>
     /// The take is staged beside its destination first, and the take it replaces is set aside rather
     /// than overwritten, so a mutation that does not commit — the item was deleted while the take was
-    /// generating, another writer held the project too long — puts back exactly what was there.
+    /// generating, it changed so the take is stale, another writer held the project too long — puts
+    /// back exactly what was there.
     /// </para>
     /// <para>
     /// The ordering opens a window the other way, and it is accepted rather than missed. When the
@@ -53,20 +74,23 @@ namespace Read2Me.Services.Audio
         ILogger<AudioResultRecorder> logger) : IAudioResultRecorder
     {
         /// <summary>
-        /// Records the take, or throws. The queue's processor turns a throw into a failed item, which
-        /// is the honest reading of an uncommitted write: nothing was recorded, the previous take is
-        /// back where it was, and the operator log carries why.
+        /// Records the take, answers that it is stale, or throws. A Stale take is an expected answer
+        /// — the item changed while the take generated, so the queue generates it again — and every
+        /// other uncommitted write throws. The queue's processor turns a throw into a failed item,
+        /// which is the honest reading of an uncommitted write: nothing was recorded, the previous take
+        /// is back where it was, and the operator log carries why.
         /// </summary>
         /// <exception cref="InvalidOperationException">The Book mutation did not commit.</exception>
         /// <exception cref="OperationCanceledException">
         /// It did not commit because it was cancelled. Told apart from the rest because the queue
         /// does: a cancelled item is dropped, not reported as a failure.
         /// </exception>
-        public async Task<string> RecordAsync(
+        public async Task<TakeRecording> RecordAsync(
             ProjectFolderId folder,
             Guid paragraphItemId,
             PipelineResult result,
             string sourceText,
+            TakeInputs resolvedFrom,
             CancellationToken ct)
         {
             var relativePath = $"audio/{paragraphItemId}.wav";
@@ -93,12 +117,19 @@ namespace Read2Me.Services.Audio
                 new RecordParagraphItemAudioMutation(folder, paragraphItemId, relativePath, new AudioReviewVerdict(
                     result.Normalize.Ok, result.Normalize.Reason,
                     result.Verify.Ok, result.Verify.Wer, result.Verify.Reason,
-                    result.Verify.Transcript, sourceText)),
+                    result.Verify.Transcript, sourceText), resolvedFrom),
                 ct);
 
             if (outcome is not BookMutationOutcome.Committed)
             {
                 Restore(destination, superseded, hadPreviousTake, paragraphItemId);
+
+                if (outcome is BookMutationOutcome.Rejected { Reason: BookMutationRejection.Stale } stale)
+                {
+                    logger.LogInformation("Item {Id} take is stale, not recorded: {Reason}", paragraphItemId, stale.Message);
+                    return new TakeRecording.Stale(stale.Message);
+                }
+
                 var failure = UncommittedArtifact.AsException(
                     outcome, $"item {paragraphItemId} audio", ct);
                 logger.LogWarning("Item {Id} audio was not recorded: {Reason}", paragraphItemId, failure.Message);
@@ -113,7 +144,7 @@ namespace Read2Me.Services.Audio
                 paragraphItemId, destination, result.Normalize.Ok, result.Normalize.Reason,
                 result.Verify.Ok, result.Verify.Reason, result.Verify.Wer);
 
-            return relativePath;
+            return new TakeRecording.Recorded(relativePath);
         }
 
         /// <summary>

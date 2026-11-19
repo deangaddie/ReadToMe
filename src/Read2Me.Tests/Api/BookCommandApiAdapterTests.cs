@@ -111,6 +111,7 @@ namespace Read2Me.Tests.Api
         [InlineData(BookMutationRejection.Conflict, StatusCodes.Status409Conflict)]
         [InlineData(BookMutationRejection.Activity, StatusCodes.Status409Conflict)]
         [InlineData(BookMutationRejection.Blocked, StatusCodes.Status409Conflict)]
+        [InlineData(BookMutationRejection.Stale, StatusCodes.Status409Conflict)]
         public void AnExpectedRefusalTheCommandDoesNotSoften_AnswersItsStatusWithItsReason(BookMutationRejection reason, int status)
         {
             var result = BookCommandApiAdapter.ToResult(

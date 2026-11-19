@@ -245,6 +245,12 @@ namespace Read2Me.Services.Queueing
                     _ = DelayedWrite.ScheduleWhen(
                         _channel.Writer, item, _activity.WhenRestoreEnded(key.Folder), _itemCts.Token);
                     break;
+
+                // As RetryOnce, but with its attempts as they were: no budget is spent.
+                case Disposition.Regenerate:
+                    if (_store.ReturnToQueued(key))
+                        _channel.Writer.TryWrite(item);
+                    break;
             }
         }
 

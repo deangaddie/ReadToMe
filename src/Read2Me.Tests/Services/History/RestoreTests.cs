@@ -622,7 +622,16 @@ public class RestoreTests : ProjectDbTestBase
 
     private async Task RecordTakeAsync(Guid itemId, string path) =>
         Assert.IsType<BookMutationOutcome.Committed>(await CommitAsync(new RecordParagraphItemAudioMutation(_folder, itemId, path,
-            new AudioReviewVerdict(true, null, false, 0.5, "too many errors", "heard", "said"))));
+            new AudioReviewVerdict(true, null, false, 0.5, "too many errors", "heard", "said"), await CurrentTakeAsync(itemId))));
+
+    /// <summary>What the item says now, so the take is current rather than stale.</summary>
+    private async Task<TakeInputs> CurrentTakeAsync(Guid itemId)
+    {
+        await using var db = await OpenDbAsync();
+        var item = await db.ParagraphItems.AsNoTracking().SingleAsync(i => i.Id == itemId);
+        var spoken = (await PronunciationMatcher.LoadAsync(db, default)).SpokenTextOf(item.Text ?? string.Empty);
+        return new TakeInputs(spoken, item.CharacterId, item.VoiceInstructions);
+    }
 
     /// <summary>Commits the list change and answers the entry's id.</summary>
     private async Task<Guid> SetPronunciationAsync(PronunciationDraft draft)

@@ -11,7 +11,6 @@ import type { ToastAction } from '@app/ui/toast';
 import { ToastService } from '@app/ui/toast';
 import { FakeApi } from '../../../testing/fake-api';
 import { FakeTimers } from '../../../testing/fake-timers';
-import { AUDIO_RUNNING } from './pronunciation-logic';
 import type { PronunciationEditor } from './pronunciation-editor';
 import './pronunciation-editor';
 
@@ -287,7 +286,7 @@ describe('a new pronunciation', () => {
           JSON.stringify({
             status: 409,
             title: 'Conflict',
-            detail: 'Audio generation is running: wait for it or cancel it.',
+            detail: 'The project is restoring: try again once it finishes.',
           }),
           {
             status: 409,
@@ -301,7 +300,7 @@ describe('a new pronunciation', () => {
     await click('save');
     expect(toasts).toEqual([
       {
-        message: 'problem: Audio generation is running: wait for it or cancel it.',
+        message: 'problem: The project is restoring: try again once it finishes.',
       },
     ]);
     expect(closes).toBe(0);
@@ -451,16 +450,6 @@ describe('an existing pronunciation', () => {
 });
 
 describe('disabled with a reason', () => {
-  it('turns Save and Delete off while audio generation runs for the project', async () => {
-    api.on('POST', IMPACT, impact());
-    await mount(WATSON, (e) => (e.audioInFlight = 2));
-    await type('spoken', 'WAT-sn');
-    expect(save().disabled).toBe(true);
-    expect(reasonOf('save')).toBe(AUDIO_RUNNING);
-    expect(q<HTMLButtonElement>('[data-action=delete]')!.disabled).toBe(true);
-    expect(reasonOf('delete')).toBe(AUDIO_RUNNING);
-  });
-
   it('turns the inputs, Save and Delete off while a step is viewed, and asks no impact', async () => {
     await mount(WATSON, (e) => (e.block = { reason: VIEWING_READ_ONLY }));
     expect(q<HTMLInputElement>('[data-field=written]')!.disabled).toBe(true);

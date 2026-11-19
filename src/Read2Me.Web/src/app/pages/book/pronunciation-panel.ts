@@ -68,15 +68,6 @@ export class PronunciationPanel extends R2mElement {
     this.#block.set(value);
   }
 
-  readonly #audioInFlight = signal(0);
-  get audioInFlight() {
-    return this.#audioInFlight();
-  }
-  /** Items queued or processing for audio, for the editor. */
-  set audioInFlight(value: number) {
-    this.#audioInFlight.set(value);
-  }
-
   protected override connected(): void {
     this.classList.add('pron-panel');
     this.setAttribute('role', 'complementary');
@@ -126,7 +117,6 @@ export class PronunciationPanel extends R2mElement {
                 .prefill=${session.forms}
                 .origin=${session.origin}
                 .block=${this.#block()}
-                .audioInFlight=${this.#audioInFlight()}
                 @editor-close=${() => state.endSession()}
               ></r2m-pronunciation-editor>`,
             )

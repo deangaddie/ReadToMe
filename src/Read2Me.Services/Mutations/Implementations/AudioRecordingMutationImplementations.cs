@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Read2Me.Data;
 using Read2Me.Data.Entities;
+using Read2Me.Services.Pronunciations;
 using EntityReviewState = Read2Me.Data.Enums.AudioReviewState;
 
 namespace Read2Me.Services.Mutations.Implementations;
@@ -116,12 +117,32 @@ public sealed class RecordParagraphItemAudioMutationImplementation
         RecordParagraphItemAudioMutation mutation, ProjectDbContext db, CancellationToken ct)
     {
         var item = await AudioEffects.ItemAsync(db, mutation.ItemId, ct);
+        if (await StaleAsync(item, mutation.ResolvedFrom, db, ct) is { } stale)
+            throw new BookMutationRejectedException(BookMutationRejection.Stale,
+                $"Item {item.Id}'s {stale} changed while its take was generating.");
+
         item.AudioFileName = mutation.RelativePath;
 
         var reviewMoved = await AudioEffects.ApplyVerdictAsync(db, mutation.ItemId, mutation.Verdict, ct);
 
         return AudioEffects.OnItem(item.ParagraphId, item.Id,
             reviewMoved ? BookFacets.Audio | BookFacets.Reviews : BookFacets.Audio);
+    }
+
+    /// <summary>
+    /// Which of the take's inputs the item no longer has, or null when the take is current. Exact
+    /// comparison: any edit that discards an item's audio (its text or the Pronunciation list moving
+    /// its Spoken text, a speaker flip, a delivery cue edit) makes a take generated before it stale.
+    /// Read inside the commit, so no such edit can land between the check and the write.
+    /// </summary>
+    private static async Task<string?> StaleAsync(
+        ParagraphItem item, TakeInputs take, ProjectDbContext db, CancellationToken ct)
+    {
+        if (item.CharacterId != take.CharacterId) return "speaker";
+        if (item.VoiceInstructions != take.VoiceInstructions) return "delivery cue";
+
+        var matcher = await PronunciationMatcher.LoadAsync(db, ct);
+        return matcher.SpokenTextOf(item.Text ?? string.Empty) == take.SpokenText ? null : "Spoken text";
     }
 }
 

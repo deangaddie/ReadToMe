@@ -17,7 +17,6 @@ import { adviceLine, gated, icon } from '@app/ui/partials';
 import {
   type Forms,
   countLine,
-  deleteBlockedReason,
   discardAdvice,
   duplicateWarning,
   isDirty,
@@ -113,15 +112,6 @@ export class PronunciationEditor extends R2mElement {
     this.#block.set(value);
   }
 
-  /** Items queued or processing for audio in this project: Save and Delete wait for them. */
-  readonly #audioInFlight = signal(0);
-  get audioInFlight() {
-    return this.#audioInFlight();
-  }
-  set audioInFlight(value: number) {
-    this.#audioInFlight.set(value);
-  }
-
   readonly written = signal('');
   readonly spoken = signal('');
   /** The host's answer for the draft as last asked; kept while a newer question is pending. */
@@ -139,15 +129,8 @@ export class PronunciationEditor extends R2mElement {
 
   private readonly saveReason = computed(() =>
     saveBlockedReason({
-      audioInFlight: this.#audioInFlight(),
       duplicateOf: this.impact()?.duplicateOf ?? null,
       invalid: this.invalid(),
-    }),
-  );
-
-  private readonly deleteReason = computed(() =>
-    deleteBlockedReason({
-      audioInFlight: this.#audioInFlight(),
     }),
   );
 
@@ -272,7 +255,7 @@ export class PronunciationEditor extends R2mElement {
       withLocal(block, this.saveReason() ?? false),
       !dirty || !complete || writing,
     );
-    const deleteBlock = withLocal(withLocal(block, this.deleteReason() ?? false), writing);
+    const deleteBlock = withLocal(block, writing);
     // Until the host answers, an unchanged entry's own reach stands in.
     const reach = impact ?? (entry && !dirty ? entry : null);
     const duplicate = duplicateWarning(impact?.duplicateOf ?? null);

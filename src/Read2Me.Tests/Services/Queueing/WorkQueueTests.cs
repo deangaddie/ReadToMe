@@ -45,6 +45,7 @@ namespace Read2Me.Tests.Services.Queueing
             new Disposition.RetryOnce(),
             new Disposition.RetryAfter(TimeSpan.Zero),
             new Disposition.RetryAfterRestore(),
+            new Disposition.Regenerate(),
         ];
 
         [Fact]
@@ -177,6 +178,25 @@ namespace Read2Me.Tests.Services.Queueing
             Assert.Equal(item.Key, requeued.Key);
             // Waiting out a Restore spends neither budget.
             Assert.Equal(default, requeued.Attempts);
+        }
+
+        /// <summary>
+        /// A Stale take goes straight back, its attempts as they were: the item changed under it, and
+        /// that is no fault of the provider's, so neither budget is spent.
+        /// </summary>
+        [Fact]
+        public void Apply_Regenerate_ReturnsToQueueAtOnce_SpendingNoBudget()
+        {
+            var sut = Sut();
+            var item = MakeItem().WithAttempts(new AttemptState(Retries: 1, Busies: 2));
+            EnqueueAndProcess(sut, item);
+
+            sut.Apply(item, new Disposition.Regenerate());
+
+            Assert.Equal(QueueItemStatus.Queued, sut.StatusOf(item.Key));
+            Assert.True(sut.Reader.TryRead(out var requeued));
+            Assert.Equal(item.Key, requeued.Key);
+            Assert.Equal(new AttemptState(Retries: 1, Busies: 2), requeued.Attempts);
         }
 
         // ── Enqueue ───────────────────────────────────────────────────────────
@@ -315,6 +335,7 @@ namespace Read2Me.Tests.Services.Queueing
         [InlineData("RetryOnce")]
         [InlineData("RetryAfter")]
         [InlineData("RetryAfterRestore")]
+        [InlineData("Regenerate")]
         [InlineData("Defer")]
         public async Task AfterCancelAll_TheItemInFlightStaysCancelled(string then)
         {
@@ -328,6 +349,7 @@ namespace Read2Me.Tests.Services.Queueing
                 case "RetryOnce": sut.Apply(item, new Disposition.RetryOnce()); break;
                 case "RetryAfter": sut.Apply(item, new Disposition.RetryAfter(TimeSpan.FromMilliseconds(10))); break;
                 case "RetryAfterRestore": sut.Apply(item, new Disposition.RetryAfterRestore()); break;
+                case "Regenerate": sut.Apply(item, new Disposition.Regenerate()); break;
                 default: sut.Defer(item); break;
             }
 

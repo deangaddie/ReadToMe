@@ -61,7 +61,7 @@ namespace Read2Me.App.Api
         private const string ChangeCost =
             "Items with audio whose Spoken text the change alters lose it (WAV reference and audio review), as a text edit does; " +
             "audioDiscardCount counts them, needsAudioCount the spoken items without audio after it. " +
-            "409 while audio generation is queued or running for the project, or a Restore runs. " +
+            "409 while a Restore runs. " +
             "An X-Origin-Id header (GUID) is echoed as originId on the mutation receipt the live hub publishes.";
 
         public static void MapPronunciationEndpoints(this IEndpointRouteBuilder endpoints)
@@ -132,14 +132,14 @@ namespace Read2Me.App.Api
 
         private static async Task<Results<Created<PronunciationSaved>, NotFound, ProblemHttpResult>> AddAsync(
             string folder, SetPronunciationRequest? body, HttpRequest request, IFileSystem fs, BookMutations mutations,
-            MutationOrigin origin, HistoryStepScope steps, ProjectDbSession session, AudioQueueService audioQueue, CancellationToken ct)
+            MutationOrigin origin, HistoryStepScope steps, ProjectDbSession session, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return TypedResults.NotFound();
 
             var draft = new PronunciationDraft(null, body?.WrittenForm, body?.SpokenForm);
             var label = $"Pronunciation: add \"{PronunciationForms.Normalise(body?.WrittenForm)}\"";
-            return await SetAsync(folderId, draft, label, StepAction.Pronunciation, request, mutations, origin, steps, session, audioQueue, ct) switch
+            return await SetAsync(folderId, draft, label, StepAction.Pronunciation, request, mutations, origin, steps, session, ct) switch
             {
                 (BookMutationOutcome.Committed { Receipt.Effects.CreatedId: { } id }, var discarded) =>
                     TypedResults.Created($"/api/projects/{folder}/pronunciations/{id}", await SavedAsync(session, folderId, id, discarded, ct)),
@@ -149,14 +149,14 @@ namespace Read2Me.App.Api
 
         private static async Task<Results<Ok<PronunciationSaved>, NotFound, ProblemHttpResult>> EditAsync(
             string folder, Guid id, SetPronunciationRequest? body, HttpRequest request, IFileSystem fs, BookMutations mutations,
-            MutationOrigin origin, HistoryStepScope steps, ProjectDbSession session, AudioQueueService audioQueue, CancellationToken ct)
+            MutationOrigin origin, HistoryStepScope steps, ProjectDbSession session, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return TypedResults.NotFound();
 
             var draft = new PronunciationDraft(id, body?.WrittenForm, body?.SpokenForm);
             var label = $"Pronunciation: edit \"{PronunciationForms.Normalise(body?.WrittenForm)}\"";
-            return await SetAsync(folderId, draft, label, StepAction.Pronunciation, request, mutations, origin, steps, session, audioQueue, ct) switch
+            return await SetAsync(folderId, draft, label, StepAction.Pronunciation, request, mutations, origin, steps, session, ct) switch
             {
                 (BookMutationOutcome.Committed or BookMutationOutcome.NoChange, var discarded) =>
                     TypedResults.Ok(await SavedAsync(session, folderId, id, discarded, ct)),
@@ -166,7 +166,7 @@ namespace Read2Me.App.Api
 
         private static async Task<Results<Ok<PronunciationDeleted>, NotFound, ProblemHttpResult>> DeleteAsync(
             string folder, Guid id, HttpRequest request, IFileSystem fs, BookMutations mutations,
-            MutationOrigin origin, HistoryStepScope steps, ProjectDbSession session, AudioQueueService audioQueue, CancellationToken ct)
+            MutationOrigin origin, HistoryStepScope steps, ProjectDbSession session, CancellationToken ct)
         {
             if (!ProjectEndpoints.TryResolve(folder, fs, out var folderId))
                 return TypedResults.NotFound();
@@ -179,7 +179,7 @@ namespace Read2Me.App.Api
 
             var draft = new PronunciationDraft(id, null, null, Delete: true);
             return await SetAsync(folderId, draft, $"Pronunciation: delete \"{written}\"", StepAction.Delete,
-                    request, mutations, origin, steps, session, audioQueue, ct) switch
+                    request, mutations, origin, steps, session, ct) switch
             {
                 (BookMutationOutcome.Committed, var discarded) =>
                     TypedResults.Ok(new PronunciationDeleted(discarded, await NeedsAudioCountAsync(session, folderId, ct))),
@@ -286,19 +286,15 @@ namespace Read2Me.App.Api
         }
 
         /// <summary>
-        /// Commits the change as one History step, unless audio generation is queued or running for the
-        /// project: the recorder doesn't check a take's text is still current, so a take in flight would
-        /// land with the old Spoken text. Answers the outcome and how many items lost their audio.
+        /// Commits the change as one History step and answers the outcome and how many items lost their
+        /// audio. Audio generation may be running: a take in flight whose Spoken text this changes is a
+        /// Stale take, which the recorder refuses and the queue generates again.
         /// </summary>
         private static async Task<(BookMutationOutcome Outcome, int AudioDiscardCount)> SetAsync(
             ProjectFolderId folderId, PronunciationDraft draft, string label, StepAction action, HttpRequest request,
             BookMutations mutations, MutationOrigin origin, HistoryStepScope steps, ProjectDbSession session,
-            AudioQueueService audioQueue, CancellationToken ct)
+            CancellationToken ct)
         {
-            if (audioQueue.BusyFor(folderId) is not null)
-                return (new BookMutationOutcome.Rejected(BookMutationRejection.Conflict,
-                    "Audio generation is running: wait for it or cancel it."), 0);
-
             OriginHeader.Apply(request, origin);
             BookMutationOutcome outcome;
             // A refused or unchanged save commits nothing, so its step has no chunk and is dropped.

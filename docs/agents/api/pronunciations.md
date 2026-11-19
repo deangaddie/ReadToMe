@@ -43,7 +43,7 @@ curl -s -X POST http://localhost:5000/api/projects/{folder}/pronunciations/try -
 Any change to the list discards the audio (WAV reference and audio review) of every item that has
 audio and whose Spoken text it alters, as a text edit does: new matches on an add, the entry's
 matches on a spoken-form edit, old and new matches on a written-form edit, items where an overlap's
-winner changes what is said, the old matches on a delete. Items without audio change silently. Add,
-edit and delete answer 409 while audio generation is queued or running for the project (a take in
-flight would land with the old Spoken text). The receipt carries the `Pronunciations` facet, so
+winner changes what is said, the old matches on a delete. Items without audio change silently. A save is
+accepted while audio generation runs: a take in flight whose Spoken text it changes is a Stale take,
+which the recorder refuses and the Audio Queue generates again. The receipt carries the `Pronunciations` facet, so
 open pages refetch the list.
