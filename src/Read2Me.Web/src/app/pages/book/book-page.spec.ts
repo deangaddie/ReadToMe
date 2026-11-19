@@ -920,12 +920,10 @@ describe('r2m-book-page', () => {
 
       live.queue.set({ attribution: { isBusy: true } } as unknown as QueueMessage);
       await page.rendered();
-      // A reason wraps the button, so it is a new element.
+      // A reason wraps the button, so it is a new element; the wording is selection-bar-gates.spec's.
       const waiting = page.querySelector<HTMLButtonElement>('[data-action=bulk-assign]')!;
       expect(waiting.disabled).toBe(true);
-      expect(waiting.closest('.r2m-blockable')!.getAttribute('data-tooltip')).toBe(
-        'Bulk assign waits until attribution has finished',
-      );
+      expect(waiting.closest('.r2m-blockable')).not.toBeNull();
     });
 
     it('Audio mode swaps the paragraph checkboxes and bar for the items; the paragraph selection is kept aside', async () => {
@@ -1080,7 +1078,7 @@ describe('r2m-book-page', () => {
       expect(trigger.disabled).toBe(false);
     });
 
-    it('the selection bar keeps Clear but Attribute is off with the reason', async () => {
+    it('the selection bar keeps Clear but Attribute is off', async () => {
       use(StepView).view('dracula', 's8');
       const { page } = await start('projects/dracula/book');
       const box = page.querySelector<HTMLInputElement>(
@@ -1092,7 +1090,6 @@ describe('r2m-book-page', () => {
 
       const attribute = page.querySelector<HTMLButtonElement>('[data-action=attribute-selection]')!;
       expect(attribute.disabled).toBe(true);
-      expect(reason(attribute)).toBe(VIEWING_READ_ONLY);
       expect(page.querySelector<HTMLButtonElement>('[data-action=clear-selection]')!.disabled).toBe(
         false,
       );

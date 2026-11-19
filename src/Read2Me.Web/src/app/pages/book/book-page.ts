@@ -1,5 +1,5 @@
 import { html, nothing } from 'lit-html';
-import { type BookNodeLevel, ITEM_AUDIO_NOT_KEPT, withLocal } from '@app/api';
+import { type BookNodeLevel, withLocal } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
 import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
@@ -48,6 +48,8 @@ import {
   type RowContext,
   buildRows,
 } from './reader-rows';
+import { NO_LIT, rowContext } from './row-context';
+import { itemBarGates, paragraphBarGates } from './selection-bar-gates';
 import { AudioSelectionStore, SelectionStore } from './selection-store';
 import { type ActionNode, SelectionWorkflow } from './selection-workflow';
 import { SpeakerAssigner } from './speaker-assigner';
@@ -75,10 +77,7 @@ const MODE_LABELS: Record<ReaderMode, string> = {
 };
 
 const SKELETON = [1, 2, 3, 4, 5, 6];
-const NO_LIT: ReadonlySet<string> = new Set();
 const BULK_MENU_ID = 'r2m-book-bulk-menu';
-/** Bulk assign's local **Blocked reason** while the attribution queue is busy. */
-const BULK_WAITS_REASON = 'Bulk assign waits until attribution has finished';
 const ACTIONS_MENU_ID = 'r2m-book-actions-menu';
 
 /**
@@ -180,27 +179,29 @@ export class BookPage extends R2mElement {
     );
     this.queueBusy = computed(() => this.live.queue()?.attribution.isBusy ?? false);
 
-    this.ctx = computed<RowContext>(() => ({
-      folder: store.folder() ?? '',
-      mode: store.mode(),
-      speakers: store.speakers(),
-      paragraphStatus: project.paragraphs(),
-      itemStatus: project.items(),
-      voices: store.itemVoices(),
-      reviews: store.reviews(),
-      selectable: workflow.kind() === 'paragraphs',
-      selected: selection.selected(),
-      itemSelectable: workflow.kind() === 'items',
-      selectedItems: audioSelection.selected(),
-      narratorOnlyMode: workflow.narratorOnlyMode(),
-      ancestry: store.ancestry(),
-      roster: this.roster(),
-      blocked: editor.block(),
-      playBlock: project.block() === null ? null : { reason: ITEM_AUDIO_NOT_KEPT },
-      generating: generator.working(),
-      marks: this.marks.marks().byItem,
-      litMarks: pronunciations.open() ? pronunciations.lit() : NO_LIT,
-    }));
+    this.ctx = computed(() =>
+      rowContext({
+        folder: store.folder(),
+        mode: store.mode(),
+        speakers: store.speakers(),
+        paragraphStatus: project.paragraphs(),
+        itemStatus: project.items(),
+        voices: store.itemVoices(),
+        reviews: store.reviews(),
+        kind: workflow.kind(),
+        selected: selection.selected(),
+        selectedItems: audioSelection.selected(),
+        narratorOnlyMode: workflow.narratorOnlyMode(),
+        ancestry: store.ancestry(),
+        roster: this.roster(),
+        block: editor.block(),
+        viewing: project.block() !== null,
+        generating: generator.working(),
+        marks: this.marks.marks().byItem,
+        pronunciationsOpen: pronunciations.open(),
+        lit: pronunciations.lit(),
+      }),
+    );
 
     // The reader's chapters, read (again): their Pronunciation marks follow, at the viewed step if any.
     this.effect(() => {
@@ -480,10 +481,11 @@ export class BookPage extends R2mElement {
   /** The paragraph selection's action bar (ticket 12): count, Attribute, Bulk assign speaker, Clear. */
   private selectionBar() {
     const count = this.selection.count();
-    const block = this.editor.block();
-    const attribute = withLocal(block, this.workflow.working());
-    // A busy queue gives Bulk assign its own local reason; viewing and stale still win.
-    const bulk = withLocal(attribute, this.queueBusy() && BULK_WAITS_REASON);
+    const { attribute, bulkAssign } = paragraphBarGates({
+      block: this.editor.block(),
+      working: this.workflow.working(),
+      queueBusy: this.queueBusy(),
+    });
     return html`<div
       class="book__selection"
       role="group"
@@ -508,7 +510,7 @@ export class BookPage extends R2mElement {
       )}
       <span class="book__bulk">
         ${gated(
-          bulk,
+          bulkAssign,
           (disabled) =>
             html`<button
               type="button"
@@ -551,10 +553,11 @@ export class BookPage extends R2mElement {
   /** The item selection's action bar (ticket 13): count, Generate audio, Clear. */
   private audioSelectionBar() {
     const count = this.audioSelection.count();
-    const generate = withLocal(
-      this.editor.block(),
-      this.workflow.working() || this.generator.working(),
-    );
+    const { generate } = itemBarGates({
+      block: this.editor.block(),
+      working: this.workflow.working(),
+      generating: this.generator.working(),
+    });
     return html`<div
       class="book__selection"
       role="group"
