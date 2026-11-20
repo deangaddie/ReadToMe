@@ -12,6 +12,8 @@ const isForwarded = (pathname: string) =>
   FORWARDED.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 
 const server = Bun.serve<Bridge>({
+  // Loopback only: without a hostname Bun binds every interface, putting the dev server on the LAN.
+  hostname: '127.0.0.1',
   port: 4300,
   development: { hmr: true, console: true },
   routes: {
