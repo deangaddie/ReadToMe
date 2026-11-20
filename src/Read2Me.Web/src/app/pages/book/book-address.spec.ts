@@ -59,6 +59,7 @@ describe('bookQuery', () => {
     expect(bookQuery({ mode: 'read' })).toEqual({ mode: null });
     expect(bookQuery({ mode: 'audio' })).toEqual({ mode: 'audio' });
     expect(bookQuery({ chapter: 'c2' })).toEqual({ chapter: 'c2' });
+    expect(bookQuery({ chapter: null })).toEqual({ chapter: null });
     expect(bookQuery({ action: null })).toEqual({ action: null });
   });
 });

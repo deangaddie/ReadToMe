@@ -70,6 +70,9 @@ adoptStyles(bookCss);
 /** How often the viewport edges are checked; see {@link ReaderWindow.tick}. */
 const EDGE_POLL_MS = 250;
 
+/** The toast for a Book link to a chapter the book doesn't have (#383). */
+export const UNKNOWN_CHAPTER_MESSAGE = "That chapter isn't in this book. Opened the first chapter.";
+
 const MODE_LABELS: Record<ReaderMode, string> = {
   read: 'Read',
   speakers: 'Speakers',
@@ -896,8 +899,13 @@ export class BookPage extends R2mElement {
     // `?chapter=` wins over whatever the window holds: a reload may have opened the first chapter
     // while the overview was still loading.
     const { chapter } = parseBookAddress(this.router.query());
-    if (chapter && !this.store.window().includes(chapter)) await this.store.openChapter(chapter);
-    else if (this.store.window().length === 0) await this.store.openFirstChapter();
+    if (chapter && !this.store.window().includes(chapter)) {
+      if (await this.store.hasChapter(chapter)) return this.store.openChapter(chapter);
+      // A Book link to a chapter the book doesn't have: the first chapter, and the address says so.
+      this.router.replaceQuery(bookQuery({ chapter: null }));
+      this.toast.info(UNKNOWN_CHAPTER_MESSAGE);
+      if (this.store.window().length === 0) await this.store.openFirstChapter();
+    } else if (this.store.window().length === 0) await this.store.openFirstChapter();
   }
 
   private scrollToChapter(chapterId: string): void {
