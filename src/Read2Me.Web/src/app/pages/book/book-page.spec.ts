@@ -23,7 +23,7 @@ import { type FakeNavigation, installNavigation, settle } from '../../../testing
 import { rereadAction } from './book-actions';
 import { BookEditor } from './book-editor';
 import { BookStore } from './book-store';
-import type { BookPage } from './book-page';
+import { type BookPage, UNKNOWN_CHAPTER_MESSAGE } from './book-page';
 import { AudioSelectionStore, SelectionStore } from './selection-store';
 import { SelectionWorkflow } from './selection-workflow';
 import { SpeakerAssigner } from './speaker-assigner';
@@ -828,6 +828,23 @@ describe('r2m-book-page', () => {
       order.indexOf(`${BASE}/nodes/Chapter/c1/children`),
     );
   });
+
+  it.each([
+    ['a chapter since deleted', 'c9'],
+    ['an id that is no chapter id at all', 'not-a-chapter'],
+  ])(
+    '?chapter= naming %s opens the first chapter, says so, and drops the chapter from the URL',
+    async (_, id) => {
+      const { page, store } = await start(`projects/dracula/book?chapter=${id}`);
+      expect(store.window()).toContain('c1');
+      expect(store.window()).not.toContain(id);
+      expect(page.getAttribute('data-current-chapter')).toBe('c1');
+      expect(toasts).toContain(UNKNOWN_CHAPTER_MESSAGE);
+      expect(new URL(navigation.calls.at(-1)!.url).searchParams.has('chapter')).toBe(false);
+      // The unknown chapter is never read.
+      expect(api.requests.some((r) => r.path.includes(`/nodes/Chapter/${id}/`))).toBe(false);
+    },
+  );
 
   it('?mode= sets the reader mode; switching mode mirrors it to the URL', async () => {
     const { page, store } = await start('projects/dracula/book?mode=audio');

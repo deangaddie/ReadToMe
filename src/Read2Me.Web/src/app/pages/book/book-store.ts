@@ -250,6 +250,19 @@ export class BookStore {
     if (first) await this.openChapter(first);
   }
 
+  /**
+   * Whether the book as shown (at the viewed History step, if any) has this chapter, loading
+   * structure until it is found or there is none left: a Book link to a chapter the book doesn't
+   * have is never opened (#383). An id that is no chapter id at all is simply not found.
+   */
+  async hasChapter(chapterId: string): Promise<boolean> {
+    return (
+      (await this.findChapter((seq) =>
+        seq.some((c) => c.id === chapterId) ? chapterId : undefined,
+      )) !== null
+    );
+  }
+
   /** Scrolls to a chapter, replacing the window unless it is already loaded. */
   async openChapter(chapterId: string): Promise<void> {
     if (!this._window().includes(chapterId)) {

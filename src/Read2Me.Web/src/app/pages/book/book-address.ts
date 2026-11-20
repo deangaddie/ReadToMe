@@ -30,7 +30,7 @@ export interface ParsedBookAddress {
 /** One change to the current Book address, for {@link Router.replaceQuery}. */
 export type BookQueryPatch =
   | { readonly mode: ReaderMode }
-  | { readonly chapter: string }
+  | { readonly chapter: string | null }
   | { readonly action: null };
 
 /** The app-relative Book link for `address`, e.g. `projects/x/book?mode=speakers&chapter=c1`. */
