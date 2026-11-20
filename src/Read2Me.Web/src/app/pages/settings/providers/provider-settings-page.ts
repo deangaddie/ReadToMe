@@ -5,6 +5,7 @@ import type { HasUnsavedChanges } from '@app/core/router';
 import { provide, use } from '@app/core/services';
 import { computed, signal, untracked } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
+import { newUuid } from '@app/core/uuid';
 import { confirmDiscard } from '@app/shared/unsaved-changes';
 import type { ConfigListItem } from '@app/ui/config-list';
 import { ConfirmService } from '@app/ui/dialogs';
@@ -242,7 +243,7 @@ export abstract class ProviderSettingsPage extends R2mElement implements HasUnsa
     const config = this.find(id);
     if (!config || !(await this.mayLeaveEditor())) return;
     const names = (this.store.configs() ?? []).map((c) => c.name);
-    const draft = duplicateProviderForm(this.form(config), names, () => crypto.randomUUID());
+    const draft = duplicateProviderForm(this.form(config), names, () => newUuid());
     this.target.set({ id: 0, baseline: this.empty(), draft });
   }
 
