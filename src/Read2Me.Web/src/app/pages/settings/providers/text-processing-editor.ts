@@ -1,6 +1,7 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
 import type { TextStepDto } from '@app/api';
+import { newUuid } from '@app/core/uuid';
 import { controlValue, field } from '@app/ui/field';
 import { icon } from '@app/ui/partials';
 import {
@@ -164,7 +165,7 @@ export function textProcessingEditor(o: TextProcessingEditorOptions) {
           class="r2m-button"
           data-action="add-substitution"
           @click=${() => {
-            const id = crypto.randomUUID();
+            const id = newUuid();
             onEdit((t) => addSubstitution(t, id));
           }}
         >

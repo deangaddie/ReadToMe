@@ -1,5 +1,6 @@
 import { ApiError } from './api-error';
 import type { paths } from './schema';
+import { newUuid } from '@app/core/uuid';
 import { readsAtStep } from './step-view';
 
 /** The HTTP methods the host maps. */
@@ -62,7 +63,7 @@ type RouteInit<O> = PathPart<O> & QueryPart<O>;
  * Stable per-tab origin id (ticket 05 / spec D6): sent as `X-Origin-Id` on every call so the hub
  * can echo it in mutation receipts and the client recognises its own writes.
  */
-export const ORIGIN_ID: string = crypto.randomUUID();
+export const ORIGIN_ID: string = newUuid();
 
 export type FetchFn = (input: string, init: RequestInit) => Promise<Response>;
 
