@@ -2,7 +2,6 @@ import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
 import { type Guid, type PronunciationEntry, PronunciationsApi, toApiError } from '@app/api';
 import { R2mElement, define } from '@app/core/element';
-import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
 import { computed, signal, untracked } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
@@ -38,7 +37,6 @@ export class PronunciationsPage extends R2mElement {
   private readonly feed = use(ProjectFeed);
   private readonly writer = use(PronunciationWriter);
   private readonly confirm = use(ConfirmService);
-  private readonly router = use(Router);
   private project!: ProjectStore;
 
   readonly entries = signal<PronunciationEntry[]>([]);
@@ -65,19 +63,6 @@ export class PronunciationsPage extends R2mElement {
       untracked(() => void this.load());
       const following = this.feed.refetchOn(folder, ['Pronunciations'], () => this.load());
       return () => following.close();
-    });
-    // `?entry=` (the Book view's Edit pencil): open that entry once the list holds it, then drop the param.
-    this.effect(() => {
-      const id = this.router.query().get('entry');
-      if (id === null || !this.entries().some((e) => e.id === id)) return;
-      untracked(() => {
-        this.editing.set({ kind: 'entry', id });
-        const query = Object.fromEntries(this.router.query());
-        this.router.navigate(this.router.path(), {
-          replace: true,
-          query: { ...query, entry: null },
-        });
-      });
     });
   }
 

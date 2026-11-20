@@ -208,15 +208,6 @@ describe('r2m-pronunciations-page', () => {
     );
   });
 
-  it('?entry= opens that entry in the editor (the Book view’s Edit pencil), then drops the param', async () => {
-    const page = await render(
-      'projects/the-adventures-of-sherlock-holmes/pronunciations?entry=watson',
-    );
-    await rerender(page);
-    expect(editorOf(page)?.entry?.writtenForm).toBe('Watson');
-    expect(use(Router).query().get('entry')).toBeNull();
-  });
-
   it('a row opens its entry in the editor and marks it; the editor closing empties the pane', async () => {
     const page = await render();
     page.querySelector<HTMLElement>('.pron__row[data-id=watson]')!.click();
