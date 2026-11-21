@@ -14,6 +14,13 @@
 # uv keeps every pin already in requirements.txt. To take a fix, a transitive security bump
 # included, name the package with -UpgradePackage: only it, and whatever it forces, moves.
 # A comma list (certifi,filelock) splits only when called from a PowerShell prompt.
+#
+# --exclude-newer '7 days' makes uv ignore any version uploaded less than 7 days ago, so a
+# hand-picked bump gets the same cooldown Dependabot applies (relative durations need
+# uv 0.9.17+). A run with no upgrade keeps the current pins, all older than the cutoff.
+# A security fix that needs a younger version overrides it for that one package, after the
+# pre-merge review: add --exclude-newer-package '<name>=<RFC 3339 timestamp now>' to $compile
+# for that run only.
 [CmdletBinding()]
 param(
   [Parameter(Mandatory)]
@@ -54,7 +61,7 @@ foreach ($name in $UpgradePackage) {
 }
 $upgrade = ($UpgradePackage | ForEach-Object { "--upgrade-package $_" }) -join ' '
 
-$compile = "uv pip compile requirements.in --generate-hashes $overrides $upgrade -o requirements.txt"
+$compile = "uv pip compile requirements.in --generate-hashes --exclude-newer '7 days' $overrides $upgrade -o requirements.txt"
 $install = 'pip install --no-cache-dir --require-hashes -r requirements.txt'
 $script  = "set -e; pip install --no-cache-dir uv==$UV; $compile; $install"
 

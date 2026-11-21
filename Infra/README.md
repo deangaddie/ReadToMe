@@ -162,7 +162,7 @@ DNS policy must be absent while a model is being downloaded.
 
 A sweep runs by hand at every pin refresh. `scripts/refresh-pins.ps1` ends by pointing here. `check.ps1` never runs it: the scan needs built images, network access for the vulnerability DB, and minutes per image.
 
-1. **Move the pins.** Run `scripts/refresh-pins.ps1` and move the audio.cpp digest by hand (see [audio.cpp](#audiocpp-tts)). Relock with `scripts/lock.ps1 <service>` for each similarity service whose base moved, then rebuild with `docker compose up -d --build`.
+1. **Move the pins.** Run `scripts/refresh-pins.ps1` and move the audio.cpp digest by hand (see [audio.cpp](#audiocpp-tts)). Relock with `scripts/lock.ps1 <service>` for each similarity service whose base moved (it skips versions younger than 7 days; its header says how a security fix overrides that), then rebuild with `docker compose up -d --build`.
 2. **Scan.** Run `pwsh scripts/scan-images.ps1 -Compare ../.artifacts/scans/<last sweep date>`.
    - It scans every image in `docker compose config --images`, skipping (with a warning) any that is neither built nor pulled. It never builds.
    - Each image is `docker save`d to a tar, and a pinned Trivy scans the tar mounted read-only, so no Docker socket goes into a container.
