@@ -16,6 +16,9 @@ Stages, in order (each one is a separate named step in .github/workflows/ci.yml)
   6. E2E in Firefox            the browser tests only (Tests/Web) with R2M_E2E_BROWSER=firefox; the API and
                                host tests never open a browser, so Chromium's pass already covers them
 
+Before any stage it removes credential-looking environment variables (TOKEN, SECRET, GH_*, NPM_*, ... ; the list is
+in Remove-CredentialVariables) from its own process, so no stage inherits them, prints how many and their names, and puts them back at the end.
+
 Before the E2E stages it installs any Playwright browser the driver wants that is not in the Playwright cache
 yet (Firefox on first use; Chromium too on a fresh machine). The cache is PLAYWRIGHT_BROWSERS_PATH when set,
 else Playwright's per-OS default.
@@ -221,6 +224,33 @@ function Invoke-E2e {
     }
 }
 
+# Removes from this process's environment, and so from every stage it starts, each variable whose name looks like
+# a credential. The gate runs third-party code (NuGet .targets, Bun and npm packages, test and app code) as the
+# developer, and a hijacked dependency release typically posts credential-looking variables out; the gate needs no
+# credentials (every package source and image is public). A backstop only: credential files (~/.npmrc, ~/.nuget,
+# gh's config) and the OS credential store stay readable. Prints how many went and their names, never values.
+# Returns name -> value, so the end of the script can put them back for a caller that ran it in its own session.
+function Remove-CredentialVariables {
+    # Matched case-insensitively against the name.
+    $patterns = @('*TOKEN*', '*SECRET*', '*PASSWORD*', '*_KEY', '*APIKEY*', '*API_KEY*', 'GH_*', 'GITHUB_*', 'NPM_*',
+        'NUGET_*', 'AZURE_*', 'AWS_*', 'OPENAI_*', 'ANTHROPIC_*', 'HF_*', 'HUGGING*')
+    # Names a pattern catches that a stage may need, and which hold paths or URLs, not secrets: NuGet's folder
+    # overrides, and the registry mirror Bun reads.
+    $allowed = @('NUGET_PACKAGES', 'NUGET_HTTP_CACHE_PATH', 'NUGET_PLUGINS_CACHE_PATH', 'NUGET_SCRATCH',
+        'NPM_CONFIG_REGISTRY')
+    $removed = [ordered]@{}
+    Get-ChildItem env: | Where-Object {
+        $name = $_.Name
+        $name -notin $allowed -and ($patterns | Where-Object { $name -like $_ })
+    } | Sort-Object Name | ForEach-Object { $removed[$_.Name] = $_.Value }
+    foreach ($name in $removed.Keys) { Remove-Item -LiteralPath "env:$name" }
+    $names = if ($removed.Count -gt 0) { ": $($removed.Keys -join ', ')" } else { '' }
+    Write-Host "Removed $($removed.Count) credential-looking environment variable(s) before the stages$names."
+    return $removed
+}
+
+$removedVariables = Remove-CredentialVariables
+
 $skip = @{}
 if ($SkipInstall) { $skip.SkipInstall = $true }
 
@@ -249,6 +279,11 @@ catch {
     Write-Host "PR gate FAILED: $($_.Exception.Message)" -ForegroundColor Red
     if ($stages.Count -gt 0) { Write-Host "Passed: $($stages -join '; ')" -ForegroundColor DarkGray }
     exit 1
+}
+finally {
+    # Only matters when the caller ran the script in its own session (./scripts/check.ps1 from pwsh); finally
+    # also runs after the exit above.
+    foreach ($entry in $removedVariables.GetEnumerator()) { Set-Item -LiteralPath "env:$($entry.Key)" $entry.Value }
 }
 
 Write-Host ''
