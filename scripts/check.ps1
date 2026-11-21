@@ -17,7 +17,7 @@ Stages, in order (each one is a separate named step in .github/workflows/ci.yml)
                                host tests never open a browser, so Chromium's pass already covers them
 
 Before any stage it removes credential-looking environment variables (TOKEN, SECRET, GH_*, NPM_*, ... ; the list is
-in Remove-CredentialVariables) from its own process, so no stage inherits them, prints how many and their names, and puts them back at the end.
+in scripts/credential-variables.ps1) from its own process, so no stage inherits them, prints how many and their names, and puts them back at the end.
 
 Before the E2E stages it installs any Playwright browser the driver wants that is not in the Playwright cache
 yet (Firefox on first use; Chromium too on a fresh machine). The cache is PLAYWRIGHT_BROWSERS_PATH when set,
@@ -230,26 +230,11 @@ function Invoke-E2e {
 # credentials (every package source and image is public). A backstop only: credential files (~/.npmrc, ~/.nuget,
 # gh's config) and the OS credential store stay readable. Prints how many went and their names, never values.
 # Returns name -> value, so the end of the script can put them back for a caller that ran it in its own session.
-function Remove-CredentialVariables {
-    # Matched case-insensitively against the name.
-    $patterns = @('*TOKEN*', '*SECRET*', '*PASSWORD*', '*_KEY', '*APIKEY*', '*API_KEY*', 'GH_*', 'GITHUB_*', 'NPM_*',
-        'NUGET_*', 'AZURE_*', 'AWS_*', 'OPENAI_*', 'ANTHROPIC_*', 'HF_*', 'HUGGING*')
-    # Names a pattern catches that a stage may need, and which hold paths or URLs, not secrets: NuGet's folder
-    # overrides, and the registry mirror Bun reads.
-    $allowed = @('NUGET_PACKAGES', 'NUGET_HTTP_CACHE_PATH', 'NUGET_PLUGINS_CACHE_PATH', 'NUGET_SCRATCH',
-        'NPM_CONFIG_REGISTRY')
-    $removed = [ordered]@{}
-    Get-ChildItem env: | Where-Object {
-        $name = $_.Name
-        $name -notin $allowed -and ($patterns | Where-Object { $name -like $_ })
-    } | Sort-Object Name | ForEach-Object { $removed[$_.Name] = $_.Value }
-    foreach ($name in $removed.Keys) { Remove-Item -LiteralPath "env:$name" }
-    $names = if ($removed.Count -gt 0) { ": $($removed.Keys -join ', ')" } else { '' }
-    Write-Host "Removed $($removed.Count) credential-looking environment variable(s) before the stages$names."
-    return $removed
-}
-
+# The list of patterns lives in credential-variables.ps1, shared with review-deps.ps1.
+. (Join-Path $PSScriptRoot 'credential-variables.ps1')
 $removedVariables = Remove-CredentialVariables
+$removedNames = if ($removedVariables.Count -gt 0) { ": $($removedVariables.Keys -join ', ')" } else { '' }
+Write-Host "Removed $($removedVariables.Count) credential-looking environment variable(s) before the stages$removedNames."
 
 $skip = @{}
 if ($SkipInstall) { $skip.SkipInstall = $true }
@@ -283,7 +268,7 @@ catch {
 finally {
     # Only matters when the caller ran the script in its own session (./scripts/check.ps1 from pwsh); finally
     # also runs after the exit above.
-    foreach ($entry in $removedVariables.GetEnumerator()) { Set-Item -LiteralPath "env:$($entry.Key)" $entry.Value }
+    Restore-CredentialVariables $removedVariables
 }
 
 Write-Host ''

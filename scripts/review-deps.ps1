@@ -8,7 +8,9 @@ developer's identity. Run this first, on the PR's base and head, and read the re
 
 It never installs, builds or runs the new code. It reads the git diff, asks the npm registry for publish dates and
 provenance, downloads the old and new tarballs and reads them in memory (nothing is unpacked to disk), and runs
-`bun pm diff` / `npm diff`, which only download and compare tarballs.
+`bun pm diff` / `npm diff`, which only download and compare tarballs. Credential-looking environment variables are
+removed for the run (scripts/credential-variables.ps1, the list check.ps1 uses), and a package or version the registry
+no longer has is a STOP.
 
 The lockfiles are compared at the merge base of the two refs and at <Head>, so every package whose version changed or
 that appeared is reviewed, transitive ones included. A wrapper bump such as oxlint-tsgolint is reviewed through its
@@ -80,10 +82,16 @@ function Add-Finding {
 
 function Write-Log { param([string]$Text) [Console]::Error.WriteLine($Text) }
 
+# Runs git and returns its stdout lines; stderr stays out of them (a warning must not end up in a lockfile's text).
 function Invoke-Git {
-    $out = & git -C $repoRoot @args 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "git $($args -join ' ') failed: $($out -join ' ')" }
-    return $out
+    $all = & git -C $repoRoot @args 2>&1
+    $code = $LASTEXITCODE
+    $errors = @($all | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] })
+    if ($code -ne 0) {
+        $detail = if ($errors.Count) { $errors -join ' ' } else { "exit code $code" }
+        throw "git $($args -join ' ') failed: $detail"
+    }
+    return @($all | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] })
 }
 
 # The file's text at a commit, or $null when it does not exist there.
@@ -157,7 +165,7 @@ function Get-LockChanges {
             $old = $null
             if ($baseByName.ContainsKey($new.Name)) {
                 if (@($baseByName[$new.Name] | Where-Object Version -eq $new.Version).Count) { continue }   # moved, not changed
-                $old = $baseByName[$new.Name] | Where-Object Registry | Sort-Object { [version]($_.Version -replace '[-+].*', '') } -Bottom 1
+                $old = $baseByName[$new.Name] | Where-Object Registry | Sort-Object { [version]($_.Version -replace '[-+].*', '') } | Select-Object -Last 1
                 if (-not $old) { $old = $baseByName[$new.Name][0] }
             }
         }
@@ -172,14 +180,21 @@ function Get-LockChanges {
 
 #region Registry and tarballs
 
+# A package's full registry document (publish times, every version's manifest), or $null when the registry has no
+# such package (404). Any other failure throws: the review cannot run without the registry.
 $packuments = @{}
 function Get-Packument {
     param([string]$Name)
     if (-not $packuments.ContainsKey($Name)) {
         Write-Log "  registry: $Name"
         $url = "$registry/$($Name -replace '/', '%2f')"
-        $response = Invoke-WebRequest $url -Headers @{ Accept = 'application/json' }
-        $packuments[$Name] = $response.Content | ConvertFrom-Json -AsHashtable -DateKind String
+        try {
+            $response = Invoke-WebRequest $url -Headers @{ Accept = 'application/json' }
+            $packuments[$Name] = $response.Content | ConvertFrom-Json -AsHashtable -DateKind String
+        } catch {
+            if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404) { $packuments[$Name] = $null }
+            else { throw }
+        }
     }
     return $packuments[$Name]
 }
@@ -202,10 +217,12 @@ function Get-IntegrityMatch {
 
 $codeExtensions = '.js', '.mjs', '.cjs', '.jsx', '.ts', '.mts', '.cts', '.tsx'
 $binaryExtensions = '.node', '.exe', '.dll', '.so', '.dylib', '.wasm', '.bin', '.a', '.lib', '.pdb'
+# require('x'), import('x'), import 'x' and ... from 'x', with or without the node: prefix.
+$importOf = { param($Modules) "(?:require\s*\(\s*|\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)['""](?:node:)?(?:$Modules)['""]" }
 $riskPatterns = [ordered]@{
-    'child_process imports' = '(?:require\s*\(\s*|\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)[''"](?:node:)?child_process[''"]'
-    'fs imports'            = '(?:require\s*\(\s*|\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)[''"](?:node:)?fs(?:/promises)?[''"]'
-    'network imports'       = '(?:require\s*\(\s*|\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)[''"](?:node:)?(?:net|http|https|http2|dgram|tls|dns)[''"]'
+    'child_process imports' = & $importOf 'child_process'
+    'fs imports'            = & $importOf 'fs|fs/promises'
+    'network imports'       = & $importOf 'net|http|https|http2|dgram|tls|dns'
     'eval calls'            = '(?<![.\w$])eval\s*\(|\bnew\s+Function\s*\('
     'fetch calls'           = '(?<![.\w$])fetch\s*\('
     'process.env reads'     = '\bprocess\.env\b'
@@ -218,7 +235,6 @@ foreach ($k in $riskPatterns.Keys) { $riskRegexes[$k] = [regex]::new($riskPatter
 function Read-Tarball {
     param([string]$Name, [string]$Version, [string]$LockIntegrity)
     $manifest = (Get-Packument $Name).versions[$Version]
-    if (-not $manifest) { throw "$Name@$Version is not on the registry." }
     Write-Log "  tarball: $Name@$Version"
     $bytes = (Invoke-WebRequest $manifest.dist.tarball).Content
     if ($bytes -is [string]) { throw "Downloading $($manifest.dist.tarball) returned text, not a tarball." }
@@ -285,8 +301,11 @@ $npmExe = $null
 function Invoke-Tool {
     param([string]$Exe, [string[]]$Arguments)
     Push-Location $toolDir
-    try { $out = & $Exe @Arguments 2>&1 | ForEach-Object { "$_" } } finally { Pop-Location }
-    return @{ Output = @($out); ExitCode = $LASTEXITCODE }
+    try {
+        $out = & $Exe @Arguments 2>&1 | ForEach-Object { "$_" }
+        $code = $LASTEXITCODE
+    } finally { Pop-Location }
+    return @{ Output = @($out); ExitCode = $code }
 }
 
 # `bun pm diff` is not in `bun pm --help` and its exit codes are undocumented: success is its summary line, not exit 0.
@@ -299,7 +318,7 @@ function Invoke-BunDiff {
     }
     $run = Invoke-Tool $script:bunExe @('pm', 'diff', "$Name@$Old..$New", '--stat')
     $ok = @($run.Output | Where-Object { $_ -match '^\d+ files? changed' }).Count -gt 0
-    return @{ Title = "bun pm diff ``$Name@$Old..$New`` --stat"; Output = $run.Output; Ok = $ok }
+    return @{ Title = "bun pm diff ``$Name@$Old..$New`` --stat"; Full = "``bun pm diff $Name@$Old..$New``"; Output = $run.Output; Ok = $ok }
 }
 
 function Invoke-NpmDiff {
@@ -310,7 +329,7 @@ function Invoke-NpmDiff {
     }
     $run = Invoke-Tool $script:npmExe @('diff', "--diff=$Name@$Old", "--diff=$Name@$New", '--diff-name-only')
     $ok = $run.ExitCode -eq 0 -and -not @($run.Output | Where-Object { $_ -match '^npm (error|ERR!)' }).Count
-    return @{ Title = "npm diff ``$Name@$Old`` ``$Name@$New`` --diff-name-only"; Output = $run.Output; Ok = $ok }
+    return @{ Title = "npm diff ``$Name@$Old`` ``$Name@$New`` --diff-name-only"; Full = "``npm diff --diff=$Name@$Old --diff=$Name@$New``"; Output = $run.Output; Ok = $ok }
 }
 
 #endregion
@@ -319,7 +338,7 @@ function Invoke-NpmDiff {
 
 # Reviews one changed package (Bun or npm, both on the npm registry). Adds its findings and returns a table row and
 # the diff tool's output for the report.
-function Test-Package {
+function Invoke-PackageReview {
     param($Change, [string]$Source, [scriptblock]$Diff)
     $name = $Change.Name
     $new = $Change.New
@@ -339,7 +358,16 @@ function Test-Package {
         $old = $null
     }
 
+    # A package or version gone from the registry (unpublished, often because it was malicious) cannot be reviewed.
     $packument = Get-Packument $name
+    if (-not $packument -or -not $packument.versions[$new.Version]) {
+        Add-Finding STOP $subject $Source 'is not on the registry (unpublished or never published); review it by hand.'
+        return @{ Row = "| ``$name`` | $(if ($old) { $old.Version } else { '-' }) | $($new.Version) | - | - | - | - |"; Diff = $null }
+    }
+    if ($old -and -not $packument.versions[$old.Version]) {
+        Add-Finding STOP $subject $Source "replaces $($old.Version), which is no longer on the registry, so there is nothing to compare against."
+        $old = $null
+    }
 
     # Age
     $published = $packument.time[$new.Version]
@@ -432,7 +460,7 @@ function Test-Package {
 }
 
 # Reviews one lockfile and returns its report section.
-function Test-Lockfile {
+function Invoke-LockfileReview {
     param([string]$Path, [scriptblock]$Read, [scriptblock]$Diff)
     $baseEntries = @(& $Read (Get-FileAt $script:mergeBase $Path))
     $headEntries = @(& $Read (Get-FileAt $script:headCommit $Path))
@@ -448,7 +476,7 @@ function Test-Lockfile {
     $section.Add('| --- | --- | --- | --- | --- | --- | --- |')
     $diffs = [System.Collections.Generic.List[object]]::new()
     foreach ($change in $changes) {
-        $result = Test-Package $change $Path $Diff
+        $result = Invoke-PackageReview $change $Path $Diff
         $section.Add($result.Row)
         if ($result.Diff) { $diffs.Add($result.Diff) }
     }
@@ -463,6 +491,8 @@ function Test-Lockfile {
         if ($lines.Count -gt $limit) { $section.Add("... $($lines.Count - $limit) more lines") }
         $section.Add('```')
         $section.Add('')
+        $section.Add("Full diff: $($d.Full)")
+        $section.Add('')
         $section.Add('</details>')
     }
     return $section
@@ -476,12 +506,12 @@ $Reviewers = @(
     @{
         Name = 'Bun'
         Match = { param($Path) (Split-Path -Leaf $Path) -eq 'bun.lock' }
-        Review = { param($Path) Test-Lockfile $Path ${function:Read-BunLock} ${function:Invoke-BunDiff} }
+        Review = { param($Path) Invoke-LockfileReview $Path ${function:Read-BunLock} ${function:Invoke-BunDiff} }
     }
     @{
         Name = 'npm'
         Match = { param($Path) (Split-Path -Leaf $Path) -eq 'package-lock.json' }
-        Review = { param($Path) Test-Lockfile $Path ${function:Read-NpmLock} ${function:Invoke-NpmDiff} }
+        Review = { param($Path) Invoke-LockfileReview $Path ${function:Read-NpmLock} ${function:Invoke-NpmDiff} }
     }
 )
 
@@ -502,6 +532,9 @@ try {
     $sections = [System.Collections.Generic.List[string]]::new()
     $reviewed = 0
     New-Item -ItemType Directory -Force $toolDir | Out-Null
+    # The review downloads public packages only, so bun pm diff and npm diff get no credential-looking variables.
+    . (Join-Path $PSScriptRoot 'credential-variables.ps1')
+    $removedVariables = Remove-CredentialVariables
     try {
         foreach ($path in $changedPaths) {
             foreach ($reviewer in $Reviewers) {
@@ -512,7 +545,10 @@ try {
                 foreach ($line in (& $reviewer.Review $path)) { $sections.Add($line) }
             }
         }
-    } finally { Remove-Item -Recurse -Force $toolDir -ErrorAction SilentlyContinue }
+    } finally {
+        Restore-CredentialVariables $removedVariables
+        Remove-Item -Recurse -Force $toolDir -ErrorAction SilentlyContinue
+    }
 
     foreach ($name in $AllowYoung) {
         if (-not $clearedYoung.Contains($name)) {
