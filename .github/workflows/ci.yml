@@ -2,6 +2,11 @@ name: CI
 
 # Mirrors scripts/check.ps1 (the local PR gate) as separate named steps, so a failure says which stage broke.
 # Keep the two in step: a stage added here is a stage added there.
+#
+# WARNING: GitHub Actions are disabled on this repo on purpose, so this workflow never runs. Before
+# re-enabling them, pin every `uses:` by full commit SHA with the tag as a trailing comment
+# (`uses: actions/checkout@<sha> # v4`), since a moved tag can hijack a run, and add a top-level
+# `permissions: contents: read` so the GITHUB_TOKEN is read-only whatever the repo default.
 
 on:
   push:
