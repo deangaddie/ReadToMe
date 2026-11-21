@@ -3,8 +3,21 @@
 # branch (.scratch/dependency-upgrades). The ignore rules filter security updates too, so a
 # fix that needs a minor bump arrives only as an alert, never as a PR.
 #
+# Cooldown is 7 days on every entry: Dependabot opens no version-update PR for a release
+# until it is 7 days old, so a hijacked release has time to be spotted and pulled first. The
+# weekly schedule can add up to 7 more days. Cooldown never applies to security updates;
+# those PRs rely on the pre-merge review alone. If the registry gives no publish date,
+# cooldown fails open and the PR says "Cooldown was not applied". The entries are
+# patch-only, so cooldown sets only default-days (no semver-*-days keys; docker accepts no
+# others anyway) and exempts no dependency.
+#
 # Each entry groups its version updates into one weekly PR, and its security updates (opened
 # when an advisory lands, not on the schedule) into one more.
+#
+# Bun: Dependabot raises no security updates for Bun. The web-security and browse-security
+# groups stay in place for when it does, but never fire today. A Bun advisory arrives only
+# as an alert and is fixed by a hand bump, which the 7-day minimum release age still
+# applies to (bunfig.toml, #415).
 #
 # Docker: base-image DIGEST bumps only. A tag move stays human-driven via
 # Infra/scripts/refresh-pins.ps1 (spec §6.1); Dependabot only proposes new digests within
@@ -32,6 +45,8 @@ updates:
     directory: /Infra
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     ignore:
       - dependency-name: "*"
         update-types:
@@ -44,6 +59,8 @@ updates:
     directory: /Infra/ContainerHealth
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     ignore:
       - dependency-name: "*"
         update-types:
@@ -60,6 +77,8 @@ updates:
     directory: /src
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     ignore:
       - dependency-name: "*"
         update-types:
@@ -76,6 +95,8 @@ updates:
     directory: /src/Read2Me.Web
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     ignore:
       - dependency-name: "*"
         update-types:
@@ -91,6 +112,8 @@ updates:
     directory: /tools/browse
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     ignore:
       - dependency-name: "*"
         update-types:
