@@ -26,8 +26,8 @@ The policy was agreed in #403.
 - **SSH.** GitHub goes over HTTPS through the PAT. Any SSH key kept for other hosts has a
   passphrase.
 - **`main` takes changes through PRs only.** The owner's ruleset bypass is `pull_request` mode, so
-  a direct push to `main` is rejected for everyone, and nothing lands without a PR on record. (The
-  settings change is #413; until it's done, the bypass still allows direct pushes.)
+  a direct push to `main` is rejected for everyone, and nothing lands without a PR on record
+  (#413). Merge with `gh pr merge --rebase`.
 - **The gate strips credential-looking environment variables.** `scripts/check.ps1` removes them
   before its stages (see `Remove-CredentialVariables`) and puts them back at the end. It's a
   backstop for the plain-text rule, not a substitute: credential files and the OS credential store
