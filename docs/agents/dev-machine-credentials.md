@@ -27,7 +27,9 @@ The policy was agreed in #403.
   passphrase.
 - **`main` takes changes through PRs only.** The owner's ruleset bypass is `pull_request` mode, so
   a direct push to `main` is rejected for everyone, and nothing lands without a PR on record
-  (#413). Merge with `gh pr merge --rebase`.
+  (#413). Merge with `gh pr merge --squash --admin`: the ruleset requires signed commits, which
+  GitHub adds to a squash commit but can't add to rebased ones, and its review and update rules
+  need the owner's bypass, which `--admin` uses inside the PR.
 - **The gate strips credential-looking environment variables.** `scripts/check.ps1` removes them
   before its stages (see `Remove-CredentialVariables`) and puts them back at the end. It's a
   backstop for the plain-text rule, not a substitute: credential files and the OS credential store
