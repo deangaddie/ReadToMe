@@ -55,6 +55,8 @@ pwsh scripts/api-types.ps1              # after changing a DTO or endpoint; -NoB
 pwsh scripts/check.ps1                  # -SkipInstall once node_modules are current; installs Playwright Firefox on first use; an E2E stage hung past -E2eTimeoutMinutes (10) is killed and dumped
 ```
 
+Which credentials the dev machine may hold, and where: `docs/agents/dev-machine-credentials.md`.
+
 ## Architecture
 
 ### .NET App (`src/Read2Me.App`)
