@@ -12,17 +12,18 @@
 # others anyway) and exempts no dependency.
 #
 # Each entry groups its version updates into one weekly PR, and its security updates (opened
-# when an advisory lands, not on the schedule) into one more.
-#
-# Bun: Dependabot raises no security updates for Bun. The web-security and browse-security
-# groups stay in place for when it does, but never fire today. A Bun advisory arrives only
-# as an alert and is fixed by a hand bump, which the 7-day minimum release age still
-# applies to (bunfig.toml, #415).
+# when an advisory lands, not on the schedule) into one more, where Dependabot raises them
+# (not for docker or Bun, below).
 #
 # Docker: base-image DIGEST bumps only. A tag move stays human-driven via
 # Infra/scripts/refresh-pins.ps1 (spec §6.1); Dependabot only proposes new digests within
 # the pinned tag. Dependabot raises no security updates for images, so docker has no
 # security group.
+#
+# Bun: Dependabot raises no security updates for Bun either. The web-security and
+# browse-security groups stay in place for when it does, but never fire today. A Bun
+# advisory arrives only as an alert and is fixed by a hand bump, which the 7-day minimum
+# release age in each project's bunfig.toml also applies to once #415 lands.
 #
 # Playwright is ignored outright in the three entries that pin it (Microsoft.Playwright,
 # playwright-core, @playwright/test). tools/browse drives the browsers the E2E tests install,
