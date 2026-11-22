@@ -104,6 +104,9 @@ services:
     depends_on: [proxy]
     environment:
       SENTENCE_TRANSFORMERS_HOME: /cache/sentence-transformers
+      # Offline: weights come only from the read-only, pre-warmed /cache (docker-compose.warmup.yml downloads).
+      HF_HUB_OFFLINE: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
     volumes:
       - ./cache/minilm-l6:/cache:ro
 
@@ -120,6 +123,9 @@ services:
     depends_on: [proxy]
     environment:
       SENTENCE_TRANSFORMERS_HOME: /cache/sentence-transformers
+      # Offline: weights come only from the read-only, pre-warmed /cache (docker-compose.warmup.yml downloads).
+      HF_HUB_OFFLINE: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
     volumes:
       - ./cache/mpnet-base-v2:/cache:ro
 

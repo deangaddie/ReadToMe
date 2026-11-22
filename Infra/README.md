@@ -147,6 +147,8 @@ Two points are accepted:
 
 `docker-compose.warmup.yml` stays on ordinary networks, because it is the approved download path. `docker build` is unaffected: `internal` applies only to the networks that running containers join.
 
+**Offline flags.** As defence in depth, the services also refuse to fetch on their own, so neither guard depends on the other. `minilm-l6` and `mpnet-base-v2` set `HF_HUB_OFFLINE=1` and `HF_HUB_DISABLE_TELEMETRY=1`; the warm-up file sets neither, so it can still download. llama runs with `--offline`, which the router passes on to each model process it spawns, so autoload switching still works.
+
 ## Usage
 
 ```bash

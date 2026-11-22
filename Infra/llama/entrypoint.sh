@@ -10,6 +10,8 @@ BASE_ARGS=(
   "--port" "$PORT"
   "--models-preset" "$MODELS_FILE"
   "--models-max" "1"
+  # Never fetch: every preset names a local /models GGUF. Holds in router mode with autoload.
+  "--offline"
 )
 
 exec /usr/local/bin/llama-server "${BASE_ARGS[@]}"
