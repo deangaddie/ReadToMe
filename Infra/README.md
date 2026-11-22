@@ -138,7 +138,7 @@ An internal network also binds no host port. **`read2me-proxy`** (nginx `stream`
 
 **First start after this layout lands:** run `docker compose down`, then `up`. A network can only become internal by being recreated.
 
-**Check it.** Run `pwsh scripts/egress-check.ps1` after any compose change. For each running service, a throwaway probe joins that container's network namespace and tries TCP connections to public IP literals. It runs the same probe from the proxy first, as a control that must connect: if it can't, the machine is offline and the result is inconclusive (exit 2). The check exits 1 if any service gets out.
+**Check it.** Run `pwsh scripts/egress-check.ps1` after any compose change. For each running service, a throwaway probe joins that container's network namespace and tries TCP connections to public IPv4 literals. It runs the same probe from the proxy first, as a control that must connect: if it can't, the machine is offline and the result is inconclusive (exit 2). The check exits 1 if any service gets out.
 
 Two points are accepted:
 

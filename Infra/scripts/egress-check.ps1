@@ -18,6 +18,8 @@
 # running, the proxy is down, or the proxy itself cannot get out).
 [CmdletBinding()]
 param(
+  # IPv4 literals only: no name, so DNS can't be what blocks the connection.
+  [ValidatePattern('^\d{1,3}(\.\d{1,3}){3}:\d{1,5}$')]
   [string[]]$Target = @('1.1.1.1:443', '8.8.8.8:53'),
   [int]$TimeoutSeconds = 5
 )
@@ -33,24 +35,34 @@ $probeImage = @($images | Where-Object { $_ -like 'nginxinc/nginx-unprivileged:*
 if (-not $probeImage) { throw "no proxy image in $Compose" }
 
 # True when any target accepts a TCP connection from inside the container's network namespace.
+# The probe prints nc's exit code itself, so a probe that never ran (the container gone, the
+# image missing) stops the check instead of reading as blocked.
 function Test-Egress([string]$container) {
-  $got = $false
+  $anyConnected = $false
   foreach ($t in $Target) {
     $ip, $port = $t -split ':'
-    docker run --rm --network "container:$container" --read-only --cap-drop ALL `
+    $out = docker run --rm --network "container:$container" --read-only --cap-drop ALL `
       --security-opt no-new-privileges:true --entrypoint sh $probeImage `
-      -c "nc -n -w $TimeoutSeconds $ip $port </dev/null" *> $null
-    $open = $LASTEXITCODE -eq 0
-    Write-Host ("    {0,-18} {1}" -f $t, $(if ($open) { 'CONNECTED' } else { 'blocked' })) `
-      -ForegroundColor $(if ($open) { 'Red' } else { 'DarkGray' })
-    $got = $got -or $open
+      -c "nc -n -w $TimeoutSeconds $ip $port </dev/null >/dev/null 2>&1; echo nc-exit=`$?" 2>&1
+    $exit = [regex]::Match("$out", 'nc-exit=(\d+)')
+    if (-not $exit.Success) {
+      Write-Host "    the probe did not run in ${container}: $out" -ForegroundColor Yellow
+      exit 2
+    }
+    $connected = $exit.Groups[1].Value -eq '0'
+    Write-Host ("    {0,-18} {1}" -f $t, $(if ($connected) { 'CONNECTED' } else { 'blocked' })) `
+      -ForegroundColor $(if ($connected) { 'Red' } else { 'DarkGray' })
+    $anyConnected = $anyConnected -or $connected
   }
-  $got
+  $anyConnected
 }
 
 function Get-Container([string]$service) {
   $id = (docker compose -f $Compose ps -q $service | Select-Object -First 1)
-  if (-not $id) { return $null }
+  if (-not $id) {
+    Write-Host "Inconclusive: $service is listed as running but has no container." -ForegroundColor Yellow
+    exit 2
+  }
   (docker inspect -f '{{.Name}}' $id).TrimStart('/')
 }
 
