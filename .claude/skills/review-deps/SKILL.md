@@ -72,3 +72,9 @@ the age STOP as a NOTE, and every other STOP still applies.
 
 The review adds no OSV-Scanner, Socket or similar: none catches a fresh hijack, and each would be one more tool
 running on the host.
+
+## After the code ran
+
+If a version this review let through is later reported malicious, or a STOP turns out to have been cleared wrongly
+after the code ran, stop, tell the human, and run nothing more from the repo: the human follows
+`docs/agents/supply-chain-incident.md`.

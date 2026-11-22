@@ -40,3 +40,9 @@ The policy was agreed in #403.
 The human keeps a local, git-ignored checklist for auditing what's actually on the machine against
 these rules. Audit results never go on the tracker (no issue, PR or comment) or anywhere else in
 the repo.
+
+## When a dependency was hijacked
+
+If a hijacked dependency version may have run on the machine, follow
+[supply-chain-incident.md](supply-chain-incident.md): it revokes the PAT first, then rotates the rest
+of these credentials in order.
