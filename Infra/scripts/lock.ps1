@@ -21,6 +21,12 @@
 # A security fix that needs a younger version overrides it for that one package, after the
 # pre-merge review: add --exclude-newer-package '<name>=<RFC 3339 timestamp now>' to $compile
 # for that run only.
+#
+# Between compile and install, wheel-pth.ps1 reads the central directory of every wheel a
+# changed pin names, on the host, and fails on any *.pth file the previous lock's version didn't
+# ship, or shipped with other contents (#418): site.py runs a .pth on every interpreter start, and neither uv nor pip can refuse
+# one. On failure the previous requirements.txt is put back and nothing is installed.
+# scripts/review-deps.ps1 runs the same check when a PR changes a requirements.txt.
 [CmdletBinding()]
 param(
   [Parameter(Mandatory)]
@@ -63,11 +69,32 @@ $upgrade = ($UpgradePackage | ForEach-Object { "--upgrade-package $_" }) -join '
 
 $compile = "uv pip compile requirements.in --generate-hashes --exclude-newer '7 days' $overrides $upgrade -o requirements.txt"
 $install = 'pip install --no-cache-dir --require-hashes -r requirements.txt'
-$script  = "set -e; pip install --no-cache-dir uv==$UV; $compile; $install"
 
 Write-Host "==> lock $Service" -ForegroundColor Cyan
 Write-Host "    base $base"
 if ($UpgradePackage) { Write-Host "    upgrade $($UpgradePackage -join ', ')" }
-docker run --rm -e PIP_BREAK_SYSTEM_PACKAGES=1 -v "${svcDir}:/w" -w /w $base sh -c $script
+$previous = Get-Content -Raw $lock
+docker run --rm -e PIP_BREAK_SYSTEM_PACKAGES=1 -v "${svcDir}:/w" -w /w $base sh -c "set -e; pip install --no-cache-dir uv==$UV; $compile"
+if ($LASTEXITCODE -ne 0) { throw "lock FAILED for $Service (exit $LASTEXITCODE)" }
+
+# The .pth check runs on the host, between compile and install, so nothing from the new lock
+# is installed before it passes. A .pth the previous lock didn't have puts the previous lock back.
+. (Join-Path $PSScriptRoot 'wheel-pth.ps1')
+Write-Host "==> .pth check" -ForegroundColor Cyan
+$changes = @(Get-LockPthChanges $previous (Get-Content -Raw $lock) { param($Line) Write-Host "  $Line" })
+$failed = @($changes | ForEach-Object {
+    $c = $_
+    $c.NewPth | ForEach-Object { "NEW .pth    $($c.Name) $($c.New) — $_" }
+    $c.Unmatched | ForEach-Object { "UNREAD      $($c.Name) $($c.New) — $_" }
+  })
+foreach ($c in $changes) { foreach ($s in $c.Skipped) { Write-Warning "$($c.Name) $($c.New): $s" } }
+if ($failed.Count) {
+  Set-Content -NoNewline -Path $lock -Value $previous
+  $failed | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
+  throw "$Service lock brings in a .pth file the previous lock didn't have, or a file the check could not read; requirements.txt is restored. A .pth runs on every interpreter start: review it before taking the bump."
+}
+Write-Host "    $($changes.Count) changed pin(s), no new .pth"
+
+docker run --rm -e PIP_BREAK_SYSTEM_PACKAGES=1 -v "${svcDir}:/w" -w /w $base sh -c "set -e; $install"
 if ($LASTEXITCODE -ne 0) { throw "lock/build FAILED for $Service (exit $LASTEXITCODE)" }
-Write-Host "==> $Service — requirements.txt regenerated and proven to install" -ForegroundColor Green
+Write-Host "==> $Service — requirements.txt regenerated, .pth-checked and proven to install" -ForegroundColor Green
