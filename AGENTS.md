@@ -101,6 +101,8 @@ User imports epub/text → LLM attributes dialog items to Characters → TTS syn
 
 ## Agent skills
 
+**Dependency PRs**: before restoring, building, gating or merging a PR that changes a manifest, lockfile, registry config or pinned digest, run the `review-deps` skill (`.claude/skills/review-deps/`).
+
 ### Issue tracker
 
 Issues and specs (PRDs) live as GitHub issues on `deangaddie/ReadToMe` (public), driven with `gh`. `.scratch/completed/` and `.scratch/not-implemented/` remain as local-only history. Every implementation issue gets its own PR and closes when it merges, even inside a wider spec. See `docs/agents/issue-tracker.md`.

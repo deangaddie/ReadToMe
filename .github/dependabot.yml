@@ -37,7 +37,8 @@
 #   checking each TTS model still generates (Infra/README.md, audio.cpp section).
 # - github-actions (.github/workflows): Actions are off.
 #
-# With Actions off these PRs get no CI. Whoever merges one runs the gate for its entry:
+# With Actions off these PRs get no CI. Before merging one: review (the review-deps skill,
+# .claude/skills/review-deps), then the gate for its entry, then merge. The gates:
 # nuget and bun /src/Read2Me.Web → pwsh scripts/check.ps1; bun /tools/browse → bun test there;
 # npm → npm run check in Infra/ContainerHealth; docker → docker compose build in Infra.
 version: 2
