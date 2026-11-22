@@ -4,8 +4,9 @@ Script-level tests for dependency-files.ps1, the check behind check.ps1's "depen
 
 .DESCRIPTION
 Each test builds a throwaway git repository in the temp folder with a `main` branch holding a few dependency files,
-changes it (a commit on a branch, a staged or unstaged edit, an untracked file), and checks whether
-Get-DependencyFileWarning returns a warning, and which files it names. Offline; exits 1 on any failure.
+changes it (a commit on a branch, a staged or unstaged edit, an untracked file), and checks what
+Write-DependencyFileWarning prints, the call check.ps1 makes: a warning naming the changed files, nothing, or a
+one-line "skipped" note when the check cannot run. Offline; exits 1 on any failure.
 
 .EXAMPLE
 pwsh scripts/dependency-files.tests.ps1
@@ -51,19 +52,20 @@ function New-FixtureRepo {
     return $repo
 }
 
-# $Expected: the files the warning must name, none for no warning, or 'NOTE' for the one-line skipped note.
+# $Expected: the files the warning must name, or none for no output at all. -Note: expect only the "skipped" note.
 function Test-Case {
-    param([string]$Name, [scriptblock]$Arrange, [string[]]$Expected)
+    param([string]$Name, [scriptblock]$Arrange, [string[]]$Expected = @(), [switch]$Note)
     $repo = New-FixtureRepo
     try {
         & $Arrange $repo
-        $warning = @(Get-DependencyFileWarning -RepoRoot $repo -Base main)
+        # What check.ps1 prints, captured from the host stream.
+        $warning = @(Write-DependencyFileWarning -RepoRoot $repo 6>&1 | ForEach-Object { "$_" } | Where-Object { $_ })
         $text = $warning -join "`n"
-        if ($Expected -eq 'NOTE') {
-            if ($warning.Count -ne 1 -or $text -notmatch 'skipped') { throw "expected the skipped note, got:`n$text" }
+        if ($Note) {
+            if ($warning.Count -ne 1 -or $text -notmatch '^Dependency-file check skipped: ') { throw "expected the skipped note, got:`n$text" }
         }
         elseif ($Expected.Count -eq 0) {
-            if ($warning.Count -ne 0) { throw "expected no warning, got:`n$text" }
+            if ($warning.Count -ne 0) { throw "expected no output, got:`n$text" }
         }
         else {
             if ($text -notmatch 'review-deps\.ps1') { throw "the warning does not point at review-deps.ps1:`n$text" }
@@ -162,7 +164,19 @@ Test-Case 'on main itself, an uncommitted bun.lock edit warns' {
 Test-Case 'a missing base ref: a note, not a failure' {
     param($r)
     Invoke-FixtureGit $r branch --quiet -m main trunk
-} 'NOTE'
+} -Note
+
+Test-Case 'falls back to origin/main when there is no local main' {
+    param($r)
+    Invoke-FixtureGit $r update-ref refs/remotes/origin/main main
+    Invoke-FixtureGit $r branch --quiet -D main
+    Set-FixtureFile $r 'src/Web/bun.lock' "{ `"changed`": true }`n"
+} @('src/Web/bun.lock')
+
+Test-Case 'a git failure: a note, not a failure' {
+    param($r)
+    Remove-Item -Recurse -Force (Join-Path $r '.git')
+} -Note
 
 Write-Host ''
 if ($failures.Count) {

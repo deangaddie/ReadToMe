@@ -1,10 +1,10 @@
-# Dot-source this, then call Get-DependencyFileWarning: it compares the working tree (committed, staged, unstaged and
-# untracked files) with the merge base of HEAD and a base branch, and returns warning lines naming every dependency
-# file that changed, or nothing when none did. check.ps1 prints them before its first stage (#420): the pre-merge
-# review (review-deps.ps1) must read a dependency change before the gate builds and runs it.
+# Dot-source this, then call Write-DependencyFileWarning: it compares the working tree (committed, staged, unstaged and
+# untracked files) with the merge base of HEAD and main (origin/main when there is no local main), and when a
+# dependency file changed prints a prominent warning naming each one. check.ps1 calls it before its first stage
+# (#420): the pre-merge review (review-deps.ps1) must read a dependency change before the gate builds and runs it.
 #
 # A warning only, never a block: a marker file or a hard stop could be faked, and the point is to catch the honest
-# mistake of forgetting the review.
+# mistake of forgetting the review. A check that cannot run prints a one-line note and never throws.
 #
 # Dependency files, in any folder (names compared case-insensitively, node_modules ignored): Directory.Packages.props,
 # package.json, bun.lock, package-lock.json, bunfig.toml, .npmrc, nuget.config, requirements.txt, requirements.in,
@@ -15,20 +15,20 @@ $script:DependencyFileNames = @('Directory.Packages.props', 'package.json', 'bun
 $script:DigestFilePattern = '^(Dockerfile(\..+)?|docker-compose.*\.ya?ml)$'
 $script:DigestPattern = '@sha256:[0-9a-f]{64}'
 
-# Runs git in $Repo and returns its stdout lines, or $null when it fails (stderr dropped).
+# Runs git in $Repo and returns its stdout lines; throws when it fails.
 function Invoke-DependencyGit {
     param([string]$Repo)
     $output = & git -C $Repo @args 2>$null
-    if ($LASTEXITCODE -ne 0) { return $null }
-    return @($output)
+    if ($LASTEXITCODE -ne 0) { throw "git $($args -join ' ') failed (exit $LASTEXITCODE)" }
+    return @($output | Where-Object { $_ })
 }
 
 # The first of $Base and origin/$Base that names a commit, or $null.
 function Resolve-DependencyBase {
     param([string]$Repo, [string]$Base)
     foreach ($ref in $Base, "origin/$Base") {
-        $commit = Invoke-DependencyGit $Repo rev-parse --verify --quiet "$ref^{commit}"
-        if ($commit) { return $ref }
+        & git -C $Repo rev-parse --verify --quiet "$ref^{commit}" *> $null
+        if ($LASTEXITCODE -eq 0) { return $ref }
     }
     return $null
 }
@@ -40,7 +40,7 @@ function Get-ChangedDependencyFiles {
     $untracked = @(Invoke-DependencyGit $Repo ls-files --others --exclude-standard)
     $changed = [System.Collections.Generic.SortedSet[string]]::new([System.StringComparer]::Ordinal)
     foreach ($path in $tracked + $untracked) {
-        if (-not $path -or $path -match '(^|/)node_modules/') { continue }
+        if ($path -match '(^|/)node_modules/') { continue }
         $leaf = Split-Path -Leaf $path
         if ($leaf -in $script:DependencyFileNames) { [void]$changed.Add($path); continue }
         if ($leaf -notmatch $script:DigestFilePattern) { continue }
@@ -57,22 +57,28 @@ function Get-ChangedDependencyFiles {
     return @($changed)
 }
 
-function Get-DependencyFileWarning {
+function Write-DependencyFileWarning {
     param([string]$RepoRoot, [string]$Base = 'main')
-    $ref = Resolve-DependencyBase $RepoRoot $Base
-    $mergeBase = if ($ref) { Invoke-DependencyGit $RepoRoot merge-base $ref HEAD | Select-Object -First 1 }
-    if (-not $mergeBase) {
-        return "Dependency-file check skipped: no merge base with '$Base' or 'origin/$Base' to compare with."
+    try {
+        $ref = Resolve-DependencyBase $RepoRoot $Base
+        if (-not $ref) { throw "no '$Base' or 'origin/$Base' branch to compare with" }
+        $mergeBase = Invoke-DependencyGit $RepoRoot merge-base $ref HEAD | Select-Object -First 1
+        $changed = @(Get-ChangedDependencyFiles $RepoRoot $mergeBase)
     }
-    $changed = @(Get-ChangedDependencyFiles $RepoRoot $mergeBase)
-    if ($changed.Count -eq 0) { return @() }
-    $lines = @(
-        "WARNING: dependency files changed since the merge base with $ref ($($mergeBase.Substring(0, 8))):"
-        $changed | ForEach-Object { "  - $_" }
-        "Run the pre-merge review first, before this gate builds and runs the new code (it compares commits, so"
-        "commit the change first), and read the report:"
-        "  pwsh scripts/review-deps.ps1 $ref HEAD > review.md"
-        "Carrying on with the gate."
-    )
-    return $lines
+    catch {
+        Write-Host "Dependency-file check skipped: $($_.Exception.Message)." -ForegroundColor DarkGray
+        return
+    }
+    if ($changed.Count -eq 0) { return }
+    $rule = '!' * 78
+    Write-Host ''
+    Write-Host $rule -ForegroundColor Yellow
+    Write-Host "WARNING: dependency files changed since the merge base with $ref ($($mergeBase.Substring(0, 8))):" -ForegroundColor Yellow
+    $changed | ForEach-Object { Write-Host "  - $_" -ForegroundColor Yellow }
+    Write-Host 'Run the pre-merge review first, before this gate builds and runs the new code (it compares commits, so' -ForegroundColor Yellow
+    Write-Host 'commit the change first), and read the report:' -ForegroundColor Yellow
+    Write-Host "  pwsh scripts/review-deps.ps1 $ref HEAD > review.md" -ForegroundColor Yellow
+    Write-Host 'Carrying on with the gate.' -ForegroundColor Yellow
+    Write-Host $rule -ForegroundColor Yellow
+    Write-Host ''
 }

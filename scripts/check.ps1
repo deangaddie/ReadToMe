@@ -231,18 +231,9 @@ function Invoke-E2e {
 
 # Warns, before any stage, when a dependency file differs from main's merge base (#420): the pre-merge review
 # (review-deps.ps1) has to read a dependency change before this gate builds and runs it. A warning only; a check that
-# cannot run never fails the gate.
+# cannot run prints a note and never fails the gate.
 . (Join-Path $PSScriptRoot 'dependency-files.ps1')
-try { $dependencyWarning = @(Get-DependencyFileWarning -RepoRoot $repoRoot -Base 'main') }
-catch { $dependencyWarning = @("Dependency-file check skipped: $($_.Exception.Message)") }
-if ($dependencyWarning.Count -gt 1) {
-    Write-Host ''
-    Write-Host ('!' * 78) -ForegroundColor Yellow
-    $dependencyWarning | ForEach-Object { Write-Host $_ -ForegroundColor Yellow }
-    Write-Host ('!' * 78) -ForegroundColor Yellow
-    Write-Host ''
-}
-elseif ($dependencyWarning.Count -eq 1) { Write-Host $dependencyWarning[0] -ForegroundColor DarkGray }
+Write-DependencyFileWarning -RepoRoot $repoRoot
 
 # Removes from this process's environment, and so from every stage it starts, each variable whose name looks like
 # a credential. The gate runs third-party code (NuGet .targets, Bun and npm packages, test and app code) as the
