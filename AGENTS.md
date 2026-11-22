@@ -52,7 +52,8 @@ dotnet test src/Read2Me.E2eTests --filter-namespace 'Read2Me.E2eTests.Tests.Web*
 pwsh scripts/api-types.ps1              # after changing a DTO or endpoint; -NoBuild, -SkipInstall
 
 # PR gate: every CI stage in order, stopping at the first failure (dotnet build, API contract, web check and build, unit, E2E Chromium, E2E Firefox browser tests only)
-pwsh scripts/check.ps1                  # -SkipInstall once node_modules are current; installs Playwright Firefox on first use; an E2E stage hung past -E2eTimeoutMinutes (10) is killed and dumped
+pwsh scripts/check.ps1                  # -SkipInstall once node_modules are current; installs Playwright Firefox on first use; an E2E stage hung past -E2eTimeoutMinutes (10) is killed and dumped; first warns (never blocks) when a dependency file differs from main
+pwsh scripts/dependency-files.tests.ps1 # tests for that warning, over throwaway git repos (offline)
 
 # Dependency review: before the gate builds a PR that changes a lockfile, a requirements.txt or an Infra digest pin; reads diffs, tarballs and wheel listings, never installs or runs them
 pwsh scripts/review-deps.ps1 origin/main <pr-head> > review.md   # exit 1 on any STOP; -AllowYoung <pkg or image> is the human's call, for a security fix only
