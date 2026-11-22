@@ -101,7 +101,7 @@ User imports epub/text → LLM attributes dialog items to Characters → TTS syn
 
 ## Agent skills
 
-**Dependency PRs**: before restoring, building, gating or merging a PR that changes a manifest, lockfile, registry config or pinned digest, run the `review-deps` skill (`.claude/skills/review-deps/`).
+**Dependency PRs**: run the `review-deps` skill (`.claude/skills/review-deps/`) before anything restores, builds or merges one.
 
 ### Issue tracker
 

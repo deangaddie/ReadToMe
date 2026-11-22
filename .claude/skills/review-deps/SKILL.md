@@ -11,10 +11,9 @@ every session run that review first, publish the report, and handle the result t
 
 ## Trigger
 
-Any PR that touches a dependency manifest, lockfile, registry config (`bunfig.toml`, `.npmrc`, `nuget.config`) or
-pinned image digest, whoever opened it: Dependabot, a hand bump on a `.scratch/dependency-upgrades` branch, or a
-feature PR that adds a package. The exact file list is `scripts/dependency-files.ps1` (the one `check.ps1` warns on);
-the review also reads `*.csproj`, `Directory.Build.*` and `global.json`.
+Whoever opened the PR, including a hand bump on a `.scratch/dependency-upgrades` branch. Registry configs count:
+`bunfig.toml`, `.npmrc`, `nuget.config`. The full file list is `scripts/dependency-files.ps1`, the same list
+`check.ps1` warns on.
 
 ## Steps
 
@@ -47,22 +46,26 @@ the review also reads `*.csproj`, `Directory.Build.*` and `global.json`.
    gh pr comment <n> --body-file <tmp>/comment-<n>.md
    ```
 
+   Done when the comment shows in `gh pr view <n> --comments`.
+
 5. **On a STOP, stop.** Leave the PR open, post the report (step 4), and hand the decision to the human in your reply,
-   naming each STOP. An agent never clears a STOP, however harmless it looks. The human clears it with a written reason
-   in a PR comment; only then carry on at step 6, and quote that comment in your reply.
+   naming each STOP. An agent never clears a STOP, however harmless it looks: only the human does, with a written reason
+   in a PR comment by the repo owner (`deangaddie`). Done when you have handed over; carry on at step 6 only once that
+   comment exists, and quote it in your reply.
 
 6. **Run the gate on the head**, now that the review is clean or every STOP has the human's written clearance. The gate
    for each Dependabot entry is listed at the end of the `.github/dependabot.yml` header; a hand bump or feature PR
    runs `pwsh scripts/check.ps1`. Check the head out only now (`gh pr checkout <n>`). Done when the gate passes; a
-   failure goes back on the PR as a comment and the PR stays open.
+   failure goes back on the PR as a comment, the PR stays open, and you switch back to `main`.
 
-7. **Merge** with `gh pr merge <n> --squash --admin`, and switch back to `main`.
+7. **Merge** with `gh pr merge <n> --squash --admin`, and switch back to `main`. Done when `gh pr view <n> --json
+   state` says `MERGED`.
 
 ## Young security fixes
 
 The 7-day age STOP holds a fresh release back until a hijack would have been spotted. When a security fix cannot wait,
-only the human overrides it: the human runs the review with `-AllowYoung <package>`, or tells you in writing to,
-naming one package and its advisory. One package per use; the advisory goes in the PR comment. The report then shows
+only the human overrides it: the human runs the review with `-AllowYoung <package>`, or tells you to (in this
+session, or in a PR comment by the repo owner), naming one package and its advisory. One package per use; the advisory goes in the PR comment. The report then shows
 the age STOP as a NOTE, and every other STOP still applies.
 
 ## No scanner
