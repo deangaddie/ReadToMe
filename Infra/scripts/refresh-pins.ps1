@@ -7,7 +7,8 @@
 # For each base image: re-resolve its tag to the current registry digest, rewrite the
 # `image:tag@sha256:...` in every Dockerfile that uses it, then this is where the
 # manual security sweep runs — scan-images.ps1 and the no-compiler check (spec §11).
-# The Trivy pin in scan-images.ps1 is refreshed the same way.
+# The Trivy pin in scan-images.ps1 and the proxy's image in docker-compose.yml are refreshed the
+# same way. audio.cpp's compose pin is not: it moves by hand (Infra/README.md, audio.cpp).
 #
 #   ./refresh-pins.ps1            # resolve + rewrite FROM digests, print diffs
 #   ./refresh-pins.ps1 -Report    # resolve + print only, touch nothing
@@ -17,7 +18,8 @@ $ErrorActionPreference = 'Stop'
 
 $InfraRoot = Split-Path -Parent $PSScriptRoot   # Infra/
 
-# tag -> files that pin it: the Dockerfiles that FROM it (spec §6.1 table), and the scanner.
+# tag -> files that pin it: the Dockerfiles that FROM it (spec §6.1 table), the scanner and the
+# proxy.
 # `Ref` is the human tag resolved against the registry. `InFile` is the literal
 # string the digest hangs off inside the Dockerfile — usually the same as `Ref`,
 # but llama's FROM is ARG-interpolated (`nvidia/cuda:${CUDA_VERSION}-...`), so its
@@ -28,7 +30,8 @@ $Images = @(
   @{ Ref = 'nvidia/cuda:13.3.0-devel-ubuntu24.04';           Files = @('Dockerfile.llama'); InFile = 'nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION}' },
   @{ Ref = 'nvidia/cuda:13.3.0-runtime-ubuntu24.04';         Files = @('Dockerfile.llama'); InFile = 'nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION}' },
   @{ Ref = 'ubuntu:24.04';                                   Files = @('Dockerfile.whisper') },
-  @{ Ref = 'aquasec/trivy:0.76.1';                           Files = @('scripts/scan-images.ps1') }
+  @{ Ref = 'aquasec/trivy:0.76.1';                           Files = @('scripts/scan-images.ps1') },
+  @{ Ref = 'nginxinc/nginx-unprivileged:1.30-alpine-slim';  Files = @('docker-compose.yml') }
 )
 
 foreach ($img in $Images) {

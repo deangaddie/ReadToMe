@@ -88,3 +88,47 @@ vulnerabilities:
   - id: CVE-2026-84782
     purls: *audiocpp-openssl
     statement: *audiocpp-unreachable
+
+  # Proxy (nginx-unprivileged 1.30.6, Alpine 3.24): no rebuilt image yet; 1.30-alpine-slim
+  # and 1.31-alpine-slim were both last built 2026-10-19. Versioned purls, so the entries stop
+  # matching once refresh-pins.ps1 moves the digest to a fixed build.
+  - id: CVE-2026-113425
+    purls: &proxy-nginx
+      - pkg:apk/alpine/nginx@1.30.6-r1
+    statement: &proxy-unconfigured >-
+      Unreachable in the proxy: proxy/nginx.conf has only a stream block (no mail, http,
+      HTTP/2, HTTP/3 or TLS). Review at each proxy digest move; delete once the image ships
+      nginx 1.30.7.
+  - id: CVE-2026-121810
+    purls: *proxy-nginx
+    statement: *proxy-unconfigured
+  - id: CVE-2026-123007
+    purls: *proxy-nginx
+    statement: *proxy-unconfigured
+  - id: CVE-2026-123633
+    purls: *proxy-nginx
+    statement: *proxy-unconfigured
+  - id: CVE-2026-118899
+    purls: *proxy-nginx
+    statement: *proxy-unconfigured
+  # The resolver is in use, but it asks only Docker's embedded DNS (127.0.0.11) for the five
+  # service names, and that server forwards nothing out (dns: 127.0.0.1).
+  - id: CVE-2026-123634
+    purls: *proxy-nginx
+    statement: >-
+      The proxy's resolver queries only Docker's embedded DNS for five compose service names;
+      a crafted answer needs control of the Docker engine. Review at each proxy digest move;
+      delete once the image ships nginx 1.30.7.
+  - id: CVE-2026-107891
+    purls:
+      - pkg:apk/alpine/musl@1.2.6-r2
+      - pkg:apk/alpine/musl-utils@1.2.6-r2
+    statement: >-
+      musl regcomp is unused: nginx compiles regexes with PCRE2, and the proxy's config has
+      none. Review at each proxy digest move; delete once the image ships musl 1.2.6-r3.
+  - id: CVE-2026-85091
+    purls:
+      - pkg:apk/alpine/zlib@1.3.2-r0
+    statement: >-
+      gz_vacate is gzip file writing; the stream-only proxy compresses nothing. Review at each
+      proxy digest move; delete once the image ships zlib 1.3.2-r1.

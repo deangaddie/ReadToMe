@@ -83,6 +83,7 @@ Containerized services orchestrated via `Infra/docker-compose.yml` (check ports 
 | `read2me-whisper` | 9000 | CPU-only Whisper.CPP transcription for accuracy scoring |
 | `read2me-minilm-l6` | 8200 | Semantic similarity — MiniLM-L6 (`POST /similarity`) |
 | `read2me-mpnet-base-v2` | 8201 | Semantic similarity — MPNet-Base-v2 (`POST /similarity`) |
+| `read2me-proxy` | all five | Publishes every port above. The services sit on internal networks with no egress (`Infra/README.md`, "Container egress"; `Infra/scripts/egress-check.ps1`) |
 
 **audio.cpp** (ADR 0010) serves the model entries in `Infra/audiocpp/server.json`; each provider config's `ModelId` names one. It keeps one model resident and switches on request, like llama autoload — the first request after a switch takes 9–31 s. Paragraph TTS clones from a voice's reference audio; voice design (`breeze-design`, `qwen3-design`, `voxcpm2`) works from a text description. `server.json` is read at container start, so restart `audiocpp` after editing it. Its GGUFs share `GGUF_MODELS_DIR` with llama, one folder per model. Breeze is research/non-commercial, output included: personal use only. Details in `Infra/README.md`.
 
