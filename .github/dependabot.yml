@@ -41,6 +41,8 @@
 # .claude/skills/review-deps), then the gate for its entry, then merge. The gates:
 # nuget and bun /src/Read2Me.Web → pwsh scripts/check.ps1; bun /tools/browse → bun test there;
 # npm → npm run check in Infra/ContainerHealth; docker → docker compose build in Infra.
+#
+# If a version that merged here is later reported malicious: docs/agents/supply-chain-incident.md.
 version: 2
 updates:
   - package-ecosystem: docker
