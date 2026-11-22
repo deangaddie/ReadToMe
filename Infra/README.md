@@ -27,7 +27,9 @@ Infra/
 │   └── server.json             # audio.cpp model entries (every TTS model)
 ├── minilm-l6/, mpnet-base-v2/  # Similarity servers (app.py + locked requirements)
 ├── scan-accepted.yaml          # Accepted scan findings (see Security sweep)
-├── scripts/                    # lock.ps1 (requirements locks; wheel-pth.ps1 fails it on a new .pth), refresh-pins.ps1 (base-image digests), scan-images.ps1 (image scan)
+├── proxy/
+│   └── nginx.conf              # read2me-proxy: the published ports (see Container egress)
+├── scripts/                    # lock.ps1 (requirements locks; wheel-pth.ps1 fails it on a new .pth), refresh-pins.ps1 (base-image digests), scan-images.ps1 (image scan), egress-check.ps1 (no service egress)
 ├── ContainerHealth/            # Standalone service dashboard (see its README)
 ├── models/                     # GGUF files unless GGUF_MODELS_DIR is set, Whisper model + its sha256 manifest
 ├── cache/                      # Similarity model caches, filled by warm-up (git-ignored)
@@ -51,8 +53,8 @@ On first run against a new workspace (no `app.db` yet) the app seeds configs at 
 Every service defines its Docker health check in its image, except audio.cpp,
 which runs the upstream image unchanged and defines it in `docker-compose.yml`. Docker runs the
 container URL from inside the container; use the host URL for a manual check
-from the machine running Compose. All published ports are bound to
-`127.0.0.1`. The llama, audio.cpp and Whisper probes use `curl --fail` (any status below 400);
+from the machine running Compose. Every host port is published by `read2me-proxy`, bound to
+`127.0.0.1` (see [Container egress](#container-egress)). The llama, audio.cpp and Whisper probes use `curl --fail` (any status below 400);
 the semantic probes require exactly `200`.
 
 | Service | Docker probe inside container | Manual probe from host |
@@ -110,6 +112,40 @@ Apply a change with `wsl --shutdown`, then restart Docker Desktop (llama comes b
 attribution runs, the host's available memory sits around 7.5 GB with a quiet desktop. Watch the host's
 `Available MBytes` and pagefile use, not free RAM alone, and close browsers or games during long runs if it
 falls toward 1 GiB.
+
+## Container egress
+
+No runtime service needs the network beyond the host: every model is mounted read-only, and downloads go through the [warm-up](#model-cache-warm-up) file. Two layers keep them in:
+
+- **DNS.** The `*hardened` anchor sets `dns: 127.0.0.1`, so no external name resolves.
+- **Routes.** Each of the five services sits on its own `internal: true` network with no `ports:`. An internal network gives a container no default route, so even a connection to an IP literal fails with "Network is unreachable".
+
+An internal network also binds no host port. **`read2me-proxy`** (nginx `stream`, `proxy/nginx.conf`) carries them instead. It is the only container on an ordinary bridge (`edge`), joins all five internal networks, and publishes the same `127.0.0.1` ports. Each port forwards raw TCP to its service:
+
+| Host port | Upstream |
+| --- | --- |
+| 8080 | `llama:8080` |
+| 8004 | `audiocpp:8080` |
+| 9000 | `whisper:8080` |
+| 8200 | `minilm-l6:8200` |
+| 8201 | `mpnet-base-v2:8201` |
+
+- The app, ContainerHealth and the Docker health checks see the same ports as before.
+- The proxy resolves each upstream per connection through Docker's DNS (`127.0.0.11`), so a stopped service never stops it starting or serving the others. A port whose service is down refuses the connection, and the proxy logs `could not be resolved`.
+- `proxy_timeout` is 900 s, because a llama model switch and an audio.cpp busy period are long and silent.
+- Every service `depends_on` the proxy, so `docker compose up -d <service>` starts it too. The app starts containers with `docker start`, which doesn't, but `restart: unless-stopped` keeps the proxy up once it has run. If a service is up and its port refuses connections, run `docker compose up -d proxy`.
+- The proxy is pinned by digest and runs under `*hardened`, with nginx as the entrypoint. The image's entrypoint scripts would rewrite `/etc/nginx`, which is read-only. `scripts/refresh-pins.ps1` refreshes the digest and `scripts/scan-images.ps1` scans it.
+
+**First start after this layout lands:** run `docker compose down`, then `up`. A network can only become internal by being recreated.
+
+**Check it.** Run `pwsh scripts/egress-check.ps1` after any compose change. For each running service, a throwaway probe joins that container's network namespace and tries TCP connections to public IP literals. It runs the same probe from the proxy first, as a control that must connect: if it can't, the machine is offline and the result is inconclusive (exit 2). The check exits 1 if any service gets out.
+
+Two points are accepted:
+
+- **Services can reach each other through the proxy.** A compromised service can connect to the proxy's listener for another service on its own network. That is the same reach the host already has, and the services hold no secrets.
+- **The proxy keeps egress.** It sits on `edge`. Keep it minimal, first-party, digest-pinned and hardened.
+
+`docker-compose.warmup.yml` stays on ordinary networks, because it is the approved download path. `docker build` is unaffected: `internal` applies only to the networks that running containers join.
 
 ## Usage
 
@@ -175,7 +211,7 @@ A sweep runs by hand at every pin refresh. `scripts/refresh-pins.ps1` ends by po
    - `statement` holds the reason and the review condition. Add `expired_at` when the review is a date.
    - Delete the entry when its condition is met. Accepted findings still print, so each one gets looked at again every sweep.
 4. **No compilers.** `docker run --rm --entrypoint sh <image> -c "command -v gcc g++ cc make git"` prints nothing for the llama, whisper and similarity images.
-5. **Check every AI path** on the rebuilt containers: health checks, an LLM request, a TTS generation per model, and a Whisper transcription. For similarity, compare the fixed pair below.
+5. **Check every AI path** on the rebuilt containers. Run `pwsh scripts/egress-check.ps1` first, then check these: health checks, an LLM request, a TTS generation per model, and a Whisper transcription. For similarity, compare the fixed pair below.
 
    ```bash
    curl -s localhost:8200/similarity -H "Content-Type: application/json" \

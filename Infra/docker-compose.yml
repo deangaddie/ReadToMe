@@ -28,8 +28,7 @@ services:
     container_name: read2me-llama
     restart: unless-stopped
     networks: [llama]
-    ports:
-      - "127.0.0.1:8080:8080"
+    depends_on: [proxy]
     volumes:
       # Host GGUF directory. Override with GGUF_MODELS_DIR in Infra/.env to share
       # model files with other projects; container path stays /models.
@@ -53,8 +52,7 @@ services:
     container_name: read2me-audiocpp
     restart: unless-stopped
     networks: [audiocpp]
-    ports:
-      - "127.0.0.1:8004:8080"
+    depends_on: [proxy]
     environment:
       NVIDIA_VISIBLE_DEVICES: all
     volumes:
@@ -79,8 +77,7 @@ services:
     user: "10001:10001"
     restart: unless-stopped
     networks: [whisper]
-    ports:
-      - "127.0.0.1:9000:8080"
+    depends_on: [proxy]
     command:
       - --host
       - 0.0.0.0
@@ -104,8 +101,7 @@ services:
     container_name: read2me-minilm-l6
     restart: unless-stopped
     networks: [minilm-l6]
-    ports:
-      - "127.0.0.1:8200:8200"
+    depends_on: [proxy]
     environment:
       SENTENCE_TRANSFORMERS_HOME: /cache/sentence-transformers
     volumes:
@@ -121,17 +117,39 @@ services:
     container_name: read2me-mpnet-base-v2
     restart: unless-stopped
     networks: [mpnet-base-v2]
-    ports:
-      - "127.0.0.1:8201:8201"
+    depends_on: [proxy]
     environment:
       SENTENCE_TRANSFORMERS_HOME: /cache/sentence-transformers
     volumes:
       - ./cache/mpnet-base-v2:/cache:ro
 
-# One single-member bridge per hardened service prevents container-to-container reach.
+  # The only container with egress: it publishes the five service ports and forwards each to
+  # its service's internal network (proxy/nginx.conf; Infra/README.md, "Container egress").
+  # Tag bumps are a hand edit; refresh-pins.ps1 refreshes the digest.
+  proxy:
+    <<: *hardened
+    image: nginxinc/nginx-unprivileged:1.30-alpine-slim@sha256:5d8bb9437d74a600ec5dbf90c035451c724dc33eac8d3a71078f6f8612c345f6
+    container_name: read2me-proxy
+    restart: unless-stopped
+    # nginx directly: the image's entrypoint scripts rewrite /etc/nginx, which is read-only here.
+    entrypoint: ["nginx", "-g", "daemon off;"]
+    networks: [edge, llama, audiocpp, whisper, minilm-l6, mpnet-base-v2]
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8004:8004"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:8200:8200"
+      - "127.0.0.1:8201:8201"
+    volumes:
+      - ./proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+
+# Each service sits alone with the proxy on its own internal network: no default route, so no
+# egress, not even to an IP literal. `edge` is the proxy's ordinary bridge, which carries the
+# published ports. scripts/egress-check.ps1 proves the block.
 networks:
-  llama:
-  audiocpp:
-  whisper:
-  minilm-l6:
-  mpnet-base-v2:
+  edge:
+  llama:         { internal: true }
+  audiocpp:      { internal: true }
+  whisper:       { internal: true }
+  minilm-l6:     { internal: true }
+  mpnet-base-v2: { internal: true }
