@@ -11,10 +11,16 @@ code. The commits are fixed points in main's history:
   108ed9c5  Bump vite from 8.1.6 to 8.1.7 (npm, Infra/ContainerHealth)    20 transitive version changes
   353fccd2  TypeScript 7 (Bun)                                            new transitive package names
   94a55ecd  Docs only                                                     no dependency file changed
+  9f7e2278  Bump python in /Infra (Docker Hub digest, two Dockerfiles)    a digest pushed 2026-11-08
+  02489eae  Move the audio.cpp pin (ghcr.io digest, docker-compose.yml)   no registry push date: the created field
+  20cd5e05  Similarity locks take certifi, filelock, setuptools fixes     setuptools ships a .pth in both versions
 
-Ages are pinned with -Now, so the young-version tests keep passing as the releases get older.
+Ages are pinned with -Now, so the young-version tests keep passing as the releases get older. The python digest's age
+comes from Docker Hub only while 3.13-slim still points at it, then from its created field (2026-11-05), so the dates
+the tests pin sit on the same side of 7 days either way. The .pth check's fixture tests are in
+Infra/scripts/wheel-pth.tests.ps1.
 
-Every test but the docs-only one reads the npm registry. Without it they are skipped and reported as such, and the run
+Every test but the docs-only one reads the npm registry, Docker Hub, ghcr.io or PyPI. Without it they are skipped and reported as such, and the run
 still fails if any test that ran failed. Exits 1 on any failure.
 
 .EXAMPLE
@@ -117,6 +123,12 @@ Test-Case 'a wildcard -AllowYoung is refused' {
     Assert-True ($run.ExitCode -eq 2) "exit code $($run.ExitCode)"
 }
 
+Test-Case 'an image name -AllowYoung is accepted, and noted when it clears nothing' {
+    $run = Invoke-Review '94a55ecd~1', '94a55ecd', '-AllowYoung', 'ghcr.io/0xshug0/audio.cpp'
+    Assert-True ($run.ExitCode -eq 0) "exit code $($run.ExitCode)"
+    Assert-True ((Select-Line (Get-Findings $run.Report NOTE) '`ghcr.io/0xshug0/audio.cpp`', 'no age STOP').Count -eq 1) 'no NOTE'
+}
+
 Test-Case -Network 'a clean Bun bump has no STOP and exits 0' {
     $run = Invoke-Review '2b39c23d~1', '2b39c23d'
     Assert-True ($run.ExitCode -eq 0) "exit code $($run.ExitCode)`n$($run.Report)"
@@ -204,6 +216,47 @@ Test-Case -Network 'an npm lockfile bump reviews its transitive changes without 
     # moved files, so a whole-package count finds nothing new.
     $notes = Get-Findings $run.Report NOTE
     Assert-True ((Select-Line $notes '`rolldown@1.1.8`').Count -eq 0) "false NOTE for rolldown:`n$($notes -join "`n")"
+}
+
+Test-Case -Network 'a Docker digest bump older than 7 days has no STOP and a row per Dockerfile' {
+    $run = Invoke-Review '9f7e2278~1', '9f7e2278', '-Now', '2026-11-22'
+    Assert-True ($run.ExitCode -eq 0) "exit code $($run.ExitCode)`n$((Get-Findings $run.Report STOP) -join "`n")"
+    foreach ($file in 'Dockerfile.minilm-l6', 'Dockerfile.mpnet-base-v2') {
+        Assert-Match $run.Report "(?m)^## Infra/$([regex]::Escape($file))$" "a section for $file"
+    }
+    Assert-Match $run.Report '(?m)^\| `python:3\.13-slim` \| `d98cc29d3266` \| `e48f59cdba69` \|' 'a row for the python digest'
+}
+
+Test-Case -Network 'a Docker digest younger than 7 days is a STOP and exits 1' {
+    $run = Invoke-Review '9f7e2278~1', '9f7e2278', '-Now', '2026-11-09'
+    Assert-True ($run.ExitCode -eq 1) "exit code $($run.ExitCode)"
+    $stops = Get-Findings $run.Report STOP
+    Assert-True ((Select-Line $stops '`python:3.13-slim@e48f59cdba69`', 'days old').Count -eq 2) "no age STOP per Dockerfile:`n$($stops -join "`n")"
+}
+
+Test-Case -Network '-AllowYoung clears a Docker age STOP by image name' {
+    $run = Invoke-Review '9f7e2278~1', '9f7e2278', '-Now', '2026-11-09', '-AllowYoung', 'python'
+    Assert-True ($run.ExitCode -eq 0) "exit code $($run.ExitCode)`n$((Get-Findings $run.Report STOP) -join "`n")"
+    $notes = Get-Findings $run.Report NOTE
+    Assert-True ((Select-Line $notes '`python:3.13-slim@e48f59cdba69`', '-AllowYoung').Count -eq 2) "no -AllowYoung NOTE:`n$($notes -join "`n")"
+}
+
+Test-Case -Network 'a ghcr.io digest is aged by its created field, with a NOTE saying so' {
+    $run = Invoke-Review '02489eae~1', '02489eae', '-Now', '2026-11-22'
+    Assert-True ($run.ExitCode -eq 0) "exit code $($run.ExitCode)`n$((Get-Findings $run.Report STOP) -join "`n")"
+    Assert-Match $run.Report '(?m)^\| `ghcr\.io/0xshug0/audio\.cpp:full-cuda12` \| `5969cc86637c` \| `05a2e7de7ac4` \| 2026-10-27 \|' 'a row with the created date'
+    $notes = Get-Findings $run.Report NOTE
+    Assert-True ((Select-Line $notes '`ghcr.io/0xshug0/audio.cpp:full-cuda12@05a2e7de7ac4`', '`created` field').Count -eq 1) "no created-field NOTE:`n$($notes -join "`n")"
+}
+
+Test-Case -Network 'a requirements.txt bump reads its wheels, and a .pth the old version shipped is a NOTE, not a STOP' {
+    $run = Invoke-Review '20cd5e05~1', '20cd5e05'
+    Assert-True ($run.ExitCode -eq 0) "exit code $($run.ExitCode)`n$((Get-Findings $run.Report STOP) -join "`n")"
+    Assert-Match $run.Report '(?m)^## Infra/minilm-l6/requirements\.txt' 'a section for the lock'
+    Assert-Match $run.Report '(?m)^\| `setuptools` \| 83\.0\.0 \| 84\.2\.1 \| 1 \| 1 kept \|' 'a row for setuptools'
+    Assert-Match $run.Report '(?m)^\| `certifi` \| 2026\.6\.17 \| 2026\.10\.23 \| 1 \| none \|' 'a row for certifi'
+    $notes = Get-Findings $run.Report NOTE
+    Assert-True ((Select-Line $notes '`setuptools==84.2.1`', 'distutils-precedence.pth', 'as 83.0.0 did').Count -eq 2) "no kept-.pth NOTE per lock:`n$($notes -join "`n")"
 }
 
 Write-Host ''

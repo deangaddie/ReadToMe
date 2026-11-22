@@ -27,7 +27,7 @@ Infra/
 │   └── server.json             # audio.cpp model entries (every TTS model)
 ├── minilm-l6/, mpnet-base-v2/  # Similarity servers (app.py + locked requirements)
 ├── scan-accepted.yaml          # Accepted scan findings (see Security sweep)
-├── scripts/                    # lock.ps1 (requirements locks), refresh-pins.ps1 (base-image digests), scan-images.ps1 (image scan)
+├── scripts/                    # lock.ps1 (requirements locks; wheel-pth.ps1 fails it on a new .pth), refresh-pins.ps1 (base-image digests), scan-images.ps1 (image scan)
 ├── ContainerHealth/            # Standalone service dashboard (see its README)
 ├── models/                     # GGUF files unless GGUF_MODELS_DIR is set, Whisper model + its sha256 manifest
 ├── cache/                      # Similarity model caches, filled by warm-up (git-ignored)
@@ -162,7 +162,7 @@ DNS policy must be absent while a model is being downloaded.
 
 A sweep runs by hand at every pin refresh. `scripts/refresh-pins.ps1` ends by pointing here. `check.ps1` never runs it: the scan needs built images, network access for the vulnerability DB, and minutes per image.
 
-1. **Move the pins.** Run `scripts/refresh-pins.ps1` and move the audio.cpp digest by hand (see [audio.cpp](#audiocpp-tts)). Relock with `scripts/lock.ps1 <service>` for each similarity service whose base moved (it skips versions younger than 7 days; its header says how a security fix overrides that), then rebuild with `docker compose up -d --build`.
+1. **Move the pins.** Run `scripts/refresh-pins.ps1` and move the audio.cpp digest by hand (see [audio.cpp](#audiocpp-tts)). Relock with `scripts/lock.ps1 <service>` for each similarity service whose base moved (it skips versions younger than 7 days, its header says how a security fix overrides that, and it fails before installing on any `.pth` file the previous lock did not have), then rebuild with `docker compose up -d --build`.
 2. **Scan.** Run `pwsh scripts/scan-images.ps1 -Compare ../.artifacts/scans/<last sweep date>`.
    - It scans every image in `docker compose config --images`, skipping (with a warning) any that is neither built nor pulled. It never builds.
    - Each image is `docker save`d to a tar, and a pinned Trivy scans the tar mounted read-only, so no Docker socket goes into a container.

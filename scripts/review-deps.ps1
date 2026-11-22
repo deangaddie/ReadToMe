@@ -16,8 +16,17 @@ The lockfiles are compared at the merge base of the two refs and at <Head>, so e
 that appeared is reviewed, transitive ones included. A wrapper bump such as oxlint-tsgolint is reviewed through its
 native packages too, since those hold the code that runs.
 
-Reviewed files (any folder): bun.lock (Bun) and package-lock.json (npm). NuGet, Docker and uv.lock checks plug into
-$Reviewers below and add their findings to the same report.
+Reviewed files: bun.lock (Bun) and package-lock.json (npm) in any folder, requirements.txt (Python) in any folder, and
+Dockerfile, Dockerfile.* and docker-compose*.yml under Infra/ (Docker digests). A NuGet check plugs into $Reviewers
+below and adds its findings to the same report.
+
+A Docker digest bump is checked for age only: beyond that it is risk-accepted, since the containers hold no secrets.
+The age is Docker Hub's push date while the tag still points at the digest; otherwise (ghcr.io, or a tag that has
+moved on) it is the image config's `created` field, which the publisher sets, and a NOTE says so.
+
+A requirements.txt change gets the .pth check lock.ps1 runs before it installs (Infra/scripts/wheel-pth.ps1): the
+central directory of every wheel a changed pin's hashes name is read over HTTP range requests, and any *.pth the
+previous version did not ship is a STOP.
 
 Each finding is STOP or NOTE. The exit code is 1 on any STOP, 0 otherwise, and 2 when the review itself could not run
 (bad ref, registry unreachable, tool missing); then no report is printed.
@@ -29,11 +38,18 @@ STOP, per changed package:
     hasInstallScript in package-lock.json, or a new or changed bin entry
   - provenance attestation on the old version but not on the new
   - a tarball whose hash does not match the lockfile, a non-registry source, or a diff tool that failed
+STOP, per changed Docker digest:
+  - a digest pushed (or, failing that, built) less than 7 days before -Now, or one the registry does not have
+STOP, per changed Python pin:
+  - a wheel that ships a *.pth file the pin's previous version did not, or did with other contents
+  - a lock hash that names no PyPI file, so the check could not read what the lock accepts
 NOTE:
   - more child_process, fs or network-module imports, or more eval / new Function / fetch / process.env use, counted
     across the whole old and new package (so renamed, hashed bundle files do not count as new code)
   - changed binary files, which are not diffable and were not inspected
   - an age STOP cleared by -AllowYoung
+  - a Docker age read from the image's own `created` field rather than a registry push date
+  - a .pth file the previous version shipped unchanged, and a Python pin with no wheel to read (an sdist, built on install)
 
 The progress log goes to stderr, the report to stdout: `pwsh scripts/review-deps.ps1 origin/main pr > review.md`.
 
@@ -44,7 +60,8 @@ The ref the change goes into, usually origin/main.
 The ref holding the change, usually the PR branch.
 
 .PARAMETER AllowYoung
-Package names whose age STOP is cleared, one name per entry: -AllowYoung a, b. Wildcards are refused; there is no
+Package or image names whose age STOP is cleared, one name per entry: -AllowYoung a, b. An image is named as the file
+writes it, without tag or digest: python, nvidia/cuda, ghcr.io/0xshug0/audio.cpp. Wildcards are refused; there is no
 blanket skip. Only the human uses it, for a security fix that cannot wait 7 days. The report says what it cleared.
 
 .PARAMETER Now
@@ -500,8 +517,208 @@ function Invoke-LockfileReview {
 
 #endregion
 
+#region Docker digests
+
+# Base-image and audio.cpp digest bumps can't be diffed, and they run in containers with no secrets, so the review
+# checks their age only (#418): a digest pushed less than 7 days before -Now is a STOP.
+
+# Every `image:tag@sha256:...` in a Dockerfile or compose file. ${VAR} and $VAR are expanded from the file's ARG
+# defaults, since Dockerfile.llama builds its FROM reference out of ARGs.
+function Read-DigestPins {
+    param([string]$Text)
+    if (-not $Text) { return @() }
+    $argDefaults = @{}
+    foreach ($m in [regex]::Matches($Text, '(?m)^\s*ARG\s+(\w+)=([^\s$@]+)\s*$')) { $argDefaults[$m.Groups[1].Value] = $m.Groups[2].Value }
+    $seen = @{}
+    foreach ($m in [regex]::Matches($Text, '(?<ref>[A-Za-z0-9$][A-Za-z0-9._/:${}-]*)@(?<digest>sha256:[0-9a-f]{64})')) {
+        $ref = [regex]::Replace($m.Groups['ref'].Value, '\$\{(\w+)\}|\$(\w+)', {
+                param($v)
+                $name = if ($v.Groups[1].Success) { $v.Groups[1].Value } else { $v.Groups[2].Value }
+                if ($argDefaults.ContainsKey($name)) { $argDefaults[$name] } else { $v.Value }
+            })
+        $digest = $m.Groups['digest'].Value
+        if ($seen.ContainsKey("$ref@$digest")) { continue }
+        $seen["$ref@$digest"] = $true
+        # registry/repository:tag; the registry is the first part when it has a dot or a port, else Docker Hub.
+        $parts = $ref.Split('/')
+        $registryHost = 'docker.io'
+        if ($parts.Count -gt 1 -and ($parts[0] -match '[.:]' -or $parts[0] -eq 'localhost')) {
+            $registryHost = $parts[0]
+            $parts = $parts[1..($parts.Count - 1)]
+        }
+        $last = $parts[-1]
+        $tag = $null
+        if ($last.Contains(':')) { $tag = $last.Substring($last.IndexOf(':') + 1); $parts[-1] = $last.Substring(0, $last.IndexOf(':')) }
+        $repository = $parts -join '/'
+        if ($registryHost -eq 'docker.io' -and $parts.Count -eq 1) { $repository = "library/$repository" }
+        $image = if ($registryHost -eq 'docker.io') { $repository -replace '^library/', '' } else { "$registryHost/$repository" }
+        [pscustomobject]@{ Ref = $ref; Image = $image; Registry = $registryHost; Repository = $repository; Tag = $tag; Digest = $digest }
+    }
+}
+
+$registryHttp = $null
+# A GET with the registry's anonymous bearer token: on a 401 it reads WWW-Authenticate, fetches a pull token from the
+# realm and retries once. Returns the status code and the body text.
+$registryTokens = @{}
+function Invoke-RegistryGet {
+    param([string]$RegistryHost, [string]$Repository, [string]$Path, [string]$Accept)
+    if (-not $script:registryHttp) {
+        $script:registryHttp = [System.Net.Http.HttpClient]::new()
+        $script:registryHttp.Timeout = [TimeSpan]::FromMinutes(1)
+    }
+    $apiHost = if ($RegistryHost -eq 'docker.io') { 'registry-1.docker.io' } else { $RegistryHost }
+    $url = "https://$apiHost/v2/$Repository/$Path"
+    $tokenKey = "$apiHost/$Repository"
+    for ($attempt = 0; $attempt -lt 2; $attempt++) {
+        $request = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Get, $url)
+        if ($Accept) { [void]$request.Headers.TryAddWithoutValidation('Accept', $Accept) }
+        if ($registryTokens[$tokenKey]) { $request.Headers.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $registryTokens[$tokenKey]) }
+        $response = $script:registryHttp.SendAsync($request).GetAwaiter().GetResult()
+        try {
+            $status = [int]$response.StatusCode
+            if ($status -eq 401 -and $attempt -eq 0) {
+                $challenge = [string]$response.Headers.WwwAuthenticate
+                if ($challenge -notmatch 'realm="([^"]+)"') { throw "$url asks for credentials the review does not have." }
+                $realm = $Matches[1]
+                $service = if ($challenge -match 'service="([^"]+)"') { "&service=$([uri]::EscapeDataString($Matches[1]))" } else { '' }
+                $tokenJson = $script:registryHttp.GetStringAsync("${realm}?scope=$([uri]::EscapeDataString("repository:${Repository}:pull"))$service").GetAwaiter().GetResult() | ConvertFrom-Json
+                $registryTokens[$tokenKey] = if ($tokenJson.token) { $tokenJson.token } else { $tokenJson.access_token }
+                continue
+            }
+            return @{ Status = $status; Body = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult() }
+        } finally { $response.Dispose() }
+    }
+}
+
+$manifestAccept = 'application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'
+
+# When the digest was pushed: Date (ISO text) and Source. Docker Hub's tag API gives a push date the registry records
+# while the tag still points at the digest. Otherwise it falls back to the image config's `created` field (the
+# linux/amd64 image of an index), which the publisher sets. Exists is false when the registry has no such digest.
+function Get-DigestDate {
+    param($Pin)
+    if ($Pin.Registry -eq 'docker.io' -and $Pin.Tag) {
+        $namespace, $name = $Pin.Repository.Split('/', 2)
+        try {
+            $tag = (Invoke-WebRequest "https://hub.docker.com/v2/namespaces/$namespace/repositories/$name/tags/$($Pin.Tag)").Content |
+                ConvertFrom-Json -DateKind String
+            if ($tag.digest -eq $Pin.Digest -and $tag.tag_last_pushed) { return @{ Exists = $true; Date = [string]$tag.tag_last_pushed; Source = 'Docker Hub push' } }
+            $platform = @($tag.images | Where-Object digest -eq $Pin.Digest) | Select-Object -First 1
+            if ($platform -and $platform.last_pushed) { return @{ Exists = $true; Date = [string]$platform.last_pushed; Source = 'Docker Hub push' } }
+        } catch {
+            if (-not ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404)) { throw }
+        }
+    }
+    Write-Log "  registry: $($Pin.Registry)/$($Pin.Repository)@$($Pin.Digest.Substring(0, 19))"
+    $manifest = Invoke-RegistryGet $Pin.Registry $Pin.Repository "manifests/$($Pin.Digest)" $manifestAccept
+    if ($manifest.Status -eq 404) { return @{ Exists = $false } }
+    if ($manifest.Status -ne 200) { throw "The registry returned $($manifest.Status) for $($Pin.Ref)@$($Pin.Digest)." }
+    $doc = $manifest.Body | ConvertFrom-Json -AsHashtable -DateKind String
+    if ($doc.manifests) {
+        $child = @($doc.manifests | Where-Object { $_.platform.os -eq 'linux' -and $_.platform.architecture -eq 'amd64' }) + @($doc.manifests) | Select-Object -First 1
+        $manifest = Invoke-RegistryGet $Pin.Registry $Pin.Repository "manifests/$($child.digest)" $manifestAccept
+        if ($manifest.Status -ne 200) { throw "The registry returned $($manifest.Status) for $($Pin.Ref)@$($child.digest)." }
+        $doc = $manifest.Body | ConvertFrom-Json -AsHashtable -DateKind String
+    }
+    $config = Invoke-RegistryGet $Pin.Registry $Pin.Repository "blobs/$($doc.config.digest)" $null
+    if ($config.Status -ne 200) { throw "The registry returned $($config.Status) for the config of $($Pin.Ref)@$($Pin.Digest)." }
+    $created = ($config.Body | ConvertFrom-Json -AsHashtable -DateKind String).created
+    return @{ Exists = $true; Date = [string]$created; Source = 'image created field' }
+}
+
+# Reviews one Dockerfile or compose file and returns its report section.
+function Invoke-DigestReview {
+    param([string]$Path)
+    $basePins = @(Read-DigestPins (Get-FileAt $script:mergeBase $Path))
+    $headPins = @(Read-DigestPins (Get-FileAt $script:headCommit $Path))
+    $section = [System.Collections.Generic.List[string]]::new()
+    $section.Add("## $Path")
+    $section.Add('')
+    $changes = @($headPins | Where-Object { $p = $_; -not @($basePins | Where-Object { $_.Ref -eq $p.Ref -and $_.Digest -eq $p.Digest }).Count })
+    if (-not $changes.Count) {
+        $section.Add('No pinned digest changed or appeared.')
+        return $section
+    }
+    $section.Add('| Image | Old | New | Pushed | Age (days) | Date from |')
+    $section.Add('| --- | --- | --- | --- | --- | --- |')
+    foreach ($pin in $changes) {
+        $old = @($basePins | Where-Object Ref -eq $pin.Ref) | Select-Object -First 1
+        $short = { param($d) $d.Substring(7, 12) }
+        $subject = "$($pin.Ref)@$(& $short $pin.Digest)"
+        Write-Log "$Path  $($pin.Ref) $(if ($old) { & $short $old.Digest } else { '(new)' }) -> $(& $short $pin.Digest)"
+        $date = Get-DigestDate $pin
+        $ageText = '?'
+        $dateText = '?'
+        $sourceText = '-'
+        if (-not $date.Exists) {
+            Add-Finding STOP $subject $Path 'is not on the registry; review it by hand.'
+        } elseif (-not $date.Date) {
+            Add-Finding STOP $subject $Path 'has no push or build date the review can read; review it by hand.'
+        } else {
+            $sourceText = $date.Source
+            $dateText = Format-Date $date.Date
+            $age = ($Now - [DateTimeOffset]::Parse($date.Date)).TotalDays
+            $ageText = '{0:0.0}' -f $age
+            if ($date.Source -ne 'Docker Hub push') {
+                Add-Finding NOTE $subject $Path "has no registry push date the review can read; its age comes from the image's own ``created`` field, which the publisher sets."
+            }
+            if ($age -lt $minAgeDays) {
+                $text = "was pushed $dateText, $ageText days old; the minimum is $minAgeDays days."
+                if ($AllowYoung -contains $pin.Image) {
+                    [void]$clearedYoung.Add($pin.Image)
+                    Add-Finding NOTE $subject $Path "$text The age STOP is cleared by -AllowYoung."
+                } else {
+                    Add-Finding STOP $subject $Path $text
+                }
+            }
+        }
+        $oldText = if ($old) { "``$(& $short $old.Digest)``" } else { '-' }
+        $section.Add("| ``$($pin.Ref)`` | $oldText | ``$(& $short $pin.Digest)`` | $dateText | $ageText | $sourceText |")
+    }
+    return $section
+}
+
+#endregion
+
+#region Python locks
+
+# A requirements.txt change is checked for new .pth files (#418), with the check lock.ps1 runs before it installs.
+. (Join-Path $repoRoot 'Infra/scripts/wheel-pth.ps1')
+
+# Reviews one requirements.txt and returns its report section.
+function Invoke-PythonLockReview {
+    param([string]$Path)
+    $changes = @(Get-LockPthChanges (Get-FileAt $script:mergeBase $Path) (Get-FileAt $script:headCommit $Path) { param($Line) Write-Log $Line })
+    $section = [System.Collections.Generic.List[string]]::new()
+    $section.Add("## $Path")
+    $section.Add('')
+    if (-not $changes.Count) {
+        $section.Add('No pin changed or appeared.')
+        return $section
+    }
+    $section.Add('| Package | Old | New | Wheels read | .pth files |')
+    $section.Add('| --- | --- | --- | --- | --- |')
+    foreach ($c in $changes) {
+        $subject = "$($c.Name)==$($c.New)"
+        foreach ($entry in $c.NewPth) {
+            $what = if ($entry -match '^(.*) \(contents changed\)$') { "``$($Matches[1])`` with contents $($c.Old) did not ship" }
+            elseif ($c.Old) { "``$entry``, which $($c.Old) did not" }
+            else { "``$entry`` and is new to the lock" }
+            Add-Finding STOP $subject $Path "ships $what; a .pth runs on every interpreter start."
+        }
+        foreach ($reason in $c.Unmatched) { Add-Finding STOP $subject $Path "$reason; review it by hand." }
+        foreach ($entry in $c.KeptPth) { Add-Finding NOTE $subject $Path "ships ``$entry``, as $($c.Old) did." }
+        foreach ($reason in $c.Skipped) { Add-Finding NOTE $subject $Path "$reason." }
+        $pthText = if ($c.NewPth.Count) { "**$($c.NewPth.Count) new**" } elseif ($c.KeptPth.Count) { "$($c.KeptPth.Count) kept" } else { 'none' }
+        $section.Add("| ``$($c.Name)`` | $(if ($c.Old) { $c.Old } else { '-' }) | $($c.New) | $($c.Wheels) | $pthText |")
+    }
+    return $section
+}
+
+#endregion
+
 # Extension point. Each reviewer picks its files from the changed paths (Match) and reviews one of them (Review),
-# adding findings with Add-Finding and returning its report section as lines. NuGet, Docker and uv.lock add an entry.
+# adding findings with Add-Finding and returning its report section as lines. NuGet adds an entry.
 $Reviewers = @(
     @{
         Name = 'Bun'
@@ -513,13 +730,24 @@ $Reviewers = @(
         Match = { param($Path) (Split-Path -Leaf $Path) -eq 'package-lock.json' }
         Review = { param($Path) Invoke-LockfileReview $Path ${function:Read-NpmLock} ${function:Invoke-NpmDiff} }
     }
+    @{
+        Name = 'Docker'
+        Match = { param($Path) $Path -like 'Infra/*' -and (Split-Path -Leaf $Path) -match '^(Dockerfile(\..+)?|docker-compose.*\.ya?ml)$' }
+        Review = { param($Path) Invoke-DigestReview $Path }
+    }
+    @{
+        Name = 'Python'
+        Match = { param($Path) (Split-Path -Leaf $Path) -eq 'requirements.txt' }
+        Review = { param($Path) Invoke-PythonLockReview $Path }
+    }
 )
 
 try {
     $AllowYoung = @($AllowYoung | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     foreach ($name in $AllowYoung) {
-        if ($name -notmatch '^(@[a-z0-9][\w.-]*/)?[a-z0-9][\w.-]*$') {
-            throw "-AllowYoung takes package names, one per entry, no wildcards: '$name'."
+        # An npm package (@scope/name or name) or an image repository as the file writes it (nvidia/cuda, ghcr.io/o/r).
+        if ($name -notmatch '^(@[a-z0-9][\w.-]*/)?[a-z0-9][\w.-]*$' -and $name -notmatch '^[a-z0-9][\w.-]*(/[a-z0-9][\w.-]*)+$') {
+            throw "-AllowYoung takes package or image names, one per entry, no wildcards: '$name'."
         }
     }
 

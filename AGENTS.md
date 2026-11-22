@@ -54,9 +54,10 @@ pwsh scripts/api-types.ps1              # after changing a DTO or endpoint; -NoB
 # PR gate: every CI stage in order, stopping at the first failure (dotnet build, API contract, web check and build, unit, E2E Chromium, E2E Firefox browser tests only)
 pwsh scripts/check.ps1                  # -SkipInstall once node_modules are current; installs Playwright Firefox on first use; an E2E stage hung past -E2eTimeoutMinutes (10) is killed and dumped
 
-# Dependency review: before the gate builds a PR that changes bun.lock or package-lock.json; reads the diff and registry tarballs, never installs or runs them
-pwsh scripts/review-deps.ps1 origin/main <pr-head> > review.md   # exit 1 on any STOP; -AllowYoung <pkg> is the human's call, for a security fix only
+# Dependency review: before the gate builds a PR that changes a lockfile, a requirements.txt or an Infra digest pin; reads diffs, tarballs and wheel listings, never installs or runs them
+pwsh scripts/review-deps.ps1 origin/main <pr-head> > review.md   # exit 1 on any STOP; -AllowYoung <pkg or image> is the human's call, for a security fix only
 pwsh scripts/review-deps.tests.ps1      # its tests, over real bump commits; network tests skip offline
+pwsh Infra/scripts/wheel-pth.tests.ps1  # the .pth check lock.ps1 and review-deps share, over wheel fixtures
 ```
 
 Which credentials the dev machine may hold, and where: `docs/agents/dev-machine-credentials.md`.
