@@ -8,7 +8,8 @@ developer's identity. Run this first, on the PR's base and head, and read the re
 
 It never installs, builds or runs the new code. It reads the git diff, asks the npm registry for publish dates and
 provenance, downloads the old and new tarballs and reads them in memory (nothing is unpacked to disk), and runs
-`bun pm diff` / `npm diff`, which only download and compare tarballs. Credential-looking environment variables are
+`bun pm diff` / `npm diff`, which only download and compare tarballs. For NuGet it runs `dotnet restore` in throwaway
+worktrees and nothing more (the NuGet region below says why restore is the one step that is safe). Credential-looking environment variables are
 removed for the run (scripts/credential-variables.ps1, the list check.ps1 uses), and a package or version the registry
 no longer has is a STOP.
 
@@ -17,8 +18,13 @@ that appeared is reviewed, transitive ones included. A wrapper bump such as oxli
 native packages too, since those hold the code that runs.
 
 Reviewed files: bun.lock (Bun) and package-lock.json (npm) in any folder, requirements.txt (Python) in any folder, and
-Dockerfile, Dockerfile.* and docker-compose*.yml under Infra/ (Docker digests). A NuGet check plugs into $Reviewers
-below and adds its findings to the same report.
+Dockerfile, Dockerfile.* and docker-compose*.yml under Infra/ (Docker digests), and Directory.Packages.props,
+Directory.Build.props, Directory.Build.targets, *.csproj, nuget.config and global.json in any folder (NuGet, reviewed
+once per run however many of them changed).
+
+A NuGet change is reviewed through a restore of src/Read2Me.slnx at the merge base and at head, each in a throwaway git
+worktree, so transitive changes are reviewed too. Each changed package's old and new .nupkg come from the nuget.org
+flat container and are read in memory (scripts/nupkg-review.ps1): file lists, .nuspec dependencies, author signatures.
 
 A Docker digest bump is checked for age only: beyond that it is risk-accepted, since the containers hold no secrets.
 The age is Docker Hub's push date while the tag still points at the digest; otherwise (ghcr.io, or a tag that has
@@ -43,6 +49,14 @@ STOP, per changed Docker digest:
 STOP, per changed Python pin:
   - a wheel that ships a *.pth file the pin's previous version did not, or did with other contents
   - a lock hash that names no PyPI file, so the check could not read what the lock accepts
+STOP, per changed NuGet package, direct or transitive:
+  - a version published less than 7 days before -Now (nuget.org registration `published`), or an unlisted one
+  - a package id not in the base tree
+  - a new file under build/, buildTransitive/, buildMultiTargeting/, analyzers/, tools/ or content*/
+  - an author signature on the old version that is missing on the new
+  - a .nupkg on nuget.org that differs from the one restore downloaded, or a version nuget.org does not have
+STOP, NuGet as a whole:
+  - a changed nuget.config (restore always uses this checkout's), or an MSBuild SDK head names and the base does not
 NOTE:
   - more child_process, fs or network-module imports, or more eval / new Function / fetch / process.env use, counted
     across the whole old and new package (so renamed, hashed bundle files do not count as new code)
@@ -50,6 +64,10 @@ NOTE:
   - an age STOP cleared by -AllowYoung
   - a Docker age read from the image's own `created` field rather than a registry push date
   - a .pth file the previous version shipped unchanged, and a Python pin with no wheel to read (an sdist, built on install)
+  - other new files in a NuGet package, a .nuspec dependency added or removed, a different author signer, and a
+    Directory.Packages.props change no project restores
+The NuGet section also lists each package's build-time files whose contents changed. That is not a finding, since
+Microsoft's packages change their buildTransitive .targets and analyzer DLLs on every patch.
 
 The progress log goes to stderr, the report to stdout: `pwsh scripts/review-deps.ps1 origin/main pr > review.md`.
 
@@ -60,7 +78,8 @@ The ref the change goes into, usually origin/main.
 The ref holding the change, usually the PR branch.
 
 .PARAMETER AllowYoung
-Package or image names whose age STOP is cleared, one name per entry: -AllowYoung a, b. An image is named as the file
+Package or image names whose age STOP is cleared, one name per entry: -AllowYoung a, b. A NuGet package is named by its
+id, in any case: Microsoft.EntityFrameworkCore. An image is named as the file
 writes it, without tag or digest: python, nvidia/cuda, ghcr.io/0xshug0/audio.cpp. Wildcards are refused; there is no
 blanket skip. Only the human uses it, for a security fix that cannot wait 7 days. The report says what it cleared.
 
@@ -89,7 +108,8 @@ $minAgeDays = 7
 $registry = 'https://registry.npmjs.org'
 
 $findings = [System.Collections.Generic.List[object]]::new()
-$clearedYoung = [System.Collections.Generic.HashSet[string]]::new()
+# Case-insensitive, as -contains is: a NuGet id is named in -AllowYoung in any case.
+$clearedYoung = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 
 # One finding in the report. $Subject is the package@version (or file) it is about, $Source the file that brought it.
 function Add-Finding {
@@ -98,6 +118,24 @@ function Add-Finding {
 }
 
 function Write-Log { param([string]$Text) [Console]::Error.WriteLine($Text) }
+
+# The age check every ecosystem shares: a release dated $Date (ISO text) less than $minAgeDays before -Now is a STOP,
+# or a NOTE when -AllowYoung names $Name. $Verb is how the file dates it ('published', 'pushed'). Returns the age text.
+function Add-AgeFinding {
+    param([string]$Subject, [string]$Source, [string]$Name, [string]$Date, [string]$Verb)
+    $age = ($Now - [DateTimeOffset]::Parse($Date)).TotalDays
+    $ageText = '{0:0.0}' -f $age
+    if ($age -lt $minAgeDays) {
+        $text = "was $Verb $(Format-Date $Date), $ageText days old; the minimum is $minAgeDays days."
+        if ($AllowYoung -contains $Name) {
+            [void]$clearedYoung.Add($Name)
+            Add-Finding NOTE $Subject $Source "$text The age STOP is cleared by -AllowYoung."
+        } else {
+            Add-Finding STOP $Subject $Source $text
+        }
+    }
+    return $ageText
+}
 
 # Runs git and returns its stdout lines; stderr stays out of them (a warning must not end up in a lockfile's text).
 function Invoke-Git {
@@ -392,17 +430,7 @@ function Invoke-PackageReview {
     if (-not $published) {
         Add-Finding STOP $subject $Source 'has no publish date on the registry.'
     } else {
-        $age = ($Now - [DateTimeOffset]::Parse($published)).TotalDays
-        $ageText = '{0:0.0}' -f $age
-        if ($age -lt $minAgeDays) {
-            $text = "was published $(Format-Date $published), $ageText days old; the minimum is $minAgeDays days."
-            if ($AllowYoung -contains $name) {
-                [void]$clearedYoung.Add($name)
-                Add-Finding NOTE $subject $Source "$text The age STOP is cleared by -AllowYoung."
-            } else {
-                Add-Finding STOP $subject $Source $text
-            }
-        }
+        $ageText = Add-AgeFinding $subject $Source $name $published 'published'
     }
 
     # Tarballs
@@ -657,20 +685,10 @@ function Invoke-DigestReview {
         } else {
             $sourceText = $date.Source
             $dateText = Format-Date $date.Date
-            $age = ($Now - [DateTimeOffset]::Parse($date.Date)).TotalDays
-            $ageText = '{0:0.0}' -f $age
             if ($date.Source -ne 'Docker Hub push') {
                 Add-Finding NOTE $subject $Path "has no registry push date the review can read; its age comes from the image's own ``created`` field, which the publisher sets."
             }
-            if ($age -lt $minAgeDays) {
-                $text = "was pushed $dateText, $ageText days old; the minimum is $minAgeDays days."
-                if ($AllowYoung -contains $pin.Image) {
-                    [void]$clearedYoung.Add($pin.Image)
-                    Add-Finding NOTE $subject $Path "$text The age STOP is cleared by -AllowYoung."
-                } else {
-                    Add-Finding STOP $subject $Path $text
-                }
-            }
+            $ageText = Add-AgeFinding $subject $Path $pin.Image $date.Date 'pushed'
         }
         $oldText = if ($old) { "``$(& $short $old.Digest)``" } else { '-' }
         $section.Add("| ``$($pin.Ref)`` | $oldText | ``$(& $short $pin.Digest)`` | $dateText | $ageText | $sourceText |")
@@ -717,8 +735,286 @@ function Invoke-PythonLockReview {
 
 #endregion
 
+#region NuGet
+
+# A NuGet package's build/*.props and .targets and its analyzers run inside `dotnet build`, as the developer, and NuGet
+# has no diff tool or release-age guard of its own (#404), so the review reads each changed package itself (#417).
+#
+# Every changed package, transitive ones included, comes from restoring src/Read2Me.slnx at the merge base and at head,
+# each in a throwaway git worktree, into a scratch packages folder, and diffing the packages in each project's
+# obj/project.assets.json. Restore uses this checkout's nuget.config (#421), so the feed list is the repo's, not the
+# machine's or the PR's. A clean worktree has no obj/nuget.g.props or .targets yet, so restore does not import the
+# packages it is restoring; after it, they would be imported. So nothing else ever evaluates the restored trees: no
+# `dotnet package list`, no build, no MSBuild call of any kind, since MSBuild property functions can read files and
+# environment variables. That restore is safe this way is inferred from the NuGet docs, not tested with a hostile
+# package (#400). Restore does evaluate head's own project files, so an MSBuild SDK that head names and the merge base
+# does not (SDKs resolve from NuGet and are imported during evaluation) is a STOP, and head is not restored. Beyond
+# that, a target or property function the PR itself adds to a .csproj or Directory.Build.* runs at restore: read the
+# PR's changes to those files before running this.
+
+. (Join-Path $PSScriptRoot 'nupkg-review.ps1')
+$nugetApi = 'https://api.nuget.org/v3'
+$nugetFlatContainer = 'https://api.nuget.org/v3-flatcontainer'
+$nugetSolution = 'src/Read2Me.slnx'
+$nugetFileNames = 'Directory.Packages.props', 'Directory.Build.props', 'Directory.Build.targets', 'nuget.config', 'global.json'
+$script:nugetReviewed = $false
+
+# Files whose change can change what restore resolves (names compared case-insensitively).
+function Test-NuGetPath {
+    param([string]$Path)
+    $leaf = Split-Path -Leaf $Path
+    return $leaf -in $nugetFileNames -or $leaf -like '*.csproj'
+}
+
+# A version's sort key: its numeric part as a [version], prerelease and build metadata dropped.
+function Get-NuGetVersionKey {
+    param([string]$Version)
+    $numeric = $Version -replace '[-+].*', ''
+    if ($numeric -notmatch '\.') { $numeric += '.0' }
+    return [version]$numeric
+}
+
+# The MSBuild SDKs a commit's project files and global.json name, other than the .NET SDK's own (Microsoft.NET.Sdk,
+# Microsoft.NET.Sdk.Web, ...), which ship with the SDK rather than from a feed.
+function Get-MsBuildSdks {
+    param([string]$Commit)
+    $sdks = [System.Collections.Generic.SortedSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($path in Invoke-Git ls-tree -r --name-only $Commit) {
+        if ($path -match '(^|/)node_modules/') { continue }
+        if ($path -match '\.(csproj|props|targets)$') {
+            $text = Get-FileAt $Commit $path
+            foreach ($m in [regex]::Matches($text, '\bSdk\s*=\s*"([^"]+)"|<Sdk\s+Name\s*=\s*"([^"]+)"')) {
+                $value = if ($m.Groups[1].Success) { $m.Groups[1].Value } else { $m.Groups[2].Value }
+                foreach ($sdk in $value -split ';') { if ($sdk.Trim()) { [void]$sdks.Add($sdk.Trim()) } }
+            }
+        } elseif ((Split-Path -Leaf $path) -eq 'global.json') {
+            $json = Get-FileAt $Commit $path | ConvertFrom-Json -AsHashtable
+            if ($json.'msbuild-sdks') { foreach ($k in $json.'msbuild-sdks'.Keys) { [void]$sdks.Add("$k/$($json.'msbuild-sdks'[$k])") } }
+        }
+    }
+    return @($sdks | Where-Object { $_ -notmatch '^Microsoft\.NET\.Sdk(\.[A-Za-z]+)*$' })
+}
+
+# Restores the solution at a commit in a throwaway worktree and returns every package in its projects'
+# project.assets.json, as id -> @{ Name; Versions = version -> the .nupkg's sha512 } (ids and versions compare case-insensitively).
+function Get-RestoredPackages {
+    param([string]$Commit, [string]$Label, [string]$PackagesDir)
+    $tree = Join-Path $toolDir "nuget-$Label"
+    Invoke-Git worktree add --detach --force $tree $Commit | Out-Null
+    try {
+        $solution = Join-Path $tree $nugetSolution
+        if (-not (Test-Path $solution)) { throw "$nugetSolution is not in $Commit." }
+        Write-Log "  dotnet restore ($Label, $($Commit.Substring(0, 8)))"
+        $output = & dotnet restore $solution --packages $PackagesDir --configfile (Join-Path $repoRoot 'nuget.config') `
+            --disable-build-servers -nologo -v q -p:NuGetAudit=false 2>&1 | ForEach-Object { "$_" }
+        if ($LASTEXITCODE -ne 0) { throw "dotnet restore at the $Label ($Commit) failed:`n$(($output | Select-Object -Last 20) -join "`n")" }
+        $packages = @{}
+        foreach ($assets in Get-ChildItem (Join-Path $tree 'src') -Recurse -File -Filter project.assets.json) {
+            $libraries = (Get-Content -Raw $assets.FullName | ConvertFrom-Json -AsHashtable).libraries
+            foreach ($key in $libraries.Keys) {
+                if ($libraries[$key].type -ne 'package') { continue }
+                $name, $version = $key -split '/', 2
+                if (-not $packages.ContainsKey($name)) { $packages[$name] = @{ Name = $name; Versions = @{} } }
+                # The assets file's own sha512 is NuGet's content hash, which leaves the signature out; the
+                # .nupkg.sha512 restore writes beside the package is the hash of the whole file it downloaded.
+                $lid = $name.ToLowerInvariant()
+                $lver = $version.ToLowerInvariant()
+                $hashFile = Join-Path $PackagesDir "$lid/$lver/$lid.$lver.nupkg.sha512"
+                $packages[$name].Versions[$version] = if (Test-Path $hashFile) { (Get-Content -Raw $hashFile).Trim() } else { $null }
+            }
+        }
+        return $packages
+    } finally {
+        Invoke-Git worktree remove --force $tree | Out-Null
+    }
+}
+
+# Directory.Packages.props as id -> version.
+function Read-PackageVersions {
+    param([string]$Text)
+    $versions = @{}
+    if (-not $Text) { return $versions }
+    foreach ($node in ([xml]$Text.TrimStart([char]0xFEFF)).SelectNodes("//*[local-name()='PackageVersion']")) { $versions[$node.Include] = $node.Version }
+    return $versions
+}
+
+# What changed between two restores: one item per id and new version. Old is the highest base version, $null for an
+# id not in the base tree. Direct is true for an id Directory.Packages.props names at head.
+function Get-NuGetChanges {
+    param([hashtable]$BasePackages, [hashtable]$HeadPackages, [hashtable]$DirectVersions)
+    foreach ($id in $HeadPackages.Keys) {
+        $base = $BasePackages[$id]
+        foreach ($version in $HeadPackages[$id].Versions.Keys) {
+            if ($base -and $base.Versions.ContainsKey($version)) { continue }
+            $old = if ($base) { $base.Versions.Keys | Sort-Object { Get-NuGetVersionKey $_ }, { $_ } | Select-Object -Last 1 } else { $null }
+            [pscustomobject]@{
+                Name = $HeadPackages[$id].Name; Old = $old; New = $version
+                Sha512 = $HeadPackages[$id].Versions[$version]; OldSha512 = if ($old) { $base.Versions[$old] } else { $null }
+                NewName = -not $base; Direct = $DirectVersions.ContainsKey($id)
+            }
+        }
+    }
+}
+
+# nuget.org's registration leaf for a version (published, listed), or $null when it has no such version.
+function Get-NuGetLeaf {
+    param([string]$Id, [string]$Version)
+    Write-Log "  registration: $Id $Version"
+    try {
+        $url = "$nugetApi/registration5-gz-semver2/$($Id.ToLowerInvariant())/$($Version.ToLowerInvariant()).json"
+        return (Invoke-WebRequest $url).Content | ConvertFrom-Json -AsHashtable -DateKind String
+    } catch {
+        if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404) { return $null }
+        throw
+    }
+}
+
+# A version's .nupkg from the nuget.org flat container, as bytes, or $null when it is not there.
+function Get-NupkgBytes {
+    param([string]$Id, [string]$Version)
+    $lid = $Id.ToLowerInvariant()
+    $lver = $Version.ToLowerInvariant()
+    Write-Log "  nupkg: $Id $Version"
+    try {
+        $bytes = (Invoke-WebRequest "$nugetFlatContainer/$lid/$lver/$lid.$lver.nupkg").Content
+    } catch {
+        if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404) { return $null }
+        throw
+    }
+    if ($bytes -is [string]) { throw "Downloading $Id $Version returned text, not a .nupkg." }
+    return , ([byte[]]$bytes)   # the comma keeps the array whole instead of unrolling it into the pipeline
+}
+
+# Reviews one changed package, adds its findings and returns its table row and changed build-time files.
+function Invoke-NuGetPackageReview {
+    param($Change, [string]$Source)
+    $id = $Change.Name
+    $subject = "$id@$($Change.New)"
+    $oldText = if ($Change.Old) { $Change.Old } else { '-' }
+    $kind = if ($Change.Direct) { 'direct' } else { 'transitive' }
+    Write-Log "$Source  $id $(if ($Change.Old) { $Change.Old } else { '(new)' }) -> $($Change.New)"
+    if ($Change.NewName) {
+        Add-Finding STOP $subject $Source 'is a package not in the base tree; check why it was added and who publishes it.'
+    }
+
+    $leaf = Get-NuGetLeaf $id $Change.New
+    $newBytes = if ($leaf) { Get-NupkgBytes $id $Change.New } else { $null }
+    if (-not $newBytes) {
+        Add-Finding STOP $subject $Source 'is not on nuget.org; review it by hand.'
+        return @{ Row = "| ``$id`` | $oldText | $($Change.New) | $kind | - | - | - | - |"; BuildTimeChanged = @() }
+    }
+
+    # Age. nuget.org gives an unlisted version a 1900 publish date, so its age cannot be read.
+    $published = [string]$leaf.published
+    $ageText = '?'
+    $publishedText = Format-Date $published
+    if ($leaf.listed -eq $false) {
+        $publishedText = 'unlisted'
+        Add-Finding STOP $subject $Source 'is unlisted on nuget.org (withdrawn by its owner), so its publish date is hidden; review it by hand.'
+    } elseif (-not $published) {
+        Add-Finding STOP $subject $Source 'has no publish date on nuget.org.'
+    } else {
+        $ageText = Add-AgeFinding $subject $Source $id $published 'published'
+    }
+
+    # The .nupkg restore took must be the one nuget.org serves now.
+    $matchesRestore = { param($bytes, $sha512) -not $sha512 -or [Convert]::ToBase64String([System.Security.Cryptography.SHA512]::HashData($bytes)) -eq $sha512 }
+    if (-not (& $matchesRestore $newBytes $Change.Sha512)) {
+        Add-Finding STOP $subject $Source 'the .nupkg on nuget.org does not match the one restore downloaded (its .nupkg.sha512).'
+    }
+    $newPkg = Read-Nupkg $newBytes
+    $oldPkg = $null
+    if ($Change.Old) {
+        $oldBytes = Get-NupkgBytes $id $Change.Old
+        if (-not $oldBytes) {
+            Add-Finding STOP $subject $Source "replaces $($Change.Old), which is no longer on nuget.org, so there is nothing to compare against."
+        } else {
+            if (-not (& $matchesRestore $oldBytes $Change.OldSha512)) {
+                Add-Finding STOP "$id@$($Change.Old)" $Source 'the .nupkg on nuget.org does not match the one restore downloaded (its .nupkg.sha512).'
+            }
+            $oldPkg = Read-Nupkg $oldBytes
+        }
+    }
+    foreach ($finding in Compare-Nupkg $oldPkg $newPkg) { Add-Finding $finding.Kind $subject $Source $finding.Text }
+
+    $signedText = if ($newPkg.AuthorSigner) { 'yes' } elseif ($oldPkg -and $oldPkg.AuthorSigner) { '**lost**' } else { 'no' }
+    $oldFiles = if ($oldPkg) { $oldPkg.Files } else { @{} }
+    $added = @($newPkg.Files.Keys | Where-Object { -not $oldFiles.ContainsKey($_) }).Count
+    $removed = @($oldFiles.Keys | Where-Object { -not $newPkg.Files.ContainsKey($_) }).Count
+    $changed = @($newPkg.Files.Keys | Where-Object { $oldFiles.ContainsKey($_) -and $oldFiles[$_] -ne $newPkg.Files[$_] }).Count
+    $row = "| ``$id`` | $oldText | $($Change.New) | $kind | $publishedText | $ageText | $signedText | $changed / $added / $removed |"
+    return @{ Row = $row; BuildTimeChanged = @(Get-ChangedBuildTimeFiles $oldPkg $newPkg) }
+}
+
+# Reviews the NuGet graph once, whichever NuGet file changed, and returns its report section.
+function Invoke-NuGetReview {
+    $script:nugetReviewed = $true
+    $source = 'NuGet'
+    $section = [System.Collections.Generic.List[string]]::new()
+    $section.Add('## NuGet (src/)')
+    $section.Add('')
+    $triggers = @($changedPaths | Where-Object { Test-NuGetPath $_ } | ForEach-Object { "``$_``" })
+    $section.Add("Changed: $($triggers -join ', '). ``$nugetSolution`` was restored at the merge base and at head, each in a throwaway worktree, against this checkout's ``nuget.config``.")
+    $section.Add('')
+
+    foreach ($path in @($changedPaths | Where-Object { (Split-Path -Leaf $_) -eq 'nuget.config' })) {
+        Add-Finding STOP $path $source 'changed; the review restored with this checkout''s nuget.config, not the PR''s, so read the feed and source-mapping change by hand.'
+    }
+    $baseSdks = @(Get-MsBuildSdks $script:mergeBase)
+    $newSdks = @(Get-MsBuildSdks $script:headCommit | Where-Object { $_ -notin $baseSdks })
+    if ($newSdks.Count) {
+        foreach ($sdk in $newSdks) {
+            Add-Finding STOP $sdk $source 'is an MSBuild SDK the merge base does not use; restore would download and import it, so head was not restored. Review it by hand.'
+        }
+        $section.Add('Head was not restored: it names a new MSBuild SDK.')
+        return $section
+    }
+
+    $packagesDir = Join-Path $toolDir 'nuget-packages'
+    try {
+        $basePackages = Get-RestoredPackages $script:mergeBase 'base' $packagesDir
+        $headPackages = Get-RestoredPackages $script:headCommit 'head' $packagesDir
+    } finally {
+        Invoke-Git worktree prune | Out-Null
+    }
+    $direct = Read-PackageVersions (Get-FileAt $script:headCommit 'src/Directory.Packages.props')
+    $baseDirect = Read-PackageVersions (Get-FileAt $script:mergeBase 'src/Directory.Packages.props')
+    $changes = @(Get-NuGetChanges $basePackages $headPackages $direct | Sort-Object Name, { Get-NuGetVersionKey $_.New })
+    # Direct changes come from the props diff too: a bump no project restores is downloaded by nothing, but say so.
+    foreach ($id in $direct.Keys) {
+        if ($baseDirect[$id] -eq $direct[$id]) { continue }
+        if (@($changes | Where-Object { $_.Name -eq $id -and $_.New -eq $direct[$id] }).Count) { continue }
+        Add-Finding NOTE "$id@$($direct[$id])" $source "changed in src/Directory.Packages.props (was $(if ($baseDirect[$id]) { $baseDirect[$id] } else { 'absent' })), but no project restores that version, so it was not reviewed."
+    }
+    if (-not $changes.Count) {
+        $section.Add('No package version changed or appeared.')
+        return $section
+    }
+    $section.Add('| Package | Old | New | Reference | Published | Age (days) | Author signed | Files changed / added / removed |')
+    $section.Add('| --- | --- | --- | --- | --- | --- | --- | --- |')
+    $buildTime = [ordered]@{}
+    foreach ($change in $changes) {
+        $result = Invoke-NuGetPackageReview $change $source
+        $section.Add($result.Row)
+        if ($result.BuildTimeChanged.Count) { $buildTime["$($change.Name)@$($change.New)"] = $result.BuildTimeChanged }
+    }
+    # Build-time files whose contents changed: not a finding (Microsoft packages change them on every patch), but the
+    # first files to read when a bump looks off.
+    foreach ($subject in $buildTime.Keys) {
+        $section.Add('')
+        $section.Add("<details><summary>``$subject`` changed $($buildTime[$subject].Count) build-time file(s)</summary>")
+        $section.Add('')
+        foreach ($file in $buildTime[$subject]) { $section.Add("- ``$file``") }
+        $section.Add('')
+        $section.Add('</details>')
+    }
+    return $section
+}
+
+#endregion
+
 # Extension point. Each reviewer picks its files from the changed paths (Match) and reviews one of them (Review),
-# adding findings with Add-Finding and returning its report section as lines. NuGet adds an entry.
+# adding findings with Add-Finding and returning its report section as lines.
 $Reviewers = @(
     @{
         Name = 'Bun'
@@ -740,12 +1036,18 @@ $Reviewers = @(
         Match = { param($Path) (Split-Path -Leaf $Path) -eq 'requirements.txt' }
         Review = { param($Path) Invoke-PythonLockReview $Path }
     }
+    @{
+        # Once per run: the first NuGet file that changed reviews the whole graph.
+        Name = 'NuGet'
+        Match = { param($Path) -not $script:nugetReviewed -and (Test-NuGetPath $Path) }
+        Review = { param($Path) Invoke-NuGetReview }
+    }
 )
 
 try {
     $AllowYoung = @($AllowYoung | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     foreach ($name in $AllowYoung) {
-        # An npm package (@scope/name or name) or an image repository as the file writes it (nvidia/cuda, ghcr.io/o/r).
+        # An npm package (@scope/name or name), a NuGet id, or an image repository as the file writes it (nvidia/cuda, ghcr.io/o/r).
         if ($name -notmatch '^(@[a-z0-9][\w.-]*/)?[a-z0-9][\w.-]*$' -and $name -notmatch '^[a-z0-9][\w.-]*(/[a-z0-9][\w.-]*)+$') {
             throw "-AllowYoung takes package or image names, one per entry, no wildcards: '$name'."
         }
