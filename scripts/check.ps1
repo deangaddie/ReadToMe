@@ -16,7 +16,12 @@ Stages, in order (each one is a separate named step in .github/workflows/ci.yml)
   6. E2E in Firefox            the browser tests only (Tests/Web) with R2M_E2E_BROWSER=firefox; the API and
                                host tests never open a browser, so Chromium's pass already covers them
 
-Before any stage it removes credential-looking environment variables (TOKEN, SECRET, GH_*, NPM_*, ... ; the list is
+Before any stage it compares the working tree and branch with main's merge base and, when a dependency file changed
+(package.json, a lockfile, bunfig.toml, .npmrc, nuget.config, Directory.Packages.props, requirements.txt, uv.lock, a
+Dockerfile or compose digest; the list is in scripts/dependency-files.ps1), prints a prominent warning to run
+scripts/review-deps.ps1 first, then carries on. A warning only, never a block.
+
+Before any stage it also removes credential-looking environment variables (TOKEN, SECRET, GH_*, NPM_*, ... ; the list is
 in scripts/credential-variables.ps1) from its own process, so no stage inherits them, prints how many and their names, and puts them back at the end.
 
 Before the E2E stages it installs any Playwright browser the driver wants that is not in the Playwright cache
@@ -223,6 +228,21 @@ function Invoke-E2e {
         $global:LASTEXITCODE = $exitCode
     }
 }
+
+# Warns, before any stage, when a dependency file differs from main's merge base (#420): the pre-merge review
+# (review-deps.ps1) has to read a dependency change before this gate builds and runs it. A warning only; a check that
+# cannot run never fails the gate.
+. (Join-Path $PSScriptRoot 'dependency-files.ps1')
+try { $dependencyWarning = @(Get-DependencyFileWarning -RepoRoot $repoRoot -Base 'main') }
+catch { $dependencyWarning = @("Dependency-file check skipped: $($_.Exception.Message)") }
+if ($dependencyWarning.Count -gt 1) {
+    Write-Host ''
+    Write-Host ('!' * 78) -ForegroundColor Yellow
+    $dependencyWarning | ForEach-Object { Write-Host $_ -ForegroundColor Yellow }
+    Write-Host ('!' * 78) -ForegroundColor Yellow
+    Write-Host ''
+}
+elseif ($dependencyWarning.Count -eq 1) { Write-Host $dependencyWarning[0] -ForegroundColor DarkGray }
 
 # Removes from this process's environment, and so from every stage it starts, each variable whose name looks like
 # a credential. The gate runs third-party code (NuGet .targets, Bun and npm packages, test and app code) as the

@@ -412,7 +412,7 @@ ASALocalRun/
  
 # Temporary analysis artifacts created during code review
 /scripts/*.ps1
-# ...except the checked-in front-end build scripts, the API contract script, their shared Bun lookup and credential stripping, the PR gate (see docs/agents/web/README.md) and the dependency review with its tests
+# ...except the checked-in front-end build scripts, the API contract script, their shared Bun lookup and credential stripping, the PR gate (see docs/agents/web/README.md) with its dependency-file warning, and the dependency review, each with its tests
 !/scripts/build-web.ps1
 !/scripts/check.ps1
 !/scripts/api-types.ps1
@@ -420,6 +420,8 @@ ASALocalRun/
 !/scripts/credential-variables.ps1
 !/scripts/review-deps.ps1
 !/scripts/review-deps.tests.ps1
+!/scripts/dependency-files.ps1
+!/scripts/dependency-files.tests.ps1
 dotnet-format-analyzers-report.json
 roslynator*.txt
 MSBuild_Logs/
