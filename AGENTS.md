@@ -63,6 +63,10 @@ pwsh Infra/scripts/wheel-pth.tests.ps1  # the .pth check lock.ps1 and review-dep
 
 Which credentials the dev machine may hold, and where: `docs/agents/dev-machine-credentials.md`.
 
+## Finishing work
+
+When the work is done and `pwsh scripts/check.ps1` passes (and `review-deps` has no STOP, for a PR that changes a dependency file), push the branch and open its PR (`Closes #N`) in the same turn, without asking. This is standing permission, so don't end a turn on "Want me to push and open the PR?". Once the PR is open nothing is left for you. The user merges, then runs `git tidy` (main, pull, delete merged branches and their worktrees), so don't offer to tidy up.
+
 ## Architecture
 
 ### .NET App (`src/Read2Me.App`)
