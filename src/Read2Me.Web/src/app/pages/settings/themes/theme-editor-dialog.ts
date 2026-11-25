@@ -1,11 +1,13 @@
 import { html, nothing } from 'lit-html';
 import { styleMap } from 'lit-html/directives/style-map.js';
 import type { AppTheme } from '@app/api';
-import { openDialog } from '@app/core/dialog';
+import { type ClosableContent, openDialog, requestDialogClose } from '@app/core/dialog';
 import { R2mElement, define } from '@app/core/element';
+import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import { contrastText, isHexColour, normalizeHex } from '@app/theme/theme-css';
+import { ConfirmService } from '@app/ui/dialogs';
 import { controlValue, field } from '@app/ui/field';
 import { icon } from '@app/ui/partials';
 import {
@@ -15,6 +17,7 @@ import {
   type ThemeDraft,
   type ThemeDraftErrors,
   fromDraft,
+  sameDraft,
   toDraft,
   validateDraft,
 } from './theme-form';
@@ -34,21 +37,24 @@ type ColourKey = 'primary' | 'secondary' | OptionalColourKey;
 /**
  * Theme create/edit form (design §6.4 dialog variant): name, primary/secondary via native colour
  * inputs with a hex readout, dark switch, clearable advanced colours and a live preview strip.
- * Closes with the API body on Save / Create, with nothing on Cancel.
+ * Closes with the API body on Save / Create, with nothing on Cancel. Cancel, Escape and a backdrop
+ * click ask before a changed draft is thrown away.
  */
-export class ThemeEditorDialog extends R2mElement {
+export class ThemeEditorDialog extends R2mElement implements ClosableContent {
+  private readonly confirm = use(ConfirmService);
   #data: ThemeEditorData = {};
+  /** The draft as it opened: Cancel discards nothing while the draft still equals it. */
+  #opened: ThemeDraft = { ...DEFAULT_DRAFT };
   get data() {
     return this.#data;
   }
   set data(value: ThemeEditorData) {
     this.#data = value;
     const theme = value.theme;
-    this.draft.set(
-      theme
-        ? { ...toDraft(theme), name: theme.isBuiltIn ? `${theme.name} copy` : theme.name }
-        : { ...DEFAULT_DRAFT },
-    );
+    this.#opened = theme
+      ? { ...toDraft(theme), name: theme.isBuiltIn ? `${theme.name} copy` : theme.name }
+      : { ...DEFAULT_DRAFT };
+    this.draft.set({ ...this.#opened });
     this.touched.set({});
     this.showAdvanced.set(!!theme && OPTIONAL_COLOURS.some(({ key }) => !!theme[key]));
   }
@@ -196,7 +202,7 @@ export class ThemeEditorDialog extends R2mElement {
         <button
           type="button"
           class="r2m-button editor__cancel"
-          @click=${() => this.emit('r2m-close')}
+          @click=${() => requestDialogClose(this)}
         >
           Cancel
         </button>
@@ -284,6 +290,16 @@ export class ThemeEditorDialog extends R2mElement {
   pickerValue(key: ColourKey): string {
     const v = this.draft()[key];
     return isHexColour(v) ? normalizeHex(v) : '#888888';
+  }
+
+  async canClose(): Promise<boolean> {
+    if (sameDraft(this.draft(), this.#opened)) return true;
+    return this.confirm.confirm({
+      title: 'Discard changes?',
+      message: 'The changes to this theme have not been saved.',
+      confirmLabel: 'Discard',
+      destructive: true,
+    });
   }
 
   save(): void {

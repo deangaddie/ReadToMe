@@ -1,8 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { AppTheme } from '@app/api';
 import { PALETTE_DEFAULTS } from '../../../../testing/themes';
-import { resetServices } from '@app/core/services';
-import type { ThemeEditorDialog, ThemeEditorResult } from './theme-editor-dialog';
+import { override, resetServices } from '@app/core/services';
+import { ConfirmService, type ConfirmOptions } from '@app/ui/dialogs';
+import { settle } from '../../../../testing/fake-navigation';
+import {
+  type ThemeEditorDialog,
+  type ThemeEditorResult,
+  openThemeEditorDialog,
+} from './theme-editor-dialog';
 import './theme-editor-dialog';
 
 /** The editor's content element on its own: the dialog chrome is the browser's and E2E's. */
@@ -103,14 +109,79 @@ describe('r2m-theme-editor-dialog', () => {
     expect(save(el).textContent?.trim()).toBe('Create');
   });
 
-  it('Cancel closes with nothing; the advanced toggle reveals the optional colours', async () => {
+  it('the advanced toggle reveals the optional colours', async () => {
     const el = await mount();
     el.querySelector<HTMLButtonElement>('[data-action="toggle-advanced"]')!.click();
     await el.rendered();
     expect(el.querySelectorAll('[data-role="advanced"] .editor__colour').length).toBe(6);
+  });
 
-    el.querySelector<HTMLButtonElement>('.editor__cancel')!.click();
-    // No detail on Cancel: the event carries null, which `openDialog` resolves as a dismissal.
-    expect(closed).toEqual([null as unknown as ThemeEditorResult]);
+  describe('closing with unsaved changes', () => {
+    let asked: ConfirmOptions[];
+    let discard: boolean;
+
+    beforeEach(() => {
+      asked = [];
+      discard = false;
+      override(ConfirmService, {
+        confirm: async (options: ConfirmOptions) => {
+          asked.push(options);
+          return discard;
+        },
+      } as unknown as ConfirmService);
+    });
+
+    async function open(theme?: AppTheme) {
+      const result = openThemeEditorDialog(theme ? { theme } : {});
+      await Promise.resolve();
+      const el = document.querySelector<ThemeEditorDialog>('r2m-theme-editor-dialog')!;
+      await el.rendered();
+      return { result, el };
+    }
+
+    const cancel = (el: Element) => el.querySelector<HTMLButtonElement>('.editor__cancel')!.click();
+    const escape = (el: Element) =>
+      el.closest('dialog')!.dispatchEvent(new Event('cancel', { cancelable: true }));
+
+    it('Cancel and Escape close without asking while nothing has changed', async () => {
+      const first = await open(orange);
+      cancel(first.el);
+      expect(await first.result).toBeNull();
+
+      const second = await open();
+      escape(second.el);
+      expect(await second.result).toBeNull();
+      expect(asked).toEqual([]);
+    });
+
+    it('asks before Cancel or Escape discard a changed draft, and Keep stays open', async () => {
+      const { result, el } = await open(orange);
+      await type(el, el.querySelector<HTMLInputElement>('input[name="name"]')!, 'Tangerine');
+
+      cancel(el);
+      await settle();
+      escape(el);
+      await settle();
+      expect(asked.map((o) => [o.title, o.destructive])).toEqual([
+        ['Discard changes?', true],
+        ['Discard changes?', true],
+      ]);
+      expect(el.closest('dialog')?.open).toBe(true);
+      expect(el.draft().name).toBe('Tangerine');
+
+      discard = true;
+      escape(el);
+      expect(await result).toBeNull();
+    });
+
+    it('a change typed back to how it opened counts as nothing changed', async () => {
+      const { result, el } = await open();
+      const name = el.querySelector<HTMLInputElement>('input[name="name"]')!;
+      await type(el, name, 'Sunset');
+      await type(el, name, '');
+      cancel(el);
+      expect(await result).toBeNull();
+      expect(asked).toEqual([]);
+    });
   });
 });

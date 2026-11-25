@@ -1,6 +1,6 @@
 import { html, nothing } from 'lit-html';
 import { BOOK_ACCEPT, BOOK_MAX_BYTES, toApiError } from '@app/api';
-import { openDialog, setDialogClosedBy } from '@app/core/dialog';
+import { type ClosableContent, openDialog, requestDialogClose } from '@app/core/dialog';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
@@ -33,9 +33,10 @@ type DraftField = keyof NewProjectErrors;
  * edited), author and an epub/txt drop. Create stays disabled until every field is valid; the
  * upload runs here so a host rejection (duplicate title, unreadable file) shows inline and the
  * form survives. Closes with the new project's folder name; Cancel and Escape close with
- * nothing, a backdrop click does not. While the upload runs the dialog refuses to close.
+ * nothing, a backdrop click does not (`closedBy: 'closerequest'`: the second click of a double-click
+ * in the OS file picker can land on the backdrop). While the upload runs it refuses to close.
  */
-export class NewProjectDialog extends R2mElement {
+export class NewProjectDialog extends R2mElement implements ClosableContent {
   private readonly store = use(ProjectsStore);
 
   readonly #draft = signal<NewProjectDraft>({ ...EMPTY_DRAFT });
@@ -47,9 +48,6 @@ export class NewProjectDialog extends R2mElement {
 
   protected override connected(): void {
     this.classList.add('new-project');
-    // No backdrop dismissal: the second click of a double-click in the OS file picker can land on
-    // the backdrop and discard the form. The upload must finish: no Escape either while it runs.
-    this.effect(() => setDialogClosedBy(this, this.#busy() ? 'none' : 'closerequest'));
   }
 
   protected template() {
@@ -213,8 +211,13 @@ export class NewProjectDialog extends R2mElement {
     }
   }
 
+  /** The upload must finish: Escape and Cancel are refused while it runs. */
+  canClose(): boolean {
+    return !this.#busy();
+  }
+
   cancel(): void {
-    if (!this.#busy()) this.emit('r2m-close', undefined);
+    requestDialogClose(this);
   }
 
   #touch(key: DraftField): void {
@@ -227,7 +230,7 @@ define('r2m-new-project-dialog', NewProjectDialog);
 export async function openNewProjectDialog(): Promise<string | undefined> {
   const dialog = document.createElement('r2m-new-project-dialog');
   // A CustomEvent turns an undefined detail into null; Cancel and dismissal both mean "nothing".
-  return (await openDialog<string | null>(dialog)) ?? undefined;
+  return (await openDialog<string | null>(dialog, { closedBy: 'closerequest' })) ?? undefined;
 }
 
 declare global {

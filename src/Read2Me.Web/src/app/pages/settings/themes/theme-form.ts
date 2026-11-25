@@ -92,3 +92,8 @@ export function validateDraft(draft: ThemeDraft): ThemeDraftErrors {
 export function isDraftValid(draft: ThemeDraft): boolean {
   return Object.keys(validateDraft(draft)).length === 0;
 }
+
+/** True when the two drafts hold the same values: the editor's "nothing changed yet" test. */
+export function sameDraft(a: ThemeDraft, b: ThemeDraft): boolean {
+  return (Object.keys(a) as (keyof ThemeDraft)[]).every((key) => a[key] === b[key]);
+}
