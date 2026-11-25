@@ -117,6 +117,32 @@ describe('r2m-new-project-dialog', () => {
     expect(dialog.closest('dialog')?.getAttribute('closedby')).toBe('closerequest');
   });
 
+  it('cannot be closed while the upload is in flight, and closes on Escape otherwise', async () => {
+    const { result, dialog, type, createButton } = await open();
+    let finish: (r: Response) => void = () => {};
+    api
+      .on('POST', '/api/projects', () => new Promise<Response>((r) => (finish = r)))
+      .on('GET', '/api/projects', []);
+    await type('bookTitle', 'Dracula');
+    await type('author', 'Bram Stoker');
+    dialog.onFiles([new File(['x'], 'dracula.epub')]);
+    await dialog.rendered();
+    const host = dialog.closest('dialog')!;
+    const escape = () => host.dispatchEvent(new Event('cancel', { cancelable: true }));
+
+    createButton().click();
+    await settle();
+    expect(dialog.canClose()).toBe(false);
+    escape();
+    await settle();
+    expect(host.open).toBe(true);
+
+    finish(problem(422, 'No room'));
+    await settle();
+    escape();
+    expect(await result).toBeUndefined();
+  });
+
   it('Cancel closes with nothing', async () => {
     const { result, dialog } = await open();
     dialog.querySelector<HTMLButtonElement>('.new-project__cancel')!.click();

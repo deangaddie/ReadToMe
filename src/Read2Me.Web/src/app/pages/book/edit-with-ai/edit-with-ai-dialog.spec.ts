@@ -527,6 +527,37 @@ describe('r2m-edit-with-ai-dialog', () => {
     expect(api.calls('DELETE', `${BASE}/prog-1`)).toHaveLength(1);
   });
 
+  it('asks before Escape or Close throw hand edits away, and Keep leaves them in place', async () => {
+    await reachReview();
+    await openRow(0);
+    type(proposed(), 'Chapter I');
+    await dialog.rendered();
+    const host = dialog.closest('dialog')!;
+
+    confirmed = false;
+    const escape = new Event('cancel', { cancelable: true });
+    host.dispatchEvent(escape);
+    expect(escape.defaultPrevented).toBe(true);
+    await settle();
+    button('close-review').click();
+    await settle();
+    await dialog.rendered();
+    expect(host.open).toBe(true);
+    expect(proposed().value).toBe('Chapter I');
+
+    confirmed = true;
+    button('close-review').click();
+    expect(await result).toBeNull();
+  });
+
+  it('closes without asking when nothing was hand-edited', async () => {
+    await reachReview();
+    // A confirm that would answer Keep: closing anyway proves it was never asked.
+    confirmed = false;
+    button('close-review').click();
+    expect(await result).toBeNull();
+  });
+
   it('Cancel closes with nothing', async () => {
     button('cancel').click();
     expect(await result).toBeNull();

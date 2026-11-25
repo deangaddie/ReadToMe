@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { openDialog } from './dialog';
+import { openDialog, requestDialogClose } from './dialog';
 
 // happy-dom's showModal only flips `open`: the focus trap, Escape and the backdrop are the
 // browser's, and are covered in E2E.
@@ -59,5 +59,123 @@ describe('openDialog', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(document.querySelector('dialog')?.open).toBe(true);
+  });
+});
+
+function titled(id?: string): HTMLElement {
+  const content = document.createElement('div');
+  const title = document.createElement('h2');
+  title.className = 'r2m-dialog__title';
+  title.textContent = 'Rename chapter';
+  if (id) title.id = id;
+  content.append(title);
+  return content;
+}
+
+describe('openDialog naming', () => {
+  it('names the dialog by its title, giving the title an id', async () => {
+    const content = titled();
+    void openDialog(content);
+    await Promise.resolve();
+    const dialog = document.querySelector('dialog')!;
+    const title = content.querySelector('h2')!;
+    expect(title.id).not.toBe('');
+    expect(dialog.getAttribute('aria-labelledby')).toBe(title.id);
+    expect(dialog.hasAttribute('aria-label')).toBe(false);
+  });
+
+  it('keeps an id the title already has', async () => {
+    void openDialog(titled('my-title'));
+    await Promise.resolve();
+    expect(document.querySelector('dialog')?.getAttribute('aria-labelledby')).toBe('my-title');
+  });
+
+  it('gives each dialog its own title id', async () => {
+    void openDialog(titled());
+    void openDialog(titled());
+    await Promise.resolve();
+    const [a, b] = [...document.querySelectorAll('dialog')];
+    expect(a?.getAttribute('aria-labelledby')).not.toBe(b?.getAttribute('aria-labelledby'));
+  });
+
+  it('names the dialog by ariaLabel over its title', async () => {
+    void openDialog(titled(), { ariaLabel: 'Edit with AI' });
+    await Promise.resolve();
+    const dialog = document.querySelector('dialog')!;
+    expect(dialog.getAttribute('aria-label')).toBe('Edit with AI');
+    expect(dialog.hasAttribute('aria-labelledby')).toBe(false);
+  });
+});
+
+function guarded(canClose: () => boolean | Promise<boolean>): HTMLElement {
+  return Object.assign(document.createElement('div'), { canClose });
+}
+
+function cancel(dialog: HTMLDialogElement): Event {
+  const event = new Event('cancel', { cancelable: true });
+  dialog.dispatchEvent(event);
+  return event;
+}
+
+describe('openDialog canClose guard', () => {
+  it('lets a cancel through when the content has no canClose', async () => {
+    void openDialog(document.createElement('div'));
+    await Promise.resolve();
+    expect(cancel(document.querySelector('dialog')!).defaultPrevented).toBe(false);
+  });
+
+  it('stays open when canClose returns false', async () => {
+    void openDialog(guarded(() => false));
+    await Promise.resolve();
+    const dialog = document.querySelector('dialog')!;
+    expect(cancel(dialog).defaultPrevented).toBe(true);
+    await Promise.resolve();
+    expect(dialog.open).toBe(true);
+    expect(dialog.isConnected).toBe(true);
+  });
+
+  it('closes with nothing when canClose returns true', async () => {
+    const result = openDialog<string>(guarded(() => true));
+    await Promise.resolve();
+    expect(cancel(document.querySelector('dialog')!).defaultPrevented).toBe(true);
+    expect(await result).toBeUndefined();
+    expect(document.querySelector('dialog')).toBeNull();
+  });
+
+  it('waits for an async canClose and asks once while it is pending', async () => {
+    let answer: (ok: boolean) => void = () => {};
+    let asked = 0;
+    const result = openDialog<string>(
+      guarded(() => {
+        asked++;
+        return new Promise<boolean>((resolve) => (answer = resolve));
+      }),
+    );
+    await Promise.resolve();
+    const dialog = document.querySelector('dialog')!;
+    cancel(dialog);
+    expect(cancel(dialog).defaultPrevented).toBe(true);
+    expect(asked).toBe(1);
+    expect(dialog.open).toBe(true);
+    answer(false);
+    await new Promise((r) => setTimeout(r));
+    expect(dialog.open).toBe(true);
+    cancel(dialog);
+    expect(asked).toBe(2);
+    answer(true);
+    expect(await result).toBeUndefined();
+  });
+
+  it('routes requestDialogClose through the guard', async () => {
+    let ok = false;
+    const content = guarded(() => ok);
+    const result = openDialog<string>(content);
+    await Promise.resolve();
+    requestDialogClose(content);
+    await new Promise((r) => setTimeout(r));
+    expect(document.querySelector('dialog')?.open).toBe(true);
+    ok = true;
+    requestDialogClose(content);
+    expect(await result).toBeUndefined();
   });
 });

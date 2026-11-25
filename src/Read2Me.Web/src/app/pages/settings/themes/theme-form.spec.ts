@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'bun:test';
 import type { AppTheme } from '@app/api';
 import { PALETTE_DEFAULTS } from '../../../../testing/themes';
-import { DEFAULT_DRAFT, fromDraft, isDraftValid, toDraft, validateDraft } from './theme-form';
+import {
+  DEFAULT_DRAFT,
+  fromDraft,
+  isDraftValid,
+  sameDraft,
+  toDraft,
+  validateDraft,
+} from './theme-form';
 
 describe('theme form', () => {
   it('requires a name and valid primary/secondary', () => {
@@ -42,5 +49,14 @@ describe('theme form', () => {
     expect(body.background).toBe('#fff5f2');
     expect(body.surface).toBeNull();
     expect(body.textPrimary).toBeNull();
+  });
+});
+
+describe('sameDraft', () => {
+  it('is true for equal values and false when any field differs', () => {
+    expect(sameDraft(DEFAULT_DRAFT, { ...DEFAULT_DRAFT })).toBe(true);
+    expect(sameDraft(DEFAULT_DRAFT, { ...DEFAULT_DRAFT, name: 'x' })).toBe(false);
+    expect(sameDraft(DEFAULT_DRAFT, { ...DEFAULT_DRAFT, isDark: true })).toBe(false);
+    expect(sameDraft(DEFAULT_DRAFT, { ...DEFAULT_DRAFT, textSecondary: '#000' })).toBe(false);
   });
 });

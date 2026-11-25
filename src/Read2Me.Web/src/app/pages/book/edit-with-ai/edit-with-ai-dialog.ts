@@ -2,7 +2,7 @@ import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
 import { LlmStreamFeed } from '@app/activity/stream-feed';
 import { type Guid, withLocal } from '@app/api';
-import { openDialog } from '@app/core/dialog';
+import { type ClosableContent, openDialog, requestDialogClose } from '@app/core/dialog';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
@@ -80,7 +80,7 @@ function preview(value: string | null | undefined): string {
  * The review rows are the book's only in-row editing (spec §7, risk 1): a row's draft lives in the
  * workflow's {@link ReviewSelection}, never in the textarea, so a row rendered afresh shows it again.
  */
-export class EditWithAiDialog extends R2mElement {
+export class EditWithAiDialog extends R2mElement implements ClosableContent {
   data!: EditWithAiDialogData;
 
   private readonly feed = use(LlmStreamFeed);
@@ -522,7 +522,7 @@ export class EditWithAiDialog extends R2mElement {
             class="r2m-button"
             data-action="close-review"
             ?disabled=${busy}
-            @click=${() => void this.closeReview()}
+            @click=${() => requestDialogClose(this)}
           >
             Close
           </button>
@@ -573,9 +573,9 @@ export class EditWithAiDialog extends R2mElement {
     await this.workflow.startOver();
   }
 
-  private async closeReview(): Promise<void> {
-    if (!(await this.confirmDiscard('Close'))) return;
-    this.close();
+  /** Escape, a backdrop click and the review's Close all ask before hand edits are thrown away. */
+  canClose(): Promise<boolean> {
+    return this.confirmDiscard('Close');
   }
 
   private readonly close = (): void => {
