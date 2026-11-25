@@ -30,7 +30,7 @@ export class ProjectsStore {
 
   /** Sorted by title, case-insensitively, so the shelf reads like a bookshelf. */
   readonly projects = computed(() =>
-    [...this._projects()].sort((a, b) =>
+    this._projects().toSorted((a, b) =>
       a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }),
     ),
   );

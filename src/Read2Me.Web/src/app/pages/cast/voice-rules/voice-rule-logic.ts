@@ -126,7 +126,7 @@ export interface Anchor {
 
 /** The deepest chosen level is the anchor; null when nothing is chosen. */
 export function deepestAnchor(selection: AnchorSelection): Anchor | null {
-  for (const pick of [...PICK_ORDER].reverse()) {
+  for (const pick of PICK_ORDER.toReversed()) {
     const id = selection[PICK_KEY[pick]];
     if (id !== null) return { level: PICK_LEVEL[pick], nodeId: id };
   }
