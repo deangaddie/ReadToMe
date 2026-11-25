@@ -347,6 +347,15 @@
   .r2m-item:has(.r2m-node-menu__trigger[aria-expanded='true']) .r2m-item__menu {
     opacity: 1;
   }
+  /* Nothing hovers on a touch screen, so the Node menu triggers stay visible there. */
+  @media (hover: none) {
+    .book__heading-menu,
+    .book__pause-menu,
+    .r2m-paragraph__menu,
+    .r2m-item__menu {
+      opacity: 1;
+    }
+  }
   /*
    * The row the user is on: the paragraph framed (its own trigger outlined to match), the item
    * within it washed with an accent bar, so each trigger reads as its row's. All shadows, inset —
