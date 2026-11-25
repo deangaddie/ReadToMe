@@ -96,4 +96,10 @@
   .tree__node--current .tree__menu {
     opacity: 1;
   }
+  /* Nothing hovers on a touch screen, so the Node menu triggers stay visible there. */
+  @media (hover: none) {
+    .tree__menu {
+      opacity: 1;
+    }
+  }
 }
