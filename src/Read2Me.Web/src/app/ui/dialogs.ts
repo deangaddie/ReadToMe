@@ -52,12 +52,16 @@ export class ConfirmDialog extends R2mElement {
 
   protected template() {
     const d = this.data;
+    // A destructive confirm focuses Cancel, so an Enter or Space straight after it opens keeps the
+    // thing rather than deleting it (top-layer K3).
+    const safeFirst = d.destructive === true;
     return html`
       <h2 class="r2m-dialog__title">${d.title}</h2>
       <div class="r2m-dialog__content r2m-confirm-dialog__message">${d.message}</div>
       <div class="r2m-dialog__actions">
         <button
           type="button"
+          ?autofocus=${safeFirst}
           class="r2m-button r2m-confirm-dialog__cancel"
           @click=${() => this.emit('r2m-close', false)}
         >
@@ -65,7 +69,7 @@ export class ConfirmDialog extends R2mElement {
         </button>
         <button
           type="button"
-          autofocus
+          ?autofocus=${!safeFirst}
           class="r2m-button r2m-button--filled ${d.destructive ? 'r2m-button--danger' : ''} r2m-confirm-dialog__confirm"
           @click=${() => this.emit('r2m-close', true)}
         >

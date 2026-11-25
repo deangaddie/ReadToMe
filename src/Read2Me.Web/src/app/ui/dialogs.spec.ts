@@ -11,7 +11,7 @@ import {
 } from './dialogs';
 
 // The services open a real <dialog>; happy-dom's showModal only flips `open`, so Escape, the focus
-// trap and autofocus are left to E2E.
+// trap and real focus are left to E2E; specs check only which button carries [autofocus].
 async function openConfirm(options: ConfirmOptions) {
   const result = new ConfirmService().confirm(options);
   const dialog = document.querySelector('r2m-confirm-dialog')!;
@@ -73,6 +73,26 @@ describe('ConfirmService', () => {
     expect(confirm.classList.contains('r2m-button--danger')).toBe(true);
     expect(confirm.querySelector('.r2m-icon')?.textContent).toBe('delete_forever');
     expect(confirm.textContent).toContain('Delete');
+  });
+
+  it('a non-destructive confirm autofocuses its confirm button', async () => {
+    const { dialog } = await openConfirm({ title: 't', message: 'm' });
+    expect(dialog.querySelector('.r2m-confirm-dialog__confirm')!.hasAttribute('autofocus')).toBe(
+      true,
+    );
+    expect(dialog.querySelector('.r2m-confirm-dialog__cancel')!.hasAttribute('autofocus')).toBe(
+      false,
+    );
+  });
+
+  it('a destructive confirm autofocuses Cancel, so an Enter at once keeps the thing', async () => {
+    const { dialog } = await openConfirm({ title: 't', message: 'm', destructive: true });
+    expect(dialog.querySelector('.r2m-confirm-dialog__cancel')!.hasAttribute('autofocus')).toBe(
+      true,
+    );
+    expect(dialog.querySelector('.r2m-confirm-dialog__confirm')!.hasAttribute('autofocus')).toBe(
+      false,
+    );
   });
 
   it('uses the given labels', async () => {
