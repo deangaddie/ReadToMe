@@ -8,6 +8,7 @@ let nextId: number;
 let delays: number[];
 let tip: HTMLElement;
 let open: boolean;
+let hovered: boolean;
 
 // The listeners go on the document, so install once for the file.
 installTooltips();
@@ -15,13 +16,16 @@ tip = document.querySelector<HTMLElement>('.r2m-tooltip')!;
 
 beforeEach(() => {
   open = false;
+  hovered = false;
   pending = new Map();
   nextId = 1;
   delays = [];
   proto['showPopover'] = () => (open = true);
   proto['hidePopover'] = () => (open = false);
   spyOn(tip, 'matches').mockImplementation(
-    ((selector: string) => selector === ':popover-open' && open) as typeof tip.matches,
+    ((selector: string) =>
+      (selector === ':popover-open' && open) ||
+      (selector === ':hover' && hovered)) as typeof tip.matches,
   );
   spyOn(globalThis, 'setTimeout').mockImplementation(((run: () => void, ms: number) => {
     const id = nextId++;
@@ -163,6 +167,15 @@ describe('installTooltips', () => {
       hover(tip);
       elapse();
       expect(open).toBe(false);
+    });
+
+    it('a blur while the pointer is on the tip keeps it, so a click on it doesn\x27t close it', () => {
+      const button = target('Hint');
+      button.dispatchEvent(new Event('focusin', { bubbles: true }));
+      elapse();
+      hovered = true;
+      button.dispatchEvent(new Event('focusout', { bubbles: true }));
+      expect(open).toBe(true);
     });
 
     it('Escape still hides it at once while hovered', () => {

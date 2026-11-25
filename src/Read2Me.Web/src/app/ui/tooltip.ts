@@ -6,7 +6,7 @@
  *
  * The tip can be hovered (WCAG 1.4.13): leaving the trigger or the tip hides it after
  * `HIDE_DELAY_MS`, and entering either one cancels that, so the pointer can cross onto it. Focus
- * out and Escape still hide it at once.
+ * out (with the pointer off the tip) and Escape still hide it at once.
  *
  * Two opt-ins:
  * - `data-tooltip-overflow` on the element: show the tip only when, at show time, its content is
@@ -86,6 +86,7 @@ export function installTooltips(root: Document = document): void {
     const target = targetOf(e) ?? delegateOf(e);
     if (target) show(target);
   });
-  root.addEventListener('focusout', hide);
+  // A click on the tip blurs its trigger; the pointer still on the tip keeps it.
+  root.addEventListener('focusout', () => tip.matches(':hover') || hide());
   root.addEventListener('keydown', (e) => e.key === 'Escape' && hide());
 }
