@@ -3,10 +3,12 @@ import { installTooltips } from './tooltip';
 
 // happy-dom has no popover methods or anchor positioning; where the tip lands is covered in E2E.
 const proto = HTMLElement.prototype as unknown as Record<string, unknown>;
-let pending: (() => void) | undefined;
+let pending: Map<number, () => void>;
+let nextId: number;
 let delays: number[];
 let tip: HTMLElement;
 let open: boolean;
+let hovered: boolean;
 
 // The listeners go on the document, so install once for the file.
 installTooltips();
@@ -14,21 +16,26 @@ tip = document.querySelector<HTMLElement>('.r2m-tooltip')!;
 
 beforeEach(() => {
   open = false;
-  pending = undefined;
+  hovered = false;
+  pending = new Map();
+  nextId = 1;
   delays = [];
   proto['showPopover'] = () => (open = true);
   proto['hidePopover'] = () => (open = false);
   spyOn(tip, 'matches').mockImplementation(
-    ((selector: string) => selector === ':popover-open' && open) as typeof tip.matches,
+    ((selector: string) =>
+      (selector === ':popover-open' && open) ||
+      (selector === ':hover' && hovered)) as typeof tip.matches,
   );
   spyOn(globalThis, 'setTimeout').mockImplementation(((run: () => void, ms: number) => {
-    pending = run;
+    const id = nextId++;
+    pending.set(id, run);
     delays.push(ms);
-    return 1;
+    return id;
   }) as unknown as typeof setTimeout);
-  spyOn(globalThis, 'clearTimeout').mockImplementation(() => {
-    pending = undefined;
-  });
+  spyOn(globalThis, 'clearTimeout').mockImplementation(((id: number | undefined) => {
+    if (id !== undefined) pending.delete(id);
+  }) as typeof clearTimeout);
   document.body.append(tip);
 });
 afterEach(() => {
@@ -47,10 +54,11 @@ function target(text: string): HTMLElement {
 }
 
 const hover = (el: Element) => el.dispatchEvent(new Event('pointerover', { bubbles: true }));
+/** Runs every timer pending now; ones they set wait for the next call. */
 const elapse = () => {
-  const run = pending;
-  pending = undefined;
-  run?.();
+  const runs = [...pending.values()];
+  pending.clear();
+  for (const run of runs) run();
 };
 
 /** A one-line text opted into the overflow gate, its widths stubbed as happy-dom lays nothing out. */
@@ -88,13 +96,95 @@ describe('installTooltips', () => {
     expect(tip.textContent).toBe('Split here');
   });
 
-  it('hides and drops the anchor when the pointer moves off', () => {
+  it('hides and drops the anchor after the hide delay once the pointer moves off', () => {
     const button = target('Hint');
     hover(button);
     elapse();
     hover(document.body);
+    expect(open).toBe(true);
+    expect(delays.at(-1)).toBe(200);
+    elapse();
     expect(open).toBe(false);
     expect(button.style.getPropertyValue('anchor-name')).toBe('');
+  });
+
+  describe('hoverable (WCAG 1.4.13)', () => {
+    it('stays open while the pointer moves from the trigger onto the tip', () => {
+      const button = target('Blocked: a job is running on this chapter');
+      hover(button);
+      elapse();
+      hover(document.body); // the gap between trigger and tip
+      hover(tip);
+      elapse();
+      expect(open).toBe(true);
+      expect(button.style.getPropertyValue('anchor-name')).toBe('--r2m-tooltip');
+    });
+
+    it('a child of the tip holds it too', () => {
+      hover(target('Hint'));
+      elapse();
+      const inner = document.createElement('span');
+      tip.append(inner);
+      hover(document.body);
+      hover(inner);
+      elapse();
+      expect(open).toBe(true);
+    });
+
+    it('hides after the delay once the pointer leaves the tip', () => {
+      hover(target('Hint'));
+      elapse();
+      hover(tip);
+      hover(document.body);
+      expect(open).toBe(true);
+      elapse();
+      expect(open).toBe(false);
+    });
+
+    it('returning to the trigger cancels the hide', () => {
+      const button = target('Hint');
+      hover(button);
+      elapse();
+      hover(document.body);
+      hover(button);
+      elapse();
+      expect(open).toBe(true);
+    });
+
+    it('entering the tip cancels a pending switch to another trigger it passed over', () => {
+      const first = target('First');
+      const second = target('Second');
+      hover(first);
+      elapse();
+      hover(second);
+      hover(tip);
+      elapse();
+      expect(tip.textContent).toBe('First');
+      expect(first.style.getPropertyValue('anchor-name')).toBe('--r2m-tooltip');
+    });
+
+    it('hovering a closed tip does nothing', () => {
+      hover(tip);
+      elapse();
+      expect(open).toBe(false);
+    });
+
+    it('a blur while the pointer is on the tip keeps it, so a click on it doesn\x27t close it', () => {
+      const button = target('Hint');
+      button.dispatchEvent(new Event('focusin', { bubbles: true }));
+      elapse();
+      hovered = true;
+      button.dispatchEvent(new Event('focusout', { bubbles: true }));
+      expect(open).toBe(true);
+    });
+
+    it('Escape still hides it at once while hovered', () => {
+      hover(target('Hint'));
+      elapse();
+      hover(tip);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(open).toBe(false);
+    });
   });
 
   it('moving off before the delay cancels the tooltip', () => {

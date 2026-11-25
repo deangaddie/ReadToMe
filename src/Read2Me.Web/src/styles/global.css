@@ -587,7 +587,6 @@ dialog.r2m-dialog--fullscreen {
   background: var(--r2m-text);
   color: var(--r2m-surface);
   font-size: var(--r2m-text-sm);
-  pointer-events: none;
 }
 
 /* ---- toasts --------------------------------------------------------------------------------- */
