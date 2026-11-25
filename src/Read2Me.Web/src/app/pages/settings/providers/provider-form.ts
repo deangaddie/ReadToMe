@@ -98,8 +98,8 @@ export function toProviderForm(config: ProviderConfig, withText: boolean): Provi
     text: withText
       ? {
           enabledStepIds: [...(config.enabledStepIds ?? [])],
-          substitutions: [...(config.substitutionSteps ?? [])]
-            .sort((a, b) => a.order - b.order)
+          substitutions: (config.substitutionSteps ?? [])
+            .toSorted((a, b) => a.order - b.order)
             .map((s) => ({ id: s.id, fromText: s.fromText, toText: s.toText })),
           toSentenceCase: tsc
             ? {

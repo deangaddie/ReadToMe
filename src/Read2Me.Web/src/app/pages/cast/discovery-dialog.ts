@@ -58,7 +58,9 @@ export class DiscoveryDialog extends R2mElement {
   readonly includedCount = computed(() => this.rows().filter((r) => r.included).length);
   readonly collisions = computed(() => rowCollisions(this.rows(), this.data.roster));
   readonly collisionList = computed(() =>
-    [...this.collisions()].sort((a, b) => a.localeCompare(b)).join(', '),
+    this.collisions()
+      .toSorted((a, b) => a.localeCompare(b))
+      .join(', '),
   );
 
   /** Which discovery call is current; an answer from an earlier one is dropped. */

@@ -50,7 +50,7 @@ export function lostVoicesWarning(
       : `its ${voiceNames.length} voices go with it`;
   return (
     `${mergedName} is deleted by this merge, and ${goes} — including any generated audio and ` +
-    `voice rules: ${[...voiceNames].sort((a, b) => a.localeCompare(b)).join(', ')}. ` +
+    `voice rules: ${voiceNames.toSorted((a, b) => a.localeCompare(b)).join(', ')}. ` +
     'The survivor keeps its own voices.'
   );
 }

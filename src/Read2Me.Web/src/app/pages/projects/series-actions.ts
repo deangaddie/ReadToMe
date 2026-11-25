@@ -157,9 +157,9 @@ export class SeriesActions {
     const picker = document.createElement('r2m-series-picker');
     picker.data = {
       book: { folder: project.folderName, title: project.title },
-      series: [...this.store.series()].sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
-      ),
+      series: this.store
+        .series()
+        .toSorted((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })),
       membership: this.store.membership(),
     };
     const pick = await openDialog<SeriesPick>(picker);

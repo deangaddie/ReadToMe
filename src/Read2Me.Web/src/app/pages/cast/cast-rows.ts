@@ -74,7 +74,7 @@ export function sortRows(
         return byName(a, b);
     }
   };
-  return [...rows].sort(compare);
+  return rows.toSorted(compare);
 }
 
 /** Fraction of voices ready; a character with no voices sorts below one with an unready voice. */

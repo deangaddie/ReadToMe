@@ -467,8 +467,7 @@ export class BookStore {
    * on `cancel()` (the request failed, nothing is coming) or when the store closes.
    */
   expectOwnReceipt(timeoutMs: number): { settled: Promise<boolean>; cancel(): void } {
-    let resolve!: (hit: boolean) => void;
-    const settled = new Promise<boolean>((r) => (resolve = r));
+    const { promise: settled, resolve } = Promise.withResolvers<boolean>();
     const timer = setTimeout(() => finish(false), timeoutMs);
     const finish = (hit: boolean) => {
       clearTimeout(timer);
