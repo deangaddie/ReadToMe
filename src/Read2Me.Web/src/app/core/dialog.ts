@@ -72,10 +72,16 @@ function guardCancel(dialog: HTMLDialogElement, content: Partial<ClosableContent
     e.preventDefault();
     if (asking) return;
     asking = true;
-    void Promise.resolve(content.canClose())
-      .then((ok) => {
-        if (ok) dialog.close();
-      })
+    // A guard that throws keeps the dialog open: losing the work is the outcome it exists to stop.
+    const canClose = content.canClose.bind(content);
+    // The executor runs now, so the hook is asked on this cancel; a throw becomes a rejection.
+    void new Promise<boolean>((resolve) => resolve(canClose()))
+      .then(
+        (ok) => {
+          if (ok) dialog.close();
+        },
+        (error: unknown) => console.error('canClose failed; the dialog stays open', error),
+      )
       .finally(() => (asking = false));
   });
 }

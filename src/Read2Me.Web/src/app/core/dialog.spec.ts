@@ -179,3 +179,24 @@ describe('openDialog canClose guard', () => {
     expect(await result).toBeUndefined();
   });
 });
+
+describe('openDialog canClose failure', () => {
+  it('stays open when canClose throws', async () => {
+    const error = console.error;
+    console.error = () => {};
+    try {
+      void openDialog(
+        guarded(() => {
+          throw new Error('confirm failed');
+        }),
+      );
+      await Promise.resolve();
+      const dialog = document.querySelector('dialog')!;
+      expect(cancel(dialog).defaultPrevented).toBe(true);
+      await new Promise((r) => setTimeout(r));
+      expect(dialog.open).toBe(true);
+    } finally {
+      console.error = error;
+    }
+  });
+});
