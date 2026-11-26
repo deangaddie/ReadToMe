@@ -135,6 +135,8 @@ export class PronunciationCard extends R2mElement {
     const { itemId, pronunciationId, start, sentenceStart } = anchor.dataset;
     if (!itemId || !pronunciationId) return;
     current?.anchor.style.removeProperty('anchor-name');
+    // The mark it leaves collapses now; the new one expands once the panel shows for it.
+    this.#expand(null);
     anchor.style.setProperty('anchor-name', ANCHOR);
     this.#open.set({
       anchor,
@@ -170,10 +172,14 @@ export class PronunciationCard extends R2mElement {
     this.#expanded = anchor;
   }
 
-  /** The panel's own `toggle`: whatever opened or closed it, the marks say so. */
-  readonly #onToggle = (e: Event): void => {
-    const open = (e as ToggleEvent).newState === 'open';
-    this.#expand(open ? (this.#open()?.anchor ?? null) : null);
+  /**
+   * The panel's own `toggle`: whatever opened or closed it, the marks say so. It reads the panel's
+   * state now, not the event's `newState`, so a late `closed` from a hide the next show already
+   * undid leaves the new mark expanded.
+   */
+  readonly #onToggle = (): void => {
+    const shown = this.#panel()?.matches(':popover-open') ?? false;
+    this.#expand(shown ? (this.#open()?.anchor ?? null) : null);
   };
 
   #panel(): HTMLElement | null {
@@ -256,7 +262,7 @@ export class PronunciationCard extends R2mElement {
     this.show(mark);
     void this.rendered().then(() => {
       if (this.#open()?.anchor !== mark) return;
-      this.querySelector<HTMLElement>('.pron-card__panel button:not([disabled])')?.focus();
+      this.#panel()?.querySelector<HTMLElement>('button:not([disabled])')?.focus();
     });
   };
 

@@ -191,10 +191,20 @@ describe('the mark the card hangs from', () => {
     expect(expanded(mark())).toBe('false');
   });
 
+  it('is expanded once a resting pointer opens its card', async () => {
+    mark().dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));
+    await settle();
+
+    expect(card.open()?.anchor).toBe(mark());
+    expect(expanded(mark())).toBe('true');
+  });
+
   it('collapses when the card moves to another mark', async () => {
     await focusMark();
 
     card.show(second());
+    expect(expanded(mark())).toBe('false');
     await settle();
 
     expect(expanded(mark())).toBe('false');
