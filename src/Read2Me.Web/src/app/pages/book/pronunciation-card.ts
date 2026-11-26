@@ -51,7 +51,8 @@ export interface PronunciationEditRequest {
  * the Book view's panel. One shared top-layer popover anchored to the mark, as the node menu is.
  * Playing is off with its reason while a step is viewed or a GPU job is queued or running; one
  * sentence plays at a time and keeps playing when the card closes, as a Try it sample does.
- * Enter on a mark moves focus into the card; Escape closes it and gives focus back to the mark.
+ * Each mark is a `role=button` whose `aria-expanded` says whether the card is open for it. Enter or
+ * Space on a mark moves focus into its card; Escape closes it and gives focus back to the mark.
  */
 export class PronunciationCard extends R2mElement {
   private readonly api = use(PronunciationsApi);
@@ -101,6 +102,8 @@ export class PronunciationCard extends R2mElement {
   #hideTimer: ReturnType<typeof setTimeout> | undefined;
   /** The mark Escape gave focus back to: that focus does not reopen its card. */
   #closedOn: HTMLElement | null = null;
+  /** The mark whose `aria-expanded` is `true`: the one the shown card hangs from. */
+  #expanded: HTMLElement | null = null;
 
   protected override connected(): void {
     this.classList.add('pron-card');
@@ -142,8 +145,9 @@ export class PronunciationCard extends R2mElement {
     });
     void this.rendered().then(() => {
       const panel = this.#panel();
-      if (this.#open()?.anchor === anchor && panel && !panel.matches(':popover-open'))
-        panel.showPopover?.();
+      if (this.#open()?.anchor !== anchor || !panel) return;
+      if (!panel.matches(':popover-open')) panel.showPopover?.();
+      this.#expand(anchor);
     });
   }
 
@@ -153,9 +157,24 @@ export class PronunciationCard extends R2mElement {
     if (!current) return;
     current.anchor.style.removeProperty('anchor-name');
     this.#open.set(null);
+    this.#expand(null);
     const panel = this.#panel();
     if (panel?.matches(':popover-open')) panel.hidePopover?.();
   }
+
+  /** Moves `aria-expanded="true"` to `anchor` (none for null); the mark it leaves reads `false`. */
+  #expand(anchor: HTMLElement | null): void {
+    if (this.#expanded === anchor) return;
+    this.#expanded?.setAttribute('aria-expanded', 'false');
+    anchor?.setAttribute('aria-expanded', 'true');
+    this.#expanded = anchor;
+  }
+
+  /** The panel's own `toggle`: whatever opened or closed it, the marks say so. */
+  readonly #onToggle = (e: Event): void => {
+    const open = (e as ToggleEvent).newState === 'open';
+    this.#expand(open ? (this.#open()?.anchor ?? null) : null);
+  };
 
   #panel(): HTMLElement | null {
     return this.querySelector<HTMLElement>('.pron-card__panel');
@@ -215,12 +234,30 @@ export class PronunciationCard extends R2mElement {
     if (this.#open() && !this.#holds(e.relatedTarget)) this.#hideSoon();
   };
 
-  /** Enter on the open mark moves into the card. */
+  /**
+   * Enter or Space on a mark (a `role=button`) moves into its card, opening it first when it is
+   * closed (after Escape) or open for another mark. Escape on the open mark closes its card, which
+   * focus opened (WCAG 1.4.13: dismissable without moving focus).
+   */
   readonly #onMarkKeydown = (e: KeyboardEvent): void => {
-    const open = this.#open();
-    if (e.key !== 'Enter' || !open || e.target !== open.anchor) return;
+    const mark =
+      e.target instanceof HTMLElement && e.target.matches('.r2m-pron-mark') ? e.target : null;
+    if (!mark) return;
+    if (e.key === 'Escape') {
+      if (this.#open()?.anchor !== mark) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.hide();
+      return;
+    }
+    if (e.key !== 'Enter' && e.key !== ' ') return;
     e.preventDefault();
-    this.querySelector<HTMLElement>('.pron-card__panel button:not([disabled])')?.focus();
+    this.#closedOn = null;
+    this.show(mark);
+    void this.rendered().then(() => {
+      if (this.#open()?.anchor !== mark) return;
+      this.querySelector<HTMLElement>('.pron-card__panel button:not([disabled])')?.focus();
+    });
   };
 
   readonly #onKeydown = (e: KeyboardEvent): void => {
@@ -254,6 +291,7 @@ export class PronunciationCard extends R2mElement {
       class="r2m-menu pron-card__panel"
       popover="manual"
       role="dialog"
+      @toggle=${this.#onToggle}
       aria-label=${entry ? `Pronunciation of ${entry.writtenForm}` : 'Pronunciation'}
     >
       ${open && entry ? this.#body(open, entry) : nothing}

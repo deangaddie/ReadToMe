@@ -10,7 +10,8 @@ import type {
 /**
  * The Book view's Pronunciation marks (pronunciation ticket 15, variant D) as pure functions and
  * partials: the host's `…/matches` spans cut each item's text into plain runs and marks. The text
- * itself is never changed; a mark is a dotted underline the hover card hangs from.
+ * itself is never changed; a mark is a dotted underline the hover card hangs from, a
+ * `role=button` with a dialog popup whose `aria-expanded` the card keeps.
  */
 
 /** One span in an item's text, as the host's matcher found it; the item is the index key. */
@@ -86,6 +87,9 @@ export function markedText(
       ? html`<span
           class="r2m-pron-mark ${lit?.has(s.mark.pronunciationId) ? 'r2m-pron-mark--lit' : ''}"
           tabindex="0"
+          role="button"
+          aria-haspopup="dialog"
+          aria-expanded="false"
           data-item-id=${itemId}
           data-pronunciation-id=${s.mark.pronunciationId}
           data-start=${s.mark.start}

@@ -155,3 +155,91 @@ describe('the Pronunciation hover card', () => {
     expect(mark().style.getPropertyValue('anchor-name')).toBe('');
   });
 });
+
+describe('the mark the card hangs from', () => {
+  const second = () => host.querySelectorAll<HTMLElement>('.r2m-pron-mark')[1]!;
+  const expanded = (el: HTMLElement) => el.getAttribute('aria-expanded');
+  const key = async (target: HTMLElement, k: string) => {
+    const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true });
+    target.dispatchEvent(e);
+    await settle();
+    return e;
+  };
+
+  beforeEach(async () => {
+    const two = indexSpans({
+      pronunciations: [{ id: 'holmes', writtenForm: 'Holmes', spokenForm: 'HOHMZ' }],
+      spans: [
+        { itemId: 'i1', start: 0, length: 6, pronunciationId: 'holmes', sentenceStart: 0 },
+        { itemId: 'i1', start: 12, length: 6, pronunciationId: 'holmes', sentenceStart: 12 },
+      ],
+    });
+    card.remove();
+    render(markedText('i1', 'Holmes ran. Holmes fell.', two.byItem['i1']), host);
+    card.marks = two;
+    host.append(card);
+    await settle();
+  });
+
+  it('is expanded while its card is open and collapsed once it closes', async () => {
+    expect(expanded(mark())).toBe('false');
+
+    await focusMark();
+    expect(expanded(mark())).toBe('true');
+
+    card.hide();
+    expect(expanded(mark())).toBe('false');
+  });
+
+  it('collapses when the card moves to another mark', async () => {
+    await focusMark();
+
+    card.show(second());
+    await settle();
+
+    expect(expanded(mark())).toBe('false');
+    expect(expanded(second())).toBe('true');
+  });
+
+  it('collapses when the panel closes by any other route (its toggle event)', async () => {
+    await focusMark();
+
+    const panel = card.querySelector<HTMLElement>('.pron-card__panel')!;
+    panel.dispatchEvent(Object.assign(new Event('toggle'), { newState: 'closed' }));
+
+    expect(expanded(mark())).toBe('false');
+  });
+
+  it('Escape collapses it; Enter reopens the card and moves focus into it', async () => {
+    await focusMark();
+    await key(card, 'Escape');
+    expect(expanded(mark())).toBe('false');
+
+    await key(mark(), 'Enter');
+
+    expect(card.open()?.anchor).toBe(mark());
+    expect(expanded(mark())).toBe('true');
+    expect(document.activeElement).toBe(play());
+  });
+
+  it('Escape on the mark whose focus opened the card closes it there', async () => {
+    await focusMark();
+
+    const e = await key(mark(), 'Escape');
+
+    expect(e.defaultPrevented).toBe(true);
+    expect(card.open()).toBeNull();
+    expect(expanded(mark())).toBe('false');
+  });
+
+  it('Space activates it as Enter does, without scrolling the page', async () => {
+    await focusMark();
+    await key(card, 'Escape');
+
+    const e = await key(mark(), ' ');
+
+    expect(e.defaultPrevented).toBe(true);
+    expect(expanded(mark())).toBe('true');
+    expect(document.activeElement).toBe(play());
+  });
+});
