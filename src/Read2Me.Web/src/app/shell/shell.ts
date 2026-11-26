@@ -114,15 +114,32 @@ export class AppShell extends R2mElement {
   private readonly narrow = signal(false);
   /** Modal rail visibility on narrow screens; ignored when the rail is docked. */
   private readonly railOpen = signal(false);
+  /** The rail is open as a modal drawer: the rest of the shell is inert until it closes. */
+  private readonly modal = computed(() => this.narrow() && this.railOpen());
+  /** Where focus goes after the next render: into the opened drawer, or back to the toggle. */
+  private focusAfterRender: 'rail' | 'toggle' | null = null;
 
   protected override connected(): void {
     if (typeof matchMedia === 'function') {
       const query = matchMedia(NARROW_QUERY);
       this.narrow.set(query.matches);
-      const onChange = (e: MediaQueryListEvent) => this.narrow.set(e.matches);
+      const onChange = (e: MediaQueryListEvent) => {
+        this.narrow.set(e.matches);
+        // Widening docks the rail; it shouldn't come back as an open drawer on narrowing again.
+        if (!e.matches) this.railOpen.set(false);
+      };
       query.addEventListener('change', onChange);
       this.onDisconnect(() => query.removeEventListener('change', onChange));
     }
+    // A popover isn't modal, so the drawer handles Escape itself (modern-web-guidance `navigation-drawer`). On the
+    // document: Tab past the last link leaves the page, and Escape then targets the body.
+    const onKeydown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || !this.modal()) return;
+      e.preventDefault();
+      this.closeModalRail();
+    };
+    document.addEventListener('keydown', onKeydown);
+    this.onDisconnect(() => document.removeEventListener('keydown', onKeydown));
     // No-Workspace mode renders the Setup check page in place of the outlet, so its chunk loads here.
     this.effect(() => {
       if (this.setupCheck.noWorkspace())
@@ -130,13 +147,27 @@ export class AppShell extends R2mElement {
     });
   }
 
+  protected override updated(): void {
+    const target = this.focusAfterRender;
+    this.focusAfterRender = null;
+    if (target === 'rail') this.querySelector<HTMLElement>('.shell__nav-item')?.focus();
+    else if (target === 'toggle') this.querySelector<HTMLElement>('.shell__menu')?.focus();
+  }
+
   private readonly toggleRail = (): void => {
-    if (this.narrow()) this.railOpen.update((open) => !open);
-    else this.rail.toggle();
+    if (!this.narrow()) this.rail.toggle();
+    else if (this.railOpen()) this.closeModalRail();
+    else {
+      this.railOpen.set(true);
+      this.focusAfterRender = 'rail';
+    }
   };
 
+  /** Closes the drawer (scrim, Escape, toggle, a nav link) and gives focus back to the toggle. */
   private readonly closeModalRail = (): void => {
-    if (this.narrow()) this.railOpen.set(false);
+    if (!this.modal()) return;
+    this.railOpen.set(false);
+    this.focusAfterRender = 'toggle';
   };
 
   /** Theme quick menu (design §5): writes the shared selection through the API. */
@@ -149,6 +180,8 @@ export class AppShell extends R2mElement {
     const crumbs = this.crumbs();
     const narrow = this.narrow();
     const expanded = narrow || this.rail.expanded();
+    // While the drawer is open only the rail and its toggle take focus.
+    const modal = this.modal();
     const connection = this.live.state();
     // Browser tests wait on this rather than on a transport detail like the WebSocket.
     this.setAttribute('data-live-state', connection);
@@ -162,85 +195,84 @@ export class AppShell extends R2mElement {
           type="button"
           class="r2m-icon-button shell__menu"
           @click=${this.toggleRail}
+          aria-expanded=${narrow ? modal : this.rail.expanded()}
           aria-label="Toggle navigation"
           data-tooltip="Toggle navigation"
         >
           ${icon('menu')}
         </button>
-        <a class="shell__brand" href="projects"
-          ><img src=${logoUrl} alt="" width="24" height="24" />Read2Me</a
-        >
+        <div class="shell__appbar-controls" ?inert=${modal}>
+          <a class="shell__brand" href="projects"
+            ><img src=${logoUrl} alt="" width="24" height="24" />Read2Me</a
+          >
 
-        <nav class="shell__crumbs" aria-label="Breadcrumb">
-          ${crumbs.map((crumb, i) => {
-            const last = i === crumbs.length - 1;
-            return html`${
-              last
-                ? html`<span class="shell__crumb shell__crumb--current" aria-current="page"
-                    >${crumb.title}</span
-                  >`
-                : html`<a class="shell__crumb" href=${crumb.href}>${crumb.title}</a>`
-            }${last ? nothing : html`<span class="shell__crumb-sep" aria-hidden="true">›</span>`}`;
-          })}
-        </nav>
+          <nav class="shell__crumbs" aria-label="Breadcrumb">
+            ${crumbs.map((crumb, i) => {
+              const last = i === crumbs.length - 1;
+              return html`${
+                last
+                  ? html`<span class="shell__crumb shell__crumb--current" aria-current="page"
+                      >${crumb.title}</span
+                    >`
+                  : html`<a class="shell__crumb" href=${crumb.href}>${crumb.title}</a>`
+              }${last ? nothing : html`<span class="shell__crumb-sep" aria-hidden="true">›</span>`}`;
+            })}
+          </nav>
 
-        <span class="shell__spacer"></span>
+          <span class="shell__spacer"></span>
 
-        ${this.nextStepPill()} ${this.historyButton()} ${this.setupShield()}
+          ${this.nextStepPill()} ${this.historyButton()} ${this.setupShield()}
 
-        <span
-          class="shell__conn shell__conn--${connection}"
-          role="status"
-          aria-label=${connectionLabel}
-          data-tooltip=${connectionLabel}
-        >
-          <span class="shell__conn-dot" aria-hidden="true"></span>
-          <span class="shell__conn-text">live</span>
-        </span>
+          <span
+            class="shell__conn shell__conn--${connection}"
+            role="status"
+            aria-label=${connectionLabel}
+            data-tooltip=${connectionLabel}
+          >
+            <span class="shell__conn-dot" aria-hidden="true"></span>
+            <span class="shell__conn-text">live</span>
+          </span>
 
-        <button
-          type="button"
-          class="r2m-icon-button shell__theme"
-          popovertarget=${THEME_MENU_ID}
-          aria-haspopup="menu"
-          aria-label="Theme"
-          data-tooltip="Theme"
-        >
-          ${icon(SCHEME_ICONS[preference])}
-        </button>
-        <div
-          id=${THEME_MENU_ID}
-          popover
-          class="r2m-menu shell__theme-menu"
-          role="menu"
-          aria-label="Theme"
-          @keydown=${menuKeys.keydown}
-          @toggle=${menuKeys.toggle}
-        >
-          ${this.schemeItem('light', 'Light')} ${this.schemeItem('dark', 'Dark')}
-          ${this.schemeItem('system', 'Follow system')}
+          <button
+            type="button"
+            class="r2m-icon-button shell__theme"
+            popovertarget=${THEME_MENU_ID}
+            aria-haspopup="menu"
+            aria-label="Theme"
+            data-tooltip="Theme"
+          >
+            ${icon(SCHEME_ICONS[preference])}
+          </button>
+          <div
+            id=${THEME_MENU_ID}
+            popover
+            class="r2m-menu shell__theme-menu"
+            role="menu"
+            aria-label="Theme"
+            @keydown=${menuKeys.keydown}
+            @toggle=${menuKeys.toggle}
+          >
+            ${this.schemeItem('light', 'Light')} ${this.schemeItem('dark', 'Dark')}
+            ${this.schemeItem('system', 'Follow system')}
+          </div>
+
+          <a
+            class="r2m-icon-button shell__settings"
+            href="settings"
+            aria-label="Settings"
+            data-tooltip="Settings"
+            >${icon('settings')}</a
+          >
         </div>
-
-        <a
-          class="r2m-icon-button shell__settings"
-          href="settings"
-          aria-label="Settings"
-          data-tooltip="Settings"
-          >${icon('settings')}</a
-        >
       </header>
 
       ${this.setupBanner()} ${this.viewingBanner()}
 
       <div class="shell__body">
-        ${
-          narrow && this.railOpen()
-            ? html`<div class="shell__scrim" @click=${this.closeModalRail}></div>`
-            : nothing
-        }
+        ${modal ? html`<div class="shell__scrim" @click=${this.closeModalRail}></div>` : nothing}
         <aside
           class="shell__rail ${expanded ? 'shell__rail--expanded' : ''} ${
-            narrow ? (this.railOpen() ? 'shell__rail--open' : 'shell__rail--closed') : ''
+            narrow ? (modal ? 'shell__rail--open' : 'shell__rail--closed') : ''
           }"
         >
           <nav class="shell__nav" aria-label="Sections">
@@ -257,7 +289,7 @@ export class AppShell extends R2mElement {
             </ul>
           </nav>
         </aside>
-        <main class="shell__main ${viewing ? 'shell__main--viewing' : ''}">
+        <main class="shell__main ${viewing ? 'shell__main--viewing' : ''}" ?inert=${modal}>
           ${
             // Without a Workspace every route shows the Setup check, which says what to fix.
             this.setupCheck.noWorkspace()
@@ -267,14 +299,18 @@ export class AppShell extends R2mElement {
         </main>
         ${
           this.history() && this.historySheet.open()
-            ? html`<aside class="shell__history" aria-labelledby="history-sheet-title">
+            ? html`<aside
+                class="shell__history"
+                aria-labelledby="history-sheet-title"
+                ?inert=${modal}
+              >
                 <r2m-history-sheet .store=${this.history()}></r2m-history-sheet>
               </aside>`
             : nothing
         }
         ${
           this.drawerOpen()
-            ? html`<aside class="shell__drawer" aria-label="Activity">
+            ? html`<aside class="shell__drawer" aria-label="Activity" ?inert=${modal}>
                 <!-- Mounted only while open so a stream tab's hub group is left when the drawer closes. -->
                 <r2m-activity-drawer></r2m-activity-drawer>
               </aside>`
@@ -282,7 +318,7 @@ export class AppShell extends R2mElement {
         }
       </div>
 
-      <footer class="shell__activity" aria-label="Background activity">
+      <footer class="shell__activity" aria-label="Background activity" ?inert=${modal}>
         <r2m-activity-bar .narrow=${narrow}></r2m-activity-bar>
       </footer>
     `;
@@ -368,7 +404,7 @@ export class AppShell extends R2mElement {
       : '';
     const cost = store.restorePreview();
     const restoring = store.restoring();
-    return html`<div class="shell__viewing" role="status">
+    return html`<div class="shell__viewing" role="status" ?inert=${this.modal()}>
       ${icon('lock')}
       <span class="shell__viewing-text"
         ><strong>Viewing ${name}</strong>${step?.summary ? ` — ${step.summary}` : ''}${when}. The
@@ -401,7 +437,7 @@ export class AppShell extends R2mElement {
   private setupBanner() {
     if (!this.setupCheck.bannerVisible()) return nothing;
     const failed = this.setupCheck.failedCount();
-    return html`<div class="shell__setup-banner" role="alert">
+    return html`<div class="shell__setup-banner" role="alert" ?inert=${this.modal()}>
       ${icon('error')}
       <span class="shell__setup-banner-text"
         ><strong>${failedLabel(failed)}.</strong> Some steps will not work until they are

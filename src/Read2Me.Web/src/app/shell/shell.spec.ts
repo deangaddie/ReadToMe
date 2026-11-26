@@ -476,7 +476,7 @@ describe('next-step pill', () => {
     const { shell } = await mountWith('projects/pride-and-prejudice/book', ACT);
     // The icon buttons share r2m-icon-button as their first class; name them by their own.
     const named = ['shell__history-toggle', 'shell__setup-shield'];
-    const bar = Array.from(shell.querySelector('.shell__appbar')?.children ?? []).map(
+    const bar = Array.from(shell.querySelector('.shell__appbar-controls')?.children ?? []).map(
       (el) => named.find((c) => el.classList.contains(c)) ?? el.classList[0],
     );
     expect(bar.indexOf('shell__next')).toBe(bar.indexOf('shell__spacer') + 1);
@@ -807,5 +807,137 @@ describe('viewing a History step', () => {
     expect(shell.querySelector('.shell__viewing')).toBeNull();
     expect(main(shell)?.inert).toBe(false);
     expect(toasts.at(-1)).toContain('Restored to #1 Split chapter');
+  });
+});
+
+describe('app-root narrow rail drawer', () => {
+  const real = window.matchMedia;
+  let narrow: boolean;
+  let listeners: ((e: MediaQueryListEvent) => void)[];
+
+  beforeEach(() => {
+    narrow = true;
+    listeners = [];
+    window.matchMedia = ((query: string) =>
+      ({
+        matches: query.includes('max-width') ? narrow : false,
+        addEventListener: (_: string, cb: (e: MediaQueryListEvent) => void) => listeners.push(cb),
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList) as typeof matchMedia;
+  });
+  afterEach(() => {
+    window.matchMedia = real;
+  });
+
+  const toggle = (shell: Element) => shell.querySelector<HTMLButtonElement>('.shell__menu');
+  const rail = (shell: Element) => shell.querySelector('.shell__rail');
+  const isOpen = (shell: Element) => rail(shell)?.classList.contains('shell__rail--open') ?? false;
+  const firstLink = (shell: Element) => shell.querySelector<HTMLElement>('.shell__nav-item');
+  const background = (shell: Element) =>
+    [
+      shell.querySelector<HTMLElement>('.shell__main'),
+      shell.querySelector<HTMLElement>('.shell__brand'),
+      shell.querySelector<HTMLElement>('.shell__theme'),
+      shell.querySelector<HTMLElement>('.shell__settings'),
+      shell.querySelector<HTMLElement>('.shell__activity'),
+    ].map((el) => el?.closest('[inert]') != null);
+
+  async function openRail() {
+    const { shell } = await mount('projects');
+    toggle(shell)?.click();
+    await settle();
+    return shell;
+  }
+
+  it('opens as a modal drawer: focus on the first nav link, the page and app bar inert', async () => {
+    const { shell } = await mount('projects');
+    expect(toggle(shell)?.getAttribute('aria-expanded')).toBe('false');
+    expect(background(shell)).toEqual([false, false, false, false, false]);
+
+    toggle(shell)?.click();
+    await settle();
+
+    expect(isOpen(shell)).toBe(true);
+    expect(toggle(shell)?.getAttribute('aria-expanded')).toBe('true');
+    expect(document.activeElement).toBe(firstLink(shell));
+    expect(background(shell)).toEqual([true, true, true, true, true]);
+    expect(toggle(shell)?.closest('[inert]')).toBeNull();
+    expect(rail(shell)?.closest('[inert]')).toBeNull();
+  });
+
+  it.each([
+    [
+      'Escape',
+      (shell: Element) => {
+        document.body.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+        );
+        return shell;
+      },
+    ],
+    [
+      'the scrim',
+      (shell: Element) => {
+        shell.querySelector<HTMLElement>('.shell__scrim')?.click();
+        return shell;
+      },
+    ],
+    [
+      'the toggle',
+      (shell: Element) => {
+        toggle(shell)?.click();
+        return shell;
+      },
+    ],
+  ])('closes on %s and gives focus back to the toggle', async (_, close) => {
+    const shell = await openRail();
+    close(shell);
+    await settle();
+
+    expect(isOpen(shell)).toBe(false);
+    expect(toggle(shell)?.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(toggle(shell));
+    expect(background(shell)).toEqual([false, false, false, false, false]);
+  });
+
+  it('closes when a nav link is followed, leaving nothing inert', async () => {
+    const shell = await openRail();
+    firstLink(shell)?.click();
+    await settle();
+
+    expect(isOpen(shell)).toBe(false);
+    expect(background(shell)).toEqual([false, false, false, false, false]);
+  });
+
+  it('leaves Escape alone while the drawer is closed', async () => {
+    const { shell } = await mount('projects');
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    shell.querySelector('.shell__main')?.dispatchEvent(escape);
+    await settle();
+    expect(escape.defaultPrevented).toBe(false);
+    expect(isOpen(shell)).toBe(false);
+  });
+
+  it('closes when the screen widens, leaving nothing inert', async () => {
+    const shell = await openRail();
+    narrow = false;
+    for (const cb of listeners) cb({ matches: false } as MediaQueryListEvent);
+    await settle();
+
+    expect(rail(shell)?.classList.contains('shell__rail--open')).toBe(false);
+    expect(background(shell)).toEqual([false, false, false, false, false]);
+  });
+
+  it('when wide, aria-expanded follows the docked rail and nothing goes inert', async () => {
+    narrow = false;
+    const { shell } = await mount('projects');
+    expect(toggle(shell)?.getAttribute('aria-expanded')).toBe('true');
+
+    toggle(shell)?.click();
+    await settle();
+
+    expect(toggle(shell)?.getAttribute('aria-expanded')).toBe('false');
+    expect(background(shell)).toEqual([false, false, false, false, false]);
+    expect(document.activeElement).not.toBe(firstLink(shell));
   });
 });
