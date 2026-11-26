@@ -14,6 +14,7 @@ import { SETUP_CHECK_PATH, failedLabel } from '@app/setup-check/surfacing';
 import { type SchemePreference, ThemeService } from '@app/theme/theme.service';
 import type { IconName } from '@app/ui/icons';
 import { icon, spinner } from '@app/ui/partials';
+import { menuKeys } from '@app/ui/menu';
 import { type GuideEntry, ProjectGuide } from './project-guide';
 import { RailState } from './rail-state';
 import { GLOBAL_NAV_ITEMS, type NavItem, contextNavItems, isActive } from './shell-nav';
@@ -201,12 +202,21 @@ export class AppShell extends R2mElement {
           type="button"
           class="r2m-icon-button shell__theme"
           popovertarget=${THEME_MENU_ID}
+          aria-haspopup="menu"
           aria-label="Theme"
           data-tooltip="Theme"
         >
           ${icon(SCHEME_ICONS[preference])}
         </button>
-        <div id=${THEME_MENU_ID} popover class="r2m-menu shell__theme-menu">
+        <div
+          id=${THEME_MENU_ID}
+          popover
+          class="r2m-menu shell__theme-menu"
+          role="menu"
+          aria-label="Theme"
+          @keydown=${menuKeys.keydown}
+          @toggle=${menuKeys.toggle}
+        >
           ${this.schemeItem('light', 'Light')} ${this.schemeItem('dark', 'Dark')}
           ${this.schemeItem('system', 'Follow system')}
         </div>

@@ -2,7 +2,7 @@ import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
 import { R2mElement, define } from '@app/core/element';
 import { computed, signal } from '@app/core/signals';
-import { closeMenuOf } from './menu';
+import { closeMenuOf, menuKeys } from './menu';
 import { icon, statusChip } from './partials';
 
 export interface ConfigListItem {
@@ -153,6 +153,8 @@ export class ConfigList extends R2mElement {
         popover
         class="r2m-menu"
         role="menu"
+        @keydown=${menuKeys.keydown}
+        @toggle=${menuKeys.toggle}
         aria-label=${`Actions for ${item.name}`}
       >
         <button

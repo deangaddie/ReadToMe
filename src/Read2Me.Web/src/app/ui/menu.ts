@@ -1,6 +1,7 @@
 import { html, nothing } from 'lit-html';
 import type { IconName } from './icons';
 import { icon } from './partials';
+import { rovingKeydown } from './roving';
 
 /**
  * Closes the `[popover].r2m-menu` the clicked entry sits in before its action runs: the browser
@@ -54,3 +55,50 @@ export function menuItem(item: MenuItem) {
 export function menuHeading(text: string) {
   return html`<div class="r2m-menu__heading" role="presentation">${text}</div>`;
 }
+
+/** Whether the last activation was a key (Enter or Space) rather than a pointer press. */
+let keyboardActivation = false;
+if (typeof document !== 'undefined') {
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.key === 'Enter' || e.key === ' ') keyboardActivation = true;
+    },
+    true,
+  );
+  document.addEventListener('pointerdown', () => (keyboardActivation = false), true);
+}
+
+const ITEM_SELECTOR = '[role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]';
+
+/** The items of the `role="menu"` `panel`, not those of a menu nested in it. */
+function itemsOf(panel: HTMLElement): HTMLElement[] {
+  return Array.from(panel.querySelectorAll<HTMLElement>(ITEM_SELECTOR)).filter(
+    (item) => item.closest('[role="menu"]') === panel,
+  );
+}
+
+function isEnabled(item: HTMLElement): boolean {
+  return !(item as HTMLButtonElement).disabled && item.getAttribute('aria-disabled') !== 'true';
+}
+
+/**
+ * The menu keyboard for a `[popover][role="menu"]` (WAI-ARIA menu pattern): bind `keydown` and
+ * `toggle` on the popover. Up and Down move between enabled items (wrapping), Home and End go to
+ * the first and last, and only one item is in the tab order, so Tab leaves the menu. An open
+ * after Enter or Space on the trigger focuses the first enabled item; a pointer open leaves focus
+ * where it is. Escape and light dismiss stay the browser's, which returns focus to the trigger.
+ * The node menu has its own keys (submenus, type-ahead) over the same `rovingKeydown`.
+ */
+export const menuKeys = {
+  keydown: (e: KeyboardEvent): void => {
+    rovingKeydown(e, itemsOf(e.currentTarget as HTMLElement).filter(isEnabled), 'vertical');
+  },
+  toggle: (e: Event): void => {
+    if ((e as ToggleEvent).newState !== 'open') return;
+    const items = itemsOf(e.currentTarget as HTMLElement);
+    const first = items.find(isEnabled);
+    for (const item of items) item.tabIndex = item === first ? 0 : -1;
+    if (keyboardActivation) first?.focus();
+  },
+};
