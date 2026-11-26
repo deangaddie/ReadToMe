@@ -67,8 +67,15 @@ describe('menuHeading', () => {
 describe('menuKeys', () => {
   function menu(): HTMLElement {
     const host = mount(
-      html`<button type="button" class="trigger">More</button>
-        <div popover role="menu" @keydown=${menuKeys.keydown} @toggle=${menuKeys.toggle}>
+      html`<button type="button" class="trigger" popovertarget="spec-menu">More</button>
+        <input class="field" />
+        <div
+          id="spec-menu"
+          popover
+          role="menu"
+          @keydown=${menuKeys.keydown}
+          @toggle=${menuKeys.toggle}
+        >
           ${menuHeading('Group')} ${menuItem({ label: 'One', action: 'one', run: () => {} })}
           ${menuItem({ label: 'Two', action: 'two', disabled: true, run: () => {} })}
           <hr class="r2m-menu__divider" />
@@ -119,6 +126,16 @@ describe('menuKeys', () => {
     trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
     open(host);
     expect(document.activeElement).toBe(trigger);
+    host.remove();
+  });
+
+  it('leaves focus where it is when the Enter landed elsewhere', () => {
+    const host = menu();
+    const field = host.querySelector<HTMLInputElement>('.field')!;
+    field.focus();
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    open(host);
+    expect(document.activeElement).toBe(field);
     host.remove();
   });
 
