@@ -131,14 +131,15 @@ export class AppShell extends R2mElement {
       query.addEventListener('change', onChange);
       this.onDisconnect(() => query.removeEventListener('change', onChange));
     }
-    // A popover isn't modal, so the drawer handles Escape itself (guide navigation-drawer).
+    // A popover isn't modal, so the drawer handles Escape itself (guide navigation-drawer). On the
+    // document: Tab past the last link leaves the page, and Escape then targets the body.
     const onKeydown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented || !this.modal()) return;
       e.preventDefault();
       this.closeModalRail();
     };
-    this.addEventListener('keydown', onKeydown);
-    this.onDisconnect(() => this.removeEventListener('keydown', onKeydown));
+    document.addEventListener('keydown', onKeydown);
+    this.onDisconnect(() => document.removeEventListener('keydown', onKeydown));
     // No-Workspace mode renders the Setup check page in place of the outlet, so its chunk loads here.
     this.effect(() => {
       if (this.setupCheck.noWorkspace())

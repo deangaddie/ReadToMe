@@ -869,7 +869,7 @@ describe('app-root narrow rail drawer', () => {
     [
       'Escape',
       (shell: Element) => {
-        document.activeElement?.dispatchEvent(
+        document.body.dispatchEvent(
           new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
         );
         return shell;
