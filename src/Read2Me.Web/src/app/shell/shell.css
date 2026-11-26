@@ -24,6 +24,10 @@
       color: inherit;
     }
   }
+  /* Everything after the toggle, so the open drawer can make it inert in one go; lays out as bar items. */
+  .shell__appbar-controls {
+    display: contents;
+  }
   .shell__brand {
     display: inline-flex;
     align-items: center;
