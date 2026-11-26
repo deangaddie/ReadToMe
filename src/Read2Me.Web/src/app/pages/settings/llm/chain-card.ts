@@ -5,7 +5,7 @@ import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { confirmPermanent } from '@app/ui/dialogs';
-import { closeMenuOf } from '@app/ui/menu';
+import { closeMenuOf, menuKeys } from '@app/ui/menu';
 import { icon, statusChip } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
 import {
@@ -160,7 +160,15 @@ export class LlmChainCard extends R2mElement {
       >
         ${icon('add')} Add step
       </button>
-      <div id=${ADD_MENU_ID} popover class="r2m-menu" role="menu" aria-label="Add step">
+      <div
+        id=${ADD_MENU_ID}
+        popover
+        class="r2m-menu"
+        role="menu"
+        aria-label="Add step"
+        @keydown=${menuKeys.keydown}
+        @toggle=${menuKeys.toggle}
+      >
         ${repeat(
           options,
           optionLabel,

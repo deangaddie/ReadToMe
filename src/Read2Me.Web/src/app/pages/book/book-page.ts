@@ -9,7 +9,7 @@ import { LiveService } from '@app/live/live.service';
 import { ConfirmService, confirmPermanent } from '@app/ui/dialogs';
 import type { IconName } from '@app/ui/icons';
 import type { MeasuredList } from '@app/ui/measured-list';
-import { menuHeading, menuItem } from '@app/ui/menu';
+import { menuHeading, menuItem, menuKeys } from '@app/ui/menu';
 import { adviceLine, emptyState, gated, icon, statusChip } from '@app/ui/partials';
 import type { SpeakerMenu } from '@app/ui/speaker-menu';
 import { ToastService } from '@app/ui/toast';
@@ -623,7 +623,15 @@ export class BookPage extends R2mElement {
             ${icon('more_vert')}
           </button>`,
       )}
-      <div id=${ACTIONS_MENU_ID} popover class="r2m-menu" role="menu" aria-label="Book actions">
+      <div
+        id=${ACTIONS_MENU_ID}
+        popover
+        class="r2m-menu"
+        role="menu"
+        aria-label="Book actions"
+        @keydown=${menuKeys.keydown}
+        @toggle=${menuKeys.toggle}
+      >
         ${menuHeading('Structure')}
         ${entry('reread', 'Reread… (auto splits)', 'restart_alt', () => void this.reread())}
         ${entry('manual-reread', 'Reread with split rules…', 'tune', () => void this.rereadManually())}

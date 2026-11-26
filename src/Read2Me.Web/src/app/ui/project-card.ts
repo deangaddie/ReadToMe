@@ -1,7 +1,7 @@
 import { html, nothing } from 'lit-html';
 import { styleMap } from 'lit-html/directives/style-map.js';
 import { type ProjectSummary, workspaceUrl } from '@app/api';
-import { closeMenuOf } from './menu';
+import { closeMenuOf, menuKeys } from './menu';
 import { icon } from './partials';
 
 /** One popover id per folder, stable across renders so the trigger and its menu always pair up. */
@@ -96,6 +96,8 @@ export function projectCard(
           popover
           class="r2m-menu"
           role="menu"
+          @keydown=${menuKeys.keydown}
+          @toggle=${menuKeys.toggle}
           aria-label=${`Actions for ${project.title}`}
         >
           <button

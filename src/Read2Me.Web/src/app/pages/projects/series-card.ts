@@ -1,6 +1,6 @@
 import { html, nothing } from 'lit-html';
 import { COVER_ACCEPT, withLocal } from '@app/api';
-import { menuItem } from '@app/ui/menu';
+import { menuItem, menuKeys } from '@app/ui/menu';
 import { gated, icon } from '@app/ui/partials';
 import { tabPanel, tabs } from '@app/ui/tabs';
 import { bookLabel, type SeriesMember, type SeriesView, seriesSummary } from './series-shelf';
@@ -118,6 +118,8 @@ export function seriesCard(series: SeriesView, options: SeriesCardOptions) {
           popover
           class="r2m-menu"
           role="menu"
+          @keydown=${menuKeys.keydown}
+          @toggle=${menuKeys.toggle}
           aria-label=${`Actions for ${series.name}`}
         >
           ${menuItem({ label: 'Add book…', icon: 'add', action: 'add-book', run: options.onAddBook })}
