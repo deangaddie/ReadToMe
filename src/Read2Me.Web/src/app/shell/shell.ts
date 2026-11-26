@@ -131,7 +131,7 @@ export class AppShell extends R2mElement {
       query.addEventListener('change', onChange);
       this.onDisconnect(() => query.removeEventListener('change', onChange));
     }
-    // A popover isn't modal, so the drawer handles Escape itself (guide navigation-drawer). On the
+    // A popover isn't modal, so the drawer handles Escape itself (modern-web-guidance `navigation-drawer`). On the
     // document: Tab past the last link leaves the page, and Escape then targets the body.
     const onKeydown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented || !this.modal()) return;

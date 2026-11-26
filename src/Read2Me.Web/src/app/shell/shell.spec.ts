@@ -900,6 +900,15 @@ describe('app-root narrow rail drawer', () => {
     expect(background(shell)).toEqual([false, false, false, false, false]);
   });
 
+  it('closes when a nav link is followed, leaving nothing inert', async () => {
+    const shell = await openRail();
+    firstLink(shell)?.click();
+    await settle();
+
+    expect(isOpen(shell)).toBe(false);
+    expect(background(shell)).toEqual([false, false, false, false, false]);
+  });
+
   it('leaves Escape alone while the drawer is closed', async () => {
     const { shell } = await mount('projects');
     const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
