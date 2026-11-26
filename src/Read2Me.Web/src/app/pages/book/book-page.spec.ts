@@ -316,6 +316,11 @@ describe('r2m-book-page', () => {
       ['Untitled chapter 2', true],
     ]);
 
+    // The reader bar is a labelled group of mixed widgets, not a toolbar: each keeps its own Tab stop (#471).
+    const bar = page.querySelector('.book__toolbar')!;
+    expect([bar.getAttribute('role'), bar.getAttribute('aria-label')]).toEqual(['group', 'Reader']);
+    expect(page.querySelector('[role=toolbar]')).toBeNull();
+
     // The toolbar button hides the tree and the reader takes the width.
     const toggle = page.querySelector<HTMLButtonElement>('[aria-label="Hide structure"]')!;
     toggle.click();

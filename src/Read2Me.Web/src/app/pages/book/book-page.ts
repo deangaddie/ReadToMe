@@ -306,7 +306,7 @@ export class BookPage extends R2mElement {
     const treeOpen = this.treeLayout.open();
     const noContent = this.noContent();
     return html`
-      <div class="book__toolbar" role="toolbar" aria-label="Reader">
+      <div class="book__toolbar" role="group" aria-label="Reader">
         <button
           type="button"
           class="r2m-icon-button"
