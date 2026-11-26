@@ -109,6 +109,14 @@ describe('markedText', () => {
     expect(marks[1]!.dataset['sentenceStart']).toBe('12');
   });
 
+  it('exposes each mark as a button that opens a dialog, closed at first', () => {
+    const el = host(markedText('i1', 'Holmes ran.', [span(0, 6)]));
+    const mark = el.querySelector<HTMLElement>('.r2m-pron-mark')!;
+    expect(mark.getAttribute('role')).toBe('button');
+    expect(mark.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(mark.getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('says where each mark starts in the item text, and lights the marks of the entries named', () => {
     const el = host(
       markedText('i1', 'Holmes met Watson.', [span(0, 6), span(11, 6, 'wat')], {
