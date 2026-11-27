@@ -154,12 +154,12 @@ export class CastPage extends R2mElement {
           <div class="cast__toolbar">
             ${gated(
               toolbarBlock,
-              (disabled) =>
+              (gate) =>
                 html`<button
                   type="button"
                   class="r2m-button r2m-button--filled"
                   data-action="discover"
-                  ?disabled=${disabled}
+                  ${gate.attrs()}
                   @click=${() => void this.runDiscovery()}
                 >
                   ${icon('auto_awesome')} Discover
@@ -167,13 +167,12 @@ export class CastPage extends R2mElement {
             )}
             ${gated(
               toolbarBlock,
-              (disabled) =>
+              (gate) =>
                 html`<button
                   type="button"
                   class="r2m-button r2m-button--stroked"
                   data-action="generate-prompts"
-                  ?disabled=${disabled}
-                  data-tooltip="One LLM voice plan per character; progress in the activity centre"
+                  ${gate.attrs('One LLM voice plan per character; progress in the activity centre')}
                   @click=${() => void this.generatePrompts()}
                 >
                   ${icon('record_voice_over')} Generate voice prompts
@@ -181,13 +180,12 @@ export class CastPage extends R2mElement {
             )}
             ${gated(
               toolbarBlock,
-              (disabled) =>
+              (gate) =>
                 html`<button
                   type="button"
                   class="r2m-button r2m-button--stroked"
                   data-action="generate-audio"
-                  ?disabled=${disabled}
-                  data-tooltip="Synthesise every prompt voice without audio; progress in the activity centre"
+                  ${gate.attrs('Synthesise every prompt voice without audio; progress in the activity centre')}
                   @click=${() => void this.generateAudio()}
                 >
                   ${icon('graphic_eq')} Generate audio
@@ -195,12 +193,12 @@ export class CastPage extends R2mElement {
             )}
             ${gated(
               toolbarBlock,
-              (disabled) =>
+              (gate) =>
                 html`<button
                   type="button"
                   class="r2m-button r2m-button--stroked"
                   data-action="add-character"
-                  ?disabled=${disabled}
+                  ${gate.attrs()}
                   @click=${() => void this.addCharacter()}
                 >
                   ${icon('person_add')} Add character

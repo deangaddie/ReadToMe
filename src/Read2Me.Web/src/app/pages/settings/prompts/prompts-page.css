@@ -99,7 +99,7 @@
     font-size: var(--r2m-text-sm);
     cursor: pointer;
 
-    &:hover:not(:disabled) {
+    &:hover:not(:disabled, [aria-disabled='true']) {
       background: var(--r2m-surface-high);
     }
     &:focus-visible {

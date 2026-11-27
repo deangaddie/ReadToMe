@@ -73,14 +73,15 @@
     text-align: left;
     cursor: pointer;
 
-    &:hover:not(:disabled) {
+    &:hover:not(:disabled, [aria-disabled='true']) {
       background: var(--r2m-surface-high);
     }
     &:focus-visible {
       outline: 2px solid var(--r2m-accent);
       outline-offset: -2px;
     }
-    &:disabled {
+    &:disabled,
+    &[aria-disabled='true'] {
       cursor: default;
     }
   }

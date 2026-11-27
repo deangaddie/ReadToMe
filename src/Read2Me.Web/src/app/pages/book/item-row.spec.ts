@@ -18,6 +18,7 @@ import type { RowContext } from './reader-rows';
 import { AudioSelectionStore } from './selection-store';
 import { SpeakerAssigner } from './speaker-assigner';
 import { itemEntry } from '../../../testing/live-messages';
+import { blockedWith, isOff } from '../../../testing/description';
 
 const NARRATOR_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -158,13 +159,13 @@ describe('itemRow (speakers)', () => {
 
   describe('checkbox enablement (ticket 13)', () => {
     it('narration and attributed lines can be selected; an unattributed line cannot', async () => {
-      expect(box(await mount(ctx(), NARRATION))!.disabled).toBe(false);
-      expect(box(await mount(ctx(), DIALOG))!.disabled).toBe(false);
+      expect(isOff(box(await mount(ctx(), NARRATION))!)).toBe(false);
+      expect(isOff(box(await mount(ctx(), DIALOG))!)).toBe(false);
       expect(box(await mount(ctx(), UNATTRIBUTED))!.disabled).toBe(true);
     });
 
     it('narrator-only mode lets an unattributed line be selected', async () => {
-      expect(box(await mount(ctx({ narratorOnlyMode: true }), UNATTRIBUTED))!.disabled).toBe(false);
+      expect(isOff(box(await mount(ctx({ narratorOnlyMode: true }), UNATTRIBUTED))!)).toBe(false);
     });
 
     it('there is no checkbox outside the item selection, and none on a pause', async () => {
@@ -356,7 +357,7 @@ describe('itemRow (audio)', () => {
       );
       expect(text(el.querySelector('.r2m-status-chip'))).toContain('Failed');
       const retry = el.querySelector<HTMLButtonElement>('[data-action=retry-audio]')!;
-      expect(retry.disabled).toBe(false);
+      expect(isOff(retry!)).toBe(false);
       retry.click();
       expect(generator.retry).toHaveBeenCalledWith('n');
     });
@@ -414,8 +415,6 @@ describe('itemRow (audio)', () => {
     /** The page's `editor.block()` while a History step is viewed. */
     const blocked = (overrides: Partial<RowContext> = {}) =>
       ctx({ blocked: { reason: VIEWING_READ_ONLY }, ...overrides });
-    const tooltip = (el: Element | null) =>
-      el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
 
     it('while viewing a step, item play is off and says item audio is not kept', async () => {
       const el = await mount(
@@ -428,8 +427,7 @@ describe('itemRow (audio)', () => {
       const player = el.querySelector('r2m-audio-player')!;
       await player.rendered();
       expect(player.querySelector('audio')?.getAttribute('src') ?? null).toBeNull();
-      expect(player.querySelector<HTMLButtonElement>('button')!.disabled).toBe(true);
-      expect(tooltip(player)).toBe(ITEM_AUDIO_NOT_KEPT);
+      expect(blockedWith(player)).toBe(ITEM_AUDIO_NOT_KEPT);
     });
 
     it('the node menu, delivery cue, Retry and Dismiss are off with the reason', async () => {
@@ -458,8 +456,7 @@ describe('itemRow (audio)', () => {
         '[data-action=dismiss-review]',
       ]) {
         const control = el.querySelector<HTMLButtonElement>(selector)!;
-        expect(control.disabled).toBe(true);
-        expect(tooltip(control)).toBe(VIEWING_READ_ONLY);
+        expect(blockedWith(control)).toBe(VIEWING_READ_ONLY);
       }
     });
 
@@ -468,9 +465,16 @@ describe('itemRow (audio)', () => {
         blocked({ mode: 'speakers', itemSelectable: false, roster: ROSTER }),
         DIALOG,
       );
-      expect(el.querySelector('r2m-speaker-chip button')).toBeNull();
-      expect(tooltip(el.querySelector('r2m-speaker-chip'))).toBe(VIEWING_READ_ONLY);
+      await el.querySelector('r2m-speaker-chip')!.rendered();
+      expect(el.querySelector('r2m-speaker-chip [popovertarget]')).toBeNull();
+      expect(blockedWith(el.querySelector('r2m-speaker-chip'))).toBe(VIEWING_READ_ONLY);
     });
+  });
+
+  it('a chip nobody can assign from stays plain text while the book is blocked', async () => {
+    const el = await mount(ctx({ blocked: { reason: VIEWING_READ_ONLY }, roster: ROSTER }), DIALOG);
+    await el.querySelector('r2m-speaker-chip')!.rendered();
+    expect(el.querySelector('r2m-speaker-chip button')).toBeNull();
   });
 
   it('carries the item id and tints a selected row', async () => {

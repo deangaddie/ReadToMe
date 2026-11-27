@@ -20,6 +20,7 @@ import { type FakeNavigation, installNavigation, settle } from '../../../testing
 import type { CastPage } from './cast-page';
 import '../project/project-shell';
 import './cast-page';
+import { blockedWith } from '../../../testing/description';
 
 const BASE = '/api/projects/dracula';
 const SUMMARY = `${BASE}/characters/summary`;
@@ -304,16 +305,12 @@ describe('r2m-cast-page', () => {
   it('viewing a History step, the toolbar and the narrator banner are off with the reason; rows still select (ticket 32)', async () => {
     use(StepView).view('dracula', 's8');
     const { page } = await render('projects/dracula/cast/arthur');
-    const reason = (el: Element | null) =>
-      el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
     for (const action of ['discover', 'generate-prompts', 'generate-audio', 'add-character']) {
       const control = page.querySelector<HTMLButtonElement>(`[data-action="${action}"]`)!;
-      expect(control.disabled).toBe(true);
-      expect(reason(control)).toBe(VIEWING_READ_ONLY);
+      expect(blockedWith(control)).toBe(VIEWING_READ_ONLY);
     }
     const picker = page.querySelector<HTMLSelectElement>('r2m-narrator-banner select')!;
-    expect(picker.disabled).toBe(true);
-    expect(reason(picker)).toBe(VIEWING_READ_ONLY);
+    expect(blockedWith(picker)).toBe(VIEWING_READ_ONLY);
     expect(page.querySelector('r2m-character-detail')).not.toBeNull();
     expect(page.querySelector('.cast__search, input[type=search]')).not.toBeNull();
   });

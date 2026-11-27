@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import type { Block } from '@app/api';
 import { speakerHue } from '@app/shared/speaker-color';
+import { html, render } from 'lit-html';
+import { gated } from './partials';
 // Side-effect import registers the element; a type-only use alone would be elided.
 import './speaker-chip';
 import type { SpeakerChip } from './speaker-chip';
 import type { SpeakerRosterEntry } from './speaker-menu';
+import { blockedWith } from '../../testing/description';
 
 const ROSTER: SpeakerRosterEntry[] = [
   { id: 'c-elizabeth', name: 'Elizabeth' },
@@ -149,6 +153,65 @@ describe('r2m-speaker-chip', () => {
     } finally {
       window.matchMedia = real;
     }
+  });
+
+  describe('behind an Edit gate', () => {
+    const reason = { reason: 'Viewing a past step' };
+
+    /** A gated chip as the reader renders it. */
+    async function gatedChip(roster: SpeakerRosterEntry[] | undefined) {
+      const host = document.createElement('div');
+      document.body.append(host);
+      const draw = async (block: Block | null) => {
+        render(
+          gated(
+            block,
+            (gate) =>
+              html`<r2m-speaker-chip
+                .name=${'Elizabeth'}
+                .roster=${roster}
+                .gate=${gate}
+              ></r2m-speaker-chip>`,
+          ),
+          host,
+        );
+        await host.querySelector('r2m-speaker-chip')!.rendered();
+      };
+      const button = () => host.querySelector<HTMLButtonElement>('r2m-speaker-chip button');
+      return { draw, button };
+    }
+
+    it('with a reason it is a focusable button that says why and opens nothing', async () => {
+      for (const roster of [ROSTER, undefined]) {
+        const { draw, button } = await gatedChip(roster);
+        await draw(reason);
+        expect(blockedWith(button())).toBe(reason.reason);
+        expect(button()!.disabled).toBe(false);
+        expect(button()!.hasAttribute('popovertarget')).toBe(false);
+        expect(button()!.getAttribute('data-tooltip')).toBe(reason.reason);
+        document.body.replaceChildren();
+      }
+    });
+
+    it('keeps the same button, and its focus, as the gate shuts and opens', async () => {
+      const { draw, button } = await gatedChip(ROSTER);
+      await draw(null);
+      const first = button()!;
+      first.focus();
+      await draw(reason);
+      expect(button()).toBe(first);
+      expect(document.activeElement).toBe(first);
+      await draw(null);
+      expect(button()).toBe(first);
+      expect(blockedWith(first)).toBeNull();
+      expect(first.hasAttribute('popovertarget')).toBe(true);
+    });
+
+    it('blocked without a reason it is plain text, as without a roster', async () => {
+      const { draw, button } = await gatedChip(ROSTER);
+      await draw({ reason: null });
+      expect(button()).toBeNull();
+    });
   });
 
   it("re-exposes the menu's pick, clear and create events and closes the menu", async () => {

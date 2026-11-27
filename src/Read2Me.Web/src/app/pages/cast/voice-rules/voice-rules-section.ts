@@ -64,12 +64,12 @@ export class VoiceRulesSection extends R2mElement {
             ? nothing
             : gated(
                 withLocal(block, this.store.voices().voices.length === 0),
-                (disabled) =>
+                (gate) =>
                   html`<button
                     type="button"
                     class="r2m-button"
                     data-action="add-rule"
-                    ?disabled=${disabled}
+                    ${gate.attrs()}
                     @click=${() => void this.addRule()}
                   >
                     ${icon('add')} Add rule
@@ -122,14 +122,13 @@ export class VoiceRulesSection extends R2mElement {
     const ability = moveAbility(rules, rule.ruleId);
     const controls = html`${gated(
       withLocal(block, !ability.up),
-      (disabled) =>
+      (gate) =>
         html`<button
           type="button"
           class="r2m-icon-button"
           data-action="move-up"
-          data-tooltip="Move up"
           aria-label="Move rule up"
-          ?disabled=${disabled}
+          ${gate.attrs('Move up')}
           @click=${() => void this.move(rule, 'Up')}
         >
           ${icon('arrow_upward')}
@@ -137,14 +136,13 @@ export class VoiceRulesSection extends R2mElement {
     )}
     ${gated(
       withLocal(block, !ability.down),
-      (disabled) =>
+      (gate) =>
         html`<button
           type="button"
           class="r2m-icon-button"
           data-action="move-down"
-          data-tooltip="Move down"
           aria-label="Move rule down"
-          ?disabled=${disabled}
+          ${gate.attrs('Move down')}
           @click=${() => void this.move(rule, 'Down')}
         >
           ${icon('arrow_downward')}
@@ -152,14 +150,13 @@ export class VoiceRulesSection extends R2mElement {
     )}
     ${gated(
       block,
-      (disabled) =>
+      (gate) =>
         html`<button
           type="button"
           class="r2m-icon-button voice-rules__delete"
           data-action="delete-rule"
-          data-tooltip="Delete rule"
           aria-label="Delete rule"
-          ?disabled=${disabled}
+          ${gate.attrs('Delete rule')}
           @click=${() => void this.deleteRule(rule)}
         >
           ${icon('delete')}

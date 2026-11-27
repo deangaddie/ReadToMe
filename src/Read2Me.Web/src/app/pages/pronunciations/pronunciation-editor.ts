@@ -283,37 +283,37 @@ export class PronunciationEditor extends R2mElement {
         </button>
       </header>
       <div class="pron-editor__fields">
-        <label class="r2m-field">
-          <span class="r2m-field__label">Written form</span>
-          ${gated(
-            block,
-            (disabled) =>
-              html`<input
+        ${gated(
+          block,
+          (gate) =>
+            html`<label class="r2m-field" ${gate.hover()}>
+              <span class="r2m-field__label">Written form</span>
+              <input
                 data-field="written"
                 maxlength=${WRITTEN_FORM_MAX}
                 placeholder="Watson"
                 .value=${live(this.written())}
-                ?disabled=${disabled}
+                ${gate.attrs()}
                 @input=${(e: Event) => this.edit('written', e)}
-              />`,
-          )}
-        </label>
+              />
+            </label>`,
+        )}
         <span class="pron-editor__arrow" aria-hidden="true">${icon('arrow_forward')}</span>
-        <label class="r2m-field">
-          <span class="r2m-field__label">Spoken form</span>
-          ${gated(
-            block,
-            (disabled) =>
-              html`<input
+        ${gated(
+          block,
+          (gate) =>
+            html`<label class="r2m-field" ${gate.hover()}>
+              <span class="r2m-field__label">Spoken form</span>
+              <input
                 data-field="spoken"
                 maxlength="200"
                 placeholder="KULL-gun"
                 .value=${live(this.spoken())}
-                ?disabled=${disabled}
+                ${gate.attrs()}
                 @input=${(e: Event) => this.edit('spoken', e)}
-              />`,
-          )}
-        </label>
+              />
+            </label>`,
+        )}
       </div>
       ${
         reach
@@ -363,12 +363,12 @@ export class PronunciationEditor extends R2mElement {
           entry
             ? gated(
                 deleteBlock,
-                (disabled) =>
+                (gate) =>
                   html`<button
                     type="button"
                     class="r2m-button pron-editor__delete"
                     data-action="delete"
-                    ?disabled=${disabled}
+                    ${gate.attrs()}
                     @click=${() => void this.delete()}
                   >
                     ${icon('delete')} Delete
@@ -387,12 +387,12 @@ export class PronunciationEditor extends R2mElement {
         </button>
         ${gated(
           saveBlock,
-          (disabled) =>
+          (gate) =>
             html`<button
               type="button"
               class="r2m-button r2m-button--filled"
               data-action="save"
-              ?disabled=${disabled}
+              ${gate.attrs()}
               @click=${() => void this.save()}
             >
               ${icon('save')} ${entry ? 'Save' : 'Add'}

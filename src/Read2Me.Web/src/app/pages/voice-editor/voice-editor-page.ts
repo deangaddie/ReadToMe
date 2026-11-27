@@ -167,12 +167,12 @@ export class VoiceEditorPage extends R2mElement {
       <div class="voice-editor__toolbar">
         ${gated(
           withLocal(block, !this.anyTicked() || busy),
-          (disabled) =>
+          (gate) =>
             html`<button
               type="button"
               class="r2m-button r2m-button--filled"
               data-action="preview"
-              ?disabled=${disabled}
+              ${gate.attrs()}
               @click=${() => void this.preview()}
             >
               ${this.rendering() ? spinner(18) : icon('play_circle')} Preview
@@ -180,12 +180,12 @@ export class VoiceEditorPage extends R2mElement {
         )}
         ${gated(
           applyBlocked,
-          (disabled) =>
+          (gate) =>
             html`<button
               type="button"
               class="r2m-button r2m-button--stroked"
               data-action="apply"
-              ?disabled=${disabled}
+              ${gate.attrs()}
               @click=${() => void this.apply()}
             >
               ${icon('check')} Apply
@@ -211,12 +211,12 @@ export class VoiceEditorPage extends R2mElement {
                 >
                 ${gated(
                   withLocal(block, busy),
-                  (disabled) =>
+                  (gate) =>
                     html`<button
                       type="button"
                       class="r2m-button voice-editor__danger"
                       data-action="restore"
-                      ?disabled=${disabled}
+                      ${gate.attrs()}
                       @click=${() => void this.restore()}
                     >
                       ${icon('history')} Restore original
@@ -296,14 +296,18 @@ export class VoiceEditorPage extends R2mElement {
     >
       ${gated(
         block,
-        (disabled) =>
-          html`<label class="voice-editor__tick" @click=${(e: Event) => e.stopPropagation()}>
+        (gate) =>
+          html`<label
+            class="voice-editor__tick"
+            ${gate.hover()}
+            @click=${(e: Event) => e.stopPropagation()}
+          >
             <input
               type="checkbox"
               class="r2m-checkbox"
               data-tick=${entry.stepId}
               .checked=${!!this.ticks()[entry.stepId]}
-              ?disabled=${disabled}
+              ${gate.attrs()}
               @change=${(e: Event) => this.tick(entry.stepId, (e.target as HTMLInputElement).checked)}
             />
             ${entry.label}

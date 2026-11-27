@@ -192,14 +192,15 @@ a {
   text-decoration: none;
   cursor: pointer;
 
-  &:hover:not(:disabled) {
+  &:hover:not(:disabled, [aria-disabled='true']) {
     background: color-mix(in srgb, var(--r2m-accent) 8%, transparent);
   }
   &:focus-visible {
     outline: 2px solid var(--r2m-accent);
     outline-offset: 2px;
   }
-  &:disabled {
+  &:disabled,
+  &[aria-disabled='true'] {
     opacity: 0.38;
     cursor: default;
   }
@@ -211,7 +212,7 @@ a {
   background: var(--r2m-accent);
   color: var(--r2m-on-accent);
 
-  &:hover:not(:disabled) {
+  &:hover:not(:disabled, [aria-disabled='true']) {
     background: color-mix(in srgb, var(--r2m-accent) 88%, black);
   }
 }
@@ -234,14 +235,15 @@ a {
   text-decoration: none;
   cursor: pointer;
 
-  &:hover:not(:disabled) {
+  &:hover:not(:disabled, [aria-disabled='true']) {
     background: color-mix(in srgb, currentColor 8%, transparent);
   }
   &:focus-visible {
     outline: 2px solid var(--r2m-accent);
     outline-offset: -2px;
   }
-  &:disabled {
+  &:disabled,
+  &[aria-disabled='true'] {
     opacity: 0.38;
     cursor: default;
   }
@@ -550,7 +552,8 @@ dialog.r2m-dialog--fullscreen {
   & .r2m-icon {
     color: var(--r2m-text-muted);
   }
-  &:disabled {
+  &:disabled,
+  &[aria-disabled='true'] {
     opacity: 0.38;
     cursor: default;
   }
@@ -736,16 +739,22 @@ dialog.r2m-dialog--fullscreen {
   margin-top: var(--r2m-space-2);
 }
 
-/* ---- message primitives (blockable, callout, advice line) ----------------------------------- */
-/* Holds a disabled control's blocked reason; focusable only while blocked. */
-.r2m-blockable {
-  display: inline-flex;
-  border-radius: var(--r2m-radius-md);
-
-  &:focus-visible {
-    outline: 2px solid var(--r2m-accent);
-    outline-offset: 2px;
-  }
+/* ---- message primitives (blocked reason, callout, advice line) ------------------------------ */
+/* A gated control's description (`ui/gate.ts`). `fixed` with no offsets leaves it where it falls
+   without ever growing the scroll area of a box that isn't positioned. */
+.r2m-blocked-reason.visually-hidden {
+  position: fixed !important;
+}
+/* A native field blocked with a reason is not `disabled`, so it takes the look from here, at a
+   weight a control's own style beats (a segmented control keeps its radios unseen). A select or a
+   slider also refuses the pointer, which would otherwise open or drag it; the box round it shows
+   the reason on hover. */
+:where(input, select, textarea)[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: default;
+}
+:is(select, input[type='range'])[aria-disabled='true'] {
+  pointer-events: none;
 }
 .r2m-callout {
   display: flex;
@@ -986,7 +995,8 @@ dialog.r2m-dialog--fullscreen {
   color: var(--r2m-accent);
   cursor: pointer;
 
-  &:disabled {
+  &:disabled,
+  &[aria-disabled='true'] {
     color: var(--r2m-text-muted);
     cursor: default;
   }
@@ -2076,7 +2086,7 @@ progress {
   background: var(--r2m-surface-high);
   color: var(--r2m-text);
 
-  &:hover:not(:disabled) {
+  &:hover:not(:disabled, [aria-disabled='true']) {
     background: color-mix(in srgb, var(--r2m-surface-high) 88%, black);
   }
 }
@@ -2170,7 +2180,8 @@ progress {
     outline: 2px solid var(--r2m-accent);
     outline-offset: 2px;
   }
-  &:disabled {
+  &:disabled,
+  &[aria-disabled='true'] {
     opacity: 0.5;
     cursor: default;
   }

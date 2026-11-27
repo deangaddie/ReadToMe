@@ -420,12 +420,12 @@ export class EditWithAiDialog extends R2mElement implements ClosableContent {
           view.llm
             ? gated(
                 withLocal(withLocal(null, view.retryingRowId !== null), blocked ?? false),
-                (disabled) =>
+                (gate) =>
                   html`<button
                     type="button"
                     class="r2m-button r2m-button--stroked"
                     data-action="retry-row"
-                    ?disabled=${disabled}
+                    ${gate.attrs()}
                     @click=${() => void this.retry(row)}
                   >
                     ${icon('refresh')} Ask AI again

@@ -114,11 +114,11 @@ export class NarratorBanner extends R2mElement {
       <span class="narrator-banner__spacer"></span>
       ${gated(
         off,
-        (disabled) =>
+        (gate) =>
           html`<button
             type="button"
             class="r2m-button"
-            ?disabled=${disabled}
+            ${gate.attrs()}
             @click=${() => this.changing.set(true)}
           >
             Change
@@ -126,11 +126,11 @@ export class NarratorBanner extends R2mElement {
       )}
       ${gated(
         off,
-        (disabled) =>
+        (gate) =>
           html`<button
             type="button"
             class="r2m-button narrator-banner__unlink"
-            ?disabled=${disabled}
+            ${gate.attrs()}
             @click=${() => void this.unlink()}
           >
             Unlink
@@ -145,12 +145,12 @@ export class NarratorBanner extends R2mElement {
     const eligible = this.eligible();
     return gated(
       withLocal(this.off(), eligible.length === 0),
-      (disabled) =>
-        html`<label class="r2m-field narrator-banner__picker">
+      (gate) =>
+        html`<label class="r2m-field narrator-banner__picker" ${gate.hover()}>
           <span class="r2m-field__label">Narrated by</span>
           <select
             .value=${live('')}
-            ?disabled=${disabled}
+            ${gate.attrs()}
             @change=${(e: Event) => this.pick((e.target as HTMLSelectElement).value)}
           >
             <option value="" selected disabled hidden></option>

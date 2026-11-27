@@ -95,7 +95,7 @@ export function pipeline<S extends PipelineStepView>(options: {
   const helpOpen = options.helpOpen ?? null;
   const last = steps.length - 1;
   /** A control's Edit gate: its own reason, else blocked without one while any action runs. */
-  const gate = (reason: string | null | undefined) =>
+  const blockOf = (reason: string | null | undefined) =>
     withLocal(busyAction === null ? null : { reason: null }, reason ?? false);
   const action = (step: PipelineStepView, a: PipelineAction) => {
     const busy = busyAction === `${step.id}:${a.id}`;
@@ -105,13 +105,13 @@ export function pipeline<S extends PipelineStepView>(options: {
       a.destructive ? 'r2m-pipeline__action--destructive' : '',
     ].join(' ');
     return gated(
-      gate(a.blockedReason),
-      (disabled) =>
+      blockOf(a.blockedReason),
+      (gate) =>
         html`<button
           type="button"
           class=${cls}
           data-action=${a.id}
-          ?disabled=${disabled}
+          ${gate.attrs()}
           @click=${() => onAct({ step: step.id, action: a.id })}
         >
           ${busy ? spinner(16, 'r2m-pipeline__spinner') : icon(a.icon)} ${a.label}
@@ -120,13 +120,13 @@ export function pipeline<S extends PipelineStepView>(options: {
   };
   const pill = (step: PipelineStepView, p: PipelineCheckpointPill) =>
     gated(
-      gate(p.blockedReason),
-      (disabled) =>
+      blockOf(p.blockedReason),
+      (gate) =>
         html`<button
           type="button"
           class="r2m-button r2m-button--stroked r2m-pipeline__pill"
           data-checkpoint=${p.id}
-          ?disabled=${disabled}
+          ${gate.attrs()}
           @click=${() => onCheckpoint?.({ step: step.id, pill: p.id })}
         >
           ${busyAction === `${step.id}:${p.id}` ? spinner(14, 'r2m-pipeline__spinner') : nothing}

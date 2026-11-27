@@ -117,14 +117,16 @@ export function paragraphRow(
         ctx.mode === 'read'
           ? html`<div class="r2m-paragraph__meta">
                 ${gated(
-                  block,
-                  (disabled) =>
+                  // A chip nobody can assign from is a label: it has no gate to give a reason for.
+                  assignable ? block : null,
+                  (gate) =>
                     html`<r2m-speaker-chip
                       .compact=${true}
                       .state=${speaker.state}
                       .name=${speaker.name}
                       .characterId=${speaker.characterId}
-                      .roster=${assignable && !disabled ? ctx.roster : undefined}
+                      .roster=${assignable ? ctx.roster : undefined}
+                      .gate=${gate}
                       @pick=${chip.pick}
                       @clear=${chip.clear}
                       @create=${chip.create}
@@ -152,16 +154,15 @@ export function paragraphRow(
         queue && outcome
           ? gated(
               block,
-              (disabled) =>
+              (gate) =>
                 html`<button
                   type="button"
                   class="r2m-paragraph__outcome"
-                  data-tooltip=${
-                    disabled
-                      ? nothing
-                      : `${queue.tooltip ? `${queue.tooltip} — ` : ''}Click to clear`
-                  }
-                  ?disabled=${disabled}
+                  ${gate.attrs(
+                    gate.blocked
+                      ? undefined
+                      : `${queue.tooltip ? `${queue.tooltip} — ` : ''}Click to clear`,
+                  )}
                   @click=${clearOutcome}
                 >
                   ${chipOf({ ...queue, tooltip: undefined })}

@@ -5,6 +5,7 @@ import { settle } from '../../../testing/fake-navigation';
 import type { NarratorBanner } from './narrator-banner';
 import { unlinkWarning } from './narrator-banner';
 import './narrator-banner';
+import { isOff } from '../../../testing/description';
 
 function row(name: string, readyVoiceCount = 0): CharacterSummaryDto {
   return {
@@ -52,7 +53,7 @@ describe('r2m-narrator-banner', () => {
     const { banner } = await mount(UNLINKED);
     expect(banner.textContent).toContain('First-person book? Say who tells it');
     expect(options(banner)).toEqual(['Watson', 'Lestrade']);
-    expect(select(banner).disabled).toBe(false);
+    expect(isOff(select(banner)!)).toBe(false);
   });
 
   it('the picker is off while busy or without any candidate', async () => {

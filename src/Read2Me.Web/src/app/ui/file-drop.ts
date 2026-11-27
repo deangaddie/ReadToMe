@@ -112,11 +112,11 @@ export class FileDrop extends R2mElement {
       ${hint ? html`<p class="r2m-file-drop__hint">${hint}</p>` : nothing}
       ${gated(
         block,
-        (disabled) =>
+        (gate) =>
           html`<button
             type="button"
             class="r2m-button r2m-button--stroked"
-            ?disabled=${disabled}
+            ${gate.attrs()}
             @click=${() => this.querySelector<HTMLInputElement>('.r2m-file-drop__input')?.click()}
           >
             ${this.#multiple() ? 'Choose files' : 'Choose file'}

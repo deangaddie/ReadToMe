@@ -96,12 +96,12 @@ export class InlineEdit extends R2mElement {
     }
     return gated(
       this.#block(),
-      (disabled) =>
+      (gate) =>
         html`<button
           type="button"
           class="r2m-inline-edit__display ${value ? '' : 'r2m-inline-edit__display--empty'}"
           aria-label=${`Edit ${placeholder || 'value'}`}
-          ?disabled=${disabled}
+          ${gate.attrs()}
           @click=${() => this.begin()}
         >
           <span class="r2m-inline-edit__text">${value || placeholder}</span>

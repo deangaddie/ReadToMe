@@ -7,6 +7,7 @@ import { FakeLive } from '../../../../testing/fake-live';
 import { settle } from '../../../../testing/fake-navigation';
 import type { SetupCheckPage } from './setup-check-page';
 import './setup-check-page';
+import { isOff } from '../../../../testing/description';
 
 const AT_START = '2026-10-28T14:02:00Z';
 const LATER = '2026-10-28T14:09:00Z';
@@ -261,7 +262,7 @@ describe('r2m-setup-check-page', () => {
     );
     expect(page.querySelector('[data-role=full-run]')).toBeNull();
     expect(page.querySelector('[data-action=run-full]')).not.toBeNull();
-    expect(page.querySelector<HTMLButtonElement>('[data-action=run-quick]')?.disabled).toBe(false);
+    expect(isOff(page.querySelector<HTMLButtonElement>('[data-action=run-quick]')!)).toBe(false);
   });
 
   it('shows Re-run on Full-tier rows only, and confirms only a check that drives a GPU container', async () => {
@@ -296,15 +297,15 @@ describe('r2m-setup-check-page', () => {
     const page = await mount();
     const rerunOf = (id: string) =>
       rowOf(page, id)?.querySelector<HTMLButtonElement>('[data-action=rerun]') ?? null;
-    expect(rerunOf('llm')?.disabled).toBe(true);
-    expect(rerunOf('ffmpeg')?.disabled).toBe(false);
+    expect(isOff(rerunOf('llm')!)).toBe(true);
+    expect(isOff(rerunOf('ffmpeg')!)).toBe(false);
 
     const running = report(AT_START);
     running.fullRun = { step: 1, total: 1, lane: 'Local', label: 'Encoding', cancelling: false };
     live.emit('setupCheck', { kind: 'Progress', report: running });
     await flush(page);
 
-    expect(rerunOf('ffmpeg')?.disabled).toBe(true);
-    expect(rerunOf('llm')?.disabled).toBe(true);
+    expect(isOff(rerunOf('ffmpeg')!)).toBe(true);
+    expect(isOff(rerunOf('llm')!)).toBe(true);
   });
 });

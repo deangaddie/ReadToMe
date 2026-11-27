@@ -6,6 +6,7 @@ import type { TreeNode } from './book-tree';
 import { NODE_MENU_OPEN, type NodeMenuRequest } from './node-menu';
 import { type StructureTree, type TreeRow, flattenTree } from './structure-tree';
 import './structure-tree';
+import { blockedWith, isOff } from '../../../testing/description';
 
 /**
  * The hand-written ARIA tree (spec §2.3 point 8): a flat list of visible rows with the tree
@@ -482,16 +483,13 @@ describe('r2m-structure-tree', () => {
         item(id).querySelector<HTMLButtonElement>('.r2m-node-menu__trigger')!;
       expect(trigger('p1').disabled).toBe(true);
       expect(trigger('p2').disabled).toBe(true);
-      expect(trigger('v1').disabled).toBe(false);
+      expect(isOff(trigger('v1')!)).toBe(false);
       trigger('v1').click();
       expect(request?.target.selection).toBe('items');
 
       tree.blocked = { reason: VIEWING_READ_ONLY };
       await tree.rendered();
-      expect(trigger('v1').disabled).toBe(true);
-      expect(trigger('v1').closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(
-        VIEWING_READ_ONLY,
-      );
+      expect(blockedWith(trigger('v1'))).toBe(VIEWING_READ_ONLY);
     });
 
     it('Shift+F10 and the ContextMenu key open the focused node menu', async () => {

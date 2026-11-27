@@ -11,6 +11,7 @@ import { settle } from '../../../../testing/fake-navigation';
 import { CastStore } from '../cast-store';
 import { ProviderSchemas } from './provider-schemas';
 import './voice-card';
+import { blockedWith, isOff } from '../../../../testing/description';
 
 const BASE = '/api/projects/dracula';
 const COMMANDS = `${BASE}/commands`;
@@ -167,9 +168,6 @@ describe('r2m-voice-card', () => {
   });
 
   describe('viewing a History step (ticket 32)', () => {
-    const reason = (el: Element | null) =>
-      el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
-
     it('the reference audio plays at the step; every edit control is off with the reason', async () => {
       use(StepView).view('dracula', 's8');
       const card = await mount(voice({ source: 'Uploaded', audioFileName: 'voices/alice/v1.wav' }));
@@ -178,8 +176,7 @@ describe('r2m-voice-card', () => {
         '/workspace/dracula/voices/alice/v1.wav?v=0&at=s8',
       );
       for (const action of ['set-default', 'delete-voice', 'save-description', 'save-transcript']) {
-        expect(button(card, action).disabled).toBe(true);
-        expect(reason(button(card, action))).toBe(VIEWING_READ_ONLY);
+        expect(blockedWith(button(card, action))).toBe(VIEWING_READ_ONLY);
       }
       expect(card.querySelector('r2m-file-drop')?.block).toEqual({ reason: VIEWING_READ_ONLY });
       expect(card.querySelector('r2m-voice-override-editor')?.block).toEqual({
@@ -189,7 +186,7 @@ describe('r2m-voice-card', () => {
       expect(textarea(card, 'Transcript').readOnly).toBe(true);
       expect(
         Array.from(card.querySelectorAll<HTMLInputElement>('.voice-card__source input')).every(
-          (r) => r.disabled,
+          (r) => blockedWith(r) === VIEWING_READ_ONLY,
         ),
       ).toBe(true);
       expect(card.querySelector('r2m-inline-edit')?.block).toEqual({ reason: VIEWING_READ_ONLY });
@@ -202,8 +199,7 @@ describe('r2m-voice-card', () => {
       );
       expect(card.querySelector('r2m-audio-player')?.src).toContain('at=s8');
       for (const action of ['save-prompt', 'regenerate-prompt', 'generate-audio']) {
-        expect(button(card, action).disabled).toBe(true);
-        expect(reason(button(card, action))).toBe(VIEWING_READ_ONLY);
+        expect(blockedWith(button(card, action))).toBe(VIEWING_READ_ONLY);
       }
       expect(textarea(card, 'Voice description prompt').readOnly).toBe(true);
     });
@@ -233,7 +229,7 @@ describe('r2m-voice-card', () => {
     expect(save().disabled).toBe(true);
     type(textarea(card, 'Voice description'), 'Where she whispers');
     await card.rendered();
-    expect(save().disabled).toBe(false);
+    expect(isOff(save()!)).toBe(false);
     save().click();
     await settle();
     await settle();
@@ -254,7 +250,7 @@ describe('r2m-voice-card', () => {
     expect(generate().textContent).toContain('Generate audio');
     type(textarea(card, 'Voice description prompt'), 'A warm alto');
     await card.rendered();
-    expect(generate().disabled).toBe(false);
+    expect(isOff(generate()!)).toBe(false);
     generate().click();
     await settle();
     await settle();

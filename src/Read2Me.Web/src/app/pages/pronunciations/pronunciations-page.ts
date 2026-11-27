@@ -137,12 +137,12 @@ export class PronunciationsPage extends R2mElement {
           <div class="pron__toolbar">
             ${gated(
               block,
-              (disabled) =>
+              (gate) =>
                 html`<button
                   type="button"
                   class="r2m-button r2m-button--filled"
                   data-action="add"
-                  ?disabled=${disabled}
+                  ${gate.attrs()}
                   @click=${() => void this.open({ kind: 'new' })}
                 >
                   ${icon('add')} Add pronunciation
@@ -225,13 +225,13 @@ export class PronunciationsPage extends R2mElement {
                               >
                                 ${gated(
                                   block,
-                                  (disabled) =>
+                                  (gate) =>
                                     html`<button
                                       type="button"
                                       class="r2m-icon-button"
                                       data-action="delete-row"
                                       aria-label="Delete ${e.writtenForm}"
-                                      ?disabled=${disabled}
+                                      ${gate.attrs()}
                                       @click=${() => void this.deleteEntry(e)}
                                     >
                                       ${icon('delete')}

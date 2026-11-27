@@ -5,6 +5,7 @@ import { settle } from '../../../../testing/fake-navigation';
 import { ProviderSchemas, type ProviderArea } from './provider-schemas';
 import type { OverrideSave } from './voice-overrides';
 import './voice-overrides';
+import { blockedWith, isOff } from '../../../../testing/description';
 
 const SCHEMA: SettingsSchema = {
   type: 'VoxCpm2',
@@ -69,7 +70,7 @@ describe('r2m-voice-override-editor', () => {
     number.value = '4';
     number.dispatchEvent(new Event('input'));
     await editor.rendered();
-    expect(save(editor).disabled).toBe(false);
+    expect(isOff(save(editor)!)).toBe(false);
     save(editor).click();
     expect(saves).toEqual([{ area: 'voice-design', json: '{"cfg_value":4}' }]);
 
@@ -94,10 +95,7 @@ describe('r2m-voice-override-editor', () => {
     expect(editor.querySelector('r2m-settings-form')?.block).toEqual({
       reason: 'Viewing a past step',
     });
-    expect(save(editor).disabled).toBe(true);
-    expect(save(editor).closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(
-      'Viewing a past step',
-    );
+    expect(blockedWith(save(editor))).toBe('Viewing a past step');
   });
 
   it('an invalid field blocks Save', async () => {

@@ -11,6 +11,7 @@ import { CastStore, SERIES_VOICES_READ_ONLY } from '../cast-store';
 import type { AddVoiceDialog } from './add-voice-dialog';
 import { ProviderSchemas } from './provider-schemas';
 import './voices-section';
+import { blockedWith, isOff } from '../../../../testing/description';
 
 const BASE = '/api/projects/dracula';
 const COMMANDS = `${BASE}/commands`;
@@ -156,13 +157,13 @@ describe('r2m-voices-section', () => {
       expect(section.querySelector('[data-action=edit-on-board]')?.getAttribute('href')).toBe(
         'projects?series=h&character=sc-alice',
       );
-      expect(section.querySelector<HTMLButtonElement>('[data-action=add-voice]')!.disabled).toBe(
-        true,
+      expect(blockedWith(section.querySelector('[data-action=add-voice]'))).toBe(
+        SERIES_VOICES_READ_ONLY,
       );
       const cards = Array.from(section.querySelectorAll('r2m-voice-card'));
       for (const card of cards) {
-        expect(card.querySelector<HTMLButtonElement>('[data-action=delete-voice]')!.disabled).toBe(
-          true,
+        expect(blockedWith(card.querySelector('[data-action=delete-voice]'))).toBe(
+          SERIES_VOICES_READ_ONLY,
         );
         expect(card.querySelector('r2m-inline-edit')?.block).toEqual({
           reason: SERIES_VOICES_READ_ONLY,
@@ -178,7 +179,7 @@ describe('r2m-voices-section', () => {
       const star = section.querySelector<HTMLButtonElement>(
         'r2m-voice-card[data-voice-id=v2] [data-action=set-default]',
       )!;
-      expect(star.disabled).toBe(false);
+      expect(isOff(star!)).toBe(false);
       star.click();
       await settle();
       expect(api.calls('POST', COMMANDS).map((r) => r.body)).toEqual([
@@ -190,7 +191,7 @@ describe('r2m-voices-section', () => {
       const section = await mount([voice('v1', 'Main')], 'v1');
       expect(store.voicesBlock()).toBeNull();
       expect(section.querySelector('[data-action=edit-on-board]')).toBeNull();
-      expect(section.querySelector<HTMLButtonElement>('[data-action=add-voice]')!.disabled).toBe(
+      expect(isOff(section.querySelector<HTMLButtonElement>('[data-action=add-voice]')!)).toBe(
         false,
       );
     });
@@ -200,7 +201,7 @@ describe('r2m-voices-section', () => {
       const section = await mountLinked();
       expect(store.voicesBlock()).toBeNull();
       expect(section.querySelector('[data-action=edit-on-board]')).toBeNull();
-      expect(section.querySelector<HTMLButtonElement>('[data-action=add-voice]')!.disabled).toBe(
+      expect(isOff(section.querySelector<HTMLButtonElement>('[data-action=add-voice]')!)).toBe(
         false,
       );
     });

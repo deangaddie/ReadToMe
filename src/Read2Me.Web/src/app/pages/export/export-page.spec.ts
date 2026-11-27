@@ -18,6 +18,7 @@ import { installNavigation, settle } from '../../../testing/fake-navigation';
 import { type ExportPage, formatOutputDate } from './export-page';
 import '../project/project-shell';
 import { assemblyMessage } from '../../../testing/live-messages';
+import { blockedWith, isOff } from '../../../testing/description';
 
 const BASE = '/api/projects/dracula';
 const START_URL = `${BASE}/assembly`;
@@ -176,7 +177,7 @@ describe('r2m-export-page', () => {
     expect(readiness).toContain('5 of 8');
     expect(readiness).toContain('D:\\ffmpeg\\ffmpeg.exe');
     expect(text(button(page, 'assemble'))).toBe('Assemble…');
-    expect(button(page, 'assemble').disabled).toBe(false);
+    expect(isOff(button(page, 'assemble')!)).toBe(false);
 
     const rows = page.querySelectorAll('[data-output]');
     expect(rows.length).toBe(2);
@@ -192,14 +193,10 @@ describe('r2m-export-page', () => {
   it('viewing a History step, Assemble and Delete are off with the reason; downloads stay (ticket 32)', async () => {
     use(StepView).view('dracula', 's8');
     const page = await render();
-    const reason = (el: Element | null) =>
-      el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
 
-    expect(button(page, 'assemble').disabled).toBe(true);
-    expect(reason(button(page, 'assemble'))).toBe(VIEWING_READ_ONLY);
+    expect(blockedWith(button(page, 'assemble'))).toBe(VIEWING_READ_ONLY);
     const remove = page.querySelector<HTMLButtonElement>('[data-action="delete-output"]')!;
-    expect(remove.disabled).toBe(true);
-    expect(reason(remove)).toBe(VIEWING_READ_ONLY);
+    expect(blockedWith(remove)).toBe(VIEWING_READ_ONLY);
     expect(page.querySelector('a[data-action="download-output"]')).not.toBeNull();
   });
 
@@ -237,7 +234,7 @@ describe('r2m-export-page', () => {
 
     expect(api.calls('POST', START_URL).map((r) => r.body)).toEqual([{ allowPartial: false }]);
     expect(toasts).toEqual([]);
-    expect(button(page, 'assemble').disabled).toBe(false);
+    expect(isOff(button(page, 'assemble')!)).toBe(false);
   });
 
   it('toasts the other 409 (a run is already active) instead of offering a partial build', async () => {
@@ -309,7 +306,7 @@ describe('r2m-export-page', () => {
     expect(states(page)).toEqual(['done', 'done', 'done', 'cancelled', 'pending']);
     expect(text(page.querySelector('[data-role="outcome"]'))).toBe('Cancelled');
     expect(page.querySelector('[data-action="cancel-assembly"]')).toBeNull();
-    expect(button(page, 'assemble').disabled).toBe(false);
+    expect(isOff(button(page, 'assemble')!)).toBe(false);
   });
 
   it('reports the finished file and reloads the outputs when the run completes', async () => {
@@ -384,6 +381,6 @@ describe('r2m-export-page', () => {
       }),
     );
     expect(page.querySelector('[data-card="progress"]')).toBeNull();
-    expect(button(page, 'assemble').disabled).toBe(false);
+    expect(isOff(button(page, 'assemble')!)).toBe(false);
   });
 });

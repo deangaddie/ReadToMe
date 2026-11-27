@@ -13,6 +13,7 @@ import type { BookEditor } from '../book-editor';
 import { type EditWithAiDialog, openEditWithAiDialog } from './edit-with-ai-dialog';
 import './edit-with-ai-dialog';
 import { bookEditMessage } from '../../../../testing/live-messages';
+import { blockedWith, isOff } from '../../../../testing/description';
 
 /**
  * Rendering and wiring: the phase bodies, the buttons reaching the workflow, the discard confirm
@@ -192,7 +193,7 @@ describe('r2m-edit-with-ai-dialog', () => {
     expect(button('analyze').disabled).toBe(true);
 
     await instruct();
-    expect(button('analyze').disabled).toBe(false);
+    expect(isOff(button('analyze')!)).toBe(false);
   });
 
   it('keeps a refused plan on Instruct and explains the status', async () => {
@@ -218,7 +219,7 @@ describe('r2m-edit-with-ai-dialog', () => {
     expect(dialog.querySelector<HTMLTextAreaElement>('[data-testid="instruction"]')!.value).toBe(
       'capitalise chapter titles',
     );
-    expect(button('analyze').disabled).toBe(false);
+    expect(isOff(button('analyze')!)).toBe(false);
   });
 
   it('shows what the host understood, and its warnings, on Plan', async () => {
@@ -456,22 +457,19 @@ describe('r2m-edit-with-ai-dialog', () => {
       await reachReview([blocked, ROWS[1]!]);
       await openRow(0);
 
-      expect(button('retry-row').disabled).toBe(true);
-      expect(button('retry-row').closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(
-        'p1 is missing: the chapter has no paragraphs',
-      );
+      expect(blockedWith(button('retry-row'))).toBe('p1 is missing: the chapter has no paragraphs');
       // Typing a value by hand still makes the row appliable.
       type(proposed(), 'Chapter 1');
       await dialog.rendered();
       expect(text('selected-count')).toBe('2 of 2 selected');
-      expect(button('retry-row').disabled).toBe(true);
+      expect(isOff(button('retry-row'))).toBe(true);
     });
 
     it('keeps Ask AI again enabled on an ordinary row', async () => {
       await reachReview();
       await openRow(0);
 
-      expect(button('retry-row').disabled).toBe(false);
+      expect(isOff(button('retry-row')!)).toBe(false);
       expect(button('retry-row').hasAttribute('data-tooltip')).toBe(false);
     });
   });

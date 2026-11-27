@@ -2,7 +2,7 @@ import { type Block, withLocal } from '@app/api';
 import { html, nothing } from 'lit-html';
 import { R2mElement, define } from '@app/core/element';
 import { computed, signal, untracked } from '@app/core/signals';
-import { icon } from './partials';
+import { type Gate, gated, icon } from './partials';
 
 export type SettingsFieldKind = 'number' | 'boolean' | 'enum' | 'string' | 'text';
 
@@ -111,9 +111,9 @@ export class SettingsForm extends R2mElement {
   }
 
   /**
-   * The form's Edit gate (viewing a History step, say): while blocked every field is off, and with
-   * a Blocked reason each field shows it as its tooltip, focusable so a tap or Tab reaches it, as
-   * `gated` does for a button. {@link disabled} folds in as a reasonless busy.
+   * The form's Edit gate (viewing a History step, say): while blocked every field is off, each
+   * rendered through `gated`, so with a Blocked reason its controls stay focusable and say why.
+   * {@link disabled} folds in as a reasonless busy.
    */
   readonly #block = signal<Block | null>(null);
   get block() {
@@ -150,64 +150,64 @@ export class SettingsForm extends R2mElement {
     const override = this.#mode() === 'override';
     this.classList.toggle('r2m-settings-form--override', override);
     const block = withLocal(this.#block(), this.#disabled());
-    const disabled = block !== null;
-    const reason = block?.reason ?? null;
-    // Read eagerly, not inside a lazy directive, so the element's effect tracks every signal.
-    return this.#schema().fields.map((field) => {
-      const overridden = this.isOverridden(field);
-      const valid = this.fieldValid(field);
-      return html`<div
-        class="r2m-settings-form__field ${overridden ? 'r2m-settings-form__field--overridden' : ''} ${
-          valid ? '' : 'r2m-settings-form__field--invalid'
-        }"
-        data-key=${field.key}
-        data-tooltip=${reason ?? nothing}
-        tabindex=${reason === null ? nothing : '0'}
-      >
-        <div class="r2m-settings-form__label-row">
-          ${
-            override
-              ? html`<span
-                  class="r2m-settings-form__dot ${overridden ? 'r2m-settings-form__dot--on' : ''}"
-                  title=${overridden ? 'Overridden' : 'Using provider default'}
-                  aria-hidden="true"
-                ></span>`
-              : nothing
-          }
-          <span class="r2m-settings-form__label">${field.label}</span>
-          ${
-            override && overridden
-              ? html`<button
-                  type="button"
-                  class="r2m-icon-button r2m-settings-form__reset"
-                  ?disabled=${disabled}
-                  @click=${() => this.reset(field)}
-                  aria-label=${`Reset ${field.label} to default`}
-                  data-tooltip="Reset to default"
-                >
-                  ${icon('restart_alt')}
-                </button>`
-              : nothing
-          }
-        </div>
-        ${this.control(field, disabled)}
-        ${
-          valid
-            ? field.help
-              ? html`<p class="r2m-settings-form__help">${field.help}</p>`
-              : nothing
-            : html`<p class="r2m-settings-form__error" role="alert">
-                Must be a
-                number${field.min !== undefined ? ` ≥ ${field.min}` : ''}${
-                  field.max !== undefined ? ` ≤ ${field.max}` : ''
-                }${field.nullable ? ', or blank' : ''}.
-              </p>`
-        }
-      </div>`;
-    });
+    // `gated` calls its control at once, so the element's effect tracks every signal read in it.
+    return this.#schema().fields.map((field) =>
+      gated(block, (gate) => this.#field(field, override, gate)),
+    );
   }
 
-  private control(field: SettingsField, disabled: boolean) {
+  #field(field: SettingsField, override: boolean, gate: Gate) {
+    const overridden = this.isOverridden(field);
+    const valid = this.fieldValid(field);
+    return html`<div
+      class="r2m-settings-form__field ${overridden ? 'r2m-settings-form__field--overridden' : ''} ${
+        valid ? '' : 'r2m-settings-form__field--invalid'
+      }"
+      data-key=${field.key}
+      ${gate.hover()}
+    >
+      <div class="r2m-settings-form__label-row">
+        ${
+          override
+            ? html`<span
+                class="r2m-settings-form__dot ${overridden ? 'r2m-settings-form__dot--on' : ''}"
+                title=${overridden ? 'Overridden' : 'Using provider default'}
+                aria-hidden="true"
+              ></span>`
+            : nothing
+        }
+        <span class="r2m-settings-form__label">${field.label}</span>
+        ${
+          override && overridden
+            ? html`<button
+                type="button"
+                class="r2m-icon-button r2m-settings-form__reset"
+                ${gate.attrs('Reset to default')}
+                @click=${() => this.reset(field)}
+                aria-label=${`Reset ${field.label} to default`}
+              >
+                ${icon('restart_alt')}
+              </button>`
+            : nothing
+        }
+      </div>
+      ${this.control(field, gate)}
+      ${
+        valid
+          ? field.help
+            ? html`<p class="r2m-settings-form__help">${field.help}</p>`
+            : nothing
+          : html`<p class="r2m-settings-form__error" role="alert">
+              Must be a
+              number${field.min !== undefined ? ` ≥ ${field.min}` : ''}${
+                field.max !== undefined ? ` ≤ ${field.max}` : ''
+              }${field.nullable ? ', or blank' : ''}.
+            </p>`
+      }
+    </div>`;
+  }
+
+  private control(field: SettingsField, gate: Gate) {
     switch (field.kind) {
       case 'number': {
         const number = html`<input
@@ -218,7 +218,7 @@ export class SettingsForm extends R2mElement {
           max=${field.max ?? nothing}
           step=${field.step ?? 'any'}
           .value=${String(this.numberValue(field))}
-          ?disabled=${disabled}
+          ${gate.attrs()}
           @input=${(e: Event) => this.setValue(field, this.parseNumber(field, valueOf(e)))}
         />`;
         if (field.min !== undefined && field.max !== undefined) {
@@ -231,7 +231,7 @@ export class SettingsForm extends R2mElement {
               max=${field.max}
               step=${field.step ?? 1}
               .value=${String(this.sliderValue(field))}
-              ?disabled=${disabled}
+              ${gate.attrs()}
               @input=${(e: Event) => this.setValue(field, Number(valueOf(e)))}
             />
             ${number}
@@ -246,7 +246,7 @@ export class SettingsForm extends R2mElement {
             role="switch"
             aria-label=${field.label}
             .checked=${!!this.value(field)}
-            ?disabled=${disabled}
+            ${gate.attrs()}
             @change=${(e: Event) => this.setValue(field, (e.target as HTMLInputElement).checked)}
           />
         </label>`;
@@ -256,7 +256,7 @@ export class SettingsForm extends R2mElement {
           class="r2m-settings-form__select"
           aria-label=${field.label}
           .value=${asText(current)}
-          ?disabled=${disabled}
+          ${gate.attrs()}
           @change=${(e: Event) => this.setValue(field, valueOf(e))}
         >
           ${(field.options ?? []).map(
@@ -272,7 +272,7 @@ export class SettingsForm extends R2mElement {
           class="r2m-settings-form__text"
           aria-label=${field.label}
           .value=${this.stringValue(field)}
-          ?disabled=${disabled}
+          ${gate.attrs()}
           @input=${(e: Event) => this.setValue(field, valueOf(e))}
         ></textarea>`;
       default:
@@ -282,7 +282,7 @@ export class SettingsForm extends R2mElement {
           autocomplete=${field.secret ? 'new-password' : 'off'}
           aria-label=${field.label}
           .value=${this.stringValue(field)}
-          ?disabled=${disabled}
+          ${gate.attrs()}
           @input=${(e: Event) => this.setValue(field, valueOf(e))}
         />`;
     }

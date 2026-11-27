@@ -59,7 +59,7 @@ try {
       done: el.classList.contains('r2m-pipeline__step--done'),
       chip: el.querySelector('.r2m-pipeline__chip')?.textContent.replace(/\s+/g, ' ').trim(),
       detail: el.querySelector('.r2m-pipeline__detail')?.textContent.trim(),
-      actions: [...el.querySelectorAll('[data-action]')].map((b) => `${b.dataset.action}${b.disabled ? '(off)' : ''}`),
+      actions: [...el.querySelectorAll('[data-action]')].map((b) => `${b.dataset.action}${b.matches(':disabled, [aria-disabled="true"]') ? '(off)' : ''}`),
     })),
   );
   for (const s of steps) console.log(' ', JSON.stringify(s));

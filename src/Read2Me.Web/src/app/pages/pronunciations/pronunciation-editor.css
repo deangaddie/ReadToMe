@@ -21,7 +21,6 @@
     gap: var(--r2m-space-2);
     margin-top: var(--r2m-space-3);
   }
-  .pron-editor__fields .r2m-blockable,
   .pron-editor__fields input {
     display: block;
     width: 100%;

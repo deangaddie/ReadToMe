@@ -452,10 +452,11 @@
     text-align: start;
     cursor: pointer;
   }
-  .r2m-item__instructions:hover:not(:disabled) {
+  .r2m-item__instructions:hover:not(:disabled, [aria-disabled='true']) {
     text-decoration: underline;
   }
-  .r2m-item__instructions:disabled {
+  .r2m-item__instructions:disabled,
+  .r2m-item__instructions[aria-disabled='true'] {
     cursor: default;
   }
   .r2m-item__chips {
@@ -475,7 +476,8 @@
     font-weight: 600;
     cursor: pointer;
   }
-  .r2m-item__action:disabled {
+  .r2m-item__action:disabled,
+  .r2m-item__action[aria-disabled='true'] {
     color: var(--r2m-text-muted);
     cursor: default;
   }

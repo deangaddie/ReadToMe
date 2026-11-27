@@ -56,7 +56,7 @@ try {
     page.evaluate((sel) => {
       const reasonOf = (el) => el?.closest('[data-tooltip]')?.getAttribute('data-tooltip') ?? null;
       return Array.from(document.querySelectorAll(sel)).map((el) => ({
-        disabled: el.disabled,
+        disabled: el.matches(':disabled, [aria-disabled="true"]'),
         reason: reasonOf(el),
       }));
     }, sel);

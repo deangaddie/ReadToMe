@@ -18,6 +18,7 @@ import { FIELD_UNSET } from '../../../testing/settings-fields';
 import type { VoiceEditorPage } from './voice-editor-page';
 import '../project/project-shell';
 import './voice-editor-page';
+import { blockedWith, isOff } from '../../../testing/description';
 
 const BASE = '/api/projects/dracula';
 const VOICE_URL = `${BASE}/voices/v1`;
@@ -227,11 +228,8 @@ describe('r2m-voice-editor-page', () => {
     expect(page.querySelector('[data-testid="original-player"] audio')?.getAttribute('src')).toBe(
       '/workspace/dracula/voices/alice/v1-main.wav?v=0',
     );
-    expect(button(page, 'preview').disabled).toBe(true);
-    expect(button(page, 'apply').disabled).toBe(true);
-    expect(button(page, 'apply').closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(
-      'Tick at least one step.',
-    );
+    expect(isOff(button(page, 'preview'))).toBe(true);
+    expect(blockedWith(button(page, 'apply'))).toBe('Tick at least one step.');
     expect(page.querySelector('[data-action="restore"]')).toBeNull();
     expect(
       page.querySelector<HTMLAnchorElement>('[data-action="back"]')?.getAttribute('href'),
@@ -242,15 +240,12 @@ describe('r2m-voice-editor-page', () => {
     use(StepView).view('dracula', 's8');
     const page = await render({ ...VOICE, isEdited: true });
     await tick(page, 'denoise');
-    const reason = (el: Element | null) =>
-      el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
 
     expect(
       page.querySelector('[data-testid="original-player"] audio')?.getAttribute('src'),
     ).toContain('at=s8');
     for (const action of ['preview', 'apply', 'restore']) {
-      expect(button(page, action).disabled).toBe(true);
-      expect(reason(button(page, action))).toBe(VIEWING_READ_ONLY);
+      expect(blockedWith(button(page, action))).toBe(VIEWING_READ_ONLY);
     }
   });
 
@@ -263,8 +258,7 @@ describe('r2m-voice-editor-page', () => {
     const ticks = Array.from(page.querySelectorAll<HTMLInputElement>('[data-tick]'));
     expect(ticks.length).toBeGreaterThan(0);
     for (const t of ticks) {
-      expect(t.disabled).toBe(true);
-      expect(t.closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(VIEWING_READ_ONLY);
+      expect(blockedWith(t)).toBe(VIEWING_READ_ONLY);
     }
     expect(page.querySelector('r2m-settings-form')?.block).toEqual({ reason: VIEWING_READ_ONLY });
   });
@@ -274,7 +268,7 @@ describe('r2m-voice-editor-page', () => {
     const page = await render();
     await tick(page, 'silence-trim');
     await tick(page, 'denoise');
-    expect(button(page, 'preview').disabled).toBe(false);
+    expect(isOff(button(page, 'preview')!)).toBe(false);
 
     await previewDefaultChain(page);
 
@@ -286,7 +280,7 @@ describe('r2m-voice-editor-page', () => {
     expect(text(page.querySelector('[data-testid="skipped-chip"]'))).toContain(
       'Skipped — trimmed result under 1000 ms',
     );
-    expect(button(page, 'apply').disabled).toBe(false);
+    expect(isOff(button(page, 'apply')!)).toBe(false);
   });
 
   it('stales the render when a dial changes after Preview, until the next Preview', async () => {
@@ -296,7 +290,7 @@ describe('r2m-voice-editor-page', () => {
     await tick(page, 'silence-trim');
     await tick(page, 'denoise');
     await previewDefaultChain(page);
-    expect(button(page, 'apply').disabled).toBe(false);
+    expect(isOff(button(page, 'apply')!)).toBe(false);
 
     const strength = page.querySelector<HTMLInputElement>(
       '[data-key="strength"] input[type="number"]',
@@ -306,7 +300,7 @@ describe('r2m-voice-editor-page', () => {
     await settle();
     await page.rendered();
 
-    expect(button(page, 'apply').disabled).toBe(true);
+    expect(isOff(button(page, 'apply'))).toBe(true);
     expect(page.querySelector('[data-testid="stale-hint"]')).not.toBeNull();
 
     previewId = 'p2';
@@ -315,7 +309,7 @@ describe('r2m-voice-editor-page', () => {
     await page.rendered();
     const second = api.calls('POST', PREVIEW_URL)[1]!.body as { steps: unknown[] };
     expect(second.steps[0]).toEqual({ stepId: 'denoise', settings: { strength: 31 } });
-    expect(button(page, 'apply').disabled).toBe(false);
+    expect(isOff(button(page, 'apply')!)).toBe(false);
     expect(page.querySelector('[data-testid="stale-hint"]')).toBeNull();
   });
 
@@ -328,7 +322,7 @@ describe('r2m-voice-editor-page', () => {
 
     await tick(page, 'hiss-reduce');
 
-    expect(button(page, 'apply').disabled).toBe(true);
+    expect(isOff(button(page, 'apply'))).toBe(true);
     expect(page.querySelector('[data-testid="hiss-hint"]')).not.toBeNull();
   });
 
@@ -391,7 +385,7 @@ describe('r2m-voice-editor-page', () => {
     expect(text(page.querySelector('[data-testid="action-error"]'))).toContain(
       'The voice has no audio.',
     );
-    expect(button(page, 'apply').disabled).toBe(true);
+    expect(isOff(button(page, 'apply'))).toBe(true);
   });
 
   it('shows a message and a way back when the voice is gone', async () => {

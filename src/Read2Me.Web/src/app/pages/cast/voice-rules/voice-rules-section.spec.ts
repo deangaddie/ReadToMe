@@ -16,6 +16,7 @@ import { settle } from '../../../../testing/fake-navigation';
 import { ProjectStore } from '../../project/project-store';
 import { CastStore } from '../cast-store';
 import './voice-rules-section';
+import { blockedWith, isOff } from '../../../../testing/description';
 
 const BASE = '/api/projects/dracula';
 const COMMANDS = `${BASE}/commands`;
@@ -177,11 +178,9 @@ describe('r2m-voice-rules-section', () => {
     expect(rows(section)[0]?.querySelector('[data-action=delete-rule]')).toBeNull();
     const onward = rows(section)[1]!;
     expect(onward.querySelector<HTMLButtonElement>('[data-action=move-up]')?.disabled).toBe(true);
-    expect(onward.querySelector<HTMLButtonElement>('[data-action=move-down]')?.disabled).toBe(
-      false,
-    );
+    expect(isOff(onward.querySelector<HTMLButtonElement>('[data-action=move-down]')!)).toBe(false);
     const single = rows(section)[2]!;
-    expect(single.querySelector<HTMLButtonElement>('[data-action=move-up]')?.disabled).toBe(false);
+    expect(isOff(single.querySelector<HTMLButtonElement>('[data-action=move-up]')!)).toBe(false);
     expect(single.querySelector<HTMLButtonElement>('[data-action=move-down]')?.disabled).toBe(true);
     const preview = Array.from(section.querySelectorAll('table.voice-rules__preview tbody tr'));
     expect(preview.map((tr) => text(tr))).toEqual(['Chapter 1 Voice A', 'Untitled —']);
@@ -212,17 +211,13 @@ describe('r2m-voice-rules-section', () => {
   it('viewing a History step, Add rule, Move and Delete are off with the reason; the preview shows (ticket 32)', async () => {
     use(StepView).view('dracula', 's8');
     const section = await mount({ ...row('Alice'), voiceCount: 1 }, [DEFAULT, ONWARD, SINGLE]);
-    const reason = (el: Element | null) =>
-      el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
     const add = section.querySelector<HTMLButtonElement>('[data-action=add-rule]')!;
-    expect(add.disabled).toBe(true);
-    expect(reason(add)).toBe(VIEWING_READ_ONLY);
+    expect(blockedWith(add)).toBe(VIEWING_READ_ONLY);
     for (const action of ['move-up', 'move-down', 'delete-rule']) {
       const control = rows(section)[2]!.querySelector<HTMLButtonElement>(
         `[data-action=${action}]`,
       )!;
-      expect(control.disabled).toBe(true);
-      expect(reason(control)).toBe(VIEWING_READ_ONLY);
+      expect(blockedWith(control)).toBe(VIEWING_READ_ONLY);
     }
     expect(section.querySelectorAll('table.voice-rules__preview tbody tr')).toHaveLength(1);
   });
@@ -262,7 +257,7 @@ describe('r2m-voice-rules-section', () => {
     const section = await mount(row('Alice'), [DEFAULT]);
     api.on('GET', `${BASE}/book`, { volumes: [] });
     const add = section.querySelector<HTMLButtonElement>('[data-action=add-rule]')!;
-    expect(add.disabled).toBe(false);
+    expect(isOff(add!)).toBe(false);
     add.click();
     await settle();
     expect(document.querySelector('r2m-add-voice-rule-dialog')).not.toBeNull();

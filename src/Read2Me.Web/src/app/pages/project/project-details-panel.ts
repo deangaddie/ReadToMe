@@ -90,11 +90,11 @@ export class ProjectDetailsPanel extends R2mElement {
           d.coverImage
             ? gated(
                 busy,
-                (disabled) =>
+                (gate) =>
                   html`<button
                     type="button"
                     class="r2m-button details__remove-cover"
-                    ?disabled=${disabled}
+                    ${gate.attrs()}
                     @click=${() => void this.removeCover()}
                   >
                     ${icon('hide_image')} Remove cover
@@ -140,14 +140,14 @@ export class ProjectDetailsPanel extends R2mElement {
       <!-- live(): a refused PUT refetches the same value, and the box must still snap back. -->
       ${gated(
         busy,
-        (disabled) =>
-          html`<label class="r2m-switch details__narrator-only">
+        (gate) =>
+          html`<label class="r2m-switch details__narrator-only" ${gate.hover()}>
             <input
               type="checkbox"
               role="switch"
               name="narratorOnly"
               .checked=${live(d.narratorOnlyMode)}
-              ?disabled=${disabled}
+              ${gate.attrs()}
               @change=${(e: Event) => void this.setNarratorOnly((e.target as HTMLInputElement).checked)}
             />
             Narrator only

@@ -12,6 +12,7 @@ import { ProviderSchemas } from '../cast/voices/provider-schemas';
 import type { AddVoiceDialog } from '../cast/voices/add-voice-dialog';
 import type { SeriesVoiceEditor } from './series-voice-editor';
 import './series-voice-editor';
+import { isOff } from '../../../testing/description';
 
 const DETAIL = '/api/series/h/characters/sc-watson';
 const SCARLET = '/api/projects/scarlet';
@@ -227,11 +228,11 @@ describe('r2m-series-voice-editor', () => {
       }),
     );
 
-    expect(action(rowOf(el, 'v1'), 'delete').disabled).toBe(true);
+    expect(isOff(action(rowOf(el, 'v1'), 'delete'))).toBe(true);
     expect(text(rowOf(el, 'v1').querySelector('[data-testid=delete-note]'))).toContain(
       "Can't delete: Voice Rules in The Sign of the Four use it.",
     );
-    expect(action(rowOf(el, 'v2'), 'delete').disabled).toBe(false);
+    expect(isOff(action(rowOf(el, 'v2'), 'delete')!)).toBe(false);
     expect(rowOf(el, 'v2').querySelector('[data-testid=delete-note]')).toBeNull();
 
     document.body.replaceChildren();
@@ -249,7 +250,7 @@ describe('r2m-series-voice-editor', () => {
         },
       }),
     );
-    expect(action(rowOf(last, 'v1'), 'delete').disabled).toBe(true);
+    expect(isOff(action(rowOf(last, 'v1'), 'delete'))).toBe(true);
     expect(text(rowOf(last, 'v1').querySelector('[data-testid=delete-note]'))).toContain(
       "Can't delete the last Voice",
     );
@@ -343,9 +344,7 @@ describe('r2m-series-voice-editor', () => {
     await card.rendered();
     expect(card.voice?.id).toBe('v1');
     // Not read-only here: this is where series Voices are edited.
-    expect(card.querySelector<HTMLButtonElement>('[data-action=delete-voice]')!.disabled).toBe(
-      false,
-    );
+    expect(isOff(card.querySelector<HTMLButtonElement>('[data-action=delete-voice]')!)).toBe(false);
     expect(action(rowOf(el, 'v1'), 'edit').getAttribute('aria-expanded')).toBe('true');
 
     action(rowOf(el, 'v1'), 'edit').click();

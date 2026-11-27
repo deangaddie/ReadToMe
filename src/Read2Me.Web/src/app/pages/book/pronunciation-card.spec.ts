@@ -10,6 +10,7 @@ import { FakeLive } from '../../../testing/fake-live';
 import type { PronunciationCard } from './pronunciation-card';
 import { indexSpans, markedText } from './pronunciation-marks';
 import './pronunciation-card';
+import { blockedWith } from '../../../testing/description';
 
 const TRY = '/api/projects/the-adventures-of-sherlock-holmes/pronunciations/try';
 
@@ -68,8 +69,6 @@ async function settle() {
 
 const mark = () => host.querySelector<HTMLElement>('.r2m-pron-mark')!;
 const play = () => card.querySelector<HTMLButtonElement>('[data-action=play-sentence]')!;
-const reasonOf = (button: HTMLElement) =>
-  button.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
 
 async function focusMark() {
   mark().dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
@@ -112,16 +111,39 @@ describe('the Pronunciation hover card', () => {
     } as QueueMessage);
     await focusMark();
 
-    expect(play().disabled).toBe(true);
-    expect(reasonOf(play())).toBe("Can't play while Attribution is running: it has the GPU");
+    expect(blockedWith(play())).toBe("Can't play while Attribution is running: it has the GPU");
+  });
+
+  it('moves the keyboard to the button that works, past one blocked with a reason', async () => {
+    live.queue.set({
+      attribution: { queuedCount: 2, processingCount: 0, isBusy: true },
+      audio: { queuedCount: 0, processingCount: 0 },
+    } as QueueMessage);
+    await focusMark();
+    mark().dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
+    await settle();
+
+    expect(document.activeElement?.getAttribute('data-action')).toBe('edit-pronunciation');
+  });
+
+  it('with every button blocked, moves the keyboard to the first, which says why', async () => {
+    card.block = { reason: VIEWING_READ_ONLY };
+    await focusMark();
+    mark().dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
+    await settle();
+
+    expect(document.activeElement).toBe(play());
   });
 
   it('is off while viewing a step', async () => {
     card.block = { reason: VIEWING_READ_ONLY };
     await focusMark();
 
-    expect(play().disabled).toBe(true);
-    expect(reasonOf(play())).toBe(VIEWING_READ_ONLY);
+    expect(blockedWith(play())).toBe(VIEWING_READ_ONLY);
   });
 
   it('Edit asks for the entry in the panel, from the mark it was opened on', async () => {
@@ -141,8 +163,7 @@ describe('the Pronunciation hover card', () => {
     await focusMark();
 
     const edit = card.querySelector<HTMLButtonElement>('[data-action=edit-pronunciation]')!;
-    expect(edit.disabled).toBe(true);
-    expect(reasonOf(edit)).toBe(VIEWING_READ_ONLY);
+    expect(blockedWith(edit)).toBe(VIEWING_READ_ONLY);
   });
 
   it('Escape closes it and gives focus back to the mark', async () => {
