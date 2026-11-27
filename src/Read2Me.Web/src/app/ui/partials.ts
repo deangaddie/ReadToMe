@@ -38,7 +38,6 @@ export function statusChip(options: {
     (tip) =>
       html`<span
         class="r2m-status-chip r2m-status-chip--${options.status} ${options.compact ? 'r2m-status-chip--compact' : ''}"
-        role="status"
         data-tooltip=${tip.tooltip}
         aria-describedby=${tip.describedBy}
         >${icon(options.icon ?? DEFAULT_ICONS[options.status])}<span class="r2m-status-chip__label"
