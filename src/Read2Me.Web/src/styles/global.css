@@ -1078,6 +1078,8 @@ dialog.r2m-dialog--fullscreen {
 }
 
 /* ---- spinner + progress --------------------------------------------------------------------- */
+/* Reduced motion slows both down, never stops them, so the work still reads as under way
+   (modern-web-guidance `ui-components/spinner`, `ui-components/progress`). */
 .r2m-spinner {
   display: inline-block;
   width: var(--_size, 20px);
@@ -1087,6 +1089,10 @@ dialog.r2m-dialog--fullscreen {
   border-top-color: currentColor;
   border-radius: 50%;
   animation: r2m-spin 0.8s linear infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation-duration: 2.4s;
+  }
 }
 /* The skeleton partial's hidden shapes lay out as the skeleton's own children. */
 .r2m-skeleton__shapes {
@@ -1097,46 +1103,63 @@ dialog.r2m-dialog--fullscreen {
     transform: rotate(360deg);
   }
 }
+/* Fully custom: the track is `progress` itself, the fill is each engine's pseudo-element, which
+   also carries the indeterminate sweep. Each engine gets its own rule, as a rule that groups
+   `-webkit-` and `-moz-` pseudo-elements is dropped by both. Set `--r2m-progress-fill` to recolour
+   the fill (`accent-color` no longer reaches it). */
 progress {
+  --r2m-progress-fill: var(--r2m-accent);
+  --r2m-progress-sweep-duration: 1.2s;
   display: block;
   width: 100%;
   height: 4px;
-  border: 0;
+  appearance: none;
+  border: 0 solid;
   border-radius: var(--r2m-radius-pill);
   background: var(--r2m-surface-highest);
-  accent-color: var(--r2m-accent);
-  overflow: hidden;
+  overflow: clip;
+  /* The sweep moves in track units (cqi). */
+  container-type: inline-size;
 
+  @media (prefers-reduced-motion: reduce) {
+    --r2m-progress-sweep-duration: 3.6s;
+  }
+
+  &:indeterminate {
+    --r2m-progress-animation: r2m-sweep var(--r2m-progress-sweep-duration) linear infinite;
+  }
+  &:dir(rtl):indeterminate {
+    --r2m-progress-animation: r2m-sweep var(--r2m-progress-sweep-duration) linear infinite reverse;
+  }
+
+  /* Chromium's track box: let the element's own background show through. */
   &::-webkit-progress-bar {
-    background: var(--r2m-surface-highest);
-    border-radius: var(--r2m-radius-pill);
+    background: transparent;
   }
   &::-webkit-progress-value {
-    background: var(--r2m-accent);
+    background: var(--r2m-progress-fill);
+    border-radius: var(--r2m-radius-pill);
+    animation: var(--r2m-progress-animation, none);
   }
   &::-moz-progress-bar {
-    background: var(--r2m-accent);
-  }
-  /* Indeterminate: a sweeping band, as mat-progress-bar's. */
-  &:indeterminate {
-    background:
-      linear-gradient(90deg, transparent 0 30%, var(--r2m-accent) 30% 60%, transparent 60%) 0 0 /
-        200% 100% no-repeat,
-      var(--r2m-surface-highest);
-    animation: r2m-sweep 1.2s linear infinite;
-
-    &::-webkit-progress-bar,
-    &::-moz-progress-bar {
-      background: transparent;
-    }
+    background: var(--r2m-progress-fill);
+    border-radius: var(--r2m-radius-pill);
+    animation: var(--r2m-progress-animation, none);
   }
 }
+/* Indeterminate: a 30% band slides across the track, physically left to right (reversed in RTL).
+   The keyframes give the fill its length; `margin-right: auto` pins Chromium's fill to the left. */
 @keyframes r2m-sweep {
+  from,
+  to {
+    inline-size: 30%;
+    margin-right: auto;
+  }
   from {
-    background-position: 100% 0;
+    translate: -100%;
   }
   to {
-    background-position: -100% 0;
+    translate: 100cqi;
   }
 }
 

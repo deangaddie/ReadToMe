@@ -29,7 +29,7 @@
       flex: 1 0 100%;
       width: 100%;
       height: 4px;
-      accent-color: var(--r2m-status-busy);
+      --r2m-progress-fill: var(--r2m-status-busy);
     }
   }
   .setup-check__table {
