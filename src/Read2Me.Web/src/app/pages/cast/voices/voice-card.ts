@@ -176,7 +176,7 @@ export class VoiceCard extends R2mElement {
                     data-tooltip="Default voice"
                     @click=${this.toggle}
                   >
-                    ${icon('star', 'r2m-icon--filled')}
+                    ${icon('star', 'r2m-icon--filled', 'Default voice')}
                   </span>`
                 : gated(
                     defaultOff,

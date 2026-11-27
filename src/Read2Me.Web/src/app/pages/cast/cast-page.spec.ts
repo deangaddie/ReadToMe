@@ -208,9 +208,14 @@ describe('r2m-cast-page', () => {
     };
     expect(badges('narrator')).toEqual([null, null]);
     const [minaLink, minaDiffers] = badges('mina');
-    expect(minaLink).not.toBeNull();
+    expect(minaLink?.querySelector('[role=img]')?.getAttribute('aria-label')).toBe(
+      'Linked in Sherlock Holmes',
+    );
     expect(minaDiffers).toBeNull();
     const [, arthurDiffers] = badges('arthur');
+    expect(arthurDiffers?.querySelector('[role=img]')?.getAttribute('aria-label')).toBe(
+      'Differs from series',
+    );
     expect(arthurDiffers?.getAttribute('data-tooltip')).toBe(
       'Differs from series: its Voices here are not the copy the other books in Sherlock Holmes hold',
     );

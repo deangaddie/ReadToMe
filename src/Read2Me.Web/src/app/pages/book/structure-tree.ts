@@ -232,7 +232,7 @@ export class StructureTree extends R2mElement {
             >
             ${
               isOpen && !node.loaded
-                ? html`<span class="tree__loading" aria-busy="true" aria-label="Loading"></span>`
+                ? html`<span class="tree__loading" role="progressbar" aria-label="Loading"></span>`
                 : nothing
             }
             <span class="tree__menu">
@@ -400,13 +400,7 @@ function statusLine(s: NodeStatusSummaryDto) {
     ${countBadge('attribution', s.attributionRemaining, 'Paragraphs needing attribution')}
     ${countBadge('audio', s.audioRemaining, 'Paragraphs needing audio')}
     ${countBadge('review', s.review, 'Paragraphs with audio to review')}
-    ${
-      s.isDone
-        ? html`<span class="material-symbols-rounded r2m-icon tree__done" aria-label="Done"
-            >check_circle</span
-          >`
-        : nothing
-    }
+    ${s.isDone ? icon('check_circle', 'tree__done', 'Done') : nothing}
   </span>`;
 }
 

@@ -197,12 +197,8 @@ function audioLine(
       ${
         reviewView
           ? review?.state === 'Dismissed'
-            ? html`<span
-                class="material-symbols-rounded r2m-icon r2m-item__review-dismissed"
-                data-testid="review-dismissed"
-                aria-label="Review dismissed"
-                data-tooltip="Review dismissed"
-                >${reviewView.icon}</span
+            ? html`<span data-testid="review-dismissed" data-tooltip="Review dismissed"
+                >${icon(reviewView.icon, 'r2m-item__review-dismissed', 'Review dismissed')}</span
               >`
             : html`${chipOf(reviewView)}
               ${gated(

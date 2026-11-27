@@ -78,9 +78,9 @@ describe('r2m-speaker-chip', () => {
 
   it('marks a linked narrator', async () => {
     const chip = await mount({ state: 'narrator-linked', name: 'Elizabeth' });
-    expect(chip.querySelector('.r2m-speaker-chip__link')?.getAttribute('aria-label')).toBe(
-      'Linked narrator',
-    );
+    const link = chip.querySelector('.r2m-speaker-chip__link');
+    expect(link?.getAttribute('role')).toBe('img');
+    expect(link?.getAttribute('aria-label')).toBe('Linked narrator');
   });
 
   it('follows the compact input', async () => {

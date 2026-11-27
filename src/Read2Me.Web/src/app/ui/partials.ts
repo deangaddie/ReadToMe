@@ -20,9 +20,21 @@ const DEFAULT_ICONS: Record<StatusKind, IconName> = {
   neutral: 'radio_button_unchecked',
 };
 
-/** Material Symbols ligature icon, drawn from the subset font that holds only `IconName`. */
-export const icon = (name: IconName, cls = '') =>
-  html`<span class="material-symbols-rounded r2m-icon ${cls}" aria-hidden="true">${name}</span>`;
+/**
+ * Material Symbols ligature icon, drawn from the subset font that holds only `IconName`.
+ * Decorative (hidden from assistive tech) unless given a `label`: then it is an image named by
+ * the label, which replaces the ligature text (a role-less span must not carry a name). The
+ * ligature sits in a hidden inner span: an image's children are presentational, but not every
+ * tree (Playwright's snapshot among them) prunes them.
+ */
+export const icon = (name: IconName, cls = '', label?: string) =>
+  label
+    ? html`<span class="material-symbols-rounded r2m-icon ${cls}" role="img" aria-label=${label}
+        ><span aria-hidden="true">${name}</span></span
+      >`
+    : html`<span class="material-symbols-rounded r2m-icon ${cls}" aria-hidden="true"
+        >${name}</span
+      >`;
 
 /** Status conveyed by colour *and* icon *and* text, never colour alone (design §7). */
 export function statusChip(options: {

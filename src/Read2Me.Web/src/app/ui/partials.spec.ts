@@ -26,6 +26,19 @@ describe('icon', () => {
     expect(el?.getAttribute('aria-hidden')).toBe('true');
     expect(el?.classList.contains('material-symbols-rounded')).toBe(true);
     expect(el?.classList.contains('extra')).toBe(true);
+    expect(el?.hasAttribute('role')).toBe(false);
+    expect(el?.hasAttribute('aria-label')).toBe(false);
+  });
+
+  it('with a label is an image named by it, so the ligature text never names it', () => {
+    const el = mount(icon('check_circle', 'extra', 'Done')).querySelector('.r2m-icon');
+    expect(el?.getAttribute('role')).toBe('img');
+    expect(el?.getAttribute('aria-label')).toBe('Done');
+    expect(el?.hasAttribute('aria-hidden')).toBe(false);
+    expect(el?.textContent).toBe('check_circle');
+    // The ligature stays drawn but hidden, so no snapshot reads it as the image's text.
+    expect(el?.querySelector('[aria-hidden="true"]')?.textContent).toBe('check_circle');
+    expect(el?.classList.contains('extra')).toBe(true);
   });
 });
 
