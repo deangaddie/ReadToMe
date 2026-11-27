@@ -54,8 +54,11 @@ export class InlineEdit extends R2mElement {
 
   readonly #editing = signal(false);
   readonly #draft = signal('');
-  /** The input was just opened: focus and select it after that render. */
-  #focusPending = false;
+  /**
+   * What takes focus after the next render: the input just opened (its text selected), or the
+   * display button a key just closed the edit back to, since the focused input leaves the DOM.
+   */
+  #focusTarget: 'input' | 'display' | null = null;
 
   readonly #valid = computed(() => {
     const text = this.#draft().trim();
@@ -70,11 +73,12 @@ export class InlineEdit extends R2mElement {
   }
 
   protected override updated(): void {
-    if (!this.#focusPending) return;
-    this.#focusPending = false;
-    const input = this.querySelector<HTMLInputElement>('.r2m-inline-edit__input');
-    input?.focus();
-    input?.select();
+    const target = this.#focusTarget;
+    if (!target) return;
+    this.#focusTarget = null;
+    const el = this.querySelector<HTMLElement>(`.r2m-inline-edit__${target}`);
+    el?.focus();
+    if (el instanceof HTMLInputElement) el.select();
   }
 
   protected template() {
@@ -94,13 +98,15 @@ export class InlineEdit extends R2mElement {
         @blur=${() => this.commit()}
       />`;
     }
+    // The name carries the visible text as written, so voice control and screen readers get it.
+    const editName = `Edit ${placeholder || 'value'}`;
     return gated(
       this.#block(),
       (gate) =>
         html`<button
           type="button"
           class="r2m-inline-edit__display ${value ? '' : 'r2m-inline-edit__display--empty'}"
-          aria-label=${`Edit ${placeholder || 'value'}`}
+          aria-label=${value ? `${editName}: ${value}` : editName}
           ${gate.attrs()}
           @click=${() => this.begin()}
         >
@@ -111,19 +117,20 @@ export class InlineEdit extends R2mElement {
   }
 
   readonly #onKeydown = (e: KeyboardEvent): void => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      this.commit();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      this.abort();
-    }
+    if (e.key !== 'Enter' && e.key !== 'Escape') return;
+    // Mid-composition both keys belong to the IME. Safari ends it before the confirming keydown,
+    // where only the key code 229 still tells.
+    if (e.isComposing || e.keyCode === 229) return;
+    e.preventDefault();
+    this.#focusTarget = 'display';
+    if (e.key === 'Enter') this.commit();
+    else this.abort();
   };
 
   begin(): void {
     if (this.#block() !== null) return;
     this.#draft.set(this.#value());
-    this.#focusPending = true;
+    this.#focusTarget = 'input';
     this.#editing.set(true);
   }
 
