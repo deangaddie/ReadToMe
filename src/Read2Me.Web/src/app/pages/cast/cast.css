@@ -448,13 +448,61 @@
   }
 }
 
-/* One voice card: a details panel with the header controls in its summary. */
+/* One voice card: an expansion panel whose header holds controls, over the button that opens it. */
 @scope (r2m-voice-card) to (r2m-inline-edit > *, r2m-audio-player > *, r2m-file-drop > *, r2m-voice-override-editor > *, .r2m-status-chip > *, .r2m-tabs > *) {
   :scope {
     display: block;
   }
   .voice-card__header {
+    position: relative;
+    display: flex;
+    align-items: center;
     gap: var(--r2m-space-2);
+    min-height: 48px;
+    padding: var(--r2m-space-2) var(--r2m-space-3);
+    user-select: none;
+  }
+  .voice-card__header:hover {
+    background: color-mix(in srgb, var(--r2m-text) 4%, transparent);
+  }
+  /* The toggle covers the header, under its controls: out of flow, painted first. */
+  .voice-card__heading {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+  }
+  .voice-card__toggle {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: 100%;
+    height: 100%;
+    padding: 0 var(--r2m-space-3);
+    border: 0;
+    background: none;
+    color: var(--r2m-text-muted);
+    cursor: pointer;
+  }
+  .voice-card__toggle:focus-visible {
+    outline: 2px solid var(--r2m-accent);
+    outline-offset: -2px;
+  }
+  .voice-card__toggle > .r2m-icon {
+    transition: rotate 120ms;
+  }
+  .voice-card__toggle[aria-expanded='true'] > .r2m-icon {
+    rotate: 180deg;
+  }
+  /* Positioned to paint over the toggle; their bare space lets a click through to it. */
+  .voice-card__title,
+  .voice-card__meta {
+    position: relative;
+    pointer-events: none;
+  }
+  .voice-card__star,
+  .voice-card__name > r2m-inline-edit,
+  .voice-card__meta > * {
+    pointer-events: auto;
   }
   .voice-card__title {
     display: flex;
@@ -493,6 +541,8 @@
     justify-content: flex-end;
     gap: var(--r2m-space-1);
     flex: 0 0 auto;
+    /* Room for the toggle's chevron. */
+    margin-inline-end: calc(20px + var(--r2m-space-2));
   }
   .voice-card__delete {
     color: var(--r2m-status-error);

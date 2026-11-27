@@ -38,7 +38,9 @@ const valueOf = (event: Event): string => (event.target as HTMLTextAreaElement).
  * Edited chip, Edit audio link, Delete; the Reference ⟷ Prompt toggle; the reference player and
  * upload, or the prompt editor with Regenerate with AI and Generate audio; the Advanced override
  * tabs; and the transcript with Send to AI. Drafts are per field and dirty-gate their Save;
- * a reload never clobbers a draft. The card and its two sub-sections are `<details>` panels.
+ * a reload never clobbers a draft. The two sub-sections are `<details>` panels. The card's header
+ * holds controls, so it is no `<summary>`: a heading button named by the voice lies under them and
+ * opens the card.
  */
 export class VoiceCard extends R2mElement {
   private readonly voices = use(VoicesApi);
@@ -98,6 +100,7 @@ export class VoiceCard extends R2mElement {
   readonly regeneratingPrompt = signal(false);
   readonly generatingAudio = signal(false);
   readonly transcribing = signal(false);
+  readonly expanded = signal(false);
   /** Which Advanced tab is open. */
   readonly overrideTab = signal<OverrideTab>('voice-design');
 
@@ -148,9 +151,23 @@ export class VoiceCard extends R2mElement {
     const block = this.store.voicesBlock();
     const off = withLocal(block, busy);
     const defaultOff = withLocal(this.store.block(), busy);
+    const open = this.expanded();
+    const bodyId = `voice-body-${voice.id}`;
     return html`
-      <details class="r2m-expansion voice-card__panel">
-        <summary class="voice-card__header">
+      <div class="r2m-expansion voice-card__panel">
+        <div class="voice-card__header">
+          <h4 class="voice-card__heading">
+            <button
+              type="button"
+              class="voice-card__toggle"
+              aria-expanded=${open ? 'true' : 'false'}
+              aria-controls=${bodyId}
+              @click=${() => this.expanded.set(!open)}
+            >
+              <span class="visually-hidden">${voice.name}</span>
+              ${icon('expand_more')}
+            </button>
+          </h4>
           <span class="voice-card__title">
             ${
               this.#isDefault()
@@ -169,22 +186,13 @@ export class VoiceCard extends R2mElement {
                         data-action="set-default"
                         aria-label="Set as default voice"
                         ${gate.attrs('Set as default')}
-                        @click=${(e: Event) => {
-                          this.stop(e);
-                          void this.setDefault();
-                        }}
+                        @click=${() => void this.setDefault()}
                       >
                         ${icon('star')}
                       </button>`,
                   )
             }
-            <span
-              class="voice-card__name"
-              role="group"
-              tabindex="-1"
-              @click=${this.stop}
-              @keydown=${this.stop}
-            >
+            <span class="voice-card__name">
               <r2m-inline-edit
                 .value=${voice.name}
                 .placeholder=${'Voice name'}
@@ -199,7 +207,7 @@ export class VoiceCard extends R2mElement {
               }
             </span>
           </span>
-          <span class="voice-card__meta" @click=${this.stop} @keydown=${this.stop}>
+          <span class="voice-card__meta">
             ${statusChip({
               status: voice.source === 'Uploaded' ? 'info' : 'neutral',
               label: voice.source === 'Uploaded' ? 'Reference' : 'Prompt',
@@ -253,140 +261,146 @@ export class VoiceCard extends R2mElement {
                 </button>`,
             )}
           </span>
-        </summary>
+        </div>
 
-        <div class="r2m-expansion__body voice-card__body">
-          <section class="voice-card__block">
-            <label class="r2m-field voice-card__wide">
-              <span class="r2m-field__label"
-                >Voice description (where in the book this voice applies)</span
-              >
-              <textarea
-                aria-label="Voice description"
-                rows="2"
-                ?readonly=${block !== null}
-                .value=${this.description()}
-                @input=${(e: Event) => this.descriptionDraft.set(valueOf(e))}
-              ></textarea>
-            </label>
-            ${gated(
-              withLocal(off, !this.descriptionDirty()),
-              (gate) =>
-                html`<button
-                  type="button"
-                  class="r2m-button r2m-button--stroked"
-                  data-action="save-description"
-                  ${gate.attrs()}
-                  @click=${() => void this.saveDescription()}
-                >
-                  ${icon('save')} Save description
-                </button>`,
-            )}
-          </section>
-
-          ${gated(
-            off,
-            (gate) =>
-              html`<fieldset
-                class="r2m-segmented voice-card__source"
-                role="radiogroup"
-                aria-label="Voice source"
-                ${gate.hover()}
-              >
-                <label data-source="Uploaded">
-                  <input
-                    type="radio"
-                    name=${`source-${voice.id}`}
-                    value="Uploaded"
-                    .checked=${live(voice.source === 'Uploaded')}
-                    ${gate.attrs()}
-                    @change=${() => void this.switchSource('Uploaded')}
-                  />
-                  Reference audio
-                </label>
-                <label data-source="Generated">
-                  <input
-                    type="radio"
-                    name=${`source-${voice.id}`}
-                    value="Generated"
-                    .checked=${live(voice.source === 'Generated')}
-                    ${gate.attrs()}
-                    @change=${() => void this.switchSource('Generated')}
-                  />
-                  Prompt
-                </label>
-              </fieldset>`,
-          )}
-          ${
-            voice.source === 'Uploaded'
-              ? this.reference(voice, block)
-              : this.promptSection(voice, off, block)
-          }
-
-          <details class="r2m-expansion voice-card__sub" data-section="advanced">
-            <summary><span class="r2m-expansion__title">Advanced settings</span></summary>
-            <div class="r2m-expansion__body">
-              ${voiceOverrides({
-                voice,
-                disabled: busy,
-                block,
-                selected: this.overrideTab(),
-                onSelect: (tab) => this.overrideTab.set(tab),
-                onSave: (save) => void this.saveOverride(save),
-              })}
-            </div>
-          </details>
-
-          <details class="r2m-expansion voice-card__sub" data-section="transcript">
-            <summary><span class="r2m-expansion__title">Transcript</span></summary>
-            <section class="r2m-expansion__body voice-card__block">
+        <div
+          id=${bodyId}
+          hidden=${open ? nothing : 'until-found'}
+          @beforematch=${() => this.expanded.set(true)}
+        >
+          <div class="r2m-expansion__body voice-card__body">
+            <section class="voice-card__block">
               <label class="r2m-field voice-card__wide">
-                <span class="r2m-field__label">Transcript</span>
+                <span class="r2m-field__label"
+                  >Voice description (where in the book this voice applies)</span
+                >
                 <textarea
-                  aria-label="Transcript"
-                  rows="3"
+                  aria-label="Voice description"
+                  rows="2"
                   ?readonly=${block !== null}
-                  .value=${this.transcript()}
-                  @input=${(e: Event) => this.transcriptDraft.set(valueOf(e))}
+                  .value=${this.description()}
+                  @input=${(e: Event) => this.descriptionDraft.set(valueOf(e))}
                 ></textarea>
               </label>
-              <div class="voice-card__actions">
-                ${gated(
-                  withLocal(off, !this.transcriptDirty()),
-                  (gate) =>
-                    html`<button
-                      type="button"
-                      class="r2m-button r2m-button--stroked"
-                      data-action="save-transcript"
-                      ${gate.attrs()}
-                      @click=${() => void this.saveTranscript()}
-                    >
-                      ${icon('save')} Save
-                    </button>`,
-                )}
-                ${
-                  voice.audioFileName
-                    ? gated(
-                        withLocal(off, this.transcribing()),
-                        (gate) =>
-                          html`<button
-                            type="button"
-                            class="r2m-button r2m-button--stroked"
-                            data-action="transcribe"
-                            ${gate.attrs()}
-                            @click=${() => void this.transcribe()}
-                          >
-                            ${icon('record_voice_over')}
-                            ${this.transcribing() ? 'Transcribing…' : 'Send to AI'}
-                          </button>`,
-                      )
-                    : nothing
-                }
-              </div>
+              ${gated(
+                withLocal(off, !this.descriptionDirty()),
+                (gate) =>
+                  html`<button
+                    type="button"
+                    class="r2m-button r2m-button--stroked"
+                    data-action="save-description"
+                    ${gate.attrs()}
+                    @click=${() => void this.saveDescription()}
+                  >
+                    ${icon('save')} Save description
+                  </button>`,
+              )}
             </section>
-          </details>
+
+            ${gated(
+              off,
+              (gate) =>
+                html`<fieldset
+                  class="r2m-segmented voice-card__source"
+                  role="radiogroup"
+                  aria-label="Voice source"
+                  ${gate.hover()}
+                >
+                  <label data-source="Uploaded">
+                    <input
+                      type="radio"
+                      name=${`source-${voice.id}`}
+                      value="Uploaded"
+                      .checked=${live(voice.source === 'Uploaded')}
+                      ${gate.attrs()}
+                      @change=${() => void this.switchSource('Uploaded')}
+                    />
+                    Reference audio
+                  </label>
+                  <label data-source="Generated">
+                    <input
+                      type="radio"
+                      name=${`source-${voice.id}`}
+                      value="Generated"
+                      .checked=${live(voice.source === 'Generated')}
+                      ${gate.attrs()}
+                      @change=${() => void this.switchSource('Generated')}
+                    />
+                    Prompt
+                  </label>
+                </fieldset>`,
+            )}
+            ${
+              voice.source === 'Uploaded'
+                ? this.reference(voice, block)
+                : this.promptSection(voice, off, block)
+            }
+
+            <details class="r2m-expansion voice-card__sub" data-section="advanced">
+              <summary><span class="r2m-expansion__title">Advanced settings</span></summary>
+              <div class="r2m-expansion__body">
+                ${voiceOverrides({
+                  voice,
+                  disabled: busy,
+                  block,
+                  selected: this.overrideTab(),
+                  onSelect: (tab) => this.overrideTab.set(tab),
+                  onSave: (save) => void this.saveOverride(save),
+                })}
+              </div>
+            </details>
+
+            <details class="r2m-expansion voice-card__sub" data-section="transcript">
+              <summary><span class="r2m-expansion__title">Transcript</span></summary>
+              <section class="r2m-expansion__body voice-card__block">
+                <label class="r2m-field voice-card__wide">
+                  <span class="r2m-field__label">Transcript</span>
+                  <textarea
+                    aria-label="Transcript"
+                    rows="3"
+                    ?readonly=${block !== null}
+                    .value=${this.transcript()}
+                    @input=${(e: Event) => this.transcriptDraft.set(valueOf(e))}
+                  ></textarea>
+                </label>
+                <div class="voice-card__actions">
+                  ${gated(
+                    withLocal(off, !this.transcriptDirty()),
+                    (gate) =>
+                      html`<button
+                        type="button"
+                        class="r2m-button r2m-button--stroked"
+                        data-action="save-transcript"
+                        ${gate.attrs()}
+                        @click=${() => void this.saveTranscript()}
+                      >
+                        ${icon('save')} Save
+                      </button>`,
+                  )}
+                  ${
+                    voice.audioFileName
+                      ? gated(
+                          withLocal(off, this.transcribing()),
+                          (gate) =>
+                            html`<button
+                              type="button"
+                              class="r2m-button r2m-button--stroked"
+                              data-action="transcribe"
+                              ${gate.attrs()}
+                              @click=${() => void this.transcribe()}
+                            >
+                              ${icon('record_voice_over')}
+                              ${this.transcribing() ? 'Transcribing…' : 'Send to AI'}
+                            </button>`,
+                        )
+                      : nothing
+                  }
+                </div>
+              </section>
+            </details>
+          </div>
         </div>
-      </details>
+      </div>
     `;
   }
 
@@ -488,14 +502,6 @@ export class VoiceCard extends R2mElement {
       }
     </section>`;
   }
-
-  /** Clicks and keys inside the header controls must not toggle the panel (Space/Enter do on the summary). */
-  private readonly stop = (event: Event): void => {
-    event.stopPropagation();
-    // A click on a control inside <summary> would also toggle the panel; a link keeps its
-    // navigation (Edit audio), since stopping the bubble is enough for it.
-    if (event.type === 'click' && !(event.target as Element).closest('a')) event.preventDefault();
-  };
 
   async setDefault(): Promise<void> {
     const voice = this.#voice();
