@@ -15,7 +15,50 @@
  * - `data-tooltip-delegate="<selector>"` on a focusable element with no tip of its own: focusing
  *   it shows the tip of the descendant the selector names, anchored to that descendant (a tree row
  *   whose title carries the tip).
+ *
+ * The shared hint is the visual cue only: no trigger points at it, since it holds a trigger's text
+ * only while open. A tip that says more than the trigger's name goes through `withTip`, which
+ * renders it a second time as the trigger's accessible description.
  */
+import { type TemplateResult, html, nothing } from 'lit-html';
+import { Directive, directive } from 'lit-html/directive.js';
+
+/** What a trigger binds for its tip; see `withTip`. */
+export interface Tip {
+  /** The trigger's `data-tooltip`. */
+  tooltip: string | typeof nothing;
+  /** The `aria-describedby` of the control the tip belongs to. */
+  describedBy: string | typeof nothing;
+  /** The element that holds the description: place it inside a positioned box. */
+  description: TemplateResult | typeof nothing;
+}
+
+let nextId = 0;
+
+/** One per rendered trigger, so its description keeps one id for as long as the trigger lives. */
+class TipDirective extends Directive {
+  readonly #id = `r2m-tip-${nextId++}`;
+
+  render(text: string | undefined, name: string | undefined, body: (tip: Tip) => unknown) {
+    const describes = !!text && text !== name;
+    return body({
+      tooltip: text || nothing,
+      describedBy: describes ? this.#id : nothing,
+      description: describes
+        ? html`<span class="visually-hidden" id=${this.#id}>${text}</span>`
+        : nothing,
+    });
+  }
+}
+
+/**
+ * Renders a trigger with its tip: `body` is handed the `data-tooltip` value and, when `text` says
+ * more than `name` (the trigger's accessible name), a visually hidden description with the
+ * `aria-describedby` that points at it. A tip that equals the name adds no description, and an
+ * empty one adds nothing.
+ */
+export const withTip = directive(TipDirective);
+
 const SHOW_DELAY_MS = 400;
 /** Time to move the pointer from the trigger onto the tip before it closes. */
 const HIDE_DELAY_MS = 200;

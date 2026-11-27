@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { render } from 'lit-html';
 import { type JobView, formatDuration, jobSummary } from './job';
 import { jobCard, jobPill } from './job-pill';
+import { description, hasDescription } from '../../testing/description';
 
 /** Ported from the Angular TestBed specs for r2m-job-pill and r2m-job-card, case for case. */
 function mount(template: unknown): HTMLElement {
@@ -73,6 +74,24 @@ describe('jobPill', () => {
       '12 queued · 3.1 s/para · ETA 0:38',
     );
     expect(el.querySelector('.r2m-spinner')).not.toBeNull();
+  });
+
+  it('describes the open button with a tooltip that differs from its label', () => {
+    const host = mount(
+      jobPill({ job: running, tooltip: 'Chapter 3', onOpen: () => {}, onCancel: () => {} }),
+    );
+    expect(host.querySelector('.r2m-job-pill')?.getAttribute('data-tooltip')).toBe('Chapter 3');
+    expect(description(host.querySelector('.r2m-job-pill__main')!)).toBe('Chapter 3');
+    expect(host.querySelector('.r2m-job-pill__cancel')?.hasAttribute('aria-describedby')).toBe(
+      false,
+    );
+  });
+
+  it('adds no description without a tooltip, or with one equal to its label', () => {
+    for (const tooltip of ['', 'Attributing']) {
+      const host = mount(jobPill({ job: running, tooltip, onOpen: () => {}, onCancel: () => {} }));
+      expect(hasDescription(host)).toBe(false);
+    }
   });
 
   it('emits open and cancel with the job id', () => {

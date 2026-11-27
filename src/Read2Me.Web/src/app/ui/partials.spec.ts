@@ -11,6 +11,7 @@ import {
   spinner,
   statusChip,
 } from './partials';
+import { description, hasDescription } from '../../testing/description';
 
 function mount(template: unknown): HTMLElement {
   const host = document.createElement('div');
@@ -53,6 +54,18 @@ describe('statusChip', () => {
     expect(chip?.querySelector('.r2m-icon')?.textContent).toBe('info');
     expect(chip?.getAttribute('data-tooltip')).toBe('All set');
     expect(chip?.classList.contains('r2m-status-chip--compact')).toBe(true);
+  });
+
+  it('is described by a tooltip that differs from its label, which stays its text', () => {
+    const host = mount(statusChip({ status: 'info', label: 'GPU', tooltip: 'Needs the GPU' }));
+    const chip = host.querySelector('.r2m-status-chip')!;
+    expect(description(chip)).toBe('Needs the GPU');
+    expect(chip.querySelector('.r2m-status-chip__label')?.textContent).toBe('GPU');
+  });
+
+  it('adds no description for a tooltip equal to its label', () => {
+    const host = mount(statusChip({ status: 'info', label: 'GPU', tooltip: 'GPU' }));
+    expect(hasDescription(host)).toBe(false);
   });
 });
 
@@ -241,6 +254,18 @@ describe('countBadge', () => {
     expect(badge?.querySelector('.r2m-count-badge__count')?.textContent).toBe('3');
     expect(badge?.querySelector('.r2m-count-badge__icon')?.textContent).toBe('rate_review');
     expect(badge?.getAttribute('data-tooltip')).toBe('3 to review');
+  });
+
+  it('is described by its tooltip, which says what the count is of', () => {
+    const host = mount(countBadge('review', 3, 'Paragraphs with audio to review'));
+    const badge = host.querySelector('.r2m-count-badge')!;
+    expect(description(badge)).toBe('Paragraphs with audio to review');
+    expect(badge.querySelector('.r2m-count-badge__count')?.textContent).toBe('3');
+  });
+
+  it('adds no description for a tooltip equal to its count', () => {
+    const host = mount(countBadge('review', 3, '3'));
+    expect(hasDescription(host)).toBe(false);
   });
 
   it('renders nothing at zero unless asked to show it', () => {
