@@ -68,12 +68,12 @@ export class VoicesSection extends R2mElement {
         }
         ${gated(
           addBlock,
-          (disabled) =>
+          (gate) =>
             html`<button
               type="button"
               class="r2m-button"
               data-action="add-voice"
-              ?disabled=${disabled}
+              ${gate.attrs()}
               @click=${() => void this.addVoice()}
             >
               ${icon('add')} Add voice

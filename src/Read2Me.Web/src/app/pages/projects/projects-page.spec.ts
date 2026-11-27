@@ -10,6 +10,7 @@ import type { NewProjectDialog } from './new-project-dialog';
 import type { ProjectsPage } from './projects-page';
 import type { SeriesVoiceEditor } from './series-voice-editor';
 import './projects-page';
+import { isOff } from '../../../testing/description';
 
 const book = (folderName: string, title: string, extra: Partial<ProjectSummary> = {}) =>
   ({
@@ -276,9 +277,7 @@ describe('r2m-projects-page', () => {
       "error: Can't delete Dracula: 128 paragraphs · assembling. Stop it in Activity, then delete.",
     ]);
     expect(cards(page)).toEqual(['dracula']);
-    expect(page.querySelector<HTMLButtonElement>('.r2m-project-card__delete')!.disabled).toBe(
-      false,
-    );
+    expect(isOff(page.querySelector<HTMLButtonElement>('.r2m-project-card__delete')!)).toBe(false);
   });
 
   it('cancelling the confirm sends nothing', async () => {
@@ -489,16 +488,16 @@ describe('r2m-projects-page Series view', () => {
       input.dispatchEvent(new Event('input'));
       await page.rendered();
     };
-    expect(save().disabled).toBe(true);
+    expect(isOff(save())).toBe(true);
 
     await typeIn('scarlet', '2');
-    expect(save().disabled).toBe(true);
+    expect(isOff(save())).toBe(true);
     expect(text(page.querySelector('.projects__panel-problem'))).toContain(
       'A Study in Scarlet and The Sign of the Four are both Book 2.',
     );
 
     await typeIn('four', '1');
-    expect(save().disabled).toBe(false);
+    expect(isOff(save()!)).toBe(false);
     api.on('PUT', '/api/series/h/positions', holmes);
     save().click();
     await flush();

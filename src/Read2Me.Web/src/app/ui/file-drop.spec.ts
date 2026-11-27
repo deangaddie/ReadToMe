@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import type { RejectedFile } from './file-drop';
 import './file-drop';
+import { blockedWith } from '../../testing/description';
 
 /** happy-dom has no DataTransfer/DragEvent; a plain Event with a dataTransfer-shaped payload is enough. */
 function drop(el: Element, files: File[]) {
@@ -64,10 +65,7 @@ describe('r2m-file-drop', () => {
     await zone.rendered();
 
     const button = zone.querySelector('button')!;
-    expect(button.disabled).toBe(true);
-    expect(button.closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(
-      'Viewing a past step',
-    );
+    expect(blockedWith(button)).toBe('Viewing a past step');
     expect(zone.querySelector<HTMLInputElement>('input[type=file]')!.disabled).toBe(true);
     drop(zone, [new File(['x'], 'book.epub')]);
     expect(files).toEqual([]);

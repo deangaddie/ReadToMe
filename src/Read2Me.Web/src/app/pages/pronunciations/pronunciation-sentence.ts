@@ -88,13 +88,13 @@ export class PronunciationSentence extends R2mElement {
     );
     return gated(
       block,
-      (disabled) =>
+      (gate) =>
         html`<button
           type="button"
           class="r2m-button r2m-button--text"
           data-action="play-${key}"
           aria-pressed=${view.phase === 'idle' ? 'false' : 'true'}
-          ?disabled=${disabled}
+          ${gate.attrs()}
           @click=${() =>
             this.player.toggle(key, [
               {

@@ -184,13 +184,13 @@ export class PronunciationTry extends R2mElement {
     const mine = view.playing?.key === key;
     return gated(
       withLocal(view.block, extra ?? false),
-      (disabled) =>
+      (gate) =>
         html`<button
           type="button"
           class="r2m-button r2m-button--text pron-try__play"
           data-play=${key}
           aria-pressed=${mine ? 'true' : 'false'}
-          ?disabled=${disabled}
+          ${gate.attrs()}
           @click=${() => this.player.toggle(key, requests())}
         >
           ${
@@ -286,14 +286,13 @@ export class PronunciationTry extends R2mElement {
               <span class="pron-try__spacer"></span>
               ${gated(
                 noOther,
-                (disabled) =>
+                (gate) =>
                   html`<button
                     type="button"
                     class="r2m-icon-button"
                     data-action="swap"
                     aria-label="Swap for another sentence"
-                    data-tooltip=${disabled ? nothing : 'Swap for another sentence'}
-                    ?disabled=${disabled}
+                    ${gate.attrs(gate.blocked ? undefined : 'Swap for another sentence')}
                     @click=${() => this.cards.set(swap(matches, this.cards(), index))}
                   >
                     ${icon('refresh')}
@@ -306,12 +305,12 @@ export class PronunciationTry extends R2mElement {
       <div class="pron-try__more">
         ${gated(
           noOther,
-          (disabled) =>
+          (gate) =>
             html`<button
               type="button"
               class="r2m-button r2m-button--text"
               data-action="other-samples"
-              ?disabled=${disabled}
+              ${gate.attrs()}
               @click=${() => this.cards.set(reshuffle(matches, this.cards()))}
             >
               ${icon('restart_alt')} Other samples

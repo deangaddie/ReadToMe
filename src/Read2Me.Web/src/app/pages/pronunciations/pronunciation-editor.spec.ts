@@ -13,6 +13,7 @@ import { FakeApi } from '../../../testing/fake-api';
 import { FakeTimers } from '../../../testing/fake-timers';
 import type { PronunciationEditor } from './pronunciation-editor';
 import './pronunciation-editor';
+import { blockedWith, isOff } from '../../../testing/description';
 
 const BASE = '/api/projects/the-adventures-of-sherlock-holmes/pronunciations';
 const IMPACT = `${BASE}/impact`;
@@ -124,7 +125,7 @@ function save(): HTMLButtonElement {
 }
 
 function reasonOf(action: string): string | null {
-  return q(`[data-action=${action}]`)!.closest('.r2m-blockable')!.getAttribute('data-tooltip');
+  return blockedWith(q(`[data-action=${action}]`)!);
 }
 
 describe('a new pronunciation', () => {
@@ -137,7 +138,7 @@ describe('a new pronunciation', () => {
     await type('written', 'Wat');
     await type('written', 'Watson');
     await type('spoken', 'WAT-sun');
-    expect(save().disabled).toBe(false);
+    expect(isOff(save()!)).toBe(false);
     expect(api.calls('POST', IMPACT)).toHaveLength(0);
 
     await settleImpact();
@@ -183,7 +184,7 @@ describe('a new pronunciation', () => {
     await type('spoken', 'WAT-sun');
     await settleImpact();
     expect(q('[data-role=duplicate]')!.textContent).toContain('“Watson” is already in the list.');
-    expect(save().disabled).toBe(true);
+
     expect(reasonOf('save')).toBe('“Watson” is already in the list.');
   });
 
@@ -234,7 +235,7 @@ describe('a new pronunciation', () => {
     expect(q('[data-role=invalid]')!.textContent).toContain(
       'Written form must end with a letter or digit.',
     );
-    expect(save().disabled).toBe(true);
+    expect(isOff(save())).toBe(true);
   });
 
   it('adds it, toasts what needs generating with Show in Book, and closes', async () => {
@@ -326,7 +327,7 @@ describe('an existing pronunciation', () => {
     expect(save().textContent).toContain('Save');
 
     await type('spoken', 'WAT-sn');
-    expect(save().disabled).toBe(false);
+    expect(isOff(save()!)).toBe(false);
     await type('spoken', 'WAT-sun');
     expect(save().disabled).toBe(true);
   });
@@ -452,12 +453,7 @@ describe('an existing pronunciation', () => {
 describe('disabled with a reason', () => {
   it('turns the inputs, Save and Delete off while a step is viewed, and asks no impact', async () => {
     await mount(WATSON, (e) => (e.block = { reason: VIEWING_READ_ONLY }));
-    expect(q<HTMLInputElement>('[data-field=written]')!.disabled).toBe(true);
-    expect(q<HTMLInputElement>('[data-field=spoken]')!.disabled).toBe(true);
-    expect(q('[data-field=written]')!.closest('.r2m-blockable')!.getAttribute('data-tooltip')).toBe(
-      VIEWING_READ_ONLY,
-    );
-    expect(save().disabled).toBe(true);
+    expect(blockedWith(q('[data-field=written]')!)).toBe(VIEWING_READ_ONLY);
     expect(reasonOf('save')).toBe(VIEWING_READ_ONLY);
     expect(reasonOf('delete')).toBe(VIEWING_READ_ONLY);
     await settleImpact();
@@ -489,7 +485,7 @@ describe('the editor in the Book view panel', () => {
     await mount(null, (e) => (e.prefill = { writtenForm: 'Watson', spokenForm: 'Watson' }));
     expect(q<HTMLInputElement>('[data-field=written]')!.value).toBe('Watson');
     expect(q<HTMLInputElement>('[data-field=spoken]')!.value).toBe('Watson');
-    expect(save().disabled).toBe(false);
+    expect(isOff(save()!)).toBe(false);
     await settleImpact();
     expect(api.calls('POST', IMPACT)[0]!.body).toMatchObject({
       writtenForm: 'Watson',

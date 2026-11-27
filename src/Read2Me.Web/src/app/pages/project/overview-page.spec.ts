@@ -19,6 +19,7 @@ import type { OverviewPage } from './overview-page';
 import './project-shell';
 import { formatBuildDate } from './project-store';
 import './overview-page';
+import { blockedWith, isOff } from '../../../testing/description';
 
 const BASE = '/api/projects/dracula';
 
@@ -162,30 +163,24 @@ describe('r2m-overview-page', () => {
       [],
       { ...DETAIL, coverImage: 'cover.jpg' },
     );
-    const reason = (el: Element | null) =>
-      el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
 
-    expect(button(page, 'openCast').disabled).toBe(false);
+    expect(isOff(button(page, 'openCast')!)).toBe(false);
     for (const action of ['reread', 'attribute']) {
-      expect(button(page, action).disabled).toBe(true);
-      expect(reason(button(page, action))).toBe(VIEWING_READ_ONLY);
+      expect(blockedWith(button(page, action))).toBe(VIEWING_READ_ONLY);
     }
     const pills = Array.from(page.querySelectorAll<HTMLButtonElement>('[data-checkpoint]'));
     expect(pills.length).toBeGreaterThan(0);
-    expect(pills.every((p) => p.disabled && reason(p) === VIEWING_READ_ONLY)).toBe(true);
+    expect(pills.every((p) => blockedWith(p) === VIEWING_READ_ONLY)).toBe(true);
 
     const details = page.querySelector('r2m-project-details-panel')!;
     expect(details.querySelector('img.details__image')?.getAttribute('src')).toContain('at=s8');
     expect(details.querySelector('r2m-file-drop')?.block).toEqual({ reason: VIEWING_READ_ONLY });
     const remove = details.querySelector<HTMLButtonElement>('.details__remove-cover')!;
-    expect(remove.disabled).toBe(true);
-    expect(reason(remove)).toBe(VIEWING_READ_ONLY);
+    expect(blockedWith(remove)).toBe(VIEWING_READ_ONLY);
     for (const edit of details.querySelectorAll('r2m-inline-edit')) {
       expect(edit.block).toEqual({ reason: VIEWING_READ_ONLY });
     }
-    expect(details.querySelector<HTMLInputElement>('input[name=narratorOnly]')?.disabled).toBe(
-      true,
-    );
+    expect(blockedWith(details.querySelector('input[name=narratorOnly]'))).toBe(VIEWING_READ_ONLY);
   });
 
   it('Remove cover asks a red confirm first (guidance-primitives 14), then DELETEs and refetches', async () => {
@@ -289,10 +284,7 @@ describe('r2m-overview-page', () => {
     await page.rendered();
 
     expect(chip('Speakers')).toContain('Review not confirmed');
-    expect(button(page, 'attribute').disabled).toBe(true);
-    expect(button(page, 'attribute').closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(
-      'Every paragraph has a speaker',
-    );
+    expect(blockedWith(button(page, 'attribute'))).toBe('Every paragraph has a speaker');
     expect(step('Structure').getAttribute('aria-current')).toBe('step');
   });
 

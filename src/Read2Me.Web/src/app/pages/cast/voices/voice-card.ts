@@ -162,14 +162,13 @@ export class VoiceCard extends R2mElement {
                   </span>`
                 : gated(
                     defaultOff,
-                    (disabled) =>
+                    (gate) =>
                       html`<button
                         type="button"
                         class="r2m-icon-button voice-card__star"
                         data-action="set-default"
-                        data-tooltip="Set as default"
                         aria-label="Set as default voice"
-                        ?disabled=${disabled}
+                        ${gate.attrs('Set as default')}
                         @click=${(e: Event) => {
                           this.stop(e);
                           void this.setDefault();
@@ -241,14 +240,13 @@ export class VoiceCard extends R2mElement {
             }
             ${gated(
               off,
-              (disabled) =>
+              (gate) =>
                 html`<button
                   type="button"
                   class="r2m-icon-button voice-card__delete"
-                  data-tooltip="Delete voice"
                   aria-label="Delete voice"
                   data-action="delete-voice"
-                  ?disabled=${disabled}
+                  ${gate.attrs('Delete voice')}
                   @click=${() => void this.deleteVoice()}
                 >
                   ${icon('delete')}
@@ -273,12 +271,12 @@ export class VoiceCard extends R2mElement {
             </label>
             ${gated(
               withLocal(off, !this.descriptionDirty()),
-              (disabled) =>
+              (gate) =>
                 html`<button
                   type="button"
                   class="r2m-button r2m-button--stroked"
                   data-action="save-description"
-                  ?disabled=${disabled}
+                  ${gate.attrs()}
                   @click=${() => void this.saveDescription()}
                 >
                   ${icon('save')} Save description
@@ -288,11 +286,12 @@ export class VoiceCard extends R2mElement {
 
           ${gated(
             off,
-            (disabled) =>
+            (gate) =>
               html`<fieldset
                 class="r2m-segmented voice-card__source"
                 role="radiogroup"
                 aria-label="Voice source"
+                ${gate.hover()}
               >
                 <label data-source="Uploaded">
                   <input
@@ -300,7 +299,7 @@ export class VoiceCard extends R2mElement {
                     name=${`source-${voice.id}`}
                     value="Uploaded"
                     .checked=${live(voice.source === 'Uploaded')}
-                    ?disabled=${disabled}
+                    ${gate.attrs()}
                     @change=${() => void this.switchSource('Uploaded')}
                   />
                   Reference audio
@@ -311,7 +310,7 @@ export class VoiceCard extends R2mElement {
                     name=${`source-${voice.id}`}
                     value="Generated"
                     .checked=${live(voice.source === 'Generated')}
-                    ?disabled=${disabled}
+                    ${gate.attrs()}
                     @change=${() => void this.switchSource('Generated')}
                   />
                   Prompt
@@ -354,12 +353,12 @@ export class VoiceCard extends R2mElement {
               <div class="voice-card__actions">
                 ${gated(
                   withLocal(off, !this.transcriptDirty()),
-                  (disabled) =>
+                  (gate) =>
                     html`<button
                       type="button"
                       class="r2m-button r2m-button--stroked"
                       data-action="save-transcript"
-                      ?disabled=${disabled}
+                      ${gate.attrs()}
                       @click=${() => void this.saveTranscript()}
                     >
                       ${icon('save')} Save
@@ -369,12 +368,12 @@ export class VoiceCard extends R2mElement {
                   voice.audioFileName
                     ? gated(
                         withLocal(off, this.transcribing()),
-                        (disabled) =>
+                        (gate) =>
                           html`<button
                             type="button"
                             class="r2m-button r2m-button--stroked"
                             data-action="transcribe"
-                            ?disabled=${disabled}
+                            ${gate.attrs()}
                             @click=${() => void this.transcribe()}
                           >
                             ${icon('record_voice_over')}
@@ -436,12 +435,12 @@ export class VoiceCard extends R2mElement {
       <div class="voice-card__actions">
         ${gated(
           withLocal(off, !this.promptDirty()),
-          (disabled) =>
+          (gate) =>
             html`<button
               type="button"
               class="r2m-button r2m-button--stroked"
               data-action="save-prompt"
-              ?disabled=${disabled}
+              ${gate.attrs()}
               @click=${() => void this.savePrompt()}
             >
               ${icon('save')} Save prompt
@@ -449,12 +448,12 @@ export class VoiceCard extends R2mElement {
         )}
         ${gated(
           withLocal(off, this.regeneratingPrompt()),
-          (disabled) =>
+          (gate) =>
             html`<button
               type="button"
               class="r2m-button r2m-button--stroked"
               data-action="regenerate-prompt"
-              ?disabled=${disabled}
+              ${gate.attrs()}
               @click=${() => void this.regeneratePrompt()}
             >
               ${icon('auto_fix_high')}
@@ -463,14 +462,14 @@ export class VoiceCard extends R2mElement {
         )}
         ${gated(
           withLocal(off, generating || !this.canGenerate()),
-          (disabled) =>
+          (gate) =>
             html`<button
               type="button"
               class="r2m-button r2m-button--stroked voice-card__generate ${
                 voice.audioFileName ? '' : 'voice-card__generate--primary'
               }"
               data-action="generate-audio"
-              ?disabled=${disabled}
+              ${gate.attrs()}
               @click=${() => void this.generateAudio()}
             >
               ${icon('volume_up')}

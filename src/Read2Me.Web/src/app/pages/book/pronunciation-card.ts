@@ -262,7 +262,12 @@ export class PronunciationCard extends R2mElement {
     this.show(mark);
     void this.rendered().then(() => {
       if (this.#open()?.anchor !== mark) return;
-      this.#panel()?.querySelector<HTMLElement>('button:not([disabled])')?.focus();
+      // The first button that works, else the first that says why it doesn't.
+      const panel = this.#panel();
+      (
+        panel?.querySelector<HTMLElement>('button:not([disabled], [aria-disabled="true"])') ??
+        panel?.querySelector<HTMLElement>('button:not([disabled])')
+      )?.focus();
     });
   };
 
@@ -323,13 +328,13 @@ export class PronunciationCard extends R2mElement {
       <div class="pron-card__actions">
         ${gated(
           view.block,
-          (disabled) =>
+          (gate) =>
             html`<button
               type="button"
               class="r2m-button r2m-button--text"
               data-action="play-sentence"
               aria-pressed=${view.phase === 'idle' ? 'false' : 'true'}
-              ?disabled=${disabled}
+              ${gate.attrs()}
               @click=${() => this.player.toggle(key, [request])}
             >
               ${
@@ -341,14 +346,13 @@ export class PronunciationCard extends R2mElement {
         )}
         ${gated(
           block,
-          (disabled) =>
+          (gate) =>
             html`<button
               type="button"
               class="r2m-icon-button"
               data-action="edit-pronunciation"
               aria-label=${`Edit pronunciation of ${entry.writtenForm}`}
-              data-tooltip=${disabled ? nothing : 'Edit pronunciation'}
-              ?disabled=${disabled}
+              ${gate.attrs(gate.blocked ? undefined : 'Edit pronunciation')}
               @click=${() => this.#edit(open)}
             >
               ${icon('edit')}

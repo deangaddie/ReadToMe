@@ -2,7 +2,7 @@ import { html, nothing } from 'lit-html';
 import { R2mElement, define } from '@app/core/element';
 import { computed, signal } from '@app/core/signals';
 import type { IconName } from './icons';
-import { icon } from './partials';
+import { type Gate, icon } from './partials';
 
 export type AbSide = 'a' | 'b';
 
@@ -24,7 +24,8 @@ export function formatClock(seconds: number | null): string {
  * Audio player (design §7): `<audio>` wrapper with play/pause, scrub and duration. `cacheKey`
  * busts the browser cache for files regenerated in place. Set `srcB` for the A/B variant: a
  * two-segment toggle swaps sources while keeping position and play state. Emits
- * `playback-ended` and `ab` (the side picked).
+ * `playback-ended` and `ab` (the side picked). Behind an Edit gate (`gate`, from `gated`) the
+ * gate decides whether the play button is off while blocked.
  */
 export class AudioPlayer extends R2mElement {
   #src = signal<string | null>(null);
@@ -49,6 +50,14 @@ export class AudioPlayer extends R2mElement {
   }
   set label(value: string | undefined) {
     this.#label.set(value);
+  }
+
+  #gate = signal<Gate | undefined>(undefined);
+  get gate() {
+    return this.#gate();
+  }
+  set gate(value: Gate | undefined) {
+    this.#gate.set(value);
   }
 
   #compact = signal(false);
@@ -143,6 +152,7 @@ export class AudioPlayer extends R2mElement {
     const playing = this.playing();
     const duration = this.duration();
     const label = this.#label();
+    const gate = this.#gate();
     const glyph: IconName = error ? 'warning' : playing ? 'pause' : 'play_arrow';
     return html`
       <audio
@@ -159,7 +169,8 @@ export class AudioPlayer extends R2mElement {
       <button
         type="button"
         class="r2m-audio-player__toggle"
-        ?disabled=${!src || error}
+        ${gate?.attrs()}
+        ?disabled=${gate?.blocked ? gate.reason === null : !src || error}
         aria-label=${playing ? 'Pause' : 'Play'}
         @click=${() => this.toggle()}
       >

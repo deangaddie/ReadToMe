@@ -11,6 +11,7 @@ import { CastStore } from './cast-store';
 import { linkedNarratorDeleteMessage, seriesChipLabel } from './character-detail';
 import type { MergeDialog } from './merge-dialog';
 import './character-detail';
+import { blockedWith, isOff } from '../../../testing/description';
 
 const BASE = '/api/projects/dracula';
 const COMMANDS = `${BASE}/commands`;
@@ -98,7 +99,7 @@ describe('r2m-character-detail', () => {
     expect(detail.querySelector('r2m-voices-section')?.character).toEqual(ALICE);
     expect(detail.querySelector('r2m-voices-section')?.textContent).toContain('No voices yet');
     expect(detail.querySelector('r2m-voice-rules-section')?.character).toEqual(ALICE);
-    expect(button(detail, 'merge').disabled).toBe(false);
+    expect(isOff(button(detail, 'merge')!)).toBe(false);
 
     document.body.replaceChildren();
     const narrator = await mount(row('Narrator'));
@@ -111,8 +112,6 @@ describe('r2m-character-detail', () => {
   it('viewing a History step, rename, Merge, Delete and the aliases are off with the reason (ticket 32)', async () => {
     use(StepView).view('dracula', 's8');
     const detail = await mount(ALICE);
-    const reason = (el: Element | null) =>
-      el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
 
     expect(detail.querySelector('r2m-inline-edit')?.block).toEqual({ reason: VIEWING_READ_ONLY });
     const removeAlias = detail.querySelector<HTMLButtonElement>('.character-detail__alias-remove')!;
@@ -122,8 +121,7 @@ describe('r2m-character-detail', () => {
       button(detail, 'add-alias'),
       removeAlias,
     ]) {
-      expect(control.disabled).toBe(true);
-      expect(reason(control)).toBe(VIEWING_READ_ONLY);
+      expect(blockedWith(control)).toBe(VIEWING_READ_ONLY);
     }
     // The lines still open the reader.
     expect(detail.querySelector('r2m-character-lines')?.textContent).toContain('Hello there.');

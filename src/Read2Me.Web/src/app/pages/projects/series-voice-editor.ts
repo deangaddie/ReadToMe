@@ -380,14 +380,13 @@ export class SeriesVoiceEditor extends R2mElement {
           </button>
           ${gated(
             withLocal(withLocal(null, busy), note ?? false),
-            (disabled) =>
+            (gate) =>
               html`<button
                 type="button"
                 class="r2m-icon-button"
                 data-action="delete"
                 aria-label=${`Delete ${voice.name}`}
-                data-tooltip=${note ? nothing : 'Delete'}
-                ?disabled=${disabled}
+                ${gate.attrs('Delete')}
                 @click=${() => void this.deleteVoice(voice)}
               >
                 ${icon('delete')}

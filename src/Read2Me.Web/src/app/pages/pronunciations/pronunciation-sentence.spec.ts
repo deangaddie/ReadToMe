@@ -9,6 +9,7 @@ import { ToastService } from '@app/ui/toast';
 import { FakeApi } from '../../../testing/fake-api';
 import type { PronunciationSentence } from './pronunciation-sentence';
 import './pronunciation-sentence';
+import { blockedWith } from '../../../testing/description';
 
 const TRY = '/api/projects/the-adventures-of-sherlock-holmes/pronunciations/try';
 
@@ -113,9 +114,6 @@ describe('the try-out of the sentence the editor was opened from', () => {
 
   it('is off with the viewing reason while a step is viewed', async () => {
     await mount({ reason: VIEWING_READ_ONLY });
-    expect(button('play-spoken').disabled).toBe(true);
-    expect(button('play-spoken').closest('.r2m-blockable')!.getAttribute('data-tooltip')).toBe(
-      VIEWING_READ_ONLY,
-    );
+    expect(blockedWith(button('play-spoken'))).toBe(VIEWING_READ_ONLY);
   });
 });

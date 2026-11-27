@@ -235,12 +235,12 @@ export function seriesPanel(series: SeriesView, options: SeriesPanelOptions) {
                 ${gated(
                   // A save in flight blocks without a reason; otherwise Save's own reason, if any.
                   withLocal(null, editing.saving || (editing.blocked ?? false)),
-                  (disabled) =>
+                  (gate) =>
                     html`<button
                       type="button"
                       class="r2m-button r2m-button--filled"
                       data-action="save-numbers"
-                      ?disabled=${disabled}
+                      ${gate.attrs()}
                       @click=${options.onSave}
                     >
                       ${icon('save')} Save numbers

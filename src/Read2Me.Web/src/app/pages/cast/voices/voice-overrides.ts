@@ -114,12 +114,12 @@ export class VoiceOverrideEditor extends R2mElement {
       ></r2m-settings-form>
       ${gated(
         withLocal(block, this.#disabled() || !this.dirty() || !this.valid()),
-        (disabled) =>
+        (gate) =>
           html`<button
             type="button"
             class="r2m-button r2m-button--stroked"
             data-action="save-override"
-            ?disabled=${disabled}
+            ${gate.attrs()}
             @click=${() => this.emit<OverrideSave>('save', { area: this.#area(), json: this.json() })}
           >
             ${icon('save')} Save

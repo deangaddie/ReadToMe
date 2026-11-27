@@ -461,13 +461,13 @@ export class BookPage extends R2mElement {
     const open = this.pronunciations.open();
     return gated(
       this.project.block(),
-      (disabled) =>
+      (gate) =>
         html`<button
           type="button"
           class="r2m-button book__pron-toggle ${open ? 'book__pron-toggle--on' : ''}"
           data-action="toggle-pronunciations"
           aria-pressed=${open ? 'true' : 'false'}
-          ?disabled=${disabled}
+          ${gate.attrs()}
           @click=${() => this.pronunciations.toggle()}
         >
           ${icon('text_to_speech')} Pronunciations
@@ -500,12 +500,12 @@ export class BookPage extends R2mElement {
       >
       ${gated(
         attribute,
-        (disabled) =>
+        (gate) =>
           html`<button
             type="button"
             class="r2m-button r2m-button--filled"
             data-action="attribute-selection"
-            ?disabled=${disabled}
+            ${gate.attrs()}
             @click=${() => void this.workflow.attribute()}
           >
             ${icon('auto_awesome')} Attribute
@@ -514,14 +514,14 @@ export class BookPage extends R2mElement {
       <span class="book__bulk">
         ${gated(
           bulkAssign,
-          (disabled) =>
+          (gate) =>
             html`<button
               type="button"
               class="r2m-button r2m-button--stroked"
               data-action="bulk-assign"
               popovertarget=${BULK_MENU_ID}
               aria-haspopup="listbox"
-              ?disabled=${disabled}
+              ${gate.attrs()}
             >
               ${icon('groups')} Bulk assign speaker ${icon('expand_more')}
             </button>`,
@@ -572,12 +572,12 @@ export class BookPage extends R2mElement {
       >
       ${gated(
         generate,
-        (disabled) =>
+        (gate) =>
           html`<button
             type="button"
             class="r2m-button r2m-button--filled"
             data-action="generate-audio-selection"
-            ?disabled=${disabled}
+            ${gate.attrs()}
             @click=${() => void this.workflow.generate()}
           >
             ${icon('graphic_eq')} Generate audio
@@ -610,7 +610,7 @@ export class BookPage extends R2mElement {
     const block = withLocal(this.editor.block(), !this.store.overview());
     return html`${gated(
         block,
-        (disabled) =>
+        (gate) =>
           html`<button
             type="button"
             class="r2m-icon-button"
@@ -618,7 +618,7 @@ export class BookPage extends R2mElement {
             aria-haspopup="menu"
             data-testid="book-actions"
             popovertarget=${ACTIONS_MENU_ID}
-            ?disabled=${disabled}
+            ${gate.attrs()}
           >
             ${icon('more_vert')}
           </button>`,

@@ -175,13 +175,13 @@ export class SetupCheckPage extends R2mElement {
     );
     return gated(
       block,
-      (disabled) =>
+      (gate) =>
         html`<button
           type="button"
           class="r2m-button r2m-button--stroked"
           data-action="rerun"
           aria-label=${`Re-run ${row.name}`}
-          ?disabled=${disabled}
+          ${gate.attrs()}
           @click=${() => void this.store.rerun(row)}
         >
           ${icon('refresh')} Re-run

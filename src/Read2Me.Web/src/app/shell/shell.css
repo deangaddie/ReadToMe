@@ -101,7 +101,7 @@
     background: var(--_bg);
     white-space: nowrap;
 
-    &:hover:not(:disabled) {
+    &:hover:not(:disabled, [aria-disabled='true']) {
       background: color-mix(in srgb, var(--_fg) 12%, var(--_bg));
     }
   }

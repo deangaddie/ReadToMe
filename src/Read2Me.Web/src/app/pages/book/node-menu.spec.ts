@@ -10,6 +10,7 @@ import { BookStore } from './book-store';
 import { NODE_MENU_OPEN, type NodeMenu, type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
 import type { NodeMenuTarget } from './node-menu-entries';
 import './node-menu';
+import { isOff } from '../../../testing/description';
 
 /**
  * Ported from the Angular TestBed spec, case for case, plus the native-only behaviour: one shared
@@ -187,7 +188,7 @@ describe('r2m-node-menu', () => {
     expect((await mount(target, true)).disabled).toBe(true);
 
     const trigger = await mount(target);
-    expect(trigger.disabled).toBe(false);
+    expect(isOff(trigger!)).toBe(false);
     const block: Block = { reason: null };
     const detail: NodeMenuRequest = { anchor: trigger, target, block };
     trigger.dispatchEvent(new CustomEvent(NODE_MENU_OPEN, { detail, bubbles: true }));

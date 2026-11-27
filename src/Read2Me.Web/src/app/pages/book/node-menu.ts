@@ -70,14 +70,14 @@ export function nodeMenuTrigger(
   };
   return gated(
     block,
-    (disabled) =>
+    (gate) =>
       html`<button
         type="button"
         class="r2m-icon-button r2m-node-menu__trigger"
         aria-label=${menuLabel(target)}
         aria-haspopup="menu"
         tabindex=${options.tabIndex ?? nothing}
-        ?disabled=${disabled}
+        ${gate.attrs()}
         @click=${open}
       >
         ${icon('more_vert')}

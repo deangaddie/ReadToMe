@@ -98,12 +98,12 @@ export class CharacterDetail extends R2mElement {
                 ></r2m-inline-edit>
                 ${gated(
                   withLocal(off, this.mergeTargets() === 0),
-                  (disabled) =>
+                  (gate) =>
                     html`<button
                       type="button"
                       class="r2m-button r2m-button--stroked"
                       data-action="merge"
-                      ?disabled=${disabled}
+                      ${gate.attrs()}
                       @click=${() => void this.merge()}
                     >
                       ${icon('merge')} Merge
@@ -111,12 +111,12 @@ export class CharacterDetail extends R2mElement {
                 )}
                 ${gated(
                   off,
-                  (disabled) =>
+                  (gate) =>
                     html`<button
                       type="button"
                       class="r2m-button r2m-button--stroked character-detail__delete"
                       data-action="delete"
-                      ?disabled=${disabled}
+                      ${gate.attrs()}
                       @click=${() => void this.deleteCharacter()}
                     >
                       ${icon('delete')} Delete
@@ -169,12 +169,12 @@ export class CharacterDetail extends R2mElement {
               ${alias.name}
               ${gated(
                 block,
-                (disabled) =>
+                (gate) =>
                   html`<button
                     type="button"
                     class="character-detail__alias-remove"
                     aria-label=${`Remove alias ${alias.name}`}
-                    ?disabled=${disabled}
+                    ${gate.attrs()}
                     @click=${() => void this.removeAlias(alias.id)}
                   >
                     ${icon('close')}
@@ -194,12 +194,12 @@ export class CharacterDetail extends R2mElement {
               />`
             : gated(
                 block,
-                (disabled) =>
+                (gate) =>
                   html`<button
                     type="button"
                     class="r2m-button"
                     data-action="add-alias"
-                    ?disabled=${disabled}
+                    ${gate.attrs()}
                     @click=${() => this.beginAlias()}
                   >
                     ${icon('add')} Add alias

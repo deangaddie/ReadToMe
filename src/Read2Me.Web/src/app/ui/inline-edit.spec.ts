@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import './inline-edit';
+import { blockedWith } from '../../testing/description';
 
 afterEach(() => document.body.replaceChildren());
 
@@ -42,10 +43,7 @@ describe('r2m-inline-edit', () => {
     await el.rendered();
 
     expect(display()?.textContent).toContain('Chapter 1');
-    expect(display()!.disabled).toBe(true);
-    expect(display()!.closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(
-      'Viewing a past step',
-    );
+    expect(blockedWith(display()!)).toBe('Viewing a past step');
     el.begin();
     await el.rendered();
     expect(field()).toBeNull();

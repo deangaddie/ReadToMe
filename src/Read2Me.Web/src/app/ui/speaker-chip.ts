@@ -3,7 +3,7 @@ import { R2mElement, define } from '@app/core/element';
 import { computed, signal } from '@app/core/signals';
 import { speakerHue } from '@app/shared/speaker-color';
 import type { IconName } from './icons';
-import { icon } from './partials';
+import { type Gate, icon } from './partials';
 import type { SpeakerMenu, SpeakerRosterEntry } from './speaker-menu';
 import './speaker-menu';
 
@@ -16,7 +16,9 @@ let nextId = 0;
  * a button that opens `r2m-speaker-menu` in a popover — the browser handles light dismiss, Escape
  * and the top layer; CSS anchor positioning places it under the chip (the button is the popover's
  * implicit anchor). The menu is rendered only while open, so every open starts with an empty
- * search. The menu's `pick` / `clear` / `create` events bubble out through the chip.
+ * search. The menu's `pick` / `clear` / `create` events bubble out through the chip. Behind an
+ * Edit gate (`gate`, from `gated`) a blocked chip offers no menu; with a Blocked reason it stays a
+ * button, which says why.
  */
 export class SpeakerChip extends R2mElement {
   #name = signal('');
@@ -51,6 +53,14 @@ export class SpeakerChip extends R2mElement {
     this.#roster.set(value);
   }
 
+  #gate = signal<Gate | undefined>(undefined);
+  get gate() {
+    return this.#gate();
+  }
+  set gate(value: Gate | undefined) {
+    this.#gate.set(value);
+  }
+
   #compact = signal(false);
   get compact() {
     return this.#compact();
@@ -61,6 +71,8 @@ export class SpeakerChip extends R2mElement {
 
   readonly #menuId = `r2m-speaker-chip-menu-${nextId++}`;
   readonly #open = signal(false);
+  /** The roster the chip offers: none while its gate is blocked. */
+  readonly #offered = computed(() => (this.#gate()?.blocked ? undefined : this.#roster()));
   readonly #label = computed(() => {
     const name = this.#name();
     switch (this.#state()) {
@@ -81,7 +93,7 @@ export class SpeakerChip extends R2mElement {
       for (const s of ['named', 'unknown', 'mixed', 'narration', 'narrator-linked'])
         this.classList.toggle(`r2m-speaker-chip--${s}`, s === this.#state());
       this.classList.toggle('r2m-speaker-chip--compact', this.#compact());
-      this.classList.toggle('r2m-speaker-chip--interactive', !!this.#roster());
+      this.classList.toggle('r2m-speaker-chip--interactive', !!this.#offered());
       this.style.setProperty(
         '--r2m-speaker-hue',
         String(speakerHue(this.#characterId() ?? this.#name() ?? '?')),
@@ -96,34 +108,43 @@ export class SpeakerChip extends R2mElement {
   }
 
   protected template() {
-    const roster = this.#roster();
+    const roster = this.#offered();
     const content = this.#content();
-    if (!roster) return html`<span class="r2m-speaker-chip__body">${content}</span>`;
+    const gate = this.#gate();
+    if (!roster && !gate?.reason) {
+      return html`<span class="r2m-speaker-chip__body">${content}</span>`;
+    }
+    // One button open or blocked with a reason, so a gate that shuts under the focus keeps it.
     return html`
       <button
         type="button"
         class="r2m-speaker-chip__body"
-        popovertarget=${this.#menuId}
-        aria-haspopup="listbox"
+        popovertarget=${roster ? this.#menuId : nothing}
+        aria-haspopup=${roster ? 'listbox' : nothing}
+        ${gate?.attrs()}
       >
         ${content}
       </button>
-      <div
-        id=${this.#menuId}
-        popover
-        class="r2m-menu r2m-speaker-chip__menu"
-        @toggle=${this.#onToggle}
-      >
-        ${
-          this.#open()
-            ? html`<r2m-speaker-menu
-                .roster=${roster}
-                .selectedId=${this.#characterId()}
-              ></r2m-speaker-menu>`
-            : nothing
-        }
-      </div>
+      ${roster ? this.#menu(roster) : nothing}
     `;
+  }
+
+  #menu(roster: readonly SpeakerRosterEntry[]) {
+    return html`<div
+      id=${this.#menuId}
+      popover
+      class="r2m-menu r2m-speaker-chip__menu"
+      @toggle=${this.#onToggle}
+    >
+      ${
+        this.#open()
+          ? html`<r2m-speaker-menu
+              .roster=${roster}
+              .selectedId=${this.#characterId()}
+            ></r2m-speaker-menu>`
+          : nothing
+      }
+    </div>`;
   }
 
   #onToggle = (e: ToggleEvent): void => {

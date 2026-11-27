@@ -29,6 +29,7 @@ import { SelectionWorkflow } from './selection-workflow';
 import { SpeakerAssigner } from './speaker-assigner';
 import '../project/project-shell';
 import './book-page';
+import { blockedWith, isOff } from '../../../testing/description';
 
 const BASE = '/api/projects/dracula';
 
@@ -537,19 +538,19 @@ describe('r2m-book-page', () => {
       await page.rendered();
       expect(treeTrigger(page, 'c1').disabled).toBe(true);
       expect(headingTrigger(page, 'c1').disabled).toBe(true);
-      expect(headingTrigger(page, 'c2').disabled).toBe(false);
+      expect(isOff(headingTrigger(page, 'c2')!)).toBe(false);
     });
 
     it('is disabled while the editor is locked', async () => {
       const { page, store } = await start('projects/dracula/book');
       await page.rendered();
-      expect(headingTrigger(page, 'c1').disabled).toBe(false);
+      expect(isOff(headingTrigger(page, 'c1')!)).toBe(false);
       // A failed read leaves the view stale, which locks the editor.
       api.on('GET', `${BASE}/nodes/Part/p1/children`, () => problem(500, 'db locked'));
       await store.refresh();
       await page.rendered();
       expect(store.stale()).toContain('db locked');
-      expect(headingTrigger(page, 'c1').disabled).toBe(true);
+      expect(blockedWith(headingTrigger(page, 'c1'))).toBe(STALE_READ_ONLY);
     });
 
     it('Edit title starts from the stored title and both panes show the new one after the save', async () => {
@@ -684,16 +685,16 @@ describe('r2m-book-page', () => {
       const { page, store } = await startNested('projects/dracula/book');
       expect(treeTrigger(page, 'pa').disabled).toBe(true);
       expect(headingTrigger(page, 'pa').disabled).toBe(true);
-      expect(headingTrigger(page, 'pb').disabled).toBe(false);
-      expect(headingTrigger(page, 'v1').disabled).toBe(false);
+      expect(isOff(headingTrigger(page, 'pb')!)).toBe(false);
+      expect(isOff(headingTrigger(page, 'v1')!)).toBe(false);
 
       // A failed read leaves the view stale, which locks the editor.
       api.on('GET', `${BASE}/nodes/Part/pb/children`, () => problem(500, 'db locked'));
       await store.refresh();
       await page.rendered();
       expect(store.stale()).toContain('db locked');
-      expect(headingTrigger(page, 'v1').disabled).toBe(true);
-      expect(headingTrigger(page, 'pb').disabled).toBe(true);
+      expect(blockedWith(headingTrigger(page, 'v1'))).toBe(STALE_READ_ONLY);
+      expect(blockedWith(headingTrigger(page, 'pb'))).toBe(STALE_READ_ONLY);
     });
 
     it.each([
@@ -931,7 +932,7 @@ describe('r2m-book-page', () => {
       await page.rendered();
 
       const bulk = page.querySelector<HTMLButtonElement>('[data-action=bulk-assign]')!;
-      expect(bulk.disabled).toBe(false);
+      expect(isOff(bulk!)).toBe(false);
       // happy-dom has no popover: the menu opens on the `toggle` event the browser would fire.
       const menu = page.querySelector('.book__bulk-menu')!;
       menu.dispatchEvent(Object.assign(new Event('toggle'), { newState: 'open' }));
@@ -942,10 +943,8 @@ describe('r2m-book-page', () => {
 
       live.queue.set({ attribution: { isBusy: true } } as unknown as QueueMessage);
       await page.rendered();
-      // A reason wraps the button, so it is a new element; the wording is selection-bar-gates.spec's.
-      const waiting = page.querySelector<HTMLButtonElement>('[data-action=bulk-assign]')!;
-      expect(waiting.disabled).toBe(true);
-      expect(waiting.closest('.r2m-blockable')).not.toBeNull();
+      // The same button, off with a reason; the wording is selection-bar-gates.spec's.
+      expect(blockedWith(bulk)).not.toBeNull();
     });
 
     it('Audio mode swaps the paragraph checkboxes and bar for the items; the paragraph selection is kept aside', async () => {
@@ -1047,24 +1046,19 @@ describe('r2m-book-page', () => {
   });
 
   describe('viewing a History step (ticket 32)', () => {
-    const reason = (el: Element | null) =>
-      el?.closest('.r2m-blockable')?.getAttribute('data-tooltip') ?? null;
-
     it('reads at the step; the tabs and tree work, every edit control is off with the reason', async () => {
       use(StepView).view('dracula', 's8');
       const { page, store } = await start('projects/dracula/book');
       expect(api.requests.find((r) => r.path === `${BASE}/book`)?.search).toBe('?at=s8');
 
       const actions = page.querySelector<HTMLButtonElement>('[data-testid=book-actions]')!;
-      expect(actions.disabled).toBe(true);
-      expect(reason(actions)).toBe(VIEWING_READ_ONLY);
+      expect(blockedWith(actions)).toBe(VIEWING_READ_ONLY);
       const triggers = Array.from(
         page.querySelectorAll<HTMLButtonElement>('.r2m-node-menu__trigger'),
       );
       expect(triggers.length).toBeGreaterThan(0);
       for (const trigger of triggers) {
-        expect(trigger.disabled).toBe(true);
-        expect(reason(trigger)).toBe(VIEWING_READ_ONLY);
+        expect(blockedWith(trigger)).toBe(VIEWING_READ_ONLY);
       }
 
       // A tree click still opens a chapter.
@@ -1088,16 +1082,16 @@ describe('r2m-book-page', () => {
       const current = () => document.querySelector<BookPage>('r2m-book-page')!;
       const actions = () =>
         current().querySelector<HTMLButtonElement>('[data-testid=book-actions]')!;
-      expect(actions().disabled).toBe(true);
+      expect(blockedWith(actions())).toBe(VIEWING_READ_ONLY);
 
       use(StepView).clear('dracula');
       for (let i = 0; i < 4; i++) await settle();
       await current().rendered();
 
-      expect(actions().disabled).toBe(false);
-      expect(reason(actions())).toBeNull();
+      expect(isOff(actions()!)).toBe(false);
+      expect(blockedWith(actions())).toBeNull();
       const trigger = current().querySelector<HTMLButtonElement>('.r2m-node-menu__trigger')!;
-      expect(trigger.disabled).toBe(false);
+      expect(isOff(trigger!)).toBe(false);
     });
 
     it('the selection bar keeps Clear but Attribute is off', async () => {
@@ -1111,8 +1105,8 @@ describe('r2m-book-page', () => {
       await page.rendered();
 
       const attribute = page.querySelector<HTMLButtonElement>('[data-action=attribute-selection]')!;
-      expect(attribute.disabled).toBe(true);
-      expect(page.querySelector<HTMLButtonElement>('[data-action=clear-selection]')!.disabled).toBe(
+      expect(blockedWith(attribute)).toBe(VIEWING_READ_ONLY);
+      expect(isOff(page.querySelector<HTMLButtonElement>('[data-action=clear-selection]')!)).toBe(
         false,
       );
     });
@@ -1130,8 +1124,8 @@ describe('r2m-book-page', () => {
       const generate = page.querySelector<HTMLButtonElement>(
         '[data-action=generate-audio-selection]',
       )!;
-      expect(generate.disabled).toBe(true);
-      expect(page.querySelector<HTMLButtonElement>('[data-action=clear-selection]')!.disabled).toBe(
+      expect(blockedWith(generate)).toBe(VIEWING_READ_ONLY);
+      expect(isOff(page.querySelector<HTMLButtonElement>('[data-action=clear-selection]')!)).toBe(
         false,
       );
     });
@@ -1147,10 +1141,9 @@ describe('r2m-book-page', () => {
       expect(store.stale()).toContain('db locked');
 
       const actions = page.querySelector<HTMLButtonElement>('[data-testid=book-actions]')!;
-      expect(actions.disabled).toBe(true);
-      expect(actions.closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(STALE_READ_ONLY);
+      expect(blockedWith(actions)).toBe(STALE_READ_ONLY);
       const toggle = page.querySelector<HTMLButtonElement>('[data-action=toggle-pronunciations]')!;
-      expect(toggle.disabled).toBe(false);
+      expect(isOff(toggle!)).toBe(false);
     });
   });
 
@@ -1293,7 +1286,7 @@ describe('r2m-book-page', () => {
       overview.resolve(OVERVIEW);
       for (let i = 0; i < 4; i++) await settle();
       await page.rendered();
-      expect(button.disabled).toBe(false);
+      expect(isOff(button!)).toBe(false);
     });
 
     it('Add pauses confirms with the chapter count, then posts its command through the editor', async () => {

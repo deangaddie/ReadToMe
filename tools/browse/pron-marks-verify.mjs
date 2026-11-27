@@ -26,7 +26,7 @@ try {
   await card.waitFor({ state: 'visible' });
   log('card', JSON.stringify(await card.innerText()), 'popover-open', await card.evaluate((e) => e.matches(':popover-open')));
   const play = card.locator('[data-action=play-sentence]');
-  log('play disabled', await play.isDisabled(), 'reason', await play.evaluate((b) => b.closest('.r2m-blockable')?.dataset.tooltip ?? null));
+  log('play disabled', await play.isDisabled(), 'reason', await play.evaluate((b) => b.getAttribute('aria-disabled') === 'true' ? b.dataset.tooltip : null));
   await page.screenshot({ path: 'pron-marks-card.png' });
 
   // A save elsewhere: the open view gains a mark.

@@ -14,6 +14,7 @@ import { ToastService } from '@app/ui/toast';
 import { FakeApi } from '../../../testing/fake-api';
 import type { PronunciationTry } from './pronunciation-try';
 import './pronunciation-try';
+import { blockedWith } from '../../../testing/description';
 
 const BASE = '/api/projects/the-adventures-of-sherlock-holmes';
 const TRY = `${BASE}/pronunciations/try`;
@@ -104,8 +105,7 @@ async function settle() {
 
 const cards = () => [...el.querySelectorAll<HTMLElement>('.pron-try__card')];
 const play = (key: string) => el.querySelector<HTMLButtonElement>(`[data-play="${key}"]`)!;
-const reasonOf = (button: HTMLElement) =>
-  button.closest('.r2m-blockable')!.getAttribute('data-tooltip');
+const reasonOf = (button: HTMLElement) => blockedWith(button);
 
 describe('Try it', () => {
   it('shows 3 cards with chapter · speaker · audio and the spoken form marked', async () => {
@@ -221,13 +221,11 @@ describe('Try it', () => {
     } as QueueMessage);
     await settle();
     for (const key of ['all', 'i0:4:3|spoken', 'i0:4:3|written']) {
-      expect(play(key).disabled).toBe(true);
       expect(reasonOf(play(key))).toBe("Can't play while Attribution is running: it has the GPU");
     }
 
     el.remove();
     await mount([match(0)], { reason: VIEWING_READ_ONLY });
-    expect(play('i0:4:3|written').disabled).toBe(true);
     expect(reasonOf(play('i0:4:3|written'))).toBe(VIEWING_READ_ONLY);
   });
 

@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import type { Block } from '@app/api';
+import { html, nothing, render } from 'lit-html';
 import './audio-player';
 import { type AbSide, type AudioPlayer, formatClock } from './audio-player';
+import { gated } from './partials';
+import { blockedWith } from '../../testing/description';
 
 /** Ported from the Angular TestBed spec; happy-dom's media element plays nothing, so play/pause are stubbed. */
 const proto = HTMLMediaElement.prototype as unknown as {
@@ -45,6 +49,76 @@ function setDuration(audio: HTMLAudioElement, seconds: number) {
 const text = (el: Element, selector: string) => el.querySelector(selector)?.textContent?.trim();
 
 describe('r2m-audio-player', () => {
+  it('behind an Edit gate with a reason, keeps its play button focusable and says why', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const draw = async (block: Block | null) => {
+      render(
+        gated(
+          block,
+          (gate) =>
+            html`<r2m-audio-player
+              .src=${gate.blocked ? null : '/workspace/dracula/audio/d.wav'}
+              .gate=${gate}
+            ></r2m-audio-player>`,
+        ),
+        host,
+      );
+      await host.querySelector('r2m-audio-player')!.rendered();
+    };
+    const button = () => host.querySelector<HTMLButtonElement>('.r2m-audio-player__toggle')!;
+
+    await draw({ reason: "Item audio isn't kept in History" });
+    const first = button();
+    expect(blockedWith(first)).toBe("Item audio isn't kept in History");
+    expect(first.disabled).toBe(false);
+    expect(first.getAttribute('aria-label')).toBe('Play');
+    first.click();
+    expect(played).toBe(0);
+
+    await draw({ reason: null });
+    expect([button().disabled, blockedWith(button())]).toEqual([true, null]);
+
+    await draw(null);
+    expect(button()).toBe(first);
+    expect([button().disabled, blockedWith(button())]).toEqual([false, null]);
+    button().click();
+    expect(played).toBe(1);
+  });
+
+  it('is plain disabled from its first render when blocked without a reason', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    for (const src of ['/workspace/dracula/audio/d.wav', null]) {
+      document.body.replaceChildren(host);
+      render(
+        gated(
+          { reason: null },
+          (gate) => html`<r2m-audio-player .src=${src} .gate=${gate}></r2m-audio-player>`,
+        ),
+        host,
+      );
+      await host.querySelector('r2m-audio-player')!.rendered();
+      expect(host.querySelector<HTMLButtonElement>('.r2m-audio-player__toggle')!.disabled).toBe(
+        true,
+      );
+      render(nothing, host);
+    }
+  });
+
+  it('is off without a source once its gate is open', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    for (const block of [{ reason: 'Not yet' }, null]) {
+      render(
+        gated(block, (gate) => html`<r2m-audio-player .gate=${gate}></r2m-audio-player>`),
+        host,
+      );
+      await host.querySelector('r2m-audio-player')!.rendered();
+    }
+    expect(host.querySelector<HTMLButtonElement>('.r2m-audio-player__toggle')!.disabled).toBe(true);
+  });
+
   it('formats the clock', () => {
     expect(formatClock(null)).toBe('–:––');
     expect(formatClock(0)).toBe('0:00');

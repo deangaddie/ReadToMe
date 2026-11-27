@@ -220,12 +220,12 @@ export class ExportPage extends R2mElement {
       <div class="export__actions">
         ${gated(
           withLocal(this.store.block(), !this.canAssemble()),
-          (disabled) =>
+          (gate) =>
             html`<button
               type="button"
               class="r2m-button r2m-button--filled"
               data-action="assemble"
-              ?disabled=${disabled}
+              ${gate.attrs()}
               @click=${() => void this.assemble()}
             >
               ${this.starting() ? spinner(18) : icon('library_music')}
@@ -377,13 +377,13 @@ export class ExportPage extends R2mElement {
       </a>
       ${gated(
         this.store.block(),
-        (disabled) =>
+        (gate) =>
           html`<button
             type="button"
             class="r2m-icon-button"
             data-action="delete-output"
             aria-label=${`Delete ${output.fileName}`}
-            ?disabled=${disabled}
+            ${gate.attrs()}
             @click=${() => void this.deleteOutput(output)}
           >
             ${icon('delete')}

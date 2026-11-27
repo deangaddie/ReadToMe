@@ -1,7 +1,8 @@
-import type { Block } from '@app/api';
-import { type TemplateResult, html, nothing } from 'lit-html';
+import { html, nothing } from 'lit-html';
 import type { IconName } from './icons';
 import { withTip } from './tooltip';
+
+export { type Gate, gated } from './gate';
 
 /**
  * Presentational partials: stateless markup is a function returning a template, not an element.
@@ -99,30 +100,6 @@ export function emptyState(
         : nothing
     }
   </div>`;
-}
-
-/**
- * Renders a control behind its **Edit gate** (context/web.md). `control` is handed `disabled`,
- * which is its only source of `?disabled`: OR nothing into it, fold the control's own conditions
- * into `block` with `withLocal` instead. While the gate has a **Blocked reason** the control is
- * wrapped in a `data-tooltip` span that takes focus, since a disabled button cannot
- * (`ui/tooltip.ts` shows on `focusin`, so a tap shows it too). Open, or blocked without a reason
- * (a momentary busy), it renders bare. A control kept out of the tab order (a tree node's trigger,
- * reached by the tree's own keys) passes `tabbable: false` so its wrapper stays out too.
- */
-export function gated<T>(
-  block: Block | null,
-  control: (disabled: boolean) => T,
-  { tabbable = true }: { tabbable?: boolean } = {},
-): T | TemplateResult {
-  const rendered = control(block !== null);
-  if (block === null || block.reason === null) return rendered;
-  return html`<span
-    class="r2m-blockable"
-    data-tooltip=${block.reason}
-    tabindex=${tabbable ? '0' : nothing}
-    >${rendered}</span
-  >`;
 }
 
 export interface Callout {

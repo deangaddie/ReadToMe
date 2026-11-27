@@ -7,6 +7,7 @@ import {
   sparsePatch,
 } from './settings-form';
 import './settings-form';
+import { blockedWith } from '../../testing/description';
 
 const SCHEMA: SettingsSchema = {
   type: 'VoxCpm2',
@@ -165,23 +166,50 @@ describe('r2m-settings-form', () => {
     expect(valid.at(-1)).toBe(true);
   });
 
-  it('a blocked gate turns every field off and shows the reason on each', async () => {
-    const { form } = await mount('override', { cfg: 3 });
+  const CONTROLS = 'input, select, textarea, button';
+
+  it('a gate with a reason keeps every control focusable, and says why on each', async () => {
+    const { form, emitted } = await mount('override', { cfg: 3 });
     form.block = { reason: 'Viewing a past step' };
     await form.rendered();
 
-    const controls = form.querySelectorAll<HTMLInputElement>('input, select, textarea, button');
-    expect(controls.length).toBeGreaterThan(0);
-    for (const control of controls) expect(control.disabled).toBe(true);
+    const controls = form.querySelectorAll<HTMLInputElement>(CONTROLS);
+    expect(controls.length).toBeGreaterThan(SCHEMA.fields.length);
+    for (const control of controls) {
+      expect(control.disabled).toBe(false);
+      expect(blockedWith(control)).toBe('Viewing a past step');
+      expect(control.getAttribute('data-tooltip')).toBe('Viewing a past step');
+    }
     for (const key of SCHEMA.fields.map((f) => f.key)) {
       expect(field(form, key).getAttribute('data-tooltip')).toBe('Viewing a past step');
+      expect(field(form, key).hasAttribute('tabindex')).toBe(false);
     }
+    field(form, 'cfg').querySelector<HTMLButtonElement>('.r2m-settings-form__reset')!.click();
+    field(form, 'denoise').querySelector<HTMLInputElement>('input')!.click();
+    typeNumber(field(form, 'seed'), 'input', '9');
+    expect(emitted).toEqual([]);
 
     form.block = null;
     await form.rendered();
-    expect(form.querySelector<HTMLInputElement>('.r2m-settings-form__number')!.disabled).toBe(
-      false,
-    );
+    for (const control of form.querySelectorAll(CONTROLS)) {
+      expect(control.hasAttribute('aria-disabled')).toBe(false);
+      expect(control.hasAttribute('aria-describedby')).toBe(false);
+      expect(control.hasAttribute('readonly')).toBe(false);
+    }
+    const reset = field(form, 'cfg').querySelector('.r2m-settings-form__reset')!;
+    expect(reset.getAttribute('data-tooltip')).toBe('Reset to default');
+    expect(field(form, 'cfg').hasAttribute('data-tooltip')).toBe(false);
+  });
+
+  it('a busy form is plain disabled, with no reason to give', async () => {
+    const { form } = await mount('override', { cfg: 3 });
+    form.disabled = true;
+    await form.rendered();
+
+    for (const control of form.querySelectorAll<HTMLInputElement>(CONTROLS)) {
+      expect(control.disabled).toBe(true);
+      expect(control.hasAttribute('aria-disabled')).toBe(false);
+    }
     expect(field(form, 'cfg').hasAttribute('data-tooltip')).toBe(false);
   });
 

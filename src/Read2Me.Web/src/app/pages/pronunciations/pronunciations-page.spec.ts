@@ -21,6 +21,7 @@ import type { PronunciationsPage } from './pronunciations-page';
 import '../project/project-shell';
 import './pronunciations-page';
 import { itemEntry } from '../../../testing/live-messages';
+import { blockedWith, isOff } from '../../../testing/description';
 
 const PROJECT = '/api/projects/the-adventures-of-sherlock-holmes';
 const LIST = `${PROJECT}/pronunciations`;
@@ -297,7 +298,7 @@ describe('r2m-pronunciations-page', () => {
     const del = page.querySelector<HTMLButtonElement>(
       '.pron__row[data-id=watson] [data-action=delete-row]',
     )!;
-    expect(del.disabled).toBe(false);
+    expect(isOff(del!)).toBe(false);
   });
 
   it('shows the viewed step’s list read-only', async () => {
@@ -305,11 +306,9 @@ describe('r2m-pronunciations-page', () => {
     const page = await render();
     expect(api.calls('GET', LIST).at(-1)!.search).toBe('?at=s8');
     const add = page.querySelector<HTMLButtonElement>('[data-action=add]')!;
-    expect(add.disabled).toBe(true);
-    expect(add.closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(VIEWING_READ_ONLY);
+    expect(blockedWith(add)).toBe(VIEWING_READ_ONLY);
     const del = page.querySelector<HTMLButtonElement>('[data-action=delete-row]')!;
-    expect(del.disabled).toBe(true);
-    expect(del.closest('.r2m-blockable')?.getAttribute('data-tooltip')).toBe(VIEWING_READ_ONLY);
+    expect(blockedWith(del)).toBe(VIEWING_READ_ONLY);
 
     page.querySelector<HTMLElement>('.pron__row[data-id=watson]')!.click();
     await rerender(page);

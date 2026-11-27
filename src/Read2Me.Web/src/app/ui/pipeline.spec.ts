@@ -7,6 +7,7 @@ import {
   type PipelineStepView,
   pipeline,
 } from './pipeline';
+import { blockedWith, isOff } from '../../testing/description';
 
 const STEPS: PipelineStepView[] = [
   {
@@ -91,20 +92,19 @@ describe('pipeline()', () => {
     );
   });
 
-  it('emits step + action; a blocked action is disabled and its wrapper carries the reason', () => {
+  it('emits step + action; a blocked action stays focusable, says why and emits nothing', () => {
     const { el, events } = mount();
     const openCast = el.querySelector<HTMLButtonElement>('[data-action="openCast"]')!;
     const attribute = el.querySelector<HTMLButtonElement>('[data-action="attribute"]')!;
 
     openCast.click();
     expect(events).toEqual([{ step: 'speakers', action: 'openCast' }]);
-    expect(openCast.disabled).toBe(false);
-    expect(openCast.closest('.r2m-blockable')).toBeNull();
+    expect(isOff(openCast)).toBe(false);
 
-    expect(attribute.disabled).toBe(true);
-    const wrapper = attribute.closest('.r2m-blockable')!;
-    expect(wrapper.getAttribute('data-tooltip')).toBe('Every paragraph has a speaker');
-    expect(wrapper.getAttribute('tabindex')).toBe('0');
+    expect(blockedWith(attribute)).toBe('Every paragraph has a speaker');
+    expect(attribute.disabled).toBe(false);
+    attribute.click();
+    expect(events).toHaveLength(1);
     expect(
       el
         .querySelector('[data-action="reread"]')!
@@ -116,10 +116,11 @@ describe('pipeline()', () => {
     const { el } = mount('speakers:openCast');
 
     const buttons = Array.from(el.querySelectorAll<HTMLButtonElement>('.r2m-pipeline__action'));
-    expect(buttons.every((b) => b.disabled)).toBe(true);
+    expect(buttons.every(isOff)).toBe(true);
     expect(el.querySelector('[data-action="openCast"] .r2m-spinner')).not.toBeNull();
     expect(el.querySelector('[data-action="reread"] .r2m-spinner')).toBeNull();
-    expect(el.querySelector('[data-action="openCast"]')!.closest('.r2m-blockable')).toBeNull();
+    // Busy carries no reason; an action with one of its own keeps it.
+    expect(el.querySelector<HTMLButtonElement>('[data-action="openCast"]')!.disabled).toBe(true);
   });
 
   it('row anatomy (variant B): pills and the hint beside the chip, callout under the detail, advice under the actions', () => {

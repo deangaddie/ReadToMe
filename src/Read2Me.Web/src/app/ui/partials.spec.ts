@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 import type { Block } from '@app/api';
 import { html, render } from 'lit-html';
 import {
@@ -121,68 +121,313 @@ describe('emptyState', () => {
 });
 
 describe('gated', () => {
-  const apply = (block: Block | null, options?: { tabbable?: boolean }) =>
-    mount(gated(block, (disabled) => html`<button ?disabled=${disabled}>Apply</button>`, options));
+  const reason = { reason: 'Preview first' };
 
-  /** What a viewer sees: the tooltip, whether a wrapper holds the control, and `disabled`. */
-  function seen(host: HTMLElement) {
-    const button = host.querySelector('button')!;
-    const wrap = button.closest('.r2m-blockable');
-    return {
-      tooltip: wrap?.getAttribute('data-tooltip') ?? null,
-      wrapped: wrap !== null,
-      tabindex: wrap?.getAttribute('tabindex') ?? null,
-      disabled: button.disabled,
-    };
+  /** A host in the document, so the activation guard sees its events. */
+  function inDocument(): HTMLElement {
+    const host = document.createElement('div');
+    document.body.append(host);
+    return host;
   }
 
-  it('renders the control bare and enabled while open', () => {
-    expect(seen(apply(null))).toEqual({
-      tooltip: null,
-      wrapped: false,
-      tabindex: null,
-      disabled: false,
-    });
-  });
-
-  it('renders it bare but disabled while blocked without a reason', () => {
-    expect(seen(apply({ reason: null }))).toEqual({
-      tooltip: null,
-      wrapped: false,
-      tabindex: null,
-      disabled: true,
-    });
-  });
-
-  it('wraps it in a focusable tooltip, disabled, while blocked with a reason', () => {
-    expect(seen(apply({ reason: 'Preview first' }))).toEqual({
-      tooltip: 'Preview first',
-      wrapped: true,
-      tabindex: '0',
-      disabled: true,
-    });
-  });
-
-  it('keeps the tooltip and disabled in step as the gate changes', () => {
-    const host = document.createElement('div');
-    for (const block of [null, { reason: 'Preview first' }, { reason: null }, null]) {
+  /** An Apply button behind `block`, redrawn by `draw`; `ran` counts the clicks that ran it. */
+  function apply(block: Block | null, options: { tabbable?: boolean; tip?: string } = {}) {
+    const host = inDocument();
+    let ran = 0;
+    const draw = (next: Block | null) =>
       render(
-        gated(block, (disabled) => html`<button ?disabled=${disabled}>Apply</button>`),
+        gated(
+          next,
+          (gate) => html`<button ${gate.attrs(options.tip)} @click=${() => ran++}>Apply</button>`,
+          options,
+        ),
         host,
       );
-      const { tooltip, disabled } = seen(host);
-      expect(disabled).toBe(block !== null);
-      expect(tooltip).toBe(block?.reason ?? null);
+    draw(block);
+    return { host, button: host.querySelector('button')!, draw, ran: () => ran };
+  }
+
+  /** What a viewer and assistive technology get from the control. */
+  const seen = ({ host, button }: ReturnType<typeof apply>) => ({
+    disabled: button.disabled,
+    ariaDisabled: button.getAttribute('aria-disabled'),
+    description: description(button) ?? null,
+    hidden: host.querySelector('.visually-hidden')?.textContent ?? null,
+    tooltip: button.getAttribute('data-tooltip'),
+    tabindex: button.getAttribute('tabindex'),
+  });
+  const open = {
+    disabled: false,
+    ariaDisabled: null,
+    description: null,
+    hidden: null,
+    tooltip: null,
+    tabindex: null,
+  };
+  const reasoned = {
+    ...open,
+    ariaDisabled: 'true',
+    description: 'Preview first',
+    hidden: 'Preview first',
+    tooltip: 'Preview first',
+  };
+
+  /** Whether the guard refused a key pressed on `el`. */
+  const refused = (el: Element, key: string, modifiers: KeyboardEventInit = {}) => {
+    const event = new KeyboardEvent('keydown', {
+      key,
+      bubbles: true,
+      cancelable: true,
+      ...modifiers,
+    });
+    el.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+
+  afterEach(() => document.body.replaceChildren());
+
+  it('renders the control alone and working while open', () => {
+    const control = apply(null);
+    expect(seen(control)).toEqual(open);
+    expect(control.host.children).toHaveLength(1);
+    control.button.click();
+    expect(control.ran()).toBe(1);
+  });
+
+  it('is plain disabled while blocked without a reason', () => {
+    expect(seen(apply({ reason: null }))).toEqual({ ...open, disabled: true });
+  });
+
+  it('stays focusable while blocked with a reason, which is its description and tooltip', () => {
+    const control = apply(reason);
+    expect(seen(control)).toEqual(reasoned);
+    expect(control.button.textContent).toBe('Apply');
+    control.button.focus();
+    expect(document.activeElement).toBe(control.button);
+  });
+
+  it('keeps the description out of the names of what surrounds the control, as a tree row’s', () => {
+    const { host, button } = apply(reason);
+    // Hidden from the tree, a node `aria-describedby` names is still read as the description.
+    const node = host.querySelector(`#${button.getAttribute('aria-describedby')}`);
+    expect(node?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('adds no wrapper round the control', () => {
+    const { host, button } = apply(reason);
+    expect(button.parentElement).toBe(host);
+  });
+
+  it('runs nothing on a click while blocked with a reason, not even for a listener above it', () => {
+    const control = apply(reason);
+    let above = 0;
+    control.host.addEventListener('click', () => above++);
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    control.button.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect([control.ran(), above]).toEqual([0, 0]);
+  });
+
+  it('swallows Enter and Space, and lets Tab and Escape by', () => {
+    const { host, button } = apply(reason);
+    const heard: string[] = [];
+    host.addEventListener('keydown', (e) => heard.push(e.key));
+    expect(['Enter', ' ', 'Tab', 'Escape'].map((k) => refused(button, k))).toEqual([
+      true,
+      true,
+      false,
+      false,
+    ]);
+    expect(heard).toEqual(['Tab', 'Escape']);
+  });
+
+  it('leaves Enter and Space alone while open', () => {
+    const { button } = apply(null);
+    expect([refused(button, 'Enter'), refused(button, ' ')]).toEqual([false, false]);
+  });
+
+  it('keeps one element through every change of the gate, with the attributes in step', () => {
+    const control = apply(null);
+    const states = [
+      [reason, reasoned],
+      [{ reason: null }, { ...open, disabled: true }],
+      [reason, reasoned],
+      [null, open],
+    ] as const;
+    for (const [block, expected] of states) {
+      control.draw(block);
+      expect(control.host.querySelector('button')).toBe(control.button);
+      expect(seen(control)).toEqual(expected);
     }
+    control.button.click();
+    expect(control.ran()).toBe(1);
+  });
+
+  it('shows the control’s own tooltip until a reason takes its place', () => {
+    const control = apply(null, { tip: 'Apply the edit' });
+    expect(seen(control).tooltip).toBe('Apply the edit');
+    control.draw(reason);
+    expect(seen(control).tooltip).toBe('Preview first');
+    control.draw({ reason: null });
+    expect(seen(control).tooltip).toBe('Apply the edit');
+  });
+
+  it('gives each rendered control a description of its own', () => {
+    const button = (text: string) =>
+      gated({ reason: text }, (gate) => html`<button ${gate.attrs()}>Apply</button>`);
+    const host = mount(html`${button('One')}${button('Two')}`);
+    expect(Array.from(host.querySelectorAll('button'), description)).toEqual(['One', 'Two']);
   });
 
   it('keeps the reason but stays out of the tab order when not tabbable, as a tree node’s trigger', () => {
-    expect(seen(apply({ reason: 'Viewing a past step' }, { tabbable: false }))).toEqual({
-      tooltip: 'Viewing a past step',
-      wrapped: true,
-      tabindex: null,
-      disabled: true,
-    });
+    const control = apply(reason, { tabbable: false });
+    expect(seen(control)).toEqual({ ...reasoned, tabindex: '-1' });
+    control.draw(null);
+    expect(seen(control)).toEqual(open);
+  });
+
+  it('leaves a tabindex the control sets itself', () => {
+    const host = document.createElement('div');
+    for (const block of [reason, null]) {
+      render(
+        gated(block, (gate) => html`<button tabindex="-1" ${gate.attrs()}>Apply</button>`, {
+          tabbable: false,
+        }),
+        host,
+      );
+      expect(host.querySelector('button')?.getAttribute('tabindex')).toBe('-1');
+    }
+  });
+
+  it('calls the control as it is called itself, so the signals it reads are tracked', () => {
+    const told: unknown[] = [];
+    for (const block of [null, { reason: null }, reason]) {
+      gated(block, (gate) => told.push([gate.blocked, gate.reason]));
+    }
+    expect(told).toEqual([
+      [false, null],
+      [true, null],
+      [true, 'Preview first'],
+    ]);
+  });
+
+  it('makes a text field read-only, not disabled, while it gives a reason', () => {
+    const host = document.createElement('div');
+    const fields = (block: Block | null) => {
+      render(
+        gated(
+          block,
+          (gate) =>
+            html`<input ${gate.attrs()} /><input type="number" ${gate.attrs()} />
+              <textarea ${gate.attrs()}></textarea>`,
+        ),
+        host,
+      );
+      return Array.from(host.querySelectorAll<HTMLInputElement>('input, textarea'), (f) => [
+        f.readOnly,
+        f.disabled,
+      ]);
+    };
+    expect(fields(reason)).toEqual(Array(3).fill([true, false]));
+    expect(fields(null)).toEqual(Array(3).fill([false, false]));
+  });
+
+  it('lets a blocked text field be read: its caret keys and copy still work', () => {
+    const host = inDocument();
+    render(
+      gated(reason, (gate) => html`<input ${gate.attrs()} />`),
+      host,
+    );
+    const field = host.querySelector('input')!;
+    expect([refused(field, 'ArrowLeft'), refused(field, 'c', { ctrlKey: true })]).toEqual([
+      false,
+      false,
+    ]);
+    // Enter would submit a form.
+    expect(refused(field, 'Enter')).toBe(true);
+  });
+
+  it('swallows every key that would change a blocked select, slider or radio', () => {
+    const host = inDocument();
+    render(
+      gated(
+        reason,
+        (gate) =>
+          html`<select ${gate.attrs()}></select
+            ><input type="range" ${gate.attrs()} /><input type="radio" ${gate.attrs()} />`,
+      ),
+      host,
+    );
+    for (const control of host.querySelectorAll('select, input')) {
+      const changing = ['ArrowDown', 'ArrowRight', 'Home', 'PageUp', 'Enter', ' ', 'a'];
+      expect(changing.map((k) => refused(control, k))).toEqual(changing.map(() => true));
+      expect(refused(control, 'ArrowDown', { altKey: true })).toBe(true);
+      // F4 opens a select on Windows; Alt+F4 is the window's.
+      expect(refused(control, 'F4')).toBe(true);
+      expect(refused(control, 'F4', { altKey: true })).toBe(false);
+      expect(['Tab', 'Escape', 'F5'].map((k) => refused(control, k))).toEqual([
+        false,
+        false,
+        false,
+      ]);
+      expect(refused(control, 'r', { ctrlKey: true })).toBe(false);
+    }
+  });
+
+  it('keeps a value set on a blocked control from reaching the app', () => {
+    const host = inDocument();
+    let heard = 0;
+    render(
+      gated(
+        reason,
+        (gate) =>
+          html`<select ${gate.attrs()} @input=${() => heard++} @change=${() => heard++}></select>`,
+      ),
+      host,
+    );
+    const select = host.querySelector('select')!;
+    select.dispatchEvent(new Event('input', { bubbles: true }));
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(heard).toBe(0);
+  });
+
+  it('leaves a blocked checkbox as it was when it or its label is clicked', () => {
+    const host = inDocument();
+    let changed = 0;
+    render(
+      gated(
+        reason,
+        (gate) =>
+          html`<label ${gate.hover()}
+            ><input type="checkbox" ${gate.attrs()} @change=${() => changed++} /> Narrator
+            only</label
+          >`,
+      ),
+      host,
+    );
+    const box = host.querySelector('input')!;
+    box.click();
+    host.querySelector('label')!.click();
+    expect([box.checked, changed]).toEqual([false, 0]);
+  });
+
+  it('shows the reason over what surrounds the control, and stays out of its label', () => {
+    const host = document.createElement('div');
+    const draw = (block: Block | null) =>
+      render(
+        gated(
+          block,
+          (gate) => html`<label ${gate.hover()}><input ${gate.attrs()} />Written form</label>`,
+        ),
+        host,
+      );
+    draw(reason);
+    const label = host.querySelector('label')!;
+    expect(label.getAttribute('data-tooltip')).toBe('Preview first');
+    expect(label.hasAttribute('aria-disabled')).toBe(false);
+    expect(label.textContent).toBe('Written form');
+    draw(null);
+    expect(label.hasAttribute('data-tooltip')).toBe(false);
   });
 });
 

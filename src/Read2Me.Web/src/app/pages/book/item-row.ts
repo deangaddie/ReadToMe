@@ -1,4 +1,5 @@
-import { type TemplateResult, html, nothing } from 'lit-html';
+import { html, nothing } from 'lit-html';
+import type { DirectiveResult } from 'lit-html/directive.js';
 import { type Block, type ParagraphItemDto, withLocal, workspaceUrl } from '@app/api';
 import { use } from '@app/core/services';
 import { gated, icon, statusChip } from '@app/ui/partials';
@@ -108,15 +109,17 @@ export function itemRow(
           : nothing
       }
       ${gated(
-        block,
-        (disabled) =>
+        // A chip nobody can assign from is a label: it has no gate to give a reason for.
+        assignable ? block : null,
+        (gate) =>
           html`<r2m-speaker-chip
             class="r2m-item__speaker"
             .compact=${true}
             .state=${speaker.state}
             .name=${speaker.name}
             .characterId=${speaker.characterId}
-            .roster=${assignable && !disabled ? ctx.roster : undefined}
+            .roster=${assignable ? ctx.roster : undefined}
+            .gate=${gate}
             @pick=${chip.pick}
             @clear=${chip.clear}
             @create=${chip.create}
@@ -204,12 +207,12 @@ function audioLine(
             : html`${chipOf(reviewView)}
               ${gated(
                 block,
-                (disabled) =>
+                (gate) =>
                   html`<button
                     type="button"
                     class="r2m-item__action"
                     data-action="dismiss-review"
-                    ?disabled=${disabled}
+                    ${gate.attrs()}
                     @click=${(e: Event) => void generator(e).dismissReview(item.id)}
                   >
                     Dismiss
@@ -222,12 +225,12 @@ function audioLine(
         queue && outcome && voiced
           ? gated(
               retryBlock,
-              (disabled) =>
+              (gate) =>
                 html`<button
                   type="button"
                   class="r2m-item__action"
                   data-action="retry-audio"
-                  ?disabled=${disabled}
+                  ${gate.attrs()}
                   @click=${(e: Event) => void generator(e).retry(item.id)}
                 >
                   Retry
@@ -248,16 +251,17 @@ function audioLine(
 function itemPlayer(src: string, audioVersion: number | null | undefined, playBlock: Block | null) {
   return gated(
     playBlock,
-    (disabled) =>
+    (gate) =>
       html`<r2m-audio-player
         .compact=${true}
-        .src=${disabled ? null : src}
-        .cacheKey=${disabled ? undefined : (audioVersion ?? undefined)}
+        .src=${gate.blocked ? null : src}
+        .cacheKey=${gate.blocked ? undefined : (audioVersion ?? undefined)}
+        .gate=${gate}
       ></r2m-audio-player>`,
   );
 }
 
-type DeliveryCueView = TemplateResult | typeof nothing;
+type DeliveryCueView = DirectiveResult | typeof nothing;
 
 /**
  * An item's delivery cue (the `voiceInstructions` TTS reads the line with), one element in both
@@ -270,13 +274,13 @@ function deliveryCue(target: NodeMenuTarget, block: Block | null): DeliveryCueVi
   if (!cue) return nothing;
   return gated(
     block,
-    (disabled) =>
+    (gate) =>
       html`<button
         type="button"
         class="r2m-item__instructions"
         data-testid="delivery-cue"
         aria-label=${`Edit delivery cue: ${cue}`}
-        ?disabled=${disabled}
+        ${gate.attrs()}
         @click=${(e: Event) =>
           void runMenuEntry('edit-cue', target, e.currentTarget as Element, block)}
       >
