@@ -153,18 +153,79 @@ describe('r2m-voice-card', () => {
     expect(button(card, 'edit-audio')?.getAttribute('href')).toBe(
       'projects/dracula/voices/v1/editor',
     );
-    // The header stops its controls' clicks so they don't toggle the panel, but the link keeps
-    // its default (the navigation) while anything else in the header loses it.
-    const linkClick = new MouseEvent('click', { bubbles: true, cancelable: true });
-    button(card, 'edit-audio')?.dispatchEvent(linkClick);
-    expect(linkClick.defaultPrevented).toBe(false);
-    const buttonClick = new MouseEvent('click', { bubbles: true, cancelable: true });
-    card.querySelector('[data-testid=voice-edited-chip]')?.dispatchEvent(buttonClick);
-    expect(buttonClick.defaultPrevented).toBe(true);
     expect(card.querySelector('[data-mode=reference]')).not.toBeNull();
     expect(card.querySelector('r2m-audio-player')?.src).toBe(
       '/workspace/dracula/voices/alice/v1.wav?v=0',
     );
+  });
+
+  describe('the header disclosure', () => {
+    const toggle = (card: Element) => card.querySelector<HTMLButtonElement>('.voice-card__toggle')!;
+    const body = (card: Element) =>
+      card.querySelector(`#${toggle(card).getAttribute('aria-controls')}`)!;
+
+    it('is a heading button named by the voice alone, with every header control outside it', async () => {
+      const card = await mount(voice({ audioFileName: 'voices/alice/v1.wav', isEdited: true }));
+      expect(toggle(card).parentElement?.tagName).toBe('H4');
+      expect(toggle(card).querySelector('.visually-hidden')?.textContent).toBe('Main');
+      // The rest of its content is the chevron, which is silent.
+      expect(
+        Array.from(toggle(card).children)
+          .filter((c) => c.getAttribute('aria-hidden') !== 'true')
+          .map((c) => c.textContent),
+      ).toEqual(['Main']);
+      expect(card.querySelector('summary :is(button, a, input, r2m-inline-edit)')).toBeNull();
+      expect(toggle(card).querySelector('button, a, input, r2m-inline-edit')).toBeNull();
+      for (const action of ['set-default', 'edit-audio', 'delete-voice']) {
+        expect(button(card, action).closest('.voice-card__header')).not.toBeNull();
+      }
+    });
+
+    it('opens and closes the body, which stays findable while closed', async () => {
+      const card = await mount(voice());
+      expect(toggle(card).getAttribute('aria-expanded')).toBe('false');
+      expect(body(card).getAttribute('hidden')).toBe('until-found');
+
+      toggle(card).click();
+      await card.rendered();
+      expect(toggle(card).getAttribute('aria-expanded')).toBe('true');
+      expect(body(card).hasAttribute('hidden')).toBe(false);
+
+      // A reload re-renders the card; it stays as the user left it.
+      card.voice = voice({ name: 'Lead' });
+      await card.rendered();
+      expect(toggle(card).getAttribute('aria-expanded')).toBe('true');
+      expect(toggle(card).querySelector('.visually-hidden')?.textContent).toBe('Lead');
+
+      toggle(card).click();
+      await card.rendered();
+      expect(toggle(card).getAttribute('aria-expanded')).toBe('false');
+      expect(body(card).getAttribute('hidden')).toBe('until-found');
+    });
+
+    it('opens when find-in-page matches inside it', async () => {
+      const card = await mount(voice());
+      body(card).dispatchEvent(new Event('beforematch', { bubbles: true }));
+      await card.rendered();
+      expect(toggle(card).getAttribute('aria-expanded')).toBe('true');
+      expect(body(card).hasAttribute('hidden')).toBe(false);
+    });
+
+    it('the lit default star is no control, so a click on it opens the card', async () => {
+      const card = await mount(voice(), true);
+      card.querySelector<HTMLElement>('.voice-card__star--on')!.click();
+      await card.rendered();
+      expect(toggle(card).getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('a header control does not open the card', async () => {
+      const card = await mount(voice());
+      button(card, 'set-default').click();
+      card.querySelector<HTMLButtonElement>('.r2m-inline-edit__display')!.click();
+      await settle();
+      await card.rendered();
+      expect(toggle(card).getAttribute('aria-expanded')).toBe('false');
+    });
   });
 
   describe('viewing a History step (ticket 32)', () => {

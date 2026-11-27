@@ -35,7 +35,7 @@ try {
   wav.writeUInt32LE(rate * 2, 40);
   for (let i = 0; i < rate; i++) wav.writeInt16LE(Math.round(8000 * Math.sin((2 * Math.PI * 440 * i) / rate)), 44 + i * 2);
   await openWeb(page, `/projects/${f}/cast/${alice}`);
-  await page.locator('r2m-voice-card summary.voice-card__header').first().click();
+  await page.locator('r2m-voice-card .voice-card__toggle').first().click();
   await page
     .locator('r2m-voice-card .r2m-file-drop__input')
     .setInputFiles({ name: 'tone.wav', mimeType: 'audio/wav', buffer: wav });
@@ -65,7 +65,7 @@ try {
     await go(`/projects/${f}/cast/${alice}`);
     const card = page.locator('r2m-voice-card').first();
     await card.waitFor();
-    await card.locator('summary.voice-card__header').click();
+    await card.locator('.voice-card__toggle').click();
     await card.locator('[data-section=advanced] > summary').click();
     await page.waitForSelector('r2m-voice-card r2m-file-drop button');
     // The override editor loads the provider schema; wait for its form or its note.
