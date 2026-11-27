@@ -1,4 +1,4 @@
-import { html, nothing } from 'lit-html';
+import { html, nothing, type TemplateResult } from 'lit-html';
 import type { IconName } from './icons';
 import { withTip } from './tooltip';
 
@@ -172,10 +172,14 @@ export function spinner(size = 20, cls = '') {
  * wrapper laid out with `display: contents`, so they stay the skeleton's own flex or grid items
  * while assistive tech hears only the label. Never `aria-busy` with a label on a bare `div`.
  */
-export function skeleton(label: string, cls = '', shapes: unknown = nothing) {
+export function skeleton(
+  label: string,
+  cls = '',
+  shapes?: TemplateResult | TemplateResult[] | string,
+) {
   return html`<div class="r2m-skeleton ${cls}" role="progressbar" aria-label=${label}>
     ${
-      shapes === nothing
+      shapes === undefined
         ? nothing
         : html`<div class="r2m-skeleton__shapes" aria-hidden="true">${shapes}</div>`
     }
