@@ -24,7 +24,7 @@ public class HistorySheetTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTes
         var main = Page.Locator(".shell__main");
         var sheet = Page.Locator(".shell__history");
         var mainBefore = (await main.BoundingBoxAsync())!;
-        await Page.GetByRole(AriaRole.Button, new() { Name = "History" }).ClickAsync();
+        await Page.GetByRole(AriaRole.Button, new() { Name = "History", Exact = true }).ClickAsync();
         await Expect(sheet.Locator(".history-sheet__row").First).ToBeVisibleAsync();
 
         var docked = (await sheet.BoundingBoxAsync())!;
@@ -66,7 +66,7 @@ public class HistorySheetTests(E2eAppFixture app, PlaywrightFixture pw) : E2eTes
             }
             """);
 
-        await Page.GetByRole(AriaRole.Button, new() { Name = "History" }).ClickAsync();
+        await Page.GetByRole(AriaRole.Button, new() { Name = "History", Exact = true }).ClickAsync();
         var steps = Page.Locator(".history-sheet__step");
         await Expect(steps).ToHaveCountAsync(2);
         await steps.Last.ClickAsync();

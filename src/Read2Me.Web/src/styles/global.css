@@ -1710,10 +1710,12 @@ progress {
   text-align: left;
   cursor: text;
 
-  &:hover,
-  &:focus-visible {
+  &:hover {
     background: var(--r2m-surface-high);
-    outline: none;
+  }
+  &:focus-visible {
+    outline: 2px solid var(--r2m-accent);
+    outline-offset: -2px;
   }
 }
 /* Placeholder text: an untitled node's placeholder title, an empty inline edit's placeholder. */
@@ -1736,6 +1738,12 @@ progress {
 .r2m-inline-edit__display:hover .r2m-inline-edit__pencil,
 .r2m-inline-edit__display:focus-visible .r2m-inline-edit__pencil {
   opacity: 1;
+}
+/* Nothing hovers on a touch screen, so the pencil stays visible there. */
+@media (hover: none) {
+  .r2m-inline-edit__pencil {
+    opacity: 1;
+  }
 }
 .r2m-inline-edit__input {
   width: 100%;

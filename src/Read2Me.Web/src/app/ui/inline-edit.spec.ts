@@ -37,6 +37,17 @@ describe('r2m-inline-edit', () => {
     expect(el.classList.contains('r2m-inline-edit--editing')).toBe(true);
   });
 
+  it('names its button with the text it shows, value or placeholder', async () => {
+    const { el, display } = await mount();
+    expect(display()?.getAttribute('aria-label')).toBe('Edit Title: Chapter 1');
+
+    el.value = '';
+    await el.rendered();
+
+    expect(display()?.textContent?.trim()).toStartWith('Title');
+    expect(display()?.getAttribute('aria-label')).toBe('Edit Title');
+  });
+
   it('blocked, it shows the value with its button off and the reason, and never opens', async () => {
     const { el, display, field } = await mount();
     el.block = { reason: 'Viewing a past step' };
@@ -74,6 +85,52 @@ describe('r2m-inline-edit', () => {
     expect(saved).toEqual([]);
     expect(cancelled()).toBe(1);
     expect(display()?.textContent).toContain('Chapter 1');
+  });
+
+  it.each(['Enter', 'Escape'])('gives focus back to the display button after %s', async (key) => {
+    const { el, display, field, type } = await mount();
+    display()!.click();
+    await el.rendered();
+
+    type('Prologue');
+    field()!.dispatchEvent(new KeyboardEvent('keydown', { key }));
+    await el.rendered();
+
+    expect(document.activeElement === display()).toBe(true);
+  });
+
+  it('leaves focus where the user moved it on a blur-save', async () => {
+    const { el, saved, display, type } = await mount();
+    const elsewhere = document.body.appendChild(document.createElement('button'));
+    display()!.click();
+    await el.rendered();
+
+    type('Prologue');
+    elsewhere.focus();
+    await el.rendered();
+
+    expect(saved).toEqual(['Prologue']);
+    expect(document.activeElement === elsewhere).toBe(true);
+  });
+
+  it.each([
+    { key: 'Enter', isComposing: true },
+    { key: 'Escape', isComposing: true },
+    // Safari ends the composition before the confirming keydown: only the key code still says so.
+    { key: 'Enter', keyCode: 229 },
+    { key: 'Escape', keyCode: 229 },
+  ])('leaves $key to the IME while it composes', async (init) => {
+    const { el, saved, cancelled, display, field, type } = await mount();
+    display()!.click();
+    await el.rendered();
+
+    type('にほん');
+    field()!.dispatchEvent(new KeyboardEvent('keydown', init));
+    await el.rendered();
+
+    expect(saved).toEqual([]);
+    expect(cancelled()).toBe(0);
+    expect(field()?.value).toBe('にほん');
   });
 
   it('does not save an unchanged or empty required value on blur', async () => {
