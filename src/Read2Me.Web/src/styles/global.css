@@ -1699,7 +1699,9 @@ progress {
   display: inline-flex;
   align-items: center;
   gap: var(--r2m-space-1);
-  max-width: 100%;
+  /* The negative margins let the hover background reach past the text, so the button is that much
+     wider than its host: capped at 100% it would cut a value whose host shrinks to fit it (#534). */
+  max-width: calc(100% + 2 * var(--r2m-space-1));
   padding: 2px var(--r2m-space-1);
   margin: -2px calc(-1 * var(--r2m-space-1));
   border: 0;
