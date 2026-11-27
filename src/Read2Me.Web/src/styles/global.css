@@ -661,6 +661,7 @@ dialog.r2m-dialog--fullscreen {
 
 /* ---- status chip + empty state -------------------------------------------------------------- */
 .r2m-status-chip {
+  position: relative; /* holds its tip's hidden description (ui/tooltip.ts) */
   display: inline-flex;
   align-items: center;
   gap: var(--r2m-space-1);
@@ -1038,6 +1039,7 @@ dialog.r2m-dialog--fullscreen {
 
 /* ---- count badge ---------------------------------------------------------------------------- */
 .r2m-count-badge {
+  position: relative; /* holds its tip's hidden description */
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -1166,6 +1168,7 @@ progress {
 
 /* ---- job pill + job card -------------------------------------------------------------------- */
 .r2m-job-pill {
+  position: relative; /* holds its tip's hidden description */
   display: inline-flex;
   align-items: center;
   height: 26px;

@@ -1,6 +1,7 @@
 import type { Block } from '@app/api';
 import { type TemplateResult, html, nothing } from 'lit-html';
 import type { IconName } from './icons';
+import { withTip } from './tooltip';
 
 /**
  * Presentational partials: stateless markup is a function returning a template, not an element.
@@ -30,14 +31,20 @@ export function statusChip(options: {
   tooltip?: string;
   compact?: boolean;
 }) {
-  return html`<span
-    class="r2m-status-chip r2m-status-chip--${options.status} ${options.compact ? 'r2m-status-chip--compact' : ''}"
-    role="status"
-    data-tooltip=${options.tooltip ?? nothing}
-    >${icon(options.icon ?? DEFAULT_ICONS[options.status])}<span class="r2m-status-chip__label"
-      >${options.label}</span
-    ></span
-  >`;
+  return withTip(
+    options.tooltip,
+    options.label,
+    (tip) =>
+      html`<span
+        class="r2m-status-chip r2m-status-chip--${options.status} ${options.compact ? 'r2m-status-chip--compact' : ''}"
+        role="status"
+        data-tooltip=${tip.tooltip}
+        aria-describedby=${tip.describedBy}
+        >${icon(options.icon ?? DEFAULT_ICONS[options.status])}<span class="r2m-status-chip__label"
+          >${options.label}</span
+        >${tip.description}</span
+      >`,
+  );
 }
 
 /**
@@ -174,9 +181,17 @@ export function spinner(size = 20, cls = '') {
 /** Count badge (design §7): number + icon coloured by kind; nothing at zero unless `showZero`. */
 export function countBadge(kind: CountBadgeKind, count: number, tooltip: string, showZero = false) {
   if (count === 0 && !showZero) return nothing;
-  return html`<span class="r2m-count-badge r2m-count-badge--${kind}" data-tooltip=${tooltip}
-    >${icon(BADGE_ICONS[kind], 'r2m-count-badge__icon')}<span class="r2m-count-badge__count"
-      >${count}</span
-    ></span
-  >`;
+  return withTip(
+    tooltip,
+    String(count),
+    (tip) =>
+      html`<span
+        class="r2m-count-badge r2m-count-badge--${kind}"
+        data-tooltip=${tip.tooltip}
+        aria-describedby=${tip.describedBy}
+        >${icon(BADGE_ICONS[kind], 'r2m-count-badge__icon')}<span class="r2m-count-badge__count"
+          >${count}</span
+        >${tip.description}</span
+      >`,
+  );
 }

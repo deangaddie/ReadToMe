@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import { installTooltips } from './tooltip';
+import { html, render } from 'lit-html';
+import { installTooltips, withTip } from './tooltip';
+import { description, hasDescription } from '../../testing/description';
 
 // happy-dom has no popover methods or anchor positioning; where the tip lands is covered in E2E.
 const proto = HTMLElement.prototype as unknown as Record<string, unknown>;
@@ -292,5 +294,68 @@ describe('installTooltips', () => {
     elapse();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(open).toBe(false);
+  });
+});
+
+describe('withTip (a tip that says more than the name is also the description)', () => {
+  const trigger = (text: string | undefined, name?: string) =>
+    withTip(
+      text,
+      name,
+      (t) =>
+        html`<span class="trigger" data-tooltip=${t.tooltip} aria-describedby=${t.describedBy}
+          >${name}${t.description}</span
+        >`,
+    );
+
+  function mounted(template: unknown): HTMLElement {
+    const host = document.body.appendChild(document.createElement('div'));
+    render(template, host);
+    return host;
+  }
+  const triggers = (host: HTMLElement) => Array.from(host.querySelectorAll('.trigger'));
+
+  it('describes the trigger with a visually hidden element when the tip differs from the name', () => {
+    const el = triggers(mounted(trigger('Needs the GPU', 'GPU')))[0]!;
+    expect(el.getAttribute('data-tooltip')).toBe('Needs the GPU');
+    expect(description(el)).toBe('Needs the GPU');
+    expect(el.querySelector('.visually-hidden')?.id).toBe(el.getAttribute('aria-describedby')!);
+  });
+
+  it('describes a tip given no name', () => {
+    const el = triggers(mounted(trigger('Needs the GPU')))[0]!;
+    expect(description(el)).toBe('Needs the GPU');
+  });
+
+  it('adds nothing but the tip when it equals the name', () => {
+    const host = mounted(trigger('Activity', 'Activity'));
+    expect(triggers(host)[0]!.getAttribute('data-tooltip')).toBe('Activity');
+    expect(hasDescription(host)).toBe(false);
+  });
+
+  it('adds nothing at all without a tip', () => {
+    for (const text of [undefined, '']) {
+      const host = mounted(trigger(text, 'GPU'));
+      expect(triggers(host)[0]!.hasAttribute('data-tooltip')).toBe(false);
+      expect(hasDescription(host)).toBe(false);
+    }
+  });
+
+  it('gives each trigger its own id, kept across renders', () => {
+    const both = (second: string) => [trigger('Same tip', 'A'), trigger(second, 'B')];
+    const host = mounted(both('Same tip'));
+    const ids = () => triggers(host).map((el) => el.getAttribute('aria-describedby'));
+    const first = ids();
+    expect(new Set(first).size).toBe(2);
+
+    render(both('A new tip'), host);
+    expect(ids()).toEqual(first);
+    expect(description(triggers(host)[1]!)).toBe('A new tip');
+  });
+
+  it('drops the description once the tip matches the name', () => {
+    const host = mounted(trigger('Needs the GPU', 'GPU'));
+    render(trigger('GPU', 'GPU'), host);
+    expect(hasDescription(host)).toBe(false);
   });
 });

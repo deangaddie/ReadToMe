@@ -3,6 +3,7 @@ import { styleMap } from 'lit-html/directives/style-map.js';
 import { type ProjectSummary, workspaceUrl } from '@app/api';
 import { closeMenuOf, menuKeys } from './menu';
 import { icon } from './partials';
+import { withTip } from './tooltip';
 
 /** One popover id per folder, stable across renders so the trigger and its menu always pair up. */
 const menuIds = new Map<string, string>();
@@ -120,14 +121,7 @@ export function projectCard(
         </div>
       </div>
       <p class="r2m-project-card__author">${project.author || 'Unknown author'}</p>
-      ${
-        options.seriesLine
-          ? html`<p class="r2m-project-card__series" data-tooltip=${options.seriesLine}>
-              ${icon('library_books')}<span>${options.seriesLine}</span>
-            </p>`
-          : nothing
-      }
-      ${options.extra ?? nothing}
+      ${options.seriesLine ? seriesLine(options.seriesLine) : nothing} ${options.extra ?? nothing}
       ${
         project.audioItemTotal > 0
           ? html`<div
@@ -151,6 +145,21 @@ export function projectCard(
     </div>
   </article>`;
 }
+
+/** The card's series line; its tip is the line in full, for when the card cuts it off. */
+const seriesLine = (line: string) =>
+  withTip(
+    line,
+    line,
+    (tip) =>
+      html`<p
+        class="r2m-project-card__series"
+        data-tooltip=${tip.tooltip}
+        aria-describedby=${tip.describedBy}
+      >
+        ${icon('library_books')}<span>${line}</span>${tip.description}
+      </p>`,
+  );
 
 /**
  * First letter or digit of the first two words that have one, upper-cased; a single-word title

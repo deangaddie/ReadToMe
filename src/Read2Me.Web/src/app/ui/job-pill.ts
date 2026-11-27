@@ -2,6 +2,7 @@ import { html, nothing } from 'lit-html';
 import { JOB_ICONS, JOB_STATE_STATUS, type JobView, formatDuration, jobSummary } from './job';
 import { icon, spinner, statusChip } from './partials';
 import { sparkline } from './throughput';
+import { withTip } from './tooltip';
 
 export interface JobPillOptions {
   job: JobView;
@@ -18,45 +19,52 @@ export interface JobPillOptions {
 export function jobPill({ job, onOpen, onCancel, tooltip }: JobPillOptions) {
   const status = JOB_STATE_STATUS[job.state];
   const summary = jobSummary(job);
-  return html`<span
-    class="r2m-job-pill r2m-job-pill--${status}"
-    data-job=${job.id}
-    data-tooltip=${tooltip || nothing}
-  >
-    <button
-      type="button"
-      class="r2m-job-pill__main"
-      aria-label=${job.label}
-      @click=${() => onOpen(job.id)}
-    >
-      ${
-        status === 'busy'
-          ? spinner(14, 'r2m-job-pill__spinner')
-          : icon(JOB_ICONS[job.kind], 'r2m-job-pill__icon')
-      }
-      <span class="r2m-job-pill__label">${job.label}</span>
-      ${
-        summary.length
-          ? html`<span class="r2m-job-pill__summary">${summary.join(' · ')}</span>`
-          : nothing
-      }
-    </button>
-    ${
-      job.cancellable
-        ? html`<button
-            type="button"
-            class="r2m-job-pill__cancel"
-            aria-label="Cancel"
-            @click=${(e: Event) => {
-              e.stopPropagation();
-              onCancel(job.id);
-            }}
-          >
-            ${icon('close')}
-          </button>`
-        : nothing
-    }
-  </span>`;
+  return withTip(
+    tooltip,
+    job.label,
+    (tip) =>
+      html`<span
+        class="r2m-job-pill r2m-job-pill--${status}"
+        data-job=${job.id}
+        data-tooltip=${tip.tooltip}
+      >
+        <button
+          type="button"
+          class="r2m-job-pill__main"
+          aria-label=${job.label}
+          aria-describedby=${tip.describedBy}
+          @click=${() => onOpen(job.id)}
+        >
+          ${
+            status === 'busy'
+              ? spinner(14, 'r2m-job-pill__spinner')
+              : icon(JOB_ICONS[job.kind], 'r2m-job-pill__icon')
+          }
+          <span class="r2m-job-pill__label">${job.label}</span>
+          ${
+            summary.length
+              ? html`<span class="r2m-job-pill__summary">${summary.join(' · ')}</span>`
+              : nothing
+          }
+        </button>
+        ${tip.description}
+        ${
+          job.cancellable
+            ? html`<button
+                type="button"
+                class="r2m-job-pill__cancel"
+                aria-label="Cancel"
+                @click=${(e: Event) => {
+                  e.stopPropagation();
+                  onCancel(job.id);
+                }}
+              >
+                ${icon('close')}
+              </button>`
+            : nothing
+        }
+      </span>`,
+  );
 }
 
 const STATE_LABEL: Record<JobView['state'], string> = {

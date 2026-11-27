@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { html, render } from 'lit-html';
 import type { ProjectSummary } from '@app/api';
 import { placeholderGradient, projectCard, projectInitials } from './project-card';
+import { hasDescription } from '../../testing/description';
 
 const base: ProjectSummary = {
   folderName: 'pride-and-prejudice',
@@ -97,6 +98,21 @@ describe('projectCard()', () => {
             : m.getAttribute('data-action'),
       ),
     ).toEqual(['open', 'extra', 'delete']);
+  });
+
+  it('adds no description to the series line, whose tooltip is its own text', () => {
+    const host = document.createElement('div');
+    render(
+      projectCard(base, {
+        onOpen: () => undefined,
+        onDelete: () => undefined,
+        seriesLine: 'Austen · Book 2',
+      }),
+      host,
+    );
+    const line = host.querySelector('.r2m-project-card__series')!;
+    expect(line.getAttribute('data-tooltip')).toBe('Austen · Book 2');
+    expect(hasDescription(host)).toBe(false);
   });
 
   it('derives initials and a stable gradient', () => {
