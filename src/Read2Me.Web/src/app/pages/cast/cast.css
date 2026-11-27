@@ -493,15 +493,17 @@
   .voice-card__toggle[aria-expanded='true'] > .r2m-icon {
     rotate: 180deg;
   }
-  /* Positioned to paint over the toggle; their bare space lets a click through to it. */
+  /* Positioned to paint over the toggle. The title column takes the free space, so a click on its
+     bare space goes through to the toggle; the right-hand group keeps its own, gaps included. */
   .voice-card__title,
   .voice-card__meta {
     position: relative;
+  }
+  .voice-card__title {
     pointer-events: none;
   }
   .voice-card__star,
-  .voice-card__name > r2m-inline-edit,
-  .voice-card__meta > * {
+  .voice-card__name > r2m-inline-edit {
     pointer-events: auto;
   }
   .voice-card__title {

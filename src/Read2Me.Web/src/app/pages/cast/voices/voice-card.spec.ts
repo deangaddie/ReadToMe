@@ -211,6 +211,13 @@ describe('r2m-voice-card', () => {
       expect(body(card).hasAttribute('hidden')).toBe(false);
     });
 
+    it('the lit default star is no control, so a click on it opens the card', async () => {
+      const card = await mount(voice(), true);
+      card.querySelector<HTMLElement>('.voice-card__star--on')!.click();
+      await card.rendered();
+      expect(toggle(card).getAttribute('aria-expanded')).toBe('true');
+    });
+
     it('a header control does not open the card', async () => {
       const card = await mount(voice());
       button(card, 'set-default').click();

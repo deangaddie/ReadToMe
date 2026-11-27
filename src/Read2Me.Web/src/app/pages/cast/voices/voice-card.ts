@@ -162,7 +162,7 @@ export class VoiceCard extends R2mElement {
               class="voice-card__toggle"
               aria-expanded=${open ? 'true' : 'false'}
               aria-controls=${bodyId}
-              @click=${() => this.expanded.set(!open)}
+              @click=${this.toggle}
             >
               <span class="visually-hidden">${voice.name}</span>
               ${icon('expand_more')}
@@ -174,6 +174,7 @@ export class VoiceCard extends R2mElement {
                 ? html`<span
                     class="voice-card__star voice-card__star--on"
                     data-tooltip="Default voice"
+                    @click=${this.toggle}
                   >
                     ${icon('star', 'r2m-icon--filled')}
                   </span>`
@@ -502,6 +503,9 @@ export class VoiceCard extends R2mElement {
       }
     </section>`;
   }
+
+  /** The header's button, and the lit default star: it lies over the button to show its tooltip. */
+  private readonly toggle = (): void => this.expanded.update((open) => !open);
 
   async setDefault(): Promise<void> {
     const voice = this.#voice();

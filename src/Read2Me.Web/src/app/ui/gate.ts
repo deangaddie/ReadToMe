@@ -89,8 +89,8 @@ let nextId = 0;
 
 /**
  * The control followed by the description its gate gives it, one id for as long as it is rendered.
- * `aria-hidden` keeps the reason out of the name of what surrounds the control (a tree row, a
- * `<summary>`, named from their content); `aria-describedby` reads a hidden node all the same.
+ * `aria-hidden` keeps the reason out of the name of what surrounds the control (a tree row, named
+ * from its content); `aria-describedby` reads a hidden node all the same.
  */
 class Described extends Directive {
   readonly #id = `r2m-blocked-${nextId++}`;
