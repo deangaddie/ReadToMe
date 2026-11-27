@@ -121,6 +121,20 @@ a {
   color: var(--r2m-accent);
 }
 
+/* Out of view but in the accessibility tree; shown while it, or something inside it, has focus or
+   is being pressed (modern-web-guidance `accessibility`). */
+.visually-hidden:where(:not(:focus-within, :active)) {
+  position: absolute !important;
+  clip-path: inset(50%) !important;
+  overflow: hidden !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  white-space: nowrap !important;
+}
+
 .material-symbols-rounded {
   font-family: 'Material Symbols Rounded';
   font-weight: normal;
