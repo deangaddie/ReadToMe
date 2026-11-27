@@ -35,10 +35,14 @@ describe('statusChip', () => {
       '.r2m-status-chip',
     );
     expect(chip?.classList.contains('r2m-status-chip--warn')).toBe(true);
-    expect(chip?.getAttribute('role')).toBe('status');
     expect(chip?.querySelector('.r2m-icon')?.textContent).toBe('warning');
     expect(chip?.querySelector('span:last-child')?.textContent).toBe('Needs review');
     expect(chip?.hasAttribute('data-tooltip')).toBe(false);
+  });
+
+  it('is not a live region, so a list of chips says nothing as it re-renders', () => {
+    const host = mount(statusChip({ status: 'busy', label: 'Running' }));
+    expect(host.querySelector('[role], [aria-live]')).toBeNull();
   });
 
   it('takes an icon, a tooltip and the compact form', () => {
