@@ -284,6 +284,36 @@ describe('r2m-voice-card', () => {
     ]);
   });
 
+  it('a rename made while an earlier write is in flight is sent once it lands (#535)', async () => {
+    const card = await mount(voice({ description: 'd' }));
+    let answer!: (v: unknown) => void;
+    let calls = 0;
+    api.on('POST', COMMANDS, () =>
+      ++calls === 1 ? new Promise((r) => (answer = r)) : { outcome: 'Committed' },
+    );
+    button(card, 'set-default').click();
+    await settle();
+    await card.rendered();
+    const edit = card.querySelector('r2m-inline-edit')!;
+    edit.querySelector<HTMLButtonElement>('.r2m-inline-edit__display')!.click();
+    await card.rendered();
+    const input = edit.querySelector<HTMLInputElement>('.r2m-inline-edit__input')!;
+    input.value = 'Lead';
+    input.dispatchEvent(new Event('input'));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await settle();
+    expect(commands()).toHaveLength(1);
+
+    answer({ outcome: 'Committed' });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(commands()).toEqual([
+      { type: 'SetVoiceDefault', voiceId: 'v1' },
+      { type: 'UpdateVoice', voiceId: 'v1', name: 'Lead', description: 'd' },
+    ]);
+    expect(store.busy()).toBe(false);
+    expect(toasts).toEqual([]);
+  });
+
   it('the description draft dirty-gates Save and clears once saved', async () => {
     const card = await mount(voice());
     const save = () => button(card, 'save-description');
