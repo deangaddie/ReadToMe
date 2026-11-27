@@ -2229,7 +2229,8 @@ progress {
       display: none;
     }
     &::after {
-      content: 'expand_more';
+      /* The empty alternative text keeps the ligature's name out of the summary's own. */
+      content: 'expand_more' / '';
       font-family: 'Material Symbols Rounded';
       font-size: 20px;
       line-height: 1;
