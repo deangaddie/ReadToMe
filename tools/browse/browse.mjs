@@ -50,7 +50,7 @@ export async function launch({ headless = true, watchdogMs = 240_000 } = {}) {
   page.on('pageerror', (e) => page.errors.push(`pageerror: ${e.message}`));
   const toastWatch = setInterval(async () => {
     try {
-      for (const t of await page.$$eval('.r2m-toast', (els) => els.map((e) => e.textContent.trim())))
+      for (const t of await page.$$eval('.r2m-toast__text', (els) => els.map((e) => e.textContent.trim())))
         if (!page.toasts.includes(t)) page.toasts.push(t);
     } catch {
       /* page navigating */
