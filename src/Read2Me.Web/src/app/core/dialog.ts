@@ -31,6 +31,18 @@ export interface ClosableContent {
 
 let titleIds = 0;
 
+/** Every modal {@link openDialog} has shown and not yet closed, in top-layer order. */
+const modals: HTMLDialogElement[] = [];
+
+/**
+ * The modal on top, or undefined when none is open. What must be seen or heard while a modal is
+ * open belongs in it: everything outside is inert.
+ */
+export function topmostModal(): HTMLDialogElement | undefined {
+  // `close` fires a task after the dialog closes, so one still listed may already be shut.
+  return modals.findLast((dialog) => dialog.open && dialog.isConnected);
+}
+
 /**
  * Asks the dialog around `content` to close as Escape would, so its `canClose` guard runs: what a
  * Cancel button in guarded content calls instead of emitting `r2m-close`. `requestClose()` is
@@ -116,11 +128,13 @@ export async function openDialog<T>(
     dialog.addEventListener(
       'close',
       () => {
+        modals.splice(modals.indexOf(dialog), 1);
         dialog.remove();
         resolve(result);
       },
       { once: true },
     );
     dialog.showModal();
+    modals.push(dialog);
   });
 }

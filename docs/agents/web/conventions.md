@@ -13,6 +13,7 @@
 11. **Specs** run under `bun test` on happy-dom. A spec that needs a real browser (dialog focus, popover, anchor positioning, layout) belongs in E2E: happy-dom has no `showPopover`, and `showModal` only flips `open`. A partial is tested by `render(partial(...), host)` from lit-html; an element by creating it, setting properties, appending and `await el.rendered()`.
 
 12. **Messages to a new user**: see [user-messages.md](user-messages.md).
+13. **Screen reader announcements** go through `announce()` (`ui/announcer.ts`), never a live region of your own; `assertive` only for data loss, a lost connection or failures. The `role=status` / `alert` nodes already in the app predate it: don't copy them ([primitives.md](primitives.md), Announcer).
 
 ## Adding a page
 
