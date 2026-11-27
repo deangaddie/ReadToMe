@@ -616,9 +616,13 @@ dialog.r2m-dialog--fullscreen {
   overflow: visible;
 }
 .r2m-toast {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: var(--r2m-space-2);
   min-width: 240px;
   max-width: 420px;
-  padding: var(--r2m-space-3) var(--r2m-space-4);
+  padding: var(--r2m-space-1) var(--r2m-space-1) var(--r2m-space-1) var(--r2m-space-4);
   border-radius: var(--r2m-radius-md);
   box-shadow: var(--r2m-shadow-2);
   color: var(--r2m-text);
@@ -636,9 +640,16 @@ dialog.r2m-dialog--fullscreen {
   background: var(--r2m-status-error-soft);
 }
 .r2m-toast__text {
-  margin: 0 0 var(--r2m-space-2);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+/* The close button stays at the top of a message that runs to several lines. */
+.r2m-toast__dismiss {
+  align-self: start;
 }
 .r2m-toast__actions {
+  grid-column: 1 / -1;
+  padding: var(--r2m-space-1) var(--r2m-space-3) var(--r2m-space-2) 0;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;

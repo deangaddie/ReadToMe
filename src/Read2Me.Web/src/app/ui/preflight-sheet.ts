@@ -264,11 +264,11 @@ export class PreflightSheet extends R2mElement {
   };
 
   private readonly cancel = (): void => {
-    if (this.phase() === 'running') {
-      // Docker ops are not safely abortable: the host finishes them; only this task is not started.
-      this.toast.info('Services continue starting in the background');
-    }
+    const running = this.phase() === 'running';
     this.emit('r2m-close', false);
+    // After the close, so the toast is not mounted in, and announced on, a dialog on its way out.
+    // Docker ops are not safely abortable: the host finishes them; only this task is not started.
+    if (running) this.toast.info('Services continue starting in the background');
   };
 
   private apply(m: PreflightMessage): void {
