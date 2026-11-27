@@ -110,6 +110,9 @@ async function render(projects: ProjectSummary[], series: SeriesDto[] = []) {
   await page.rendered();
   await settle();
   expect(page.querySelectorAll('.projects__skeleton').length).toBeGreaterThan(0);
+  expect(page.querySelector('[role="progressbar"]')?.getAttribute('aria-label')).toBe(
+    'Loading projects',
+  );
   answer(projects);
   api.on('GET', '/api/projects', projects);
   await settle();

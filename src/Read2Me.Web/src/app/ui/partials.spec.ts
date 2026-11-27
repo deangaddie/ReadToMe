@@ -8,6 +8,7 @@ import {
   countBadge,
   emptyState,
   icon,
+  skeleton,
   spinner,
   statusChip,
 } from './partials';
@@ -506,6 +507,40 @@ describe('spinner', () => {
     expect(el?.getAttribute('role')).toBe('progressbar');
     expect(el?.classList.contains('x-ring')).toBe(true);
     expect(el?.getAttribute('style')).toContain('--_size: 14px');
+  });
+});
+
+describe('skeleton', () => {
+  it('is one indeterminate progressbar named by its label', () => {
+    const host = mount(skeleton('Loading chapter', 'x-skel'));
+    const bars = host.querySelectorAll('[role="progressbar"]');
+    expect(bars).toHaveLength(1);
+    const bar = bars[0]!;
+    expect(bar.getAttribute('aria-label')).toBe('Loading chapter');
+    expect(bar.hasAttribute('aria-valuenow')).toBe(false);
+    expect(bar.classList.contains('r2m-skeleton')).toBe(true);
+    expect(bar.classList.contains('x-skel')).toBe(true);
+    expect(host.querySelector('[aria-busy]')).toBeNull();
+  });
+
+  it('hides its shapes from assistive tech', () => {
+    const host = mount(
+      skeleton(
+        'Reading the cast',
+        'x-skel',
+        html`<div class="x-line"></div>
+          Reading the cast…`,
+      ),
+    );
+    const shapes = host.querySelector('.r2m-skeleton__shapes');
+    expect(shapes?.getAttribute('aria-hidden')).toBe('true');
+    expect(shapes?.querySelector('.x-line')).not.toBeNull();
+    expect(shapes?.textContent).toContain('Reading the cast…');
+  });
+
+  it('adds no shapes wrapper when the skeleton is one block', () => {
+    const host = mount(skeleton('Loading outputs', 'x-skel'));
+    expect(host.querySelector('.r2m-skeleton__shapes')).toBeNull();
   });
 });
 

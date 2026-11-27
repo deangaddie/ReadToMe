@@ -166,6 +166,22 @@ export function spinner(size = 20, cls = '') {
   ></span>`;
 }
 
+/**
+ * Loading placeholder: one indeterminate progressbar named by `label` (say "Loading chapter"),
+ * drawn by `cls`. Its `shapes` (lines, cards, a visible "Reading…" line) sit in an `aria-hidden`
+ * wrapper laid out with `display: contents`, so they stay the skeleton's own flex or grid items
+ * while assistive tech hears only the label. Never `aria-busy` with a label on a bare `div`.
+ */
+export function skeleton(label: string, cls = '', shapes: unknown = nothing) {
+  return html`<div class="r2m-skeleton ${cls}" role="progressbar" aria-label=${label}>
+    ${
+      shapes === nothing
+        ? nothing
+        : html`<div class="r2m-skeleton__shapes" aria-hidden="true">${shapes}</div>`
+    }
+  </div>`;
+}
+
 /** Count badge (design §7): number + icon coloured by kind; nothing at zero unless `showZero`. */
 export function countBadge(kind: CountBadgeKind, count: number, tooltip: string, showZero = false) {
   if (count === 0 && !showZero) return nothing;

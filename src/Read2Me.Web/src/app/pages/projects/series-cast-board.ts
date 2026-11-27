@@ -9,7 +9,7 @@ import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { SeriesStore, rereads } from '@app/series/series-store';
-import { icon, statusChip } from '@app/ui/partials';
+import { icon, skeleton, statusChip } from '@app/ui/partials';
 import { SeriesActions } from './series-actions';
 import { type BoardCell, boardCells, pickerOptions, suggestedRowCells } from './series-cast';
 import { bookLabel } from './series-shelf';
@@ -119,7 +119,7 @@ export class SeriesCastBoard extends R2mElement {
     const error = this.error();
     if (error && !cast)
       return statusChip({ status: 'error', label: `The series cast could not be read: ${error}` });
-    if (!cast) return html`<p class="series-cast__note" aria-busy="true">Reading the cast…</p>`;
+    if (!cast) return skeleton('Reading the cast', 'series-cast__note', 'Reading the cast…');
     if (cast.books.length === 0)
       return html`<p class="series-cast__note">
         No books yet. Add books to the series to link their Characters.

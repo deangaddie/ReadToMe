@@ -10,7 +10,7 @@ import { ConfirmService, confirmPermanent } from '@app/ui/dialogs';
 import type { IconName } from '@app/ui/icons';
 import type { MeasuredList } from '@app/ui/measured-list';
 import { menuHeading, menuItem, menuKeys } from '@app/ui/menu';
-import { adviceLine, emptyState, gated, icon, statusChip } from '@app/ui/partials';
+import { adviceLine, emptyState, gated, icon, skeleton, statusChip } from '@app/ui/partials';
 import type { SpeakerMenu } from '@app/ui/speaker-menu';
 import { ToastService } from '@app/ui/toast';
 import { type StepActionId, adviceFor } from '../project/pipeline-steps';
@@ -414,13 +414,11 @@ export class BookPage extends R2mElement {
               >
                 ${
                   rows.length === 0
-                    ? html`<div
-                        class="book__skeleton"
-                        aria-busy="true"
-                        aria-label="Loading chapter"
-                      >
-                        ${SKELETON.map(() => html`<div class="book__skeleton-line"></div>`)}
-                      </div>`
+                    ? skeleton(
+                        'Loading chapter',
+                        'book__skeleton',
+                        SKELETON.map(() => html`<div class="book__skeleton-line"></div>`),
+                      )
                     : nothing
                 }
                 <r2m-measured-list

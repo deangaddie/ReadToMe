@@ -8,7 +8,7 @@ import { signal, untracked } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import { ConfirmService } from '@app/ui/dialogs';
 import { menuItem } from '@app/ui/menu';
-import { emptyState, icon, statusChip } from '@app/ui/partials';
+import { emptyState, icon, skeleton, statusChip } from '@app/ui/partials';
 import { projectCard } from '@app/ui/project-card';
 import { ToastService } from '@app/ui/toast';
 import { SeriesStore, rereads } from '@app/series/series-store';
@@ -229,16 +229,18 @@ export class ProjectsPage extends R2mElement {
   }
 
   private skeletons() {
-    return html`<div class="projects__grid" aria-busy="true" aria-label="Loading projects">
-      ${SKELETONS.map(
+    return skeleton(
+      'Loading projects',
+      'projects__grid',
+      SKELETONS.map(
         () =>
           html`<div class="projects__skeleton">
             <div class="projects__skeleton-cover"></div>
             <div class="projects__skeleton-line projects__skeleton-line--title"></div>
             <div class="projects__skeleton-line"></div>
           </div>`,
-      )}
-    </div>`;
+      ),
+    );
   }
 
   private booksView(error: string | null, cards: CardState) {
