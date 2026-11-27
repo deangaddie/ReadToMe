@@ -75,6 +75,8 @@
       flex: 0 1 auto;
       min-width: 10em;
       white-space: normal;
+      /* A word longer than the box breaks rather than running under the controls. */
+      overflow-wrap: anywhere;
       line-height: 1.2;
 
       & > .shell__crumb {
