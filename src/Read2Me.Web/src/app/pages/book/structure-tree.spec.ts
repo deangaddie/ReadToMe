@@ -220,7 +220,9 @@ describe('r2m-structure-tree', () => {
   it('an expanded node whose children are not loaded yet shows a loading mark', async () => {
     await mount({ expandedIds: new Set(['v2']) });
     expect(item('v2').getAttribute('aria-expanded')).toBe('true');
-    expect(item('v2').querySelector('.tree__loading')?.getAttribute('role')).toBe('progressbar');
+    const loading = item('v2').querySelector('.tree__loading');
+    expect(loading?.getAttribute('role')).toBe('progressbar');
+    expect(loading?.getAttribute('aria-label')).toBe('Loading contents');
     expect(ids()).toEqual(['v1', 'v2']);
   });
 

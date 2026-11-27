@@ -15,7 +15,7 @@ import { adoptStyles } from '@app/core/styles';
 import { LiveService } from '@app/live/live.service';
 import { ConfirmService } from '@app/ui/dialogs';
 import { type KeyValueRow, keyValue } from '@app/ui/key-value';
-import { emptyState, gated, icon, spinner, statusChip } from '@app/ui/partials';
+import { emptyState, gated, icon, skeleton, spinner, statusChip } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
 import { ProjectStore } from '../project/project-store';
 import {
@@ -334,11 +334,7 @@ export class ExportPage extends R2mElement {
         error !== null
           ? statusChip({ status: 'error', label: `Outputs could not be loaded: ${error}` })
           : !this.outputsLoaded()
-            ? html`<div
-                class="export__skeleton"
-                aria-busy="true"
-                aria-label="Loading outputs"
-              ></div>`
+            ? skeleton('Loading outputs', 'export__skeleton')
             : outputs.length === 0
               ? emptyState({
                   icon: 'library_music',

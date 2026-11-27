@@ -1088,6 +1088,10 @@ dialog.r2m-dialog--fullscreen {
   border-radius: 50%;
   animation: r2m-spin 0.8s linear infinite;
 }
+/* The skeleton partial's hidden shapes lay out as the skeleton's own children. */
+.r2m-skeleton__shapes {
+  display: contents;
+}
 @keyframes r2m-spin {
   to {
     transform: rotate(360deg);

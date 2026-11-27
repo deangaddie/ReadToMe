@@ -16,7 +16,7 @@ import { provide, use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { SeriesStore, rereads } from '@app/series/series-store';
 import { ConfirmService, PromptService } from '@app/ui/dialogs';
-import { callout, gated, icon, statusChip } from '@app/ui/partials';
+import { callout, gated, icon, skeleton, statusChip } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
 import { CastStore } from '../cast/cast-store';
 import { openAddVoiceDialog } from '../cast/voices/add-voice-dialog';
@@ -244,7 +244,7 @@ export class SeriesVoiceEditor extends R2mElement {
         label: `The series Voices could not be read: ${error}`,
       });
     if (!detail)
-      return html`<p class="series-voices__note" aria-busy="true">Reading the Voices…</p>`;
+      return skeleton('Reading the Voices', 'series-voices__note', 'Reading the Voices…');
     const busy = this.busy();
     // Read here, not inside `repeat`'s item templates, so the rows stay tracked (docs/agents/web/conventions.md, Gotchas).
     const view: RowView = {

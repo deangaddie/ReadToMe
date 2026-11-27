@@ -3,7 +3,7 @@ import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
-import { statusChip } from '@app/ui/partials';
+import { skeleton, statusChip } from '@app/ui/partials';
 import { pipeline } from '@app/ui/pipeline';
 import { helpPanel } from './help-panel';
 import { type StepId, readOnlyPipeline } from './pipeline-steps';
@@ -72,11 +72,7 @@ export class OverviewPage extends R2mElement {
                   renderHelp: (step) => helpPanel(step, closeHelp, 'inline'),
                 })
               : this.store.loading()
-                ? html`<div
-                    class="overview__skeleton"
-                    aria-busy="true"
-                    aria-label="Loading pipeline"
-                  ></div>`
+                ? skeleton('Loading pipeline', 'overview__skeleton')
                 : nothing
           }
         </section>

@@ -17,7 +17,7 @@ import { adoptStyles } from '@app/core/styles';
 import { LiveService } from '@app/live/live.service';
 import { Preflight } from '@app/shared/preflight';
 import { ConfirmService, PromptService } from '@app/ui/dialogs';
-import { emptyState, gated, icon, statusChip } from '@app/ui/partials';
+import { emptyState, gated, icon, skeleton, statusChip } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
 import { ProjectStore } from '../project/project-store';
 import {
@@ -261,11 +261,7 @@ export class CastPage extends R2mElement {
     narrator: NarratorDto | null,
   ) {
     if (this.store.loading() && rows.length === 0) {
-      return html`<div
-        class="cast__skeleton"
-        aria-busy="true"
-        aria-label="Loading characters"
-      ></div>`;
+      return skeleton('Loading characters', 'cast__skeleton');
     }
     if (rows.length === 0) {
       return emptyState({

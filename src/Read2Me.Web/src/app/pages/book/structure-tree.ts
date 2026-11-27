@@ -5,7 +5,7 @@ import { R2mElement, define } from '@app/core/element';
 import { computed, signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import type { NodeStatusSummaryDto } from '@app/api';
-import { countBadge, icon, statusChip } from '@app/ui/partials';
+import { countBadge, icon, skeleton, statusChip } from '@app/ui/partials';
 import { TypeAhead, typeAheadTarget } from '@app/ui/roving';
 import { type TreeNode, placeholderTitleClass } from './book-tree';
 import { NODE_MENU_OPEN, type NodeMenuRequest, nodeMenuTrigger } from './node-menu';
@@ -230,11 +230,7 @@ export class StructureTree extends R2mElement {
               data-tooltip-overflow
               >${node.title}</span
             >
-            ${
-              isOpen && !node.loaded
-                ? html`<span class="tree__loading" role="progressbar" aria-label="Loading"></span>`
-                : nothing
-            }
+            ${isOpen && !node.loaded ? skeleton('Loading contents', 'tree__loading') : nothing}
             <span class="tree__menu">
               ${nodeMenuTrigger(menu.target, { block: menu.block, tabIndex: -1 })}
             </span>
