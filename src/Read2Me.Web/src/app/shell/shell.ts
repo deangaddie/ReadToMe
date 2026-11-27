@@ -206,17 +206,26 @@ export class AppShell extends R2mElement {
             ><img src=${logoUrl} alt="" width="24" height="24" />Read2Me</a
           >
 
-          <nav class="shell__crumbs" aria-label="Breadcrumb">
-            ${crumbs.map((crumb, i) => {
-              const last = i === crumbs.length - 1;
-              return html`${
-                last
-                  ? html`<span class="shell__crumb shell__crumb--current" aria-current="page"
-                      >${crumb.title}</span
-                    >`
-                  : html`<a class="shell__crumb" href=${crumb.href}>${crumb.title}</a>`
-              }${last ? nothing : html`<span class="shell__crumb-sep" aria-hidden="true">›</span>`}`;
-            })}
+          <nav class="shell__crumbs" aria-label="Breadcrumbs">
+            <ol>
+              ${crumbs.map((crumb, i) =>
+                i === crumbs.length - 1
+                  ? html`<li>
+                      <a class="shell__crumb" href=${crumb.href} aria-current="page"
+                        >${crumb.title}</a
+                      >
+                    </li>`
+                  : html`<li>
+                      <a
+                        class="shell__crumb"
+                        href=${crumb.href}
+                        data-tooltip=${crumb.title}
+                        data-tooltip-overflow
+                        >${crumb.title}</a
+                      >
+                    </li>`,
+              )}
+            </ol>
           </nav>
 
           <span class="shell__spacer"></span>
