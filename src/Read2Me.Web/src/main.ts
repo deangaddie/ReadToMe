@@ -32,7 +32,3 @@ installTooltips();
 
 // Open the live hub once for the app's lifetime; it reconnects on its own.
 use(LiveService).start();
-
-// TEMPORARY (#472 proof): lets the browser test call announce(); deleted with the test.
-const { announce } = await import('@app/ui/announcer');
-Object.assign(window, { __announce: announce });
