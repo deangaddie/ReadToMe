@@ -79,6 +79,9 @@ export class CastStore {
   private readonly _voiceRulesLoading = signal(false);
   private readonly _audioVersions = signal<Record<Guid, number>>({});
   private readonly _busy = signal(false);
+  /** The last command's turn, which the next one waits for (#535); and how many are not done. */
+  private queue: Promise<unknown> = Promise.resolve();
+  private unfinished = 0;
 
   readonly folder = this._folder.asReadonly();
   readonly rows = this._rows.asReadonly();
@@ -214,20 +217,41 @@ export class CastStore {
   /**
    * Posts one command and reloads. Resolves the host's response (for `newEntityId`), or undefined
    * when the host refused it — the refusal is toasted verbatim (design §8).
+   *
+   * Commands go one at a time (#535): one made while another is in flight waits for it to land and
+   * reload, then is sent to the folder it was made for. {@link busy} holds from the first to the
+   * last. Each checks the Edit gate again at its turn; a closed gate sends nothing and toasts why.
    */
-  async run(command: BookCommand): Promise<CommandResponse | undefined> {
+  run(command: BookCommand): Promise<CommandResponse | undefined> {
     const folder = this._folder();
-    if (!folder || this._busy() || this.block() !== null) return undefined;
+    if (!folder) return Promise.resolve(undefined);
+    const idle = this.unfinished === 0;
+    this.unfinished++;
     this._busy.set(true);
+    // Idle, it goes now; otherwise after the last one queued.
+    const turn = idle
+      ? this.send(folder, command)
+      : this.queue.then(() => this.send(folder, command));
+    this.queue = turn;
+    return turn.finally(() => {
+      if (--this.unfinished === 0) this._busy.set(false);
+    });
+  }
+
+  /** One command's turn: never rejects, so the queue behind it always moves on. */
+  private async send(folder: string, command: BookCommand): Promise<CommandResponse | undefined> {
+    const block = this.stepView.readOnly(folder);
+    if (block !== null) {
+      this.toast.warn(block.reason ? `Not saved. ${block.reason}` : 'Not saved.');
+      return undefined;
+    }
     try {
       const response = await this.book.execute(folder, command);
-      await this.refresh();
+      if (this._folder() === folder) await this.refresh();
       return response;
     } catch (error) {
       this.toast.problem(toApiError(error).toProblem());
       return undefined;
-    } finally {
-      this._busy.set(false);
     }
   }
 

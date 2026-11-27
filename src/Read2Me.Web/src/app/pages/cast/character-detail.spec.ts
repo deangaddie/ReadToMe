@@ -157,6 +157,40 @@ describe('r2m-character-detail', () => {
     expect(store.selected()?.name).toBe('Alice Liddell');
   });
 
+  it('a rename made while an earlier write is in flight is sent once it lands (#535)', async () => {
+    const detail = await mount(ALICE);
+    let answer!: (v: unknown) => void;
+    let calls = 0;
+    api.on('POST', COMMANDS, () =>
+      ++calls === 1 ? new Promise((r) => (answer = r)) : { outcome: 'Committed' },
+    );
+    const earlier = store.run({ type: 'AddCharacterAlias', characterId: 'alice', name: 'Ally' });
+    await settle();
+    await detail.rendered();
+    detail.querySelector<HTMLButtonElement>('.r2m-inline-edit__display')!.click();
+    await detail.rendered();
+    const input = detail.querySelector<HTMLInputElement>('.r2m-inline-edit__input')!;
+    input.value = 'Alice Liddell';
+    input.dispatchEvent(new Event('input'));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await settle();
+    expect(commands()).toHaveLength(1);
+
+    api.on('GET', `${BASE}/characters/summary`, [
+      row('Narrator'),
+      { ...ALICE, name: 'Alice Liddell' },
+    ]);
+    answer({ outcome: 'Committed' });
+    await earlier;
+    await settle();
+    expect(commands()).toEqual([
+      { type: 'AddCharacterAlias', characterId: 'alice', name: 'Ally' },
+      { type: 'RenameCharacter', characterId: 'alice', name: 'Alice Liddell' },
+    ]);
+    expect(store.selected()?.name).toBe('Alice Liddell');
+    expect(toasts).toEqual([]);
+  });
+
   it('adds an alias on Enter, ignores the blur that follows, and removes one', async () => {
     const detail = await mount(ALICE);
     api.on('POST', COMMANDS, { outcome: 'Committed' });

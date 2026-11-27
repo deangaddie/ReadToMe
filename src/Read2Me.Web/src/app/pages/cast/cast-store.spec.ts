@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type {
-  CharacterSummaryDto,
-  CharacterVoicesDto,
-  VoiceDto,
-  BookFacets,
-  ReceiptMessage,
+import {
+  StepView,
+  VIEWING_READ_ONLY,
+  type CharacterSummaryDto,
+  type CharacterVoicesDto,
+  type VoiceDto,
+  type BookFacets,
+  type ReceiptMessage,
 } from '@app/api';
-import { override, resetServices } from '@app/core/services';
+import { override, resetServices, use } from '@app/core/services';
 import type { Receipt } from '@app/live/live-messages';
 import { REFETCH_DEBOUNCE_MS } from '@app/shared/debounced';
 import { ToastService } from '@app/ui/toast';
@@ -89,6 +91,7 @@ const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 let api: FakeApi;
 let live: FakeLive;
 let problems: unknown[];
+let warnings: string[];
 let store: CastStore;
 
 beforeEach(() => {
@@ -98,7 +101,11 @@ beforeEach(() => {
   live = new FakeLive().install();
   live.seed('dracula', REVISION);
   problems = [];
-  override(ToastService, { problem: (p: unknown) => problems.push(p) } as unknown as ToastService);
+  warnings = [];
+  override(ToastService, {
+    problem: (p: unknown) => problems.push(p),
+    warn: (m: string) => warnings.push(m),
+  } as unknown as ToastService);
   store = new CastStore();
 });
 afterEach(() => store.close());
@@ -326,16 +333,101 @@ describe('CastStore', () => {
     expect(api.calls('GET', SUMMARY)).toHaveLength(1);
   });
 
-  it('a second run while one is in flight is refused', async () => {
-    await open();
-    let answer!: (v: unknown) => void;
-    api.on('POST', COMMANDS, () => new Promise((r) => (answer = r)));
-    api.on('GET', SUMMARY, [row('Narrator')]);
-    const first = store.run({ type: 'CreateCharacter', name: 'Bob' });
-    expect(await store.run({ type: 'CreateCharacter', name: 'Carol' })).toBeUndefined();
-    answer({ outcome: 'Committed' });
-    await first;
-    expect(api.calls('POST', COMMANDS)).toHaveLength(1);
+  describe('a run while another is in flight (#535)', () => {
+    /** Holds every command until `release(i)`; answers it with `newEntityId` = its name. */
+    function holdCommands() {
+      const answers: ((v: unknown) => void)[] = [];
+      api.on(
+        'POST',
+        COMMANDS,
+        (body) =>
+          new Promise((r) => {
+            const name = (body as { name?: string }).name ?? null;
+            answers.push(() => r({ outcome: 'Committed', newEntityId: name }));
+          }),
+      );
+      return {
+        release: async (i: number) => {
+          answers[i]!(undefined);
+          await settle();
+        },
+        count: () => answers.length,
+      };
+    }
+
+    it('waits, then is sent once the earlier one lands; busy holds until the last', async () => {
+      await open();
+      const held = holdCommands();
+      const first = store.run({ type: 'CreateCharacter', name: 'Bob' });
+      const second = store.run({ type: 'RenameCharacter', characterId: 'alice', name: 'Al' });
+      await settle();
+      expect(held.count()).toBe(1);
+
+      await held.release(0);
+      expect((await first)?.newEntityId).toBe('Bob');
+      expect(store.busy()).toBe(true);
+      // The first reloaded before the second was sent.
+      expect(api.calls('GET', SUMMARY)).toHaveLength(2);
+      expect(held.count()).toBe(2);
+
+      await held.release(1);
+      expect((await second)?.newEntityId).toBe('Al');
+      expect(store.busy()).toBe(false);
+      expect(api.calls('POST', COMMANDS).map((c) => c.body)).toEqual([
+        { type: 'CreateCharacter', name: 'Bob' },
+        { type: 'RenameCharacter', characterId: 'alice', name: 'Al' },
+      ]);
+      expect(api.calls('GET', SUMMARY)).toHaveLength(3);
+    });
+
+    it('a refused earlier command does not stop the next', async () => {
+      await open();
+      let calls = 0;
+      api.on('POST', COMMANDS, () =>
+        ++calls === 1 ? problem(422, 'Name taken') : { outcome: 'Committed' },
+      );
+      const first = store.run({ type: 'CreateCharacter', name: 'Bob' });
+      const second = store.run({ type: 'CreateCharacter', name: 'Carol' });
+      expect(await first).toBeUndefined();
+      expect(await second).toBeDefined();
+      expect(problems).toHaveLength(1);
+      expect(store.busy()).toBe(false);
+    });
+
+    it('is not sent when the Edit gate closed before its turn, and says why', async () => {
+      await open();
+      const held = holdCommands();
+      const first = store.run({ type: 'CreateCharacter', name: 'Bob' });
+      const second = store.run({ type: 'RenameCharacter', characterId: 'alice', name: 'Al' });
+      await settle();
+      use(StepView).view('dracula', 's8');
+      await held.release(0);
+      await first;
+      expect(await second).toBeUndefined();
+      expect(held.count()).toBe(1);
+      expect(warnings).toEqual([`Not saved. ${VIEWING_READ_ONLY}`]);
+      expect(store.busy()).toBe(false);
+    });
+
+    it('is sent to the folder it was made for, and reloads only if that folder is still open', async () => {
+      await open();
+      const held = holdCommands();
+      const first = store.run({ type: 'CreateCharacter', name: 'Bob' });
+      const second = store.run({ type: 'RenameCharacter', characterId: 'alice', name: 'Al' });
+      await settle();
+      api.on('GET', '/api/projects/emma/characters/summary', [row('Narrator')]);
+      await store.open('emma');
+      await held.release(0);
+      await first;
+      await held.release(1);
+      await second;
+      expect(api.calls('POST', COMMANDS)).toHaveLength(2);
+      expect(api.calls('POST', '/api/projects/emma/commands')).toHaveLength(0);
+      // Only the open load of emma; no reload of either folder after the switch.
+      expect(api.calls('GET', SUMMARY)).toHaveLength(1);
+      expect(api.calls('GET', '/api/projects/emma/characters/summary')).toHaveLength(1);
+      expect(store.busy()).toBe(false);
+    });
   });
 
   it('close drops the selection and stops listening', async () => {
