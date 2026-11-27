@@ -556,7 +556,9 @@ describe('itemRow (audio)', () => {
     it('a dismissed review is a faded icon with no chip', async () => {
       const el = await mount(ctx({ reviews: { d: { ...review, state: 'Dismissed' } } }), DIALOG);
       expect(el.querySelector('.r2m-status-chip')).toBeNull();
-      expect(el.querySelector('[data-testid=review-dismissed]')).not.toBeNull();
+      expect(
+        el.querySelector('[data-testid=review-dismissed] [role=img]')?.getAttribute('aria-label'),
+      ).toBe('Review dismissed');
     });
 
     it('a verify failure carries a Dismiss that posts through the generator; a dismissed review has none', async () => {

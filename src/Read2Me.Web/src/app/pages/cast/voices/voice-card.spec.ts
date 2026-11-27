@@ -148,7 +148,9 @@ describe('r2m-voice-card', () => {
     expect(card.querySelector('[data-testid=voice-reference-warning]')?.textContent).toContain(
       '20 s',
     );
-    expect(card.querySelector('.voice-card__star--on')).not.toBeNull();
+    expect(card.querySelector('.voice-card__star--on [role=img]')?.getAttribute('aria-label')).toBe(
+      'Default voice',
+    );
     expect(button(card, 'set-default')).toBeNull();
     expect(button(card, 'edit-audio')?.getAttribute('href')).toBe(
       'projects/dracula/voices/v1/editor',

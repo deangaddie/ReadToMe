@@ -171,11 +171,7 @@ export class SpeakerChip extends R2mElement {
       <span class="r2m-speaker-chip__name">${this.#label()}</span>
       ${
         state === 'narrator-linked'
-          ? html`<span
-              class="material-symbols-rounded r2m-speaker-chip__link"
-              aria-label="Linked narrator"
-              >${'link' satisfies IconName}</span
-            >`
+          ? icon('link', 'r2m-speaker-chip__link', 'Linked narrator')
           : nothing
       }`;
   }

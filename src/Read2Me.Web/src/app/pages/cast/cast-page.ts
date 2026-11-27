@@ -305,8 +305,7 @@ export class CastPage extends R2mElement {
                             class="cast__series"
                             data-testid="series-badge"
                             data-tooltip=${`Linked in ${row.seriesLink.seriesName}: its Voices are shared`}
-                            aria-label=${`Linked in ${row.seriesLink.seriesName}`}
-                            >${icon('link')}</span
+                            >${icon('link', '', `Linked in ${row.seriesLink.seriesName}`)}</span
                           >`
                         : nothing
                     }
@@ -316,8 +315,7 @@ export class CastPage extends R2mElement {
                             class="cast__series cast__series--differs"
                             data-testid="differs-badge"
                             data-tooltip=${`Differs from series: its Voices here are not the copy the other books in ${row.seriesLink.seriesName} hold`}
-                            aria-label="Differs from series"
-                            >${icon('sync_problem')}</span
+                            >${icon('sync_problem', '', 'Differs from series')}</span
                           >`
                         : nothing
                     }

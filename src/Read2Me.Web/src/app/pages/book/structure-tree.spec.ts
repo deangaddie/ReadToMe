@@ -186,7 +186,7 @@ describe('r2m-structure-tree', () => {
       const children = Array.from(item('p1').children);
       expect(children.indexOf(p1)).toBe(children.length - 1);
       expect(line2('Alpha')?.textContent).toContain('Processing');
-      expect(line2('Bravo')?.querySelector('[aria-label="Done"]')).not.toBeNull();
+      expect(line2('Bravo')?.querySelector('[role=img][aria-label="Done"]')).not.toBeNull();
     });
 
     it('a row with no badges and no chip has no second line', async () => {
@@ -220,7 +220,7 @@ describe('r2m-structure-tree', () => {
   it('an expanded node whose children are not loaded yet shows a loading mark', async () => {
     await mount({ expandedIds: new Set(['v2']) });
     expect(item('v2').getAttribute('aria-expanded')).toBe('true');
-    expect(item('v2').querySelector('.tree__loading')).not.toBeNull();
+    expect(item('v2').querySelector('.tree__loading')?.getAttribute('role')).toBe('progressbar');
     expect(ids()).toEqual(['v1', 'v2']);
   });
 
