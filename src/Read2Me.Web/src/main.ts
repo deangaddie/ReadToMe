@@ -32,16 +32,3 @@ installTooltips();
 
 // Open the live hub once for the app's lifetime; it reconnects on its own.
 use(LiveService).start();
-
-// TEMPORARY (#465 proof): a real API call left unhandled, and a closedby=any dialog.
-const { ProjectsApi } = await import('@app/api');
-Object.assign(window, {
-  __uncaughtCreate: () =>
-    void use(ProjectsApi).create({
-      title: 'x',
-      bookTitle: 'x',
-      author: 'x',
-      file: new File(['x'], 'x.txt'),
-    }),
-  __confirm: () => void confirm.confirm({ title: 'Proof?', message: 'A closedby=any dialog.' }),
-});
