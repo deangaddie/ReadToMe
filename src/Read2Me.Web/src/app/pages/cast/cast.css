@@ -506,6 +506,10 @@
   .voice-card__name > r2m-inline-edit {
     pointer-events: auto;
   }
+  /* As wide as the name, not the description under it, so the space beside a short name opens the card. */
+  .voice-card__name > r2m-inline-edit {
+    align-self: flex-start;
+  }
   .voice-card__title {
     display: flex;
     align-items: center;
