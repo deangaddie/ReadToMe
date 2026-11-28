@@ -2,7 +2,7 @@
 @scope (r2m-add-titles-dialog) {
   :scope {
     display: block;
-    min-width: 360px;
+    min-width: min(360px, 100%);
     max-width: 520px;
   }
   .titles__content {

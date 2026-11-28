@@ -7,7 +7,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--r2m-space-3);
-    min-width: min(560px, 90vw);
+    min-width: min(560px, var(--r2m-dialog-content-max));
   }
   .editor__preview {
     border-radius: var(--r2m-radius-md);

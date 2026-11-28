@@ -2,7 +2,7 @@
 @scope (r2m-new-project-dialog) to (r2m-file-drop > *) {
   :scope {
     display: block;
-    width: min(560px, 90vw);
+    width: min(560px, var(--r2m-dialog-content-max));
   }
   .new-project__content {
     gap: var(--r2m-space-3);
