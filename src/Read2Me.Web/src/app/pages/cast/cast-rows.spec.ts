@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import type { CharacterSummaryDto } from '@app/api';
-import { displayName, filterRows, hasBookIcon, readinessChip, sortRows } from './cast-rows';
+import {
+  displayName,
+  filterRows,
+  hasBookIcon,
+  readinessChip,
+  sortAnnouncement,
+  sortRows,
+} from './cast-rows';
 
 function row(overrides: Partial<CharacterSummaryDto> & { name: string }): CharacterSummaryDto {
   return {
@@ -112,5 +119,24 @@ describe('sortRows', () => {
   it('does not mutate its input', () => {
     sortRows(rows, 'name');
     expect(rows[0]).toBe(watson);
+  });
+
+  it('sorts numbers in names naturally, ignoring case', () => {
+    const guards = [row({ name: 'Guard 10' }), row({ name: 'guard 2' }), row({ name: 'Guard 1' })];
+    expect(sortRows(guards, 'name').map((r) => r.name)).toEqual(['Guard 1', 'guard 2', 'Guard 10']);
+    const tied = guards.map((g) => ({ ...g, lineCount: 3 }));
+    expect(sortRows(tied, 'lines').map((r) => r.name)).toEqual(['Guard 1', 'guard 2', 'Guard 10']);
+  });
+});
+
+describe('sortAnnouncement', () => {
+  it.each([
+    ['name', 42, 'Sorted by name, 42 characters'],
+    ['lines', 42, 'Sorted by lines, 42 characters'],
+    ['readiness', 3, 'Sorted by voice readiness, 3 characters'],
+    ['name', 1, 'Sorted by name, 1 character'],
+    ['lines', 0, 'Sorted by lines, 0 characters'],
+  ] as const)('%s with %d rows', (sort, count, expected) => {
+    expect(sortAnnouncement(sort, count)).toBe(expected);
   });
 });
