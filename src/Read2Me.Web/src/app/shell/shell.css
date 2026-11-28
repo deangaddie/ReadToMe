@@ -38,14 +38,51 @@
     text-decoration: none;
     margin: 0 var(--r2m-space-3) 0 var(--r2m-space-1);
   }
+  /* Breadcrumbs: an ordered list of links, the last the current page (aria-current). Ancestors
+     truncate (their full text is a tooltip); the current page never does. */
   .shell__crumbs {
-    display: flex;
-    align-items: center;
-    gap: var(--r2m-space-1);
     min-width: 0;
     font-size: var(--r2m-text-md);
-    overflow: hidden;
     white-space: nowrap;
+
+    & > ol {
+      display: flex;
+      align-items: center;
+      gap: var(--r2m-space-1);
+      min-width: 0;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    & li {
+      display: flex;
+      align-items: center;
+      gap: var(--r2m-space-1);
+      min-width: 0;
+    }
+    /* The separator is generated content with empty alt text, so it is not announced. */
+    & li + li::before {
+      content: '›' / '';
+      color: var(--r2m-text-muted);
+    }
+    /* Ancestors give way first, down to a sliver that still shows their ellipsis. */
+    & li:not(:last-child) {
+      flex: 0 1000 auto;
+      min-width: 2.5em;
+    }
+    /* The current page never truncates: short of room it wraps to a second line of the bar. */
+    & li:last-child {
+      flex: 0 1 auto;
+      min-width: 10em;
+      white-space: normal;
+      /* A word longer than the box breaks rather than running under the controls. */
+      overflow-wrap: anywhere;
+      line-height: 1.2;
+
+      & > .shell__crumb {
+        overflow: visible;
+      }
+    }
   }
   .shell__crumb {
     color: var(--r2m-text-muted);
@@ -53,16 +90,15 @@
     overflow: hidden;
     text-overflow: ellipsis;
 
-    &:hover {
+    &:hover,
+    &:focus-visible {
       color: var(--r2m-text);
+      text-decoration: underline;
     }
-  }
-  .shell__crumb--current {
-    color: var(--r2m-text);
-    font-weight: 500;
-  }
-  .shell__crumb-sep {
-    color: var(--r2m-text-muted);
+    &[aria-current='page'] {
+      color: var(--r2m-text);
+      font-weight: 500;
+    }
   }
   .shell__spacer {
     flex: 1 1 auto;

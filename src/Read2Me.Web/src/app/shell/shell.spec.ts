@@ -137,18 +137,36 @@ describe('app-root', () => {
       if (expected) expect(crumbs[i]).toBe(expected);
     });
     if (c.title) expect(crumbs.at(-1)).toBe(c.title);
-    expect(shell.querySelector('.shell__crumb--current')?.textContent?.trim()).toBe(
+    expect(shell.querySelector('.shell__crumb[aria-current="page"]')?.textContent?.trim()).toBe(
       crumbs.at(-1) ?? '',
     );
   });
 
-  it('links every crumb but the current page, app-relative', async () => {
+  it('lists every crumb as a link, app-relative, the last one the current page', async () => {
     const { shell } = await mount('projects/my%20book/book');
-    const links = Array.from(shell.querySelectorAll('a.shell__crumb')).map((a) =>
-      a.getAttribute('href'),
-    );
-    expect(links).toEqual(['projects', 'projects/my%20book']);
-    expect(shell.querySelector('.shell__crumb--current')?.textContent).toBe('Book');
+    const nav = shell.querySelector('nav.shell__crumbs');
+    expect(nav?.getAttribute('aria-label')).toBe('Breadcrumbs');
+    const items = Array.from(nav?.querySelectorAll(':scope > ol > li') ?? []);
+    expect(items.length).toBe(3);
+    const links = items.map((li) => li.querySelector(':scope > a.shell__crumb'));
+    expect(links.map((a) => a?.getAttribute('href'))).toEqual([
+      'projects',
+      'projects/my%20book',
+      'projects/my%20book/book',
+    ]);
+    expect(links.map((a) => a?.getAttribute('aria-current'))).toEqual([null, null, 'page']);
+    // The separator is generated content with empty alt text, not markup.
+    expect(nav?.querySelector('[aria-hidden]')).toBeNull();
+  });
+
+  it('tips a cut-off ancestor crumb with its full text, never the current one', async () => {
+    const { shell } = await mount('projects/my%20book/book');
+    const links = Array.from(shell.querySelectorAll<HTMLAnchorElement>('a.shell__crumb'));
+    for (const a of links.slice(0, -1)) {
+      expect(a.dataset['tooltip']).toBe(a.textContent?.trim());
+      expect(a.hasAttribute('data-tooltip-overflow')).toBe(true);
+    }
+    expect(links.at(-1)?.hasAttribute('data-tooltip')).toBe(false);
   });
 
   it('names the project crumb by its loaded title, keeping the folder link', async () => {
