@@ -74,6 +74,9 @@ namespace Read2Me.App
                 app.UseHttpsRedirection();
             }
 
+            // Ahead of the Workspace mount and routing: another page's request is refused before anything runs.
+            app.UseRequestIsolation(env.IsDevelopment());
+
             app.UseStaticFiles(new StaticFileOptions
             {
                 OnPrepareResponse = ApplySpaBundleCaching

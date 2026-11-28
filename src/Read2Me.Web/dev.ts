@@ -6,7 +6,30 @@ const HOST = 'localhost:5000';
 const FORWARDED = ['/api', '/hubs', '/workspace', '/openapi', '/audio-preview', '/preview-source'];
 const ROOT = BASE.replace(/\/$/, '');
 
-type Bridge = { path: string; upstream?: WebSocket; pending: (string | Uint8Array<ArrayBuffer>)[] };
+// The browser headers the host's request isolation reads (docs/agents/api/README.md). Plain HTTP
+// forwards them with the rest; the /hubs bridge opens a socket of its own, so it passes them on.
+const ISOLATION_HEADERS = ['origin', 'sec-fetch-site', 'sec-fetch-mode', 'sec-fetch-dest'];
+
+const isolationHeaders = (req: Request): Record<string, string> =>
+  Object.fromEntries(
+    ISOLATION_HEADERS.flatMap((name) => {
+      const value = req.headers.get(name);
+      return value === null ? [] : [[name, value]];
+    }),
+  );
+
+// Bun's WebSocket takes request headers; the DOM lib's constructor type, which wins here, does not.
+const BunWebSocket = WebSocket as unknown as new (
+  url: string,
+  options: Bun.WebSocketOptions,
+) => WebSocket;
+
+type Bridge = {
+  path: string;
+  headers: Record<string, string>;
+  upstream?: WebSocket;
+  pending: (string | Uint8Array<ArrayBuffer>)[];
+};
 
 const isForwarded = (pathname: string) =>
   FORWARDED.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
@@ -26,7 +49,8 @@ const server = Bun.serve<Bridge>({
     const url = new URL(req.url);
     if (!isForwarded(url.pathname)) return new Response('Not found', { status: 404 });
     if (req.headers.get('upgrade')?.toLowerCase() === 'websocket') {
-      return srv.upgrade(req, { data: { path: url.pathname + url.search, pending: [] } })
+      const data = { path: url.pathname + url.search, headers: isolationHeaders(req), pending: [] };
+      return srv.upgrade(req, { data })
         ? undefined
         : new Response('Upgrade failed', { status: 400 });
     }
@@ -44,7 +68,9 @@ const server = Bun.serve<Bridge>({
   // The /hubs bridge: SignalR's WebSocket goes to the host, buffering until the upstream opens.
   websocket: {
     open(ws) {
-      const upstream = new WebSocket(`ws://${HOST}${ws.data.path}`);
+      const upstream = new BunWebSocket(`ws://${HOST}${ws.data.path}`, {
+        headers: ws.data.headers,
+      });
       upstream.binaryType = 'arraybuffer';
       ws.data.upstream = upstream;
       upstream.onopen = () => {

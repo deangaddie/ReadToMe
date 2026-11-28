@@ -47,6 +47,27 @@ while :; do
 done
 ```
 
+## Request isolation and security headers
+
+The host has no authentication, so any other page the user has open is the threat, another
+`localhost` port included (it is the same site). One middleware (`Api/RequestIsolation.cs`), ahead
+of routing and every file mount, guards `/api`, `/hubs` (negotiate and the WebSocket upgrade),
+`/workspace`, `/audio-preview` and `/preview-source`:
+
+- **`Sec-Fetch-Site` present**: `same-origin` and `none` pass. Any other value passes only for a
+  `GET` navigation (`Sec-Fetch-Mode: navigate`, not into an `<object>` or `<embed>`), so a link to a
+  Workspace file still opens. Everything else, `same-site` included, is a **403** problem.
+- **No `Sec-Fetch-Site`, `Origin` present**: `Origin` must equal one of the host's own origins as a
+  whole string: its bound addresses (each loopback binding under `localhost`, `127.0.0.1` and
+  `[::1]`) and, in Development, the web dev server (`http://localhost:4300`, `http://127.0.0.1:4300`).
+- **Neither header** (curl, an agent, the .NET client, tests): passes unchanged.
+
+Every guarded response carries `Vary: Sec-Fetch-Dest, Sec-Fetch-Mode, Sec-Fetch-Site`. The host has
+no CORS policy, and must not gain one: the rule stops requests that do harm unread, and relies on
+cross-origin reads staying refused. The dev server (`src/Read2Me.Web/dev.ts`) forwards the browser's
+headers on plain HTTP and passes `Origin` and `Sec-Fetch-*` to its upstream hub socket, so the
+host's one check covers dev too; it has no check of its own.
+
 ## Parts
 
 Read the part for the area you are calling or changing:
