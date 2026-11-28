@@ -491,6 +491,16 @@ describe('LiveService', () => {
       ]);
     });
 
+    it('says no return for a drop the app stopped, after a fresh start', async () => {
+      service.start();
+      await settle();
+      current().drop();
+      await service.stop();
+      service.start();
+      await settle();
+      expect(heard.map((h) => h.text)).toEqual(['Live updates disconnected — retrying']);
+    });
+
     it('says nothing when the app stops the connection itself', async () => {
       service.start();
       await settle();

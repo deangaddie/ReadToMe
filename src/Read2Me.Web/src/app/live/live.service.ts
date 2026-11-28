@@ -46,8 +46,8 @@ export type LiveConnectionState = 'connecting' | 'connected' | 'reconnecting' | 
 /** How long the hub may be unreachable before the user is told (spec "Error handling"). */
 export const DISCONNECT_TOAST_AFTER_MS = 5000;
 
-const LOST_MESSAGE = 'Live updates disconnected — retrying';
-const BACK_MESSAGE = 'Live updates reconnected';
+const DISCONNECTED_MESSAGE = 'Live updates disconnected — retrying';
+const RECONNECTED_MESSAGE = 'Live updates reconnected';
 
 type FamilySubjects = { [K in LiveFamily]: Emitter<LiveMessageMap[K]> };
 
@@ -188,6 +188,7 @@ export class LiveService {
 
   async stop(): Promise<void> {
     this.stopped = true;
+    this.lostAnnounced = false;
     this.clearDisconnectToast();
     const connection = this.connection;
     this.connection = null;
@@ -306,10 +307,10 @@ export class LiveService {
     this.clearDisconnectToast();
     const announced = this.lostAnnounced;
     this.lostAnnounced = false;
-    if (announced) announce(BACK_MESSAGE, 'polite');
+    if (announced) announce(RECONNECTED_MESSAGE, 'polite');
     if (this.disconnectToasted) {
       this.disconnectToasted = false;
-      this.toast.success(BACK_MESSAGE, { silent: announced });
+      this.toast.success(RECONNECTED_MESSAGE, { silent: announced });
     }
     for (const folder of this.joinedProjects()) await this.invokeJoinProject(folder);
     for (const kind of this.joinedStreams())
@@ -324,7 +325,7 @@ export class LiveService {
   private onLost(state: 'reconnecting' | 'disconnected'): void {
     if (this._state() === 'connected') {
       this.lostAnnounced = true;
-      announce(LOST_MESSAGE, 'assertive');
+      announce(DISCONNECTED_MESSAGE, 'assertive');
     }
     this._state.set(state);
     if (state === 'reconnecting' && this._attempt() === 0) this._attempt.set(1);
@@ -337,7 +338,7 @@ export class LiveService {
       this.disconnectTimer = null;
       if (this._state() === 'connected' || this.stopped) return;
       this.disconnectToasted = true;
-      this.toast.warn(LOST_MESSAGE, { silent: this.lostAnnounced });
+      this.toast.warn(DISCONNECTED_MESSAGE, { silent: this.lostAnnounced });
     }, DISCONNECT_TOAST_AFTER_MS);
   }
 

@@ -59,8 +59,7 @@ describe('ToastService', () => {
     const service = new ToastService();
     service.success('Back', { silent: true });
     service.warn('Lost', { silent: true });
-    service.error('Broke', { silent: true });
-    expect(messages()).toEqual(['Back', 'Lost', 'Broke']);
+    expect(messages()).toEqual(['Back', 'Lost']);
     expect(announced).toEqual([]);
   });
 

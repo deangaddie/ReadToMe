@@ -115,20 +115,20 @@ export class ToastService {
   readonly #countdowns = new WeakMap<Element, Countdown>();
 
   success(message: string, options?: ToastOptions): void {
-    this.show('success', message, [], options);
+    this.show('success', message, options);
   }
 
   /** With `actions`, the toast offers them as buttons and stays up longer. */
   info(message: string, actions?: ToastAction[]): void {
-    this.show('info', message, actions);
+    this.show('info', message, { actions });
   }
 
   warn(message: string, options?: ToastOptions): void {
-    this.show('warn', message, [], options);
+    this.show('warn', message, options);
   }
 
-  error(message: string, options?: ToastOptions): void {
-    this.show('error', message, [], options);
+  error(message: string): void {
+    this.show('error', message);
   }
 
   /** Error toast for a ProblemDetails body: `detail`, else `title`, else a generic message. */
@@ -140,8 +140,7 @@ export class ToastService {
   private show(
     severity: ToastSeverity,
     message: string,
-    actions: ToastAction[] = [],
-    { silent = false }: ToastOptions = {},
+    { actions = [], silent = false }: ToastOptions & { actions?: ToastAction[] | undefined } = {},
   ): void {
     const stack = this.stack();
     const toast = document.createElement('div');
