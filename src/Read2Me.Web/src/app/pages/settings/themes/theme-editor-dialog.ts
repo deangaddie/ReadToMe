@@ -34,6 +34,14 @@ export type ThemeEditorResult = Omit<AppTheme, 'id' | 'isBuiltIn'>;
 
 type ColourKey = 'primary' | 'secondary' | OptionalColourKey;
 
+/** The fields in reading order: a failed submit focuses the first one with an error. */
+const FIELD_ORDER: readonly (keyof ThemeDraftErrors)[] = [
+  'name',
+  'primary',
+  'secondary',
+  ...OPTIONAL_COLOURS.map(({ key }) => key),
+];
+
 /**
  * Theme create/edit form (design §6.4 dialog variant): name, primary/secondary via native colour
  * inputs with a hex readout, dark switch, clearable advanced colours and a live preview strip.
@@ -110,112 +118,113 @@ export class ThemeEditorDialog extends R2mElement implements ClosableContent {
     return html`
       <h2 class="r2m-dialog__title">${this.heading}</h2>
 
-      <div class="r2m-dialog__content editor">
-        <div
-          class="editor__preview"
-          style=${styleMap({ background: p.background })}
-          aria-hidden="true"
-        >
+      <form novalidate @submit=${(e: SubmitEvent) => this.onSubmit(e)}>
+        <div class="r2m-dialog__content editor">
           <div
-            class="editor__preview-bar"
-            style=${styleMap({ background: p.appbar, color: p.appbarText })}
+            class="editor__preview"
+            style=${styleMap({ background: p.background })}
+            aria-hidden="true"
           >
-            Read2Me
-          </div>
-          <div class="editor__preview-body">
             <div
-              class="editor__preview-nav"
-              style=${styleMap({ background: p.nav, color: p.navText })}
+              class="editor__preview-bar"
+              style=${styleMap({ background: p.appbar, color: p.appbarText })}
             >
-              ▤
+              Read2Me
             </div>
-            <div class="editor__preview-card" style=${styleMap({ background: p.surface })}>
-              <span style=${styleMap({ color: p.text })}>Aa</span>
-              <span
-                class="editor__preview-chip"
-                style=${styleMap({ background: p.primary, color: p.onPrimary })}
-                >Primary</span
+            <div class="editor__preview-body">
+              <div
+                class="editor__preview-nav"
+                style=${styleMap({ background: p.nav, color: p.navText })}
               >
-              <span
-                class="editor__preview-dot"
-                style=${styleMap({ background: p.secondary })}
-              ></span>
+                ▤
+              </div>
+              <div class="editor__preview-card" style=${styleMap({ background: p.surface })}>
+                <span style=${styleMap({ color: p.text })}>Aa</span>
+                <span
+                  class="editor__preview-chip"
+                  style=${styleMap({ background: p.primary, color: p.onPrimary })}
+                  >Primary</span
+                >
+                <span
+                  class="editor__preview-dot"
+                  style=${styleMap({ background: p.secondary })}
+                ></span>
+              </div>
             </div>
           </div>
+
+          ${field(
+            { id: 'theme-name', label: 'Name', error: this.error('name'), cls: 'editor__name' },
+            (a) =>
+              html`<input
+                id=${a.id}
+                aria-describedby=${a.describedBy}
+                aria-invalid=${a.invalid}
+                type="text"
+                name="name"
+                autofocus
+                required
+                maxlength="60"
+                autocomplete="off"
+                .value=${draft.name}
+                @input=${(e: Event) => this.setName(controlValue(e))}
+                @blur=${() => this.touch('name')}
+              />`,
+          )}
+
+          <div class="editor__row">
+            ${this.colour('primary', 'Primary', draft.primary, this.error('primary'))}
+            ${this.colour('secondary', 'Secondary', draft.secondary, this.error('secondary'))}
+            <label class="r2m-switch">
+              <input
+                type="checkbox"
+                role="switch"
+                name="isDark"
+                .checked=${draft.isDark}
+                @change=${(e: Event) => this.setDark((e.target as HTMLInputElement).checked)}
+              />
+              Dark mode
+            </label>
+          </div>
+
+          <button
+            type="button"
+            class="r2m-button editor__advanced-toggle"
+            data-action="toggle-advanced"
+            aria-expanded=${showAdvanced ? 'true' : 'false'}
+            @click=${() => this.showAdvanced.update((v) => !v)}
+          >
+            ${icon(showAdvanced ? 'expand_less' : 'expand_more')} Advanced colours
+          </button>
+
+          ${
+            showAdvanced
+              ? html`<div class="editor__advanced" data-role="advanced">
+                  ${OPTIONAL_COLOURS.map((opt) =>
+                    this.colour(opt.key, opt.label, draft[opt.key], this.error(opt.key), opt.hint),
+                  )}
+                </div>`
+              : nothing
+          }
         </div>
 
-        ${field(
-          { id: 'theme-name', label: 'Name', error: this.error('name'), cls: 'editor__name' },
-          (a) =>
-            html`<input
-              id=${a.id}
-              aria-describedby=${a.describedBy}
-              aria-invalid=${a.invalid}
-              type="text"
-              name="name"
-              autofocus
-              required
-              maxlength="60"
-              autocomplete="off"
-              .value=${draft.name}
-              @input=${(e: Event) => this.setName(controlValue(e))}
-            />`,
-        )}
-
-        <div class="editor__row">
-          ${this.colour('primary', 'Primary', draft.primary, this.error('primary'))}
-          ${this.colour('secondary', 'Secondary', draft.secondary, this.error('secondary'))}
-          <label class="r2m-switch">
-            <input
-              type="checkbox"
-              role="switch"
-              name="isDark"
-              .checked=${draft.isDark}
-              @change=${(e: Event) => this.setDark((e.target as HTMLInputElement).checked)}
-            />
-            Dark mode
-          </label>
+        <div class="r2m-dialog__actions">
+          <button
+            type="button"
+            class="r2m-button editor__cancel"
+            @click=${() => requestDialogClose(this)}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="r2m-button r2m-button--filled editor__save"
+            data-action="save-theme"
+          >
+            ${this.isEdit ? 'Save' : 'Create'}
+          </button>
         </div>
-
-        <button
-          type="button"
-          class="r2m-button editor__advanced-toggle"
-          data-action="toggle-advanced"
-          aria-expanded=${showAdvanced ? 'true' : 'false'}
-          @click=${() => this.showAdvanced.update((v) => !v)}
-        >
-          ${icon(showAdvanced ? 'expand_less' : 'expand_more')} Advanced colours
-        </button>
-
-        ${
-          showAdvanced
-            ? html`<div class="editor__advanced" data-role="advanced">
-                ${OPTIONAL_COLOURS.map((opt) =>
-                  this.colour(opt.key, opt.label, draft[opt.key], this.error(opt.key), opt.hint),
-                )}
-              </div>`
-            : nothing
-        }
-      </div>
-
-      <div class="r2m-dialog__actions">
-        <button
-          type="button"
-          class="r2m-button editor__cancel"
-          @click=${() => requestDialogClose(this)}
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          class="r2m-button r2m-button--filled editor__save"
-          data-action="save-theme"
-          ?disabled=${!this.valid()}
-          @click=${() => this.save()}
-        >
-          ${this.isEdit ? 'Save' : 'Create'}
-        </button>
-      </div>
+      </form>
     `;
   }
 
@@ -228,6 +237,8 @@ export class ThemeEditorDialog extends R2mElement implements ClosableContent {
     hint?: string,
   ) {
     const optional = hint !== undefined;
+    const errorId = error ? `theme-${key}-error` : null;
+    const hintId = !errorId && hint ? `theme-${key}-hint` : null;
     return html`<div
       class="editor__colour ${optional ? 'editor__colour--optional' : ''}"
       data-colour=${key}
@@ -238,6 +249,7 @@ export class ThemeEditorDialog extends R2mElement implements ClosableContent {
         .value=${this.pickerValue(key)}
         aria-label="${label} colour"
         @input=${(e: Event) => this.setColour(key, controlValue(e))}
+        @change=${() => this.touch(key)}
       />
       <input
         class="editor__hex"
@@ -245,8 +257,11 @@ export class ThemeEditorDialog extends R2mElement implements ClosableContent {
         spellcheck="false"
         placeholder=${optional ? 'default' : nothing}
         aria-label="${label} hex"
+        aria-invalid=${errorId ? 'true' : nothing}
+        aria-describedby=${errorId ?? hintId ?? nothing}
         .value=${value}
         @input=${(e: Event) => this.setColour(key, controlValue(e))}
+        @blur=${() => this.touch(key)}
       />
       ${
         optional
@@ -263,10 +278,10 @@ export class ThemeEditorDialog extends R2mElement implements ClosableContent {
           : nothing
       }
       ${
-        error
-          ? html`<span class="editor__error" role="alert">${error}</span>`
-          : hint
-            ? html`<span class="editor__hint">${hint}</span>`
+        errorId
+          ? html`<span class="editor__error" id=${errorId}>${error}</span>`
+          : hintId
+            ? html`<span class="editor__hint" id=${hintId}>${hint}</span>`
             : nothing
       }
     </div>`;
@@ -274,7 +289,6 @@ export class ThemeEditorDialog extends R2mElement implements ClosableContent {
 
   setName(value: string): void {
     this.draft.update((d) => ({ ...d, name: value }));
-    this.touch('name');
   }
 
   setDark(value: boolean): void {
@@ -283,7 +297,6 @@ export class ThemeEditorDialog extends R2mElement implements ClosableContent {
 
   setColour(key: ColourKey, value: string): void {
     this.draft.update((d) => ({ ...d, [key]: value }));
-    this.touch(key);
   }
 
   /** Native colour inputs only accept #rrggbb; give them a valid value or a neutral fallback. */
@@ -302,10 +315,30 @@ export class ThemeEditorDialog extends R2mElement implements ClosableContent {
     });
   }
 
-  save(): void {
-    this.touched.set({ name: true, primary: true, secondary: true });
-    if (!this.valid()) return;
-    this.emit('r2m-close', fromDraft(this.draft()));
+  onSubmit(e: SubmitEvent): void {
+    e.preventDefault();
+    void this.save();
+  }
+
+  /**
+   * Submit: every field touched. An invalid draft focuses its first invalid field, opening the
+   * advanced colours when that one is hidden behind the toggle, and closes with nothing.
+   */
+  async save(): Promise<void> {
+    this.touched.set(Object.fromEntries(FIELD_ORDER.map((k) => [k, true])));
+    const errors = this.errors();
+    const first = FIELD_ORDER.find((k) => errors[k]);
+    if (!first) {
+      this.emit('r2m-close', fromDraft(this.draft()));
+      return;
+    }
+    if (OPTIONAL_COLOURS.some(({ key }) => key === first)) this.showAdvanced.set(true);
+    await this.rendered();
+    const control =
+      first === 'name'
+        ? this.querySelector<HTMLElement>('input[name="name"]')
+        : this.querySelector<HTMLElement>(`[data-colour="${first}"] .editor__hex`);
+    control?.focus();
   }
 
   private touch(key: keyof ThemeDraft): void {

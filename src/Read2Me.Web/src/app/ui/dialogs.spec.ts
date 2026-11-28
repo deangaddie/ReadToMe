@@ -182,22 +182,73 @@ describe('PromptService', () => {
     expect(await result).toBeNull();
   });
 
-  it('Enter submits a single-line prompt', async () => {
-    const { result, input, type } = await openPrompt({ title: 'Rename' });
+  it('is a form: the confirm submits it, Cancel does not', async () => {
+    const { result, dialog, type, confirm } = await openPrompt({ title: 'Rename' });
+    const form = dialog.querySelector('form')!;
+    expect(confirm.closest('form')).toBe(form);
+    expect(confirm.type).toBe('submit');
+    expect(dialog.querySelector<HTMLButtonElement>('.r2m-text-prompt-dialog__cancel')!.type).toBe(
+      'button',
+    );
     await type('Jane');
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    form.requestSubmit();
     expect(await result).toBe('Jane');
   });
 
-  it('a required prompt cannot be confirmed while blank', async () => {
-    const { input, type, confirm } = await openPrompt({ title: 'Name it', required: true });
-    expect(confirm.disabled).toBe(true);
-    await type('   ');
-    expect(confirm.disabled).toBe(true);
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    expect(document.querySelector('dialog')).not.toBeNull();
-    await type('Wickham');
+  it('a required prompt keeps its confirm enabled; submitting it blank shows the error and focuses the field', async () => {
+    const { dialog, input, type, confirm } = await openPrompt({
+      title: 'Name it',
+      label: 'Name',
+      required: true,
+    });
     expect(confirm.disabled).toBe(false);
+    await type('   ');
+    expect(dialog.querySelector('.r2m-field__error')).toBeNull();
+
+    confirm.click();
+    await dialog.rendered();
+    const error = dialog.querySelector('.r2m-field__error')!;
+    expect(error.textContent).toBe('Name is required');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(input.getAttribute('aria-describedby')).toBe(error.id);
+    expect(document.activeElement).toBe(input);
+    expect(document.querySelector('dialog')).not.toBeNull();
+
+    await type('Wickham');
+    expect(dialog.querySelector('.r2m-field__error')).toBeNull();
+    expect(input.hasAttribute('aria-invalid')).toBe(false);
+  });
+
+  it('a required prompt shows its error on blur, not while typing', async () => {
+    const { dialog, input, type } = await openPrompt({
+      title: 'Name it',
+      label: 'Name',
+      required: true,
+      initial: 'Lydia',
+    });
+    await type('');
+    expect(dialog.querySelector('.r2m-field__error')).toBeNull();
+    input.dispatchEvent(new Event('blur'));
+    await dialog.rendered();
+    expect(dialog.querySelector('.r2m-field__error')?.textContent).toBe('Name is required');
+  });
+
+  it('the error replaces the hint as the description', async () => {
+    const { dialog, input, confirm } = await openPrompt({
+      title: 'Name it',
+      label: 'Name',
+      required: true,
+      hint: 'Shown on the cast page.',
+    });
+    expect(input.getAttribute('aria-describedby')).toBe(
+      dialog.querySelector('.r2m-field__hint')!.id,
+    );
+    confirm.click();
+    await dialog.rendered();
+    expect(dialog.querySelector('.r2m-field__hint')).toBeNull();
+    expect(input.getAttribute('aria-describedby')).toBe(
+      dialog.querySelector('.r2m-field__error')!.id,
+    );
   });
 
   it('a hint shows under the field and describes the input', async () => {

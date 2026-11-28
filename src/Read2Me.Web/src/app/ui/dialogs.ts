@@ -103,12 +103,23 @@ export interface TextPromptOptions {
 }
 
 const PROMPT_HINT_ID = 'r2m-text-prompt-hint';
+const PROMPT_ERROR_ID = 'r2m-text-prompt-error';
 
-/** One-field text prompt; resolves the trimmed text, or null on Cancel. */
+/**
+ * One-field text prompt; resolves the trimmed text, or null on Cancel. A form: Enter in the
+ * single-line field submits it natively (IME-safe), the confirm stays enabled, and a required
+ * prompt submitted blank shows its error and keeps focus in the field. The error shows once the
+ * field is blurred or the form submitted, never while typing, and clears as soon as it is fixed.
+ */
 export class TextPromptDialog extends R2mElement {
   data!: TextPromptOptions;
   readonly #value = signal('');
-  readonly #valid = computed(() => !this.data.required || this.#value().trim().length > 0);
+  readonly #touched = signal(false);
+  readonly #error = computed(() =>
+    this.data.required && this.#value().trim().length === 0
+      ? `${this.data.label ?? 'This field'} is required`
+      : null,
+  );
 
   protected override connected(): void {
     this.#value.set(this.data.initial ?? '');
@@ -117,59 +128,77 @@ export class TextPromptDialog extends R2mElement {
   protected template() {
     const d = this.data;
     const onInput = (e: Event) => this.#value.set((e.target as HTMLInputElement).value);
-    const describedBy = d.hint ? PROMPT_HINT_ID : nothing;
+    const onBlur = () => this.#touched.set(true);
+    const error = this.#touched() ? this.#error() : null;
+    const describedBy = error ? PROMPT_ERROR_ID : d.hint ? PROMPT_HINT_ID : nothing;
+    const invalid = error ? 'true' : nothing;
     return html`
       <h2 class="r2m-dialog__title">${d.title}</h2>
-      <div class="r2m-dialog__content">
-        <label class="r2m-field">
-          ${d.label ? html`<span class="r2m-field__label">${d.label}</span>` : nothing}
+      <form novalidate @submit=${(e: SubmitEvent) => this.#submit(e)}>
+        <div class="r2m-dialog__content">
+          <label class="r2m-field">
+            ${d.label ? html`<span class="r2m-field__label">${d.label}</span>` : nothing}
+            ${
+              d.multiline
+                ? html`<textarea
+                    autofocus
+                    class="r2m-text-prompt-dialog__input"
+                    rows="3"
+                    aria-describedby=${describedBy}
+                    aria-invalid=${invalid}
+                    placeholder=${d.placeholder ?? ''}
+                    .value=${this.#value()}
+                    @input=${onInput}
+                    @blur=${onBlur}
+                  ></textarea>`
+                : html`<input
+                    autofocus
+                    type="text"
+                    class="r2m-text-prompt-dialog__input"
+                    aria-describedby=${describedBy}
+                    aria-invalid=${invalid}
+                    placeholder=${d.placeholder ?? ''}
+                    .value=${this.#value()}
+                    @input=${onInput}
+                    @blur=${onBlur}
+                  />`
+            }
+          </label>
           ${
-            d.multiline
-              ? html`<textarea
-                  autofocus
-                  class="r2m-text-prompt-dialog__input"
-                  rows="3"
-                  aria-describedby=${describedBy}
-                  placeholder=${d.placeholder ?? ''}
-                  .value=${this.#value()}
-                  @input=${onInput}
-                ></textarea>`
-              : html`<input
-                  autofocus
-                  type="text"
-                  class="r2m-text-prompt-dialog__input"
-                  aria-describedby=${describedBy}
-                  placeholder=${d.placeholder ?? ''}
-                  .value=${this.#value()}
-                  @input=${onInput}
-                  @keydown=${(e: KeyboardEvent) => e.key === 'Enter' && this.#submit()}
-                />`
+            error
+              ? html`<p class="r2m-field__error" id=${PROMPT_ERROR_ID}>${error}</p>`
+              : d.hint
+                ? html`<p class="r2m-field__hint" id=${PROMPT_HINT_ID}>${d.hint}</p>`
+                : nothing
           }
-        </label>
-        ${d.hint ? html`<p class="r2m-field__hint" id=${PROMPT_HINT_ID}>${d.hint}</p>` : nothing}
-      </div>
-      <div class="r2m-dialog__actions">
-        <button
-          type="button"
-          class="r2m-button r2m-text-prompt-dialog__cancel"
-          @click=${() => this.emit('r2m-close', null)}
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          class="r2m-button r2m-button--filled r2m-text-prompt-dialog__confirm"
-          ?disabled=${!this.#valid()}
-          @click=${() => this.#submit()}
-        >
-          ${d.confirmLabel ?? 'OK'}
-        </button>
-      </div>
+        </div>
+        <div class="r2m-dialog__actions">
+          <button
+            type="button"
+            class="r2m-button r2m-text-prompt-dialog__cancel"
+            @click=${() => this.emit('r2m-close', null)}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="r2m-button r2m-button--filled r2m-text-prompt-dialog__confirm"
+          >
+            ${d.confirmLabel ?? 'OK'}
+          </button>
+        </div>
+      </form>
     `;
   }
 
-  #submit(): void {
-    if (this.#valid()) this.emit('r2m-close', this.#value().trim());
+  #submit(e: SubmitEvent): void {
+    e.preventDefault();
+    this.#touched.set(true);
+    if (this.#error() === null) {
+      this.emit('r2m-close', this.#value().trim());
+      return;
+    }
+    this.querySelector<HTMLElement>('.r2m-text-prompt-dialog__input')?.focus();
   }
 }
 define('r2m-text-prompt-dialog', TextPromptDialog);

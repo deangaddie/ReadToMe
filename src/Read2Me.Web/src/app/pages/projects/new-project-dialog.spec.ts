@@ -33,13 +33,16 @@ async function open() {
 }
 
 describe('r2m-new-project-dialog', () => {
-  it('auto-fills the project title and enables Create only when everything is valid', async () => {
+  it('auto-fills the project title, and Create is an enabled submit whatever the draft holds', async () => {
     const { dialog, input, type, createButton } = await open();
-    expect(createButton().disabled).toBe(true);
+    expect(createButton().type).toBe('submit');
+    expect(createButton().closest('form')).not.toBeNull();
+    expect(dialog.querySelector<HTMLButtonElement>('.new-project__cancel')!.type).toBe('button');
+    expect(createButton().disabled).toBe(false);
 
     await type('bookTitle', 'Dracula');
     expect(input('title').value).toBe('Dracula');
-    expect(createButton().disabled).toBe(true);
+    expect(createButton().disabled).toBe(false);
 
     await type('author', 'Bram Stoker');
     dialog.onFiles([new File(['x'], 'dracula.epub')]);
@@ -55,7 +58,56 @@ describe('r2m-new-project-dialog', () => {
     ).toEqual(['bookTitle']);
   });
 
-  it('shows the rejection inline and keeps Create disabled', async () => {
+  it('Create on an empty draft shows every error, the file one included, focuses Book title and sends nothing', async () => {
+    const { dialog, input, createButton } = await open();
+    expect(dialog.querySelectorAll('.r2m-field__error')).toHaveLength(0);
+
+    createButton().click();
+    await settle();
+    await dialog.rendered();
+
+    expect(Array.from(dialog.querySelectorAll('.r2m-field__error'), (e) => e.textContent)).toEqual([
+      'Book title is required',
+      'Project title is required',
+      'Author is required',
+    ]);
+    expect(input('bookTitle').getAttribute('aria-invalid')).toBe('true');
+    expect(dialog.querySelector('.new-project__file')?.textContent).toContain('Choose a book file');
+    expect(document.activeElement).toBe(input('bookTitle'));
+    expect(api.calls('POST', '/api/projects')).toHaveLength(0);
+  });
+
+  it('Create with every field but the file focuses the drop’s Choose file button', async () => {
+    const { dialog, type, createButton } = await open();
+    await type('bookTitle', 'Dracula');
+    await type('author', 'Bram Stoker');
+
+    createButton().click();
+    await settle();
+    await dialog.rendered();
+
+    expect(dialog.querySelectorAll('.r2m-field__error')).toHaveLength(0);
+    expect(dialog.querySelector('.new-project__file')?.textContent).toContain('Choose a book file');
+    expect((document.activeElement as HTMLElement).textContent?.trim()).toBe('Choose file');
+    expect(document.activeElement?.closest('r2m-file-drop')).not.toBeNull();
+    expect(api.calls('POST', '/api/projects')).toHaveLength(0);
+  });
+
+  it('a field shows its error once blurred, not while typing, and clears it on input once fixed', async () => {
+    const { dialog, input, type } = await open();
+    await type('author', 'Bram');
+    await type('author', '');
+    expect(dialog.querySelector('.r2m-field__error')).toBeNull();
+
+    input('author').dispatchEvent(new Event('blur'));
+    await dialog.rendered();
+    expect(dialog.querySelector('.r2m-field__error')?.textContent).toBe('Author is required');
+
+    await type('author', 'B');
+    expect(dialog.querySelector('.r2m-field__error')).toBeNull();
+  });
+
+  it('shows the rejection inline and does not send it', async () => {
     const { dialog, type, createButton } = await open();
     await type('bookTitle', 'Dracula');
     await type('author', 'Bram Stoker');
@@ -65,7 +117,9 @@ describe('r2m-new-project-dialog', () => {
     expect(dialog.querySelector('.new-project__file')?.textContent).toContain(
       'dracula.pdf is not an .epub or .txt file.',
     );
-    expect(createButton().disabled).toBe(true);
+    createButton().click();
+    await settle();
+    expect(api.calls('POST', '/api/projects')).toHaveLength(0);
   });
 
   it('posts the multipart form and closes with the new folder', async () => {
@@ -133,6 +187,8 @@ describe('r2m-new-project-dialog', () => {
     createButton().click();
     await settle();
     expect(dialog.canClose()).toBe(false);
+    await dialog.rendered();
+    expect(createButton().disabled).toBe(true);
     escape();
     await settle();
     expect(host.open).toBe(true);

@@ -2,12 +2,12 @@ import { describe, expect, it } from 'bun:test';
 import type { VoiceRuleDto } from '@app/api';
 import {
   EMPTY_ANCHOR,
-  canSubmitRule,
   deepestAnchor,
   describeRule,
   isDangling,
   moveAbility,
   ruleCommand,
+  ruleErrors,
   selectAnchor,
   showRuleControls,
 } from './voice-rule-logic';
@@ -194,7 +194,7 @@ describe('selectAnchor (cascading reset)', () => {
   });
 });
 
-describe('deepestAnchor / canSubmitRule / ruleCommand', () => {
+describe('deepestAnchor / ruleErrors / ruleCommand', () => {
   it('the deepest chosen level becomes the anchor', () => {
     expect(deepestAnchor(EMPTY_ANCHOR)).toBeNull();
     expect(deepestAnchor({ ...EMPTY_ANCHOR, volumeId: 'v' })).toEqual({
@@ -210,10 +210,18 @@ describe('deepestAnchor / canSubmitRule / ruleCommand', () => {
     ).toEqual({ level: 'ParagraphItem', nodeId: 'i' });
   });
 
-  it('submit needs a voice and an anchor', () => {
-    expect(canSubmitRule(null, { ...EMPTY_ANCHOR, volumeId: 'v' })).toBe(false);
-    expect(canSubmitRule('voice', EMPTY_ANCHOR)).toBe(false);
-    expect(canSubmitRule('voice', { ...EMPTY_ANCHOR, volumeId: 'v' })).toBe(true);
+  it('submit needs a voice and an anchor, a volume at least', () => {
+    expect(ruleErrors(null, EMPTY_ANCHOR)).toEqual({
+      voice: 'Choose a voice',
+      anchor: 'Choose an anchor: at least a volume',
+    });
+    expect(ruleErrors(null, { ...EMPTY_ANCHOR, volumeId: 'v' })).toEqual({
+      voice: 'Choose a voice',
+    });
+    expect(ruleErrors('voice', EMPTY_ANCHOR)).toEqual({
+      anchor: 'Choose an anchor: at least a volume',
+    });
+    expect(ruleErrors('voice', { ...EMPTY_ANCHOR, volumeId: 'v' })).toEqual({});
   });
 
   it('from here on leaves the to end open; just this node closes it on the same anchor', () => {

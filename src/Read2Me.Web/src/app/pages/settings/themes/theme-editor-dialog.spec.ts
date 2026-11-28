@@ -53,11 +53,14 @@ async function type(el: ThemeEditorDialog, input: HTMLInputElement, value: strin
 }
 
 describe('r2m-theme-editor-dialog', () => {
-  it('New starts from the defaults with Create disabled until a name is typed', async () => {
+  it('New starts from the defaults with Create an enabled submit', async () => {
     const el = await mount();
     expect(el.querySelector('.r2m-dialog__title')?.textContent).toBe('New theme');
     expect(save(el).textContent?.trim()).toBe('Create');
-    expect(save(el).disabled).toBe(true);
+    expect(save(el).type).toBe('submit');
+    expect(save(el).closest('form')).not.toBeNull();
+    expect(el.querySelector<HTMLButtonElement>('.editor__cancel')!.type).toBe('button');
+    expect(save(el).disabled).toBe(false);
     expect(el.querySelector('[data-role="advanced"]')).toBeNull();
 
     await type(el, el.querySelector<HTMLInputElement>('input[name="name"]')!, 'Sunset');
@@ -80,7 +83,39 @@ describe('r2m-theme-editor-dialog', () => {
     ]);
   });
 
-  it('a custom theme edits in place with its advanced colours shown; a bad hex blocks Save', async () => {
+  it('Create with no name shows the error, focuses Name and closes with nothing', async () => {
+    const el = await mount();
+    const name = el.querySelector<HTMLInputElement>('input[name="name"]')!;
+    save(el).click();
+    await settle();
+    await el.rendered();
+    expect(el.querySelector('.editor__name .r2m-field__error')?.textContent).toBe(
+      'Name is required',
+    );
+    expect(document.activeElement).toBe(name);
+    expect(closed).toEqual([]);
+  });
+
+  it('a hex error waits for blur, then describes the input and marks it invalid', async () => {
+    const el = await mount(orange);
+    await type(el, hex(el, 'Primary'), '#1');
+    expect(el.querySelector('[data-colour="primary"] .editor__error')).toBeNull();
+    expect(hex(el, 'Primary').hasAttribute('aria-invalid')).toBe(false);
+
+    hex(el, 'Primary').dispatchEvent(new Event('blur'));
+    await el.rendered();
+    const error = el.querySelector('[data-colour="primary"] .editor__error')!;
+    expect(error.textContent).toBe('Use #rgb or #rrggbb');
+    expect(error.getAttribute('role')).toBeNull();
+    expect(hex(el, 'Primary').getAttribute('aria-invalid')).toBe('true');
+    expect(hex(el, 'Primary').getAttribute('aria-describedby')).toBe(error.id);
+
+    await type(el, hex(el, 'Primary'), '#123');
+    expect(el.querySelector('[data-colour="primary"] .editor__error')).toBeNull();
+    expect(hex(el, 'Primary').hasAttribute('aria-invalid')).toBe(false);
+  });
+
+  it('a custom theme edits in place with its advanced colours shown; a bad hex stops Save at that field', async () => {
     const el = await mount(orange);
     expect(el.querySelector('.r2m-dialog__title')?.textContent).toBe('Edit Orange');
     expect(save(el).textContent?.trim()).toBe('Save');
@@ -88,11 +123,15 @@ describe('r2m-theme-editor-dialog', () => {
     expect(hex(el, 'Primary').value).toBe('#ff9900');
     expect(hex(el, 'Surface').value).toBe('#222222');
 
-    await type(el, hex(el, 'Primary'), 'orange');
-    expect(el.querySelector('[data-colour="primary"] [role="alert"]')?.textContent).toBe(
-      'Use #rgb or #rrggbb',
+    await type(el, hex(el, 'Surface'), 'grey');
+    save(el).click();
+    await settle();
+    await el.rendered();
+    expect(el.querySelector('[data-colour="surface"] .editor__error')?.textContent).toBe(
+      'Use #rgb or #rrggbb, or clear',
     );
-    expect(save(el).disabled).toBe(true);
+    expect(document.activeElement).toBe(hex(el, 'Surface'));
+    expect(closed).toEqual([]);
 
     await type(el, hex(el, 'Primary'), '#F90');
     el.querySelector<HTMLButtonElement>('button[aria-label="Clear Surface"]')!.click();
@@ -100,6 +139,21 @@ describe('r2m-theme-editor-dialog', () => {
     expect(hex(el, 'Surface').value).toBe('');
     save(el).click();
     expect(closed[0]).toMatchObject({ name: 'Orange', primary: '#ff9900', surface: null });
+  });
+
+  it('a bad advanced colour hidden behind the toggle is revealed and focused on submit', async () => {
+    const el = await mount(orange);
+    await type(el, hex(el, 'Surface'), 'grey');
+    el.querySelector<HTMLButtonElement>('[data-action="toggle-advanced"]')!.click();
+    await el.rendered();
+    expect(el.querySelector('[data-role="advanced"]')).toBeNull();
+
+    save(el).click();
+    await settle();
+    await el.rendered();
+    expect(el.querySelector('[data-role="advanced"]')).not.toBeNull();
+    expect(document.activeElement).toBe(hex(el, 'Surface'));
+    expect(closed).toEqual([]);
   });
 
   it('a built-in opens as a copy named after it', async () => {

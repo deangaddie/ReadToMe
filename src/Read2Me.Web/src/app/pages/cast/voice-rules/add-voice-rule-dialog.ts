@@ -16,9 +16,10 @@ import {
   type AnchorPick,
   type AnchorSelection,
   EMPTY_ANCHOR,
+  type RuleErrors,
   type RuleMode,
-  canSubmitRule,
   ruleCommand,
+  ruleErrors,
   selectAnchor,
   snippet,
 } from './voice-rule-logic';
@@ -33,8 +34,10 @@ export interface AddVoiceRuleDialogData {
 /**
  * Add voice rule: a voice, the mode (From here on / Just this node) and a cascading
  * Volume → Part → Chapter → Paragraph → Line anchor. Each level is clearable and resets the deeper
- * ones; the deepest chosen level is the anchor. Add stays off until a voice and an anchor are
- * chosen. Answers the `CreateVoiceRule` command to run, or null on cancel.
+ * ones; the deepest chosen level is the anchor. A form: Add stays enabled, and submitting without a
+ * voice or an anchor shows the errors and focuses the first. A select's error shows once it changes
+ * (the anchor's: a level cleared back to nothing) or the form is submitted. Answers the
+ * `CreateVoiceRule` command to run, or null on cancel.
  */
 export class AddVoiceRuleDialog extends R2mElement {
   private readonly book = use(BookApi);
@@ -54,7 +57,16 @@ export class AddVoiceRuleDialog extends R2mElement {
     const id = this.selection().paragraphId;
     return this.paragraphs().find((p) => p.id === id)?.items ?? [];
   });
-  readonly canSubmit = computed(() => canSubmitRule(this.voiceId(), this.selection()));
+  readonly errors = computed(() => ruleErrors(this.voiceId(), this.selection()));
+  readonly touched = signal<Partial<Record<keyof RuleErrors, boolean>>>({});
+
+  error(key: keyof RuleErrors): string | null {
+    return this.touched()[key] ? (this.errors()[key] ?? null) : null;
+  }
+
+  private touch(key: keyof RuleErrors): void {
+    this.touched.update((t) => ({ ...t, [key]: true }));
+  }
 
   protected override connected(): void {
     this.voiceId.set(this.data.voices[0]?.id ?? null);
@@ -64,113 +76,131 @@ export class AddVoiceRuleDialog extends R2mElement {
   protected template() {
     const selection = this.selection();
     const mode = this.mode();
+    const voiceError = this.error('voice');
     return html`
       <h2 class="r2m-dialog__title">Add voice rule</h2>
-      <div class="r2m-dialog__content add-rule">
-        <label class="r2m-field">
-          <span class="r2m-field__label">Voice</span>
-          <select
-            data-field="voice"
-            autofocus
-            .value=${this.voiceId() ?? ''}
-            @change=${(e: Event) => this.voiceId.set((e.target as HTMLSelectElement).value || null)}
-          >
-            ${this.data.voices.map(
-              (v) =>
-                html`<option value=${v.id} ?selected=${v.id === this.voiceId()}>${v.name}</option>`,
+      <form novalidate @submit=${(e: SubmitEvent) => this.onSubmit(e)}>
+        <div class="r2m-dialog__content add-rule">
+          <label class="r2m-field">
+            <span class="r2m-field__label">Voice</span>
+            <select
+              data-field="voice"
+              autofocus
+              aria-invalid=${voiceError ? 'true' : nothing}
+              aria-describedby=${voiceError ? 'add-rule-voice-error' : nothing}
+              .value=${this.voiceId() ?? ''}
+              @change=${(e: Event) => {
+                this.voiceId.set((e.target as HTMLSelectElement).value || null);
+                this.touch('voice');
+              }}
+            >
+              ${this.data.voices.map(
+                (v) =>
+                  html`<option value=${v.id} ?selected=${v.id === this.voiceId()}>
+                    ${v.name}
+                  </option>`,
+              )}
+            </select>
+            ${
+              voiceError
+                ? html`<span class="r2m-field__error" id="add-rule-voice-error"
+                    >${voiceError}</span
+                  >`
+                : nothing
+            }
+          </label>
+
+          <div class="add-rule__group">
+            <span class="add-rule__label" id="rule-mode-label">Mode</span>
+            <fieldset
+              class="r2m-radio-group add-rule__mode"
+              role="radiogroup"
+              aria-labelledby="rule-mode-label"
+            >
+              <label class="r2m-radio">
+                <input
+                  type="radio"
+                  name="mode"
+                  value="fromHereOn"
+                  .checked=${mode === 'fromHereOn'}
+                  @change=${() => this.mode.set('fromHereOn')}
+                />
+                From here on
+              </label>
+              <label class="r2m-radio">
+                <input
+                  type="radio"
+                  name="mode"
+                  value="justThisNode"
+                  .checked=${mode === 'justThisNode'}
+                  @change=${() => this.mode.set('justThisNode')}
+                />
+                Just this node
+              </label>
+            </fieldset>
+          </div>
+
+          <div class="add-rule__group">
+            <span class="add-rule__label">Anchor</span>
+            ${this.picker(
+              'volume',
+              'Volume',
+              selection.volumeId,
+              this.volumes(),
+              (v) => v.title || 'Untitled',
+              this.error('anchor'),
             )}
-          </select>
-        </label>
-
-        <div class="add-rule__group">
-          <span class="add-rule__label" id="rule-mode-label">Mode</span>
-          <fieldset
-            class="r2m-radio-group add-rule__mode"
-            role="radiogroup"
-            aria-labelledby="rule-mode-label"
-          >
-            <label class="r2m-radio">
-              <input
-                type="radio"
-                name="mode"
-                value="fromHereOn"
-                .checked=${mode === 'fromHereOn'}
-                @change=${() => this.mode.set('fromHereOn')}
-              />
-              From here on
-            </label>
-            <label class="r2m-radio">
-              <input
-                type="radio"
-                name="mode"
-                value="justThisNode"
-                .checked=${mode === 'justThisNode'}
-                @change=${() => this.mode.set('justThisNode')}
-              />
-              Just this node
-            </label>
-          </fieldset>
+            ${
+              selection.volumeId
+                ? this.picker(
+                    'part',
+                    'Part',
+                    selection.partId,
+                    this.parts(),
+                    (p) => p.title || 'Untitled',
+                  )
+                : nothing
+            }
+            ${
+              selection.partId
+                ? this.picker(
+                    'chapter',
+                    'Chapter',
+                    selection.chapterId,
+                    this.chapters(),
+                    (c) => c.title || 'Untitled',
+                  )
+                : nothing
+            }
+            ${
+              selection.chapterId
+                ? this.picker(
+                    'paragraph',
+                    'Paragraph',
+                    selection.paragraphId,
+                    this.paragraphs(),
+                    (p) => this.paragraphLabel(p),
+                  )
+                : nothing
+            }
+            ${
+              selection.paragraphId
+                ? this.picker('item', 'Line', selection.itemId, this.items(), (i) =>
+                    this.itemLabel(i.text),
+                  )
+                : nothing
+            }
+          </div>
         </div>
-
-        <div class="add-rule__group">
-          <span class="add-rule__label">Anchor</span>
-          ${this.picker('volume', 'Volume', selection.volumeId, this.volumes(), (v) => v.title || 'Untitled')}
-          ${
-            selection.volumeId
-              ? this.picker(
-                  'part',
-                  'Part',
-                  selection.partId,
-                  this.parts(),
-                  (p) => p.title || 'Untitled',
-                )
-              : nothing
-          }
-          ${
-            selection.partId
-              ? this.picker(
-                  'chapter',
-                  'Chapter',
-                  selection.chapterId,
-                  this.chapters(),
-                  (c) => c.title || 'Untitled',
-                )
-              : nothing
-          }
-          ${
-            selection.chapterId
-              ? this.picker(
-                  'paragraph',
-                  'Paragraph',
-                  selection.paragraphId,
-                  this.paragraphs(),
-                  (p) => this.paragraphLabel(p),
-                )
-              : nothing
-          }
-          ${
-            selection.paragraphId
-              ? this.picker('item', 'Line', selection.itemId, this.items(), (i) =>
-                  this.itemLabel(i.text),
-                )
-              : nothing
-          }
+        <div class="r2m-dialog__actions">
+          <button type="button" class="r2m-button" @click=${() => this.emit('r2m-close', null)}>
+            Cancel
+          </button>
+          <button type="submit" class="r2m-button r2m-button--filled" data-action="add">
+            Add rule
+          </button>
         </div>
-      </div>
-      <div class="r2m-dialog__actions">
-        <button type="button" class="r2m-button" @click=${() => this.emit('r2m-close', null)}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          class="r2m-button r2m-button--filled"
-          data-action="add"
-          ?disabled=${!this.canSubmit()}
-          @click=${() => this.submit()}
-        >
-          Add rule
-        </button>
-      </div>
+      </form>
     `;
   }
 
@@ -181,13 +211,17 @@ export class AddVoiceRuleDialog extends R2mElement {
     value: Guid | null,
     options: readonly T[],
     text: (option: T) => string,
+    error: string | null = null,
   ) {
+    const errorId = error ? `add-rule-${pick}-error` : null;
     return html`<div class="r2m-field add-rule__level">
       <label class="r2m-field__label" for=${`add-rule-${pick}`}>${label}</label>
       <div class="add-rule__control">
         <select
           id=${`add-rule-${pick}`}
           data-field=${pick}
+          aria-invalid=${errorId ? 'true' : nothing}
+          aria-describedby=${errorId ?? nothing}
           .value=${value ?? ''}
           @change=${(e: Event) => void this.pick(pick, (e.target as HTMLSelectElement).value || null)}
         >
@@ -209,12 +243,14 @@ export class AddVoiceRuleDialog extends R2mElement {
             : nothing
         }
       </div>
+      ${errorId ? html`<span class="r2m-field__error" id=${errorId}>${error}</span>` : nothing}
     </div>`;
   }
 
   /** Records the pick, resets the deeper levels, and fetches the next level's options. */
   async pick(level: AnchorPick, id: Guid | null): Promise<void> {
     this.selection.set(selectAnchor(this.selection(), level, id));
+    this.touch('anchor');
     switch (level) {
       case 'volume':
         this.parts.set([]);
@@ -251,7 +287,22 @@ export class AddVoiceRuleDialog extends R2mElement {
     return snippet(text) || '(pause)';
   }
 
-  submit(): void {
+  onSubmit(e: SubmitEvent): void {
+    e.preventDefault();
+    void this.submit();
+  }
+
+  /** Submit: both fields touched; without a voice or an anchor, focus the first and stay open. */
+  async submit(): Promise<void> {
+    this.touched.set({ voice: true, anchor: true });
+    const errors = this.errors();
+    if (errors.voice || errors.anchor) {
+      await this.rendered();
+      this.querySelector<HTMLElement>(
+        errors.voice ? 'select[data-field=voice]' : 'select[data-field=volume]',
+      )?.focus();
+      return;
+    }
     const command = ruleCommand(
       this.data.characterId,
       this.voiceId(),
