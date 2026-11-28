@@ -502,8 +502,10 @@
   .voice-card__title {
     pointer-events: none;
   }
+  /* The description takes the pointer for its tooltip, and a click on it opens the card as before. */
   .voice-card__star,
-  .voice-card__name > r2m-inline-edit {
+  .voice-card__name > r2m-inline-edit,
+  .voice-card__description {
     pointer-events: auto;
   }
   /* As wide as the name, not the description under it, so the space beside a short name opens the card. */

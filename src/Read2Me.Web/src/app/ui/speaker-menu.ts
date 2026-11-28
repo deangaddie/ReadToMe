@@ -130,10 +130,16 @@ export class SpeakerMenu extends R2mElement {
                     class="r2m-speaker-menu__row ${entry.id === this.#selectedId() ? 'r2m-speaker-menu__row--selected' : ''} ${i === active ? 'r2m-speaker-menu__row--active' : ''}"
                     aria-selected=${entry.id === this.#selectedId()}
                     style="--r2m-speaker-hue: ${speakerHue(entry.id)}"
+                    data-tooltip-delegate=".r2m-speaker-menu__name"
                     @click=${() => this.#output('pick', entry.id)}
                   >
                     <span class="r2m-speaker-menu__dot" aria-hidden="true"></span>
-                    <span class="r2m-speaker-menu__name">${entry.name}</span>
+                    <span
+                      class="r2m-speaker-menu__name"
+                      data-tooltip=${entry.name}
+                      data-tooltip-overflow
+                      >${entry.name}</span
+                    >
                     ${entry.isNarrator ? icon('auto_stories', 'r2m-speaker-menu__narrator') : nothing}
                   </button>`,
               )

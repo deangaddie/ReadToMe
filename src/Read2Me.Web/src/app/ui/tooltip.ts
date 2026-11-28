@@ -11,10 +11,12 @@
  * Two opt-ins:
  * - `data-tooltip-overflow` on the element: show the tip only when, at show time, its content is
  *   wider than its box (`scrollWidth > clientWidth`), i.e. a one-line text cut off by an ellipsis.
- *   Measured once per hover or focus, with no observer.
- * - `data-tooltip-delegate="<selector>"` on a focusable element with no tip of its own: focusing
- *   it shows the tip of the descendant the selector names, anchored to that descendant (a tree row
- *   whose title carries the tip).
+ *   Measured once per hover or focus, with no observer. A label that fits hands over to the
+ *   nearest ancestor with a tip (a button whose own tip gives advice).
+ * - `data-tooltip-delegate="<selector>"` on an element: focusing it, or a control inside it with
+ *   no tip of its own, shows the tip of the descendant the selector names, anchored to that
+ *   descendant (a tree row whose title carries the tip, the Download link of an export row). On an
+ *   element with a tip of its own, the descendant goes first and, fitting, hands back to it.
  *
  * The shared hint is the visual cue only: no trigger points at it, since it holds a trigger's text
  * only while open. A tip that says more than the trigger's name goes through `withTip`, which
@@ -80,13 +82,18 @@ export function installTooltips(root: Document = document): void {
     clearTimeout(hideTimer);
   };
 
-  const show = (target: HTMLElement) => {
+  /** The element whose tip shows: a fitting overflow label hands over to the nearest tipped ancestor. */
+  const resolve = (el: HTMLElement | null): HTMLElement | null => {
+    while (el && 'tooltipOverflow' in el.dataset && el.scrollWidth <= el.clientWidth)
+      el = el.parentElement?.closest<HTMLElement>('[data-tooltip]') ?? null;
+    return el;
+  };
+  const show = (trigger: HTMLElement) => {
     cancelTimers();
     showTimer = setTimeout(() => {
-      if ('tooltipOverflow' in target.dataset && target.scrollWidth <= target.clientWidth) {
-        hide();
-        return;
-      }
+      const target = resolve(trigger);
+      if (!target) return hide();
+      if (target === anchor && isOpen()) return; // the pointer moved between a label and its trigger
       anchor?.style.removeProperty('anchor-name');
       anchor = target;
       target.style.setProperty('anchor-name', '--r2m-tooltip');
@@ -109,10 +116,13 @@ export function installTooltips(root: Document = document): void {
   };
   const targetOf = (e: Event) =>
     (e.target instanceof Element ? e.target.closest<HTMLElement>('[data-tooltip]') : null) ?? null;
-  const delegateOf = (e: Event) => {
-    if (!(e.target instanceof HTMLElement)) return null;
-    const selector = e.target.dataset['tooltipDelegate'];
-    return selector ? e.target.querySelector<HTMLElement>(selector) : null;
+  /** On focus: the delegated descendant, unless the focused control inside the host has its own tip. */
+  const focusTargetOf = (e: Event) => {
+    const own = targetOf(e);
+    if (!(e.target instanceof Element)) return own;
+    const host = e.target.closest<HTMLElement>('[data-tooltip-delegate]');
+    const delegated = host?.querySelector<HTMLElement>(host.dataset['tooltipDelegate'] ?? '');
+    return delegated && (!own || own.contains(host!)) ? delegated : own;
   };
 
   root.addEventListener('pointerover', (e) => {
@@ -126,7 +136,7 @@ export function installTooltips(root: Document = document): void {
     else hideSoon();
   });
   root.addEventListener('focusin', (e) => {
-    const target = targetOf(e) ?? delegateOf(e);
+    const target = focusTargetOf(e);
     if (target) show(target);
   });
   // A click on the tip blurs its trigger; the pointer still on the tip keeps it.

@@ -255,6 +255,33 @@ describe('installTooltips', () => {
       elapse();
       expect(open).toBe(false);
     });
+
+    it('a fitting label inside a trigger with its own tip shows that tip instead', () => {
+      const button = target('Assign a speaker first');
+      const label = overflowText('Generate audio', { content: 90, box: 180 });
+      button.append(label);
+      hover(label);
+      elapse();
+      expect(open).toBe(true);
+      expect(tip.textContent).toBe('Assign a speaker first');
+      expect(button.style.getPropertyValue('anchor-name')).toBe('--r2m-tooltip');
+    });
+
+    it('moving between that label and its trigger leaves the open tip as it is', () => {
+      const button = target('Assign a speaker first');
+      const label = overflowText('Generate audio', { content: 90, box: 180 });
+      button.append(label);
+      hover(label);
+      elapse();
+      hover(button);
+      expect(pending.size).toBe(0);
+      hover(label);
+      let reopened = false;
+      proto['showPopover'] = () => (reopened = true);
+      elapse();
+      expect(open).toBe(true);
+      expect(reopened).toBe(false);
+    });
   });
 
   describe('data-tooltip-delegate (a focusable element whose tip is on a descendant)', () => {
@@ -286,6 +313,40 @@ describe('installTooltips', () => {
       item.dispatchEvent(new Event('focusin', { bubbles: true }));
       elapse();
       expect(open).toBe(false);
+    });
+
+    it('focusing a control inside the element with no tip of its own shows the descendant tip', () => {
+      const { row: item } = row({ content: 300, box: 120 });
+      const link = document.createElement('a');
+      link.href = '#';
+      item.append(link);
+      link.dispatchEvent(new Event('focusin', { bubbles: true }));
+      elapse();
+      expect(open).toBe(true);
+      expect(tip.textContent).toBe('CHAPTER II. THE SCIENCE OF DEDUCTION.');
+    });
+
+    it('a control inside the element with a tip of its own keeps it', () => {
+      const { row: item } = row({ content: 300, box: 120 });
+      const remove = document.createElement('button');
+      remove.dataset['tooltip'] = 'Delete';
+      item.append(remove);
+      remove.dispatchEvent(new Event('focusin', { bubbles: true }));
+      elapse();
+      expect(tip.textContent).toBe('Delete');
+    });
+
+    it('on an element with a tip of its own, a cut descendant wins and a fitting one gives way', () => {
+      const widths = { content: 300, box: 120 };
+      const { row: item } = row(widths);
+      item.dataset['tooltip'] = 'Assign a speaker first';
+      item.dispatchEvent(new Event('focusin', { bubbles: true }));
+      elapse();
+      expect(tip.textContent).toBe('CHAPTER II. THE SCIENCE OF DEDUCTION.');
+      widths.content = 100;
+      item.dispatchEvent(new Event('focusin', { bubbles: true }));
+      elapse();
+      expect(tip.textContent).toBe('Assign a speaker first');
     });
   });
 
