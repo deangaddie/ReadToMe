@@ -357,6 +357,16 @@ a {
       outline: 2px solid var(--r2m-accent);
       outline-offset: 2px;
     }
+    /* appearance: none drops the browser's disabled look, so draw it: as the icon button does. */
+    &:disabled,
+    &[aria-disabled='true'] {
+      opacity: 0.38;
+      cursor: default;
+    }
+  }
+  /* The label's text dims to match; currentColor at 38% is the text at opacity 0.38. */
+  &:has(> input:disabled, > input[aria-disabled='true']) {
+    color: color-mix(in srgb, currentColor 38%, transparent);
   }
 }
 /* mat-radio-group: native radios, one label per option (spec §5.3). */
