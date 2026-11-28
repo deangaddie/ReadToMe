@@ -11,9 +11,9 @@ export const GUIDE_URL = 'https://github.com/deangaddie/ReadToMe/blob/main/docs/
 /**
  * One Pipeline step's help as the Overview shows it (guidance-primitives spec §3): the step's icon
  * and name, a close ×, the `r2m-help` body and an "Open the guide" link to the source page. The
- * same template serves both placements, the right column at ≥ 1100 px (`side`) and inside the
- * step's row below that (`inline`); the Overview's CSS shows one and hides the other, so the help
- * stays open when the window crosses the breakpoint.
+ * same template serves both placements, the right column when the main area is 68.75em or wider
+ * (`side`) and inside the step's row below that (`inline`); the Overview's CSS shows one and hides
+ * the other, so the help stays open when the main area crosses the breakpoint.
  */
 export function helpPanel(
   step: { id: StepId; title: string; icon: IconName },

@@ -28,8 +28,8 @@ const editingKey = (editing: Editing): string =>
  * `/projects/{folder}/pronunciations` (ticket 12, variant F without the try-out): the book's
  * Pronunciation list on the left — Add pronunciation, search, and a Written | Spoken | Items |
  * With audio table with a delete per row — and the one entry being edited on the right, in the
- * shared {@link PronunciationEditor}. On narrow screens the editor replaces the list. The list
- * rereads on every receipt carrying the `Pronunciations` facet (any tab's or agent's change) and
+ * shared {@link PronunciationEditor}. When the main area is narrow the editor replaces the list.
+ * The list rereads on every receipt carrying the `Pronunciations` facet (any tab's or agent's change) and
  * on a catch-up after a hub reconnect, at the viewed step while one is viewed (read-only then).
  */
 export class PronunciationsPage extends R2mElement {

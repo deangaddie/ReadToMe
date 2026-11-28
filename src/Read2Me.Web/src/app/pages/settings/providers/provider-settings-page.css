@@ -60,7 +60,7 @@
     gap: var(--r2m-space-2);
     align-items: end;
   }
-  @container page (max-width: 37.5em) {
+  @container page (width <= 37.5em) {
     .text-steps__row {
       grid-template-columns: minmax(0, 1fr) auto;
     }

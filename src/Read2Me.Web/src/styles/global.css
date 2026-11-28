@@ -2557,7 +2557,7 @@ textarea.r2m-settings-form__text {
   gap: var(--r2m-space-4);
   align-items: start;
 
-  @container page (max-width: 56.25em) {
+  @container page (width <= 56.25em) {
     grid-template-columns: minmax(0, 1fr);
   }
 }

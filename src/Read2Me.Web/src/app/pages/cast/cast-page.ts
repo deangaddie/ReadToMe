@@ -45,8 +45,9 @@ adoptStyles(castCss);
 /**
  * `/projects/{folder}/cast[/{characterId}]` (design §6.4, ticket 15): the roster on the left —
  * search, sort, narrator banner, rows with readiness — and the selected character on the right.
- * On narrow screens the list is the page and the detail is the pushed route. The toolbar starts the
- * two voice batches (16): prompts behind the scope dialog when voices exist, audio directly.
+ * When the main area is narrow the list is the page and the detail is the pushed route. The
+ * toolbar starts the two voice batches (16): prompts behind the scope dialog when voices exist,
+ * audio directly.
  * `?discover=1` (from the overview's pipeline) opens the discovery dialog on arrival. Provides the
  * {@link CastStore} to the detail and reads the project shell's {@link ProjectStore}.
  */

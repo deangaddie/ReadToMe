@@ -18,9 +18,9 @@ adoptStyles(overviewCss);
  * `/projects/{folder}` (design §6.2, guidance-primitives spec §3): the nine-step Pipeline stepper
  * beside the project card. The steps are the {@link ProjectStore}'s `pipeline`; row actions and
  * checkpoint pills go through the shell's {@link StepRunner}, as the next-step pill's do. A row's
- * `?` opens that step's help: in the right column in place of the details card at laptop width,
- * inside the row below 1100 px; both render and the CSS shows one. Reads the store the project
- * shell provides.
+ * `?` opens that step's help: in the right column in place of the details card when the main area
+ * is wide, inside the row below 68.75em of it; both render and the CSS shows one. Reads the store
+ * the project shell provides.
  */
 export class OverviewPage extends R2mElement {
   private store!: ProjectStore;
