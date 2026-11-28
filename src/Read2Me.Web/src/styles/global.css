@@ -179,6 +179,19 @@ a {
   align-self: center;
 }
 
+/* ---- Table scroll: a table wider than its column scrolls inside a named region the keyboard can
+   reach (`role="region" tabindex="0" aria-labelledby` its caption), not across the page
+   (modern-web-guidance `responsive-table`, `form-factor-adaptation`). The ring sits inside the box,
+   so a clipping ancestor can't cut it off. */
+.r2m-table-scroll {
+  overflow-x: auto;
+
+  &:focus-visible {
+    outline: 2px solid var(--r2m-accent);
+    outline-offset: -2px;
+  }
+}
+
 /* ---- buttons: .r2m-button alone is the text variant ----------------------------------------- */
 .r2m-button {
   display: inline-flex;

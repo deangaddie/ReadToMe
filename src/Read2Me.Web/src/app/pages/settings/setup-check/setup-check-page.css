@@ -114,11 +114,4 @@
   .setup-check__fix-copy .r2m-icon {
     font-size: 0.875rem;
   }
-  /* Phone width: the table scrolls inside itself rather than widening the page. */
-  @container page (width <= 43.75em) {
-    .setup-check__table {
-      display: block;
-      overflow-x: auto;
-    }
-  }
 }

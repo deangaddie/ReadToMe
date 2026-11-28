@@ -153,6 +153,7 @@ describe('r2m-series-voice-editor', () => {
       '',
     ]);
     expect(text(rowOf(el, 'v1').querySelector('.series-voices__voice'))).toBe('Army doctor warm');
+    expect(el.querySelector('table')?.getAttribute('aria-label')).toBe('Dr. Watson: series Voices');
     const checked = (id: string) =>
       Array.from(
         rowOf(el, id).querySelectorAll<HTMLInputElement>('input[type=radio]'),

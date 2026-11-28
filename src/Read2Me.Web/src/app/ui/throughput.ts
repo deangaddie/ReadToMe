@@ -92,7 +92,7 @@ export function throughput(snapshot: ThroughputSnapshot) {
     }
     ${
       !snapshot.isRunActive && snapshot.perConfig.length
-        ? html`<table class="r2m-throughput__table">
+        ? html`<table class="r2m-throughput__table" aria-label="Throughput per config">
             <thead>
               <tr>
                 <th scope="col">Config</th>

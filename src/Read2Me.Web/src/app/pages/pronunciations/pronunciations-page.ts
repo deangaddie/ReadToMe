@@ -185,7 +185,7 @@ export class PronunciationsPage extends R2mElement {
                   ? html`<p class="pron__none">
                       No pronunciation matches "${this.query().trim()}".
                     </p>`
-                  : html`<table class="pron__table">
+                  : html`<table class="pron__table" aria-label="Pronunciations">
                       <thead>
                         <tr>
                           <th scope="col">Written</th>

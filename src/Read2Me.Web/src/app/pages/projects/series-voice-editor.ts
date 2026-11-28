@@ -288,7 +288,11 @@ export class SeriesVoiceEditor extends R2mElement {
       ${
         detail.voices.length === 0
           ? html`<p class="series-voices__note">No Voices yet. Add one to share it.</p>`
-          : html`<table class="series-voices__table" aria-busy=${busy ? 'true' : 'false'}>
+          : html`<table
+              class="series-voices__table"
+              aria-label=${`${this.label}: series Voices`}
+              aria-busy=${busy ? 'true' : 'false'}
+            >
               <thead>
                 <tr>
                   <th scope="col">Voice</th>
