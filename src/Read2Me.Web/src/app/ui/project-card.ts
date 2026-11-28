@@ -63,6 +63,7 @@ export function projectCard(
         coverUrl
           ? html`<img
               class="r2m-project-card__image"
+              loading="lazy"
               src=${coverUrl}
               alt=${`${project.title} cover`}
             />`

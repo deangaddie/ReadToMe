@@ -40,6 +40,7 @@ function poster(series: SeriesView) {
   return html`<span class="projects__poster" data-poster=${source}>
     <img
       class="projects__poster-image"
+      loading="lazy"
       src=${url}
       alt=${note ? `${series.name}: ${note}` : `${series.name} poster`}
     />

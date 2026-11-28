@@ -617,6 +617,7 @@ describe('r2m-projects-page series poster', () => {
     const poster = posterOf(page);
     expect(poster.dataset.poster).toBe('Uploaded');
     expect(poster.querySelector('img')!.getAttribute('src')).toBe('/api/series/h/poster?v=7');
+    expect(poster.querySelector('img')!.getAttribute('loading')).toBe('lazy');
     expect(poster.querySelector('.projects__poster-note')).toBeNull();
     const menu = page.querySelector<HTMLElement>('.projects__series-card')!;
     expect(menuLabels(menu)).toEqual([
