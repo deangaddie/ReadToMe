@@ -126,6 +126,7 @@ export class DiscoveryDialog extends R2mElement {
               : nothing
         }
         ${streamDisclosure({
+          id: 'discovery-activity',
           feed: this.feed,
           open: showStream,
           onToggle: () => this.showStream.set(!showStream),

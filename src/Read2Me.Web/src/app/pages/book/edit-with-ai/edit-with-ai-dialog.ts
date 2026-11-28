@@ -149,6 +149,7 @@ export class EditWithAiDialog extends R2mElement implements ClosableContent {
         }
         ${this.body(phase)}
         ${streamDisclosure({
+          id: 'edit-with-ai-activity',
           feed: this.feed,
           open: this.showStream(),
           onToggle: () => this.showStream.update((open) => !open),

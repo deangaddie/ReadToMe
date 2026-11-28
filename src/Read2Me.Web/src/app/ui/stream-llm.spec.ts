@@ -71,4 +71,28 @@ describe('r2m-stream-llm', () => {
     expect(el.paused()).toBe(false);
     expect(el.querySelector('.r2m-stream-llm__jump')).toBeNull();
   });
+
+  it('leaves a hidden list alone and lands at the latest entry when shown, unless paused', async () => {
+    const el = await mount();
+    const scroll = el.querySelector('.r2m-stream-llm__scroll') as HTMLElement;
+    Object.defineProperty(scroll, 'scrollHeight', { value: 1000, configurable: true });
+    Object.defineProperty(scroll, 'clientHeight', { value: 200, configurable: true });
+
+    el.shown = false;
+    scroll.scrollTop = 0;
+    scroll.dispatchEvent(new Event('scroll'));
+    el.events = [{ kind: 'runStarted' }];
+    await el.rendered();
+    expect(el.paused()).toBe(false);
+    expect(scroll.scrollTop).toBe(0);
+
+    el.shown = true;
+    expect(scroll.scrollTop).toBe(1000);
+
+    scroll.scrollTop = 40;
+    scroll.dispatchEvent(new Event('scroll'));
+    el.shown = false;
+    el.shown = true;
+    expect(scroll.scrollTop).toBe(40);
+  });
 });
