@@ -9,7 +9,7 @@
     margin: 0;
     padding: var(--r2m-space-1);
     list-style: none;
-    border: 1px solid var(--r2m-outline);
+    border: 1px solid var(--r2m-outline-variant);
     border-radius: var(--r2m-radius-lg);
     background: var(--r2m-surface);
   }
@@ -128,7 +128,7 @@
   .prompt-editor__pre {
     margin: 0;
     padding: var(--r2m-space-3);
-    border: 1px solid var(--r2m-outline);
+    border: 1px solid var(--r2m-outline-variant);
     border-radius: var(--r2m-radius-md);
     background: var(--r2m-surface-low);
     font-family: var(--r2m-font-mono, monospace);

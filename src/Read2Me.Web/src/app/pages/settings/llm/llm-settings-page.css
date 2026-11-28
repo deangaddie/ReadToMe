@@ -45,7 +45,7 @@
   :scope {
     display: block;
     padding: var(--r2m-space-4);
-    border: 1px solid var(--r2m-outline);
+    border: 1px solid var(--r2m-outline-variant);
     border-radius: var(--r2m-radius-lg);
     background: var(--r2m-surface);
   }
@@ -83,7 +83,7 @@
     align-items: center;
     gap: var(--r2m-space-2);
     padding: var(--r2m-space-1) var(--r2m-space-2);
-    border: 1px solid var(--r2m-outline);
+    border: 1px solid var(--r2m-outline-variant);
     border-radius: var(--r2m-radius-md);
   }
   .chain__name {
@@ -110,7 +110,7 @@
   :scope {
     display: block;
     padding: var(--r2m-space-4);
-    border: 1px solid var(--r2m-outline);
+    border: 1px solid var(--r2m-outline-variant);
     border-radius: var(--r2m-radius-lg);
     background: var(--r2m-surface);
   }
@@ -136,6 +136,6 @@
   }
   .console__stream {
     height: 40vh;
-    border-top: 1px solid var(--r2m-outline);
+    border-top: 1px solid var(--r2m-outline-variant);
   }
 }

@@ -68,7 +68,10 @@
   --r2m-surface-container: light-dark(#ededf4, #1d2024);
   --r2m-surface-high: light-dark(#e7e8ee, #282a2f);
   --r2m-surface-highest: light-dark(#e1e2e8, #33353a);
-  --r2m-outline: light-dark(#c4c6d0, #44474e);
+  /* Control boundaries (fields, stroked buttons, switch track, menus): 3:1 on every surface. */
+  --r2m-outline: light-dark(#74777f, #8e9099);
+  /* Dividers and non-interactive container edges (cards, panels, table rules). */
+  --r2m-outline-variant: light-dark(#c4c6d0, #44474e);
   --r2m-text: light-dark(#1a1b1f, #e2e2e9);
   --r2m-text-muted: light-dark(#44474e, #c4c6d0);
   --r2m-nav-active-bg: light-dark(#d7e3f8, #3d4758);
@@ -88,7 +91,7 @@
   --r2m-target-min: 24px;
   --r2m-activity-bg: var(--r2m-surface-container);
 
-  --r2m-status-ok: light-dark(#1b7f3b, #6fd58a);
+  --r2m-status-ok: light-dark(#17733a, #6fd58a);
   --r2m-status-ok-soft: light-dark(#dcf5e3, #163d22);
   --r2m-status-warn: light-dark(#9a5b00, #f2bf5e);
   --r2m-status-warn-soft: light-dark(#fff1d6, #46320a);
@@ -454,7 +457,7 @@ a {
     user-select: none;
   }
   & label + label {
-    border-left: 1px solid var(--r2m-outline);
+    border-left: 1px solid var(--r2m-outline-variant);
   }
   & input {
     position: absolute;
@@ -648,7 +651,7 @@ dialog.r2m-dialog--fullscreen {
 .r2m-menu__divider {
   margin: var(--r2m-space-1) 0;
   border: 0;
-  border-top: 1px solid var(--r2m-outline);
+  border-top: 1px solid var(--r2m-outline-variant);
 }
 
 /* ---- tooltip -------------------------------------------------------------------------------- */
@@ -951,7 +954,7 @@ dialog.r2m-dialog--fullscreen {
   align-items: center;
   gap: var(--r2m-space-2);
   padding: var(--r2m-space-2) var(--r2m-space-3);
-  border-bottom: 1px solid var(--r2m-outline);
+  border-bottom: 1px solid var(--r2m-outline-variant);
   color: var(--r2m-text-muted);
   /* The input drops its own outline, so the row carries the focus ring, as the Config list search does. */
   &:focus-within {
@@ -1017,7 +1020,7 @@ dialog.r2m-dialog--fullscreen {
   text-align: center;
 }
 .r2m-speaker-menu__footer {
-  border-top: 1px solid var(--r2m-outline);
+  border-top: 1px solid var(--r2m-outline-variant);
   padding: var(--r2m-space-1) 0;
 }
 
@@ -1328,13 +1331,13 @@ progress {
 }
 .r2m-job-pill__cancel {
   padding: 0 var(--r2m-space-1);
-  border-left: 1px solid var(--r2m-outline);
+  border-left: 1px solid var(--r2m-outline-variant);
 }
 
 .r2m-job-card {
   display: block;
   padding: var(--r2m-space-3) var(--r2m-space-4);
-  border: 1px solid var(--r2m-outline);
+  border: 1px solid var(--r2m-outline-variant);
   border-radius: var(--r2m-radius-lg);
   background: var(--r2m-surface);
 }
@@ -1447,7 +1450,7 @@ progress {
   & th,
   & td {
     padding: var(--r2m-space-1) var(--r2m-space-2);
-    border-bottom: 1px solid var(--r2m-outline);
+    border-bottom: 1px solid var(--r2m-outline-variant);
     text-align: left;
   }
   & th {
@@ -1492,7 +1495,7 @@ progress {
   display: flex;
   justify-content: flex-end;
   padding: 0 var(--r2m-space-2);
-  border-bottom: 1px solid var(--r2m-outline);
+  border-bottom: 1px solid var(--r2m-outline-variant);
 }
 .r2m-stream-llm__scroll,
 .r2m-stream-audio__scroll {
@@ -1536,7 +1539,7 @@ progress {
   content-visibility: auto;
   /* Without this the column squeezes a skipped entry below its estimate. */
   flex-shrink: 0;
-  border: 1px solid var(--r2m-outline);
+  border: 1px solid var(--r2m-outline-variant);
   border-radius: var(--r2m-radius-md);
   background: var(--r2m-surface);
 }
@@ -1967,7 +1970,7 @@ progress {
 .r2m-project-card {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--r2m-outline);
+  border: 1px solid var(--r2m-outline-variant);
   border-radius: var(--r2m-radius-lg);
   background: var(--r2m-surface-low);
   overflow: hidden;
@@ -2171,7 +2174,7 @@ progress {
   width: 2px;
   min-height: var(--r2m-space-4);
   margin: var(--r2m-space-1) 0;
-  background: var(--r2m-outline);
+  background: var(--r2m-outline-variant);
 }
 .r2m-pipeline__step--done .r2m-pipeline__line {
   background: var(--r2m-status-ok);
@@ -2309,7 +2312,7 @@ progress {
 
 /* ---- stream disclosure: the "Show / Hide AI activity" strip at the foot of an AI dialog ----- */
 .r2m-stream-disclosure {
-  border-top: 1px solid var(--r2m-outline);
+  border-top: 1px solid var(--r2m-outline-variant);
   padding-top: var(--r2m-space-1);
 }
 .r2m-stream-disclosure__body {
@@ -2333,7 +2336,7 @@ progress {
 
 /* ---- expansion panel (mat-expansion-panel): details/summary with a chevron ------------------- */
 .r2m-expansion {
-  border: 1px solid var(--r2m-outline);
+  border: 1px solid var(--r2m-outline-variant);
   border-radius: var(--r2m-radius-md);
   background: var(--r2m-surface);
 
@@ -2601,7 +2604,7 @@ textarea.r2m-settings-form__text {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border: 1px solid var(--r2m-outline);
+  border: 1px solid var(--r2m-outline-variant);
   border-radius: var(--r2m-radius-lg);
   background: var(--r2m-surface);
 }
@@ -2611,7 +2614,7 @@ textarea.r2m-settings-form__text {
   justify-content: space-between;
   gap: var(--r2m-space-3);
   padding: var(--r2m-space-4) var(--r2m-space-4) var(--r2m-space-3);
-  border-bottom: 1px solid var(--r2m-outline);
+  border-bottom: 1px solid var(--r2m-outline-variant);
 }
 .r2m-config-editor-frame__title {
   margin: 0;
@@ -2640,7 +2643,7 @@ textarea.r2m-settings-form__text {
   justify-content: flex-end;
   gap: var(--r2m-space-2);
   padding: var(--r2m-space-3) var(--r2m-space-4);
-  border-top: 1px solid var(--r2m-outline);
+  border-top: 1px solid var(--r2m-outline-variant);
 }
 
 /* ---- settings master–detail: the list beside the editor, stacked when the page is narrow --------- */

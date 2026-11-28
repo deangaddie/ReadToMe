@@ -16,7 +16,7 @@
     & th,
     & td {
       padding: var(--r2m-space-2);
-      border-bottom: 1px solid var(--r2m-outline);
+      border-bottom: 1px solid var(--r2m-outline-variant);
       text-align: left;
       vertical-align: middle;
     }

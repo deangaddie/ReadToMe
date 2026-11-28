@@ -37,7 +37,7 @@
     font-size: var(--r2m-text-sm);
     font-weight: 500;
     color: var(--r2m-text-muted);
-    border-bottom: 1px solid var(--r2m-outline);
+    border-bottom: 1px solid var(--r2m-outline-variant);
     padding: var(--r2m-space-1) var(--r2m-space-2);
   }
   .pron__table td {
@@ -81,7 +81,7 @@
     width: 1%;
   }
   .pron__editor {
-    border: 1px solid var(--r2m-outline);
+    border: 1px solid var(--r2m-outline-variant);
     border-radius: var(--r2m-radius-md);
     padding: var(--r2m-space-3);
     background: var(--r2m-surface-low);

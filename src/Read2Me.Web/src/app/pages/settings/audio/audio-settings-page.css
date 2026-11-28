@@ -28,7 +28,7 @@
     flex-direction: column;
     gap: var(--r2m-space-2);
     padding: var(--r2m-space-4);
-    border: 1px solid var(--r2m-outline);
+    border: 1px solid var(--r2m-outline-variant);
     border-radius: var(--r2m-radius-lg);
     background: var(--r2m-surface-low);
   }

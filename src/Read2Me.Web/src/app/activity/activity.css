@@ -45,7 +45,7 @@
     flex: 0 0 auto;
     min-block-size: var(--r2m-appbar-height);
     padding: 0 var(--r2m-space-2) 0 var(--r2m-space-4);
-    border-bottom: 1px solid var(--r2m-outline);
+    border-bottom: 1px solid var(--r2m-outline-variant);
   }
   .activity-drawer__title {
     font-weight: 600;
@@ -53,7 +53,7 @@
   /* Four icon+label tabs must fit the 420 px drawer. */
   .r2m-tabs {
     flex: 0 0 auto;
-    border-bottom: 1px solid var(--r2m-outline);
+    border-bottom: 1px solid var(--r2m-outline-variant);
   }
   .r2m-tabs__tab {
     flex: 1 1 0;
@@ -78,7 +78,7 @@
   }
   .activity-jobs__throughput {
     padding: var(--r2m-space-3) var(--r2m-space-4);
-    border: 1px solid var(--r2m-outline);
+    border: 1px solid var(--r2m-outline-variant);
     border-radius: var(--r2m-radius-lg);
     background: var(--r2m-surface);
   }
@@ -137,7 +137,7 @@
     align-items: center;
     gap: var(--r2m-space-2);
     padding: var(--r2m-space-2) var(--r2m-space-3);
-    border: 1px solid var(--r2m-outline);
+    border: 1px solid var(--r2m-outline-variant);
     border-radius: var(--r2m-radius-md);
     background: var(--r2m-surface);
   }
@@ -161,6 +161,6 @@
     display: flex;
     justify-content: flex-end;
     padding: var(--r2m-space-2) var(--r2m-space-3);
-    border-top: 1px solid var(--r2m-outline);
+    border-top: 1px solid var(--r2m-outline-variant);
   }
 }

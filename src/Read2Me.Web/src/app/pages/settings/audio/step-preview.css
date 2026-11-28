@@ -6,7 +6,7 @@
     gap: var(--r2m-space-2);
     margin-top: var(--r2m-space-3);
     padding: var(--r2m-space-3);
-    border: 1px dashed var(--r2m-outline);
+    border: 1px dashed var(--r2m-outline-variant);
     border-radius: var(--r2m-radius-md);
   }
   .step-preview__head {

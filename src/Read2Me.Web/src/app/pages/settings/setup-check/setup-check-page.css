@@ -42,7 +42,7 @@
   .setup-check__table td {
     text-align: left;
     padding: var(--r2m-space-2);
-    border-bottom: 1px solid var(--r2m-outline);
+    border-bottom: 1px solid var(--r2m-outline-variant);
     vertical-align: top;
     overflow-wrap: anywhere;
   }
@@ -99,7 +99,7 @@
     gap: var(--r2m-space-1);
     max-width: 100%;
     padding: 1px 6px;
-    border: 1px solid var(--r2m-outline);
+    border: 1px solid var(--r2m-outline-variant);
     border-radius: var(--r2m-radius-sm);
     background: var(--r2m-surface-container);
     color: var(--r2m-text);
