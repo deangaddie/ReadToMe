@@ -11,7 +11,7 @@
   }
   .editor__preview {
     border-radius: var(--r2m-radius-md);
-    border: 1px solid var(--r2m-outline);
+    border: 1px solid var(--r2m-outline-variant);
     overflow: hidden;
     font-size: var(--r2m-text-sm);
   }

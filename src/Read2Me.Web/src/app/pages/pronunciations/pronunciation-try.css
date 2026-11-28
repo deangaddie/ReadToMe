@@ -17,7 +17,7 @@
     font-size: var(--r2m-text-sm);
   }
   .pron-try__card {
-    border: 1px solid var(--r2m-outline);
+    border: 1px solid var(--r2m-outline-variant);
     border-radius: var(--r2m-radius-md);
     padding: var(--r2m-space-2) var(--r2m-space-3);
     margin-top: var(--r2m-space-2);
@@ -64,7 +64,7 @@
     padding: 0;
     max-height: 320px;
     overflow-y: auto;
-    border-top: 1px solid var(--r2m-outline);
+    border-top: 1px solid var(--r2m-outline-variant);
   }
   .pron-try__row {
     display: grid;
@@ -72,7 +72,7 @@
     align-items: center;
     column-gap: var(--r2m-space-2);
     padding: var(--r2m-space-1) 0;
-    border-bottom: 1px solid var(--r2m-outline);
+    border-bottom: 1px solid var(--r2m-outline-variant);
   }
   .pron-try__row .pron-try__sentence {
     grid-column: 1 / -1;

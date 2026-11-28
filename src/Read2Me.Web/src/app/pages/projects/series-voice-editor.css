@@ -7,7 +7,7 @@
     display: grid;
     gap: var(--r2m-space-2);
     padding: var(--r2m-space-3);
-    border: 1px solid var(--r2m-outline);
+    border: 1px solid var(--r2m-outline-variant);
     border-radius: var(--r2m-radius-md);
   }
   .series-voices__head {
@@ -42,7 +42,7 @@
     & th,
     & td {
       padding: var(--r2m-space-2);
-      border-bottom: 1px solid var(--r2m-outline);
+      border-bottom: 1px solid var(--r2m-outline-variant);
       text-align: left;
       vertical-align: middle;
     }

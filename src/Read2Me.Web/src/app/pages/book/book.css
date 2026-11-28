@@ -107,7 +107,7 @@
   }
   .book__tree {
     overflow: auto;
-    border-right: 1px solid var(--r2m-outline);
+    border-right: 1px solid var(--r2m-outline-variant);
     padding-right: var(--r2m-space-2);
   }
   /* The gutter between the tree and the reader resizes the tree (spec #309); out of the grid flow. */
@@ -149,7 +149,7 @@
     align-items: flex-end;
     gap: var(--r2m-space-2);
     padding: var(--r2m-space-2) var(--r2m-space-1);
-    border-bottom: 1px solid var(--r2m-outline);
+    border-bottom: 1px solid var(--r2m-outline-variant);
     border-radius: var(--r2m-radius-md) var(--r2m-radius-md) 0 0;
     transition: box-shadow 120ms;
   }
@@ -195,7 +195,7 @@
   }
   .book__pause-rule {
     flex: 1 1 auto;
-    border-top: 1px dashed var(--r2m-outline);
+    border-top: 1px dashed var(--r2m-outline-variant);
   }
   .book__pause-menu {
     display: inline-flex;

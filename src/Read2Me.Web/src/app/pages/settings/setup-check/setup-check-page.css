@@ -42,7 +42,7 @@
   .setup-check__table td {
     text-align: left;
     padding: var(--r2m-space-2);
-    border-bottom: 1px solid var(--r2m-outline);
+    border-bottom: 1px solid var(--r2m-outline-variant);
     vertical-align: top;
     overflow-wrap: anywhere;
   }

@@ -5,7 +5,7 @@
     min-height: 0;
     overflow: auto;
     padding: 0 var(--r2m-space-3) var(--r2m-space-3);
-    border-left: 1px solid var(--r2m-outline);
+    border-left: 1px solid var(--r2m-outline-variant);
     background: var(--r2m-surface);
     box-sizing: border-box;
   }
@@ -33,7 +33,7 @@
   }
   .pron-panel__editor {
     padding-bottom: var(--r2m-space-3);
-    border-bottom: 1px solid var(--r2m-outline);
+    border-bottom: 1px solid var(--r2m-outline-variant);
   }
   .pron-panel__list {
     list-style: none;

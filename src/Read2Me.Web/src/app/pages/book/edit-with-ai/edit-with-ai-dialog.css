@@ -83,7 +83,7 @@
     gap: var(--r2m-space-1);
   }
   .edit__row {
-    border: 1px solid var(--r2m-outline);
+    border: 1px solid var(--r2m-outline-variant);
     border-radius: var(--r2m-radius-md);
     padding: var(--r2m-space-1) var(--r2m-space-2);
   }
@@ -152,7 +152,7 @@
     flex-direction: column;
     gap: var(--r2m-space-1);
     padding: var(--r2m-space-2) 0;
-    border-top: 1px solid var(--r2m-outline);
+    border-top: 1px solid var(--r2m-outline-variant);
   }
   .edit__current {
     margin: 0;

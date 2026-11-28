@@ -13,7 +13,7 @@
   .themes__card {
     display: flex;
     flex-direction: column;
-    border: 1px solid var(--r2m-outline);
+    border: 1px solid var(--r2m-outline-variant);
     border-radius: var(--r2m-radius-lg);
     background: var(--r2m-surface-low);
     overflow: hidden;
