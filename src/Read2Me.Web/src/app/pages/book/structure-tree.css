@@ -43,7 +43,7 @@
     cursor: pointer;
   }
   .tree__toggle .r2m-icon {
-    font-size: 20px;
+    font-size: 1.25rem;
   }
   .tree__select {
     flex: 0 0 auto;
@@ -82,7 +82,7 @@
     background: color-mix(in srgb, var(--r2m-text-muted) 20%, transparent);
   }
   .tree__done {
-    font-size: 16px;
+    font-size: 1rem;
     color: var(--r2m-status-ok);
   }
   .tree__menu {

@@ -76,7 +76,7 @@
     color: var(--r2m-status-info);
   }
   .setup-check__note .r2m-icon {
-    font-size: 16px;
+    font-size: 1rem;
   }
   .setup-check__fix {
     display: inline-flex;
@@ -91,7 +91,7 @@
     color: var(--r2m-accent);
   }
   .setup-check__fix-link .r2m-icon {
-    font-size: 16px;
+    font-size: 1rem;
   }
   .setup-check__fix-copy {
     display: inline-flex;
@@ -112,7 +112,7 @@
     text-align: left;
   }
   .setup-check__fix-copy .r2m-icon {
-    font-size: 14px;
+    font-size: 0.875rem;
   }
   /* Phone width: the table scrolls inside itself rather than widening the page. */
   @container page (width <= 43.75em) {

@@ -122,7 +122,7 @@
     font-weight: 600;
 
     & .r2m-icon {
-      font-size: 14px;
+      font-size: 0.875rem;
     }
   }
 
@@ -159,7 +159,7 @@
     font-size: var(--r2m-text-sm);
 
     & .r2m-icon {
-      font-size: 16px;
+      font-size: 1rem;
     }
   }
   .projects__panel-grid {

@@ -27,7 +27,7 @@ import shellCss from './shell.css' with { type: 'text' };
 
 adoptStyles(shellCss);
 
-const NARROW_QUERY = '(max-width: 899.98px)';
+const NARROW_QUERY = '(width < 56.25em)';
 const THEME_MENU_ID = 'r2m-theme-menu';
 
 const SCHEME_ICONS: Record<SchemePreference, IconName> = {

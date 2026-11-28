@@ -20,7 +20,7 @@
     color: var(--r2m-text-muted);
   }
   .pron-card__arrow {
-    font-size: 18px;
+    font-size: 1.125rem;
     color: var(--r2m-text-muted);
   }
   .pron-card__spoken {
