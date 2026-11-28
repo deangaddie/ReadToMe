@@ -11,6 +11,7 @@ import { Router } from '@app/core/router';
 import { use } from '@app/core/services';
 import { type ReadonlySignal, computed, signal } from '@app/core/signals';
 import { ConfirmService } from '@app/ui/dialogs';
+import { isComposing } from '@app/ui/keys';
 import { gated, icon, statusChip } from '@app/ui/partials';
 import { bookLink } from '../book/book-address';
 import { castPath, seriesBoardPath } from './cast-path';
@@ -211,6 +212,7 @@ export class CharacterDetail extends R2mElement {
   }
 
   readonly #onAliasKeydown = (e: KeyboardEvent): void => {
+    if (isComposing(e)) return;
     if (e.key === 'Enter') {
       e.preventDefault();
       void this.commitAlias(e);

@@ -6,6 +6,7 @@ import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import { icon, statusChip } from '@app/ui/partials';
+import { isComposing } from '@app/ui/keys';
 import { type AliasOwner, collides } from './alias-collisions';
 import {
   type DiscoveryRow,
@@ -298,6 +299,7 @@ export class DiscoveryDialog extends R2mElement {
   }
 
   private onAliasKeydown(index: number, e: KeyboardEvent): void {
+    if (isComposing(e)) return;
     if (e.key === 'Enter') {
       e.preventDefault();
       this.commitAlias(index, e);

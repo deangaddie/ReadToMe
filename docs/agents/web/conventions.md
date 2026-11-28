@@ -40,3 +40,4 @@
 - `navigate` events for back/forward are cancelable in both browsers; in Chromium that needs user activation.
 - Bun 1.4.2 on Windows: `rmSync` throws `EINVAL` for a relative path through `..`, existing or not (resolve it first), and `Bun.build` won't create its `outdir`.
 - Computed lists are synchronous, so Enter-before-render races are gone. Don't reintroduce async list derivation.
+- A custom `keydown` handler that acts on Enter or Escape returns early on `isComposing(e)` (`ui/keys.ts`): mid IME composition Enter confirms a conversion and Escape cancels one (modern-web-guidance `forms/ime-safe-enter-submit`). A `<form>` whose Enter submits natively needs no handler at all.

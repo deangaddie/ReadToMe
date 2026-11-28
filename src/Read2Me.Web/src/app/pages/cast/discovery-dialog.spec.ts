@@ -88,6 +88,21 @@ describe('r2m-discovery-dialog', () => {
     );
   });
 
+  it.each(['Enter', 'Escape'])('leaves %s to the IME while it composes an alias', async (key) => {
+    api.on('POST', DISCOVER, OUTCOME);
+    const { dialog } = await open();
+    row(dialog, 1).querySelector<HTMLButtonElement>('.discover__add-alias')!.click();
+    await dialog.rendered();
+    const alias = dialog.querySelector<HTMLInputElement>('input[aria-label="New alias"]')!;
+    alias.value = 'にほん';
+    const init = { key, isComposing: true, bubbles: true, cancelable: true };
+    alias.dispatchEvent(new KeyboardEvent('keydown', init));
+    await dialog.rendered();
+    expect(dialog.querySelector('input[aria-label="New alias"]')).toBe(alias);
+    expect(alias.value).toBe('にほん');
+    expect(row(dialog, 1).querySelectorAll('.discover__alias')).toHaveLength(1);
+  });
+
   it('edits a row (rename, add and remove an alias), drops a row to clear the warning, and applies', async () => {
     api.on('POST', DISCOVER, OUTCOME);
     api.on('POST', APPLY, { applied: 2 });

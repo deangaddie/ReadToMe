@@ -231,6 +231,20 @@ describe('r2m-character-detail', () => {
     expect(commands()).toEqual([]);
   });
 
+  it.each(['Enter', 'Escape'])('leaves %s to the IME while it composes an alias', async (key) => {
+    const detail = await mount(ALICE);
+    button(detail, 'add-alias').click();
+    await detail.rendered();
+    const input = detail.querySelector<HTMLInputElement>('.character-detail__alias-input')!;
+    input.value = 'にほん';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key, isComposing: true, cancelable: true }));
+    await settle();
+    await detail.rendered();
+    expect(commands()).toEqual([]);
+    expect(detail.querySelector('.character-detail__alias-input')).toBe(input);
+    expect(input.value).toBe('にほん');
+  });
+
   it('Merge opens the dialog, posts MergeCharacters and goes to the survivor', async () => {
     const detail = await mount(ALICE);
     api.on('POST', COMMANDS, { outcome: 'Committed' });

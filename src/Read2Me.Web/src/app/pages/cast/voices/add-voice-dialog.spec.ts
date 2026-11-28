@@ -43,4 +43,19 @@ describe('r2m-add-voice-dialog', () => {
       .click();
     expect(await result).toBeNull();
   });
+
+  it('leaves Enter to the IME while it composes the name', async () => {
+    const { result, dialog } = await open();
+    const name = dialog.querySelector<HTMLInputElement>('input[type=text]')!;
+    name.value = 'にほん';
+    name.dispatchEvent(new Event('input'));
+    const init = { key: 'Enter', isComposing: true, bubbles: true, cancelable: true };
+    name.dispatchEvent(new KeyboardEvent('keydown', init));
+    await settle();
+    expect(dialog.isConnected).toBe(true);
+    name.value = '日本';
+    name.dispatchEvent(new Event('input'));
+    name.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(await result).toEqual({ name: '日本', isGenerated: false });
+  });
 });
