@@ -219,7 +219,7 @@ export class CastPage extends R2mElement {
               : nothing
           }
 
-          <div class="cast__filters">
+          <search class="cast__filters" aria-label="Filter characters">
             <label class="r2m-field cast__search">
               <input
                 type="search"
@@ -245,7 +245,7 @@ export class CastPage extends R2mElement {
                 )}
               </select>
             </label>
-          </div>
+          </search>
 
           ${this.roster(rows, characterId, narrator)}
         </section>

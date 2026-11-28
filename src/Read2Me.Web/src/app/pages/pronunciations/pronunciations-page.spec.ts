@@ -194,6 +194,14 @@ describe('r2m-pronunciations-page', () => {
     );
   });
 
+  it('the search box sits in a named search landmark, the Add button outside it', async () => {
+    const page = await render();
+    const landmark = page.querySelector('search[aria-label="Filter pronunciations"]');
+    expect(landmark?.querySelector('input[type=search]')).not.toBeNull();
+    expect(landmark?.querySelector('[data-action=add]')).toBeNull();
+    expect(page.querySelectorAll('search').length).toBe(1);
+  });
+
   it('search filters by written or spoken form', async () => {
     const page = await render();
     const search = page.querySelector<HTMLInputElement>('input[type=search]')!;

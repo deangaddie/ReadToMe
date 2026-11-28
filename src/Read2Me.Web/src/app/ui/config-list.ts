@@ -80,16 +80,18 @@ export class ConfigList extends R2mElement {
     const activeLabel = this.#activeLabel();
     return html`
       <header class="r2m-config-list__head">
-        <label class="r2m-config-list__search">
-          ${icon('search')}
-          <input
-            type="search"
-            placeholder="Search"
-            aria-label="Search configurations"
-            .value=${this.#query()}
-            @input=${(e: Event) => this.#query.set((e.target as HTMLInputElement).value)}
-          />
-        </label>
+        <search class="r2m-config-list__filter" aria-label="Filter configurations">
+          <label class="r2m-config-list__search">
+            ${icon('search')}
+            <input
+              type="search"
+              placeholder="Search"
+              aria-label="Search configurations"
+              .value=${this.#query()}
+              @input=${(e: Event) => this.#query.set((e.target as HTMLInputElement).value)}
+            />
+          </label>
+        </search>
         <button
           type="button"
           class="r2m-button r2m-button--filled"

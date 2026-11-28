@@ -42,6 +42,13 @@ describe('r2m-config-list', () => {
     expect(list.querySelector('[role="menuitem"]')?.textContent).toContain('Make default');
   });
 
+  it('wraps the search box in a named search landmark', async () => {
+    const { list } = await mount();
+    const landmark = list.querySelector('search[aria-label="Filter configurations"]');
+    expect(landmark?.querySelector('input[type="search"]')).not.toBeNull();
+    expect(list.querySelectorAll('search').length).toBe(1);
+  });
+
   it('filters by name or subtitle and emits pick / create', async () => {
     const { list, events } = await mount();
     const input = list.querySelector<HTMLInputElement>('input[type="search"]')!;

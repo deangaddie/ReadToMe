@@ -2402,9 +2402,11 @@ textarea.r2m-settings-form__text {
   gap: var(--r2m-space-2);
   padding: 0 0 var(--r2m-space-2);
 }
-.r2m-config-list__search {
+.r2m-config-list__filter {
   flex: 1;
   min-width: 0; /* lets the search shrink so New stays inside the 320 px column */
+}
+.r2m-config-list__search {
   display: flex;
   align-items: center;
   gap: var(--r2m-space-1);
