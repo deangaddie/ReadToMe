@@ -2550,14 +2550,14 @@ textarea.r2m-settings-form__text {
   border-top: 1px solid var(--r2m-outline);
 }
 
-/* ---- settings master–detail: the list beside the editor, stacked on narrow screens ---------- */
+/* ---- settings master–detail: the list beside the editor, stacked when the page is narrow --------- */
 .r2m-master-detail {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
   gap: var(--r2m-space-4);
   align-items: start;
 
-  @media (max-width: 900px) {
+  @container page (width <= 56.25em) {
     grid-template-columns: minmax(0, 1fr);
   }
 }

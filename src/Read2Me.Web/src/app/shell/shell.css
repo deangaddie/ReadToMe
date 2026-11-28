@@ -368,6 +368,9 @@
     min-height: 0;
     padding: 0 var(--r2m-space-6) var(--r2m-space-6);
     overflow: auto;
+    /* Pages query the room they have (`@container page`), not the viewport: the rail, the drawer
+       and the History sheet dock beside this at 900 px and wider. */
+    container: page / inline-size;
   }
 
   /* ---- activity drawer (design §5): docked at the end of the body ---------------------------- */

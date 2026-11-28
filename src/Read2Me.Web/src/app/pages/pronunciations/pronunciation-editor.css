@@ -69,7 +69,7 @@
   .r2m-advice {
     text-align: end;
   }
-  @media (max-width: 599.98px) {
+  @container page (width < 37.5em) {
     .pron-editor__fields {
       grid-template-columns: minmax(0, 1fr);
     }

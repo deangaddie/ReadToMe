@@ -115,7 +115,7 @@
     font-size: 14px;
   }
   /* Phone width: the table scrolls inside itself rather than widening the page. */
-  @media (max-width: 700px) {
+  @container page (width <= 43.75em) {
     .setup-check__table {
       display: block;
       overflow-x: auto;

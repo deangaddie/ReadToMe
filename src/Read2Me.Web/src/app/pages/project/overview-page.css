@@ -1,8 +1,9 @@
 /*
  * The project overview (design §6.2, guidance-primitives spec §3): the stepper beside the project
- * details card. One breakpoint, 1100 px. Above it a step's help replaces the details card in the
- * right column; below it the page is one column, the details card follows the stepper, and the
- * same help opens inline in the step's row. Both placements render; the media query shows one.
+ * details card. One breakpoint, 68.75em (1100 px) of the main area (`@container page`). Above it a
+ * step's help replaces the details card in the right column; below it the page is one column, the
+ * details card follows the stepper, and the same help opens inline in the step's row. Both
+ * placements render; the container query shows one.
  */
 @scope (r2m-overview-page) to (r2m-project-details-panel) {
   :scope {
@@ -55,7 +56,7 @@
     gap: var(--r2m-space-1);
     color: var(--r2m-accent);
   }
-  @media (max-width: 1099.98px) {
+  @container page (width < 68.75em) {
     .overview__body {
       grid-template-columns: minmax(0, 1fr);
     }

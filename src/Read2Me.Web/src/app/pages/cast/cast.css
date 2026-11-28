@@ -102,7 +102,7 @@
     border-radius: var(--r2m-radius-md);
     background: color-mix(in srgb, var(--r2m-text-muted) 12%, transparent);
   }
-  @media (max-width: 899.98px) {
+  @container page (width < 56.25em) {
     .cast {
       grid-template-columns: minmax(0, 1fr);
     }
