@@ -170,6 +170,15 @@ export class AppShell extends R2mElement {
     this.focusAfterRender = 'toggle';
   };
 
+  /**
+   * The skip link (2.4.1 Bypass Blocks): `<base href>` and Navigation API routing would read
+   * `#main` as a route, so it focuses `<main>` in place and leaves the URL alone.
+   */
+  private readonly skipToMain = (event: Event): void => {
+    event.preventDefault();
+    this.querySelector<HTMLElement>('main')?.focus();
+  };
+
   /** Theme quick menu (design §5): writes the shared selection through the API. */
   private setScheme(preference: SchemePreference): void {
     this.querySelector<HTMLElement>(`#${THEME_MENU_ID}`)?.hidePopover();
@@ -190,6 +199,13 @@ export class AppShell extends R2mElement {
     // The page body while viewing a History step: greyed, still browsable; its edit controls are off.
     const viewing = this.viewing();
     return html`
+      <a
+        href="#main"
+        class="r2m-skip-link visually-hidden"
+        ?inert=${modal}
+        @click=${this.skipToMain}
+        >Skip to main content</a
+      >
       <header class="shell__appbar">
         <button
           type="button"
@@ -298,7 +314,12 @@ export class AppShell extends R2mElement {
             </ul>
           </nav>
         </aside>
-        <main class="shell__main ${viewing ? 'shell__main--viewing' : ''}" ?inert=${modal}>
+        <main
+          id="main"
+          tabindex="-1"
+          class="shell__main ${viewing ? 'shell__main--viewing' : ''}"
+          ?inert=${modal}
+        >
           ${
             // Without a Workspace every route shows the Setup check, which says what to fix.
             this.setupCheck.noWorkspace()

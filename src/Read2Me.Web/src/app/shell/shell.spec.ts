@@ -317,6 +317,38 @@ describe('app-root', () => {
   });
 });
 
+describe('skip link', () => {
+  const skip = (shell: Element) => shell.querySelector<HTMLAnchorElement>('.r2m-skip-link');
+
+  it('is the first element and the first link, visually hidden until focused, pointing at main', async () => {
+    const { shell } = await mount('projects/pride-and-prejudice/book');
+    const link = skip(shell);
+    expect(shell.firstElementChild).toBe(link);
+    expect(shell.querySelector('a')).toBe(link);
+    expect(link?.textContent?.trim()).toBe('Skip to main content');
+    expect(link?.getAttribute('href')).toBe('#main');
+    expect(link?.classList.contains('visually-hidden')).toBe(true);
+    const main = shell.querySelector('main');
+    expect(main?.id).toBe('main');
+    expect(main?.getAttribute('tabindex')).toBe('-1');
+  });
+
+  it('focuses main without navigating', async () => {
+    const { shell, router } = await mount('projects/pride-and-prejudice/book');
+    const before = location.href;
+    const path = router.path();
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+
+    skip(shell)?.dispatchEvent(click);
+    await settle();
+
+    expect(click.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(shell.querySelector('main'));
+    expect(location.href).toBe(before);
+    expect(router.path()).toBe(path);
+  });
+});
+
 describe('Setup check surfacing', () => {
   const STARTED = '2026-10-29T09:00:00Z';
 
@@ -855,6 +887,7 @@ describe('app-root narrow rail drawer', () => {
   const firstLink = (shell: Element) => shell.querySelector<HTMLElement>('.shell__nav-item');
   const background = (shell: Element) =>
     [
+      shell.querySelector<HTMLElement>('.r2m-skip-link'),
       shell.querySelector<HTMLElement>('.shell__main'),
       shell.querySelector<HTMLElement>('.shell__brand'),
       shell.querySelector<HTMLElement>('.shell__theme'),
@@ -872,7 +905,7 @@ describe('app-root narrow rail drawer', () => {
   it('opens as a modal drawer: focus on the first nav link, the page and app bar inert', async () => {
     const { shell } = await mount('projects');
     expect(toggle(shell)?.getAttribute('aria-expanded')).toBe('false');
-    expect(background(shell)).toEqual([false, false, false, false, false]);
+    expect(background(shell)).toEqual([false, false, false, false, false, false]);
 
     toggle(shell)?.click();
     await settle();
@@ -880,7 +913,7 @@ describe('app-root narrow rail drawer', () => {
     expect(isOpen(shell)).toBe(true);
     expect(toggle(shell)?.getAttribute('aria-expanded')).toBe('true');
     expect(document.activeElement).toBe(firstLink(shell));
-    expect(background(shell)).toEqual([true, true, true, true, true]);
+    expect(background(shell)).toEqual([true, true, true, true, true, true]);
     expect(toggle(shell)?.closest('[inert]')).toBeNull();
     expect(rail(shell)?.closest('[inert]')).toBeNull();
   });
@@ -917,7 +950,7 @@ describe('app-root narrow rail drawer', () => {
     expect(isOpen(shell)).toBe(false);
     expect(toggle(shell)?.getAttribute('aria-expanded')).toBe('false');
     expect(document.activeElement).toBe(toggle(shell));
-    expect(background(shell)).toEqual([false, false, false, false, false]);
+    expect(background(shell)).toEqual([false, false, false, false, false, false]);
   });
 
   it('closes when a nav link is followed, leaving nothing inert', async () => {
@@ -926,7 +959,7 @@ describe('app-root narrow rail drawer', () => {
     await settle();
 
     expect(isOpen(shell)).toBe(false);
-    expect(background(shell)).toEqual([false, false, false, false, false]);
+    expect(background(shell)).toEqual([false, false, false, false, false, false]);
   });
 
   it('leaves Escape alone while the drawer is closed', async () => {
@@ -945,7 +978,7 @@ describe('app-root narrow rail drawer', () => {
     await settle();
 
     expect(rail(shell)?.classList.contains('shell__rail--open')).toBe(false);
-    expect(background(shell)).toEqual([false, false, false, false, false]);
+    expect(background(shell)).toEqual([false, false, false, false, false, false]);
   });
 
   it('when wide, aria-expanded follows the docked rail and nothing goes inert', async () => {
@@ -957,7 +990,7 @@ describe('app-root narrow rail drawer', () => {
     await settle();
 
     expect(toggle(shell)?.getAttribute('aria-expanded')).toBe('false');
-    expect(background(shell)).toEqual([false, false, false, false, false]);
+    expect(background(shell)).toEqual([false, false, false, false, false, false]);
     expect(document.activeElement).not.toBe(firstLink(shell));
   });
 });

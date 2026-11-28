@@ -7,6 +7,25 @@
     overflow: hidden;
   }
 
+  /* ---- skip link (2.4.1 Bypass Blocks): `.visually-hidden` until focused, then over the app bar
+     at the top left, fixed so nothing below it shifts ---------------------------------------- */
+  .r2m-skip-link {
+    position: fixed;
+    top: var(--r2m-space-2);
+    left: var(--r2m-space-2);
+    z-index: 4;
+    padding: var(--r2m-space-2) var(--r2m-space-3);
+    border-radius: var(--r2m-radius-md);
+    background: var(--r2m-surface);
+    color: var(--r2m-accent);
+    box-shadow: var(--r2m-shadow-2);
+    font-weight: 600;
+  }
+  /* The skip target takes focus only by script, so it draws no ring of its own. */
+  .shell__main:focus {
+    outline: none;
+  }
+
   /* ---- app bar ---------------------------------------------------------------------------- */
   .shell__appbar {
     display: flex;
