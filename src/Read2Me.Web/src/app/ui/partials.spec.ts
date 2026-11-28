@@ -297,6 +297,27 @@ describe('gated', () => {
     expect(Array.from(host.querySelectorAll('button'), description)).toEqual(['One', 'Two']);
   });
 
+  it('adds the control’s own description after the reason, and keeps it once the gate opens', () => {
+    const host = document.createElement('div');
+    const draw = (block: Block | null, own?: string) =>
+      render(
+        html`<p id="own">Too big</p>
+          ${gated(block, (gate) => html`<input ${gate.attrs(undefined, own)} />`)}`,
+        host,
+      );
+    draw(null, 'own');
+    const input = host.querySelector('input')!;
+    expect(description(input)).toBe('Too big');
+    draw(reason, 'own');
+    expect(description(input)).toBe('Preview first Too big');
+    draw(reason);
+    expect(description(input)).toBe('Preview first');
+    draw(null, 'own');
+    expect(description(input)).toBe('Too big');
+    draw(null);
+    expect(input.hasAttribute('aria-describedby')).toBe(false);
+  });
+
   it('keeps the reason but stays out of the tab order when not tabbable, as a tree node’s trigger', () => {
     const control = apply(reason, { tabbable: false });
     expect(seen(control)).toEqual({ ...reasoned, tabindex: '-1' });

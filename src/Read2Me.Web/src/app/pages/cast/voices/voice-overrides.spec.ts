@@ -106,8 +106,12 @@ describe('r2m-voice-override-editor', () => {
     number.value = '99';
     number.dispatchEvent(new Event('input'));
     await editor.rendered();
-    expect(editor.querySelector('.r2m-settings-form__error')).not.toBeNull();
+    // Save is off at once; the error itself waits for the field to be left.
     expect(save(editor).disabled).toBe(true);
+    expect(editor.querySelector('.r2m-settings-form__error')).toBeNull();
+    number.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    await editor.querySelector('r2m-settings-form')!.rendered();
+    expect(editor.querySelector('.r2m-settings-form__error')).not.toBeNull();
   });
 
   it('says so when no provider is active, and shows a failed load', async () => {

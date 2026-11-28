@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   type SettingsFormMode,
   type SettingsSchema,
@@ -7,7 +7,9 @@ import {
   sparsePatch,
 } from './settings-form';
 import './settings-form';
-import { blockedWith } from '../../testing/description';
+import { blockedWith, description } from '../../testing/description';
+import { FakeTimers } from '../../testing/fake-timers';
+import { ERROR_ANNOUNCE_DELAY_MS } from './field';
 
 const SCHEMA: SettingsSchema = {
   type: 'VoxCpm2',
@@ -102,6 +104,59 @@ describe('r2m-settings-form', () => {
     expect(valid.at(-1)).toBe(true);
   });
 
+  it('names each control by a label of its own, and the slider by “… slider”', async () => {
+    const { form } = await mount();
+    const named = {
+      cfg: '.r2m-settings-form__number',
+      seed: 'input[type="number"]',
+      denoise: 'input[role="switch"]',
+      lang: 'select',
+      name: 'input[type="text"]',
+      notes: 'textarea',
+    };
+    const ids = new Set<string>();
+    for (const [key, selector] of Object.entries(named)) {
+      const control = field(form, key).querySelector(selector)!;
+      const label = field(form, key).querySelector<HTMLLabelElement>('.r2m-settings-form__label')!;
+      expect(label.tagName).toBe('LABEL');
+      expect(control.id).not.toBe('');
+      expect(label.htmlFor).toBe(control.id);
+      expect(control.hasAttribute('aria-label')).toBe(false);
+      ids.add(control.id);
+    }
+    expect(ids.size).toBe(Object.keys(named).length);
+    expect(
+      field(form, 'cfg').querySelector('input[type="range"]')?.getAttribute('aria-label'),
+    ).toBe('CFG slider');
+  });
+
+  it('a second form on the page gives its controls other ids', async () => {
+    const { form: one } = await mount();
+    const { form: two } = await mount();
+    const id = (form: HTMLElement) => field(form, 'seed').querySelector('input')!.id;
+    expect(id(one)).not.toBe(id(two));
+  });
+
+  it('clicking a switch field’s name toggles it', async () => {
+    const { form, emitted } = await mount('override');
+    field(form, 'denoise')
+      .querySelector<HTMLLabelElement>('label.r2m-settings-form__label')!
+      .click();
+    expect(emitted.at(-1)).toEqual({ denoise: false });
+  });
+
+  it('turns text correction off on a string field and leaves a text field alone', async () => {
+    const { form } = await mount();
+    const string = field(form, 'name').querySelector('input')!;
+    expect(string.getAttribute('spellcheck')).toBe('false');
+    expect(string.getAttribute('autocapitalize')).toBe('none');
+    expect(string.getAttribute('autocorrect')).toBe('off');
+    const text = field(form, 'notes').querySelector('textarea')!;
+    for (const name of ['spellcheck', 'autocapitalize', 'autocorrect']) {
+      expect(text.hasAttribute(name)).toBe(false);
+    }
+  });
+
   it('defaults mode emits the full value set', async () => {
     const { form, emitted } = await mount('defaults', { cfg: 1.5 });
     typeNumber(field(form, 'seed'), 'input[type="number"]', '42');
@@ -152,18 +207,99 @@ describe('r2m-settings-form', () => {
     );
   });
 
-  it('flips valid-change false on an out-of-range number and back on fix', async () => {
+  it('flips valid-change false on an out-of-range number and back on fix, while typing', async () => {
     const { form, valid } = await mount();
     typeNumber(field(form, 'cfg'), '.r2m-settings-form__number', '99');
     await form.rendered();
     expect(valid.at(-1)).toBe(false);
-    expect(field(form, 'cfg').querySelector('.r2m-settings-form__error')?.textContent).toContain(
-      '≤ 5',
-    );
 
     typeNumber(field(form, 'cfg'), '.r2m-settings-form__number', '4');
     await form.rendered();
     expect(valid.at(-1)).toBe(true);
+  });
+
+  describe('a number’s error', () => {
+    let timers: FakeTimers;
+    let said: string[];
+
+    beforeEach(() => {
+      timers = new FakeTimers().install();
+      said = [];
+      document.ariaNotify = (text: string) => void said.push(text);
+    });
+
+    afterEach(() => {
+      timers.restore();
+      delete document.ariaNotify;
+    });
+
+    const number = (form: HTMLElement) =>
+      field(form, 'cfg').querySelector<HTMLInputElement>('.r2m-settings-form__number')!;
+    const error = (form: HTMLElement) =>
+      field(form, 'cfg').querySelector<HTMLElement>('.r2m-settings-form__error');
+    const leave = (form: HTMLElement) =>
+      number(form).dispatchEvent(new FocusEvent('blur')) &&
+      number(form).dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+
+    it('stays hidden while the user types, and the control reads as valid', async () => {
+      const { form } = await mount();
+      typeNumber(field(form, 'cfg'), '.r2m-settings-form__number', '-');
+      await form.rendered();
+      await timers.advance(ERROR_ANNOUNCE_DELAY_MS);
+      expect(error(form)).toBeNull();
+      expect(number(form).getAttribute('aria-invalid')).toBe('false');
+      expect(number(form).hasAttribute('aria-describedby')).toBe(false);
+      expect(said).toEqual([]);
+    });
+
+    it('shows on blur, describes the control, marks it invalid and is announced once', async () => {
+      const { form } = await mount();
+      typeNumber(field(form, 'cfg'), '.r2m-settings-form__number', '99');
+      leave(form);
+      await form.rendered();
+      const shown = error(form)!;
+      expect(shown.hasAttribute('role')).toBe(false);
+      expect(shown.id).not.toBe('');
+      expect(number(form).getAttribute('aria-describedby')).toBe(shown.id);
+      expect(number(form).getAttribute('aria-invalid')).toBe('true');
+      expect(field(form, 'cfg').querySelector('.r2m-settings-form__help')).toBeNull();
+
+      await timers.advance(ERROR_ANNOUNCE_DELAY_MS);
+      expect(said).toEqual(['CFG: Must be a number ≥ 0 ≤ 5.']);
+      leave(form);
+      await form.rendered();
+      await timers.advance(ERROR_ANNOUNCE_DELAY_MS);
+      expect(said).toHaveLength(1);
+    });
+
+    it('clears as the value turns valid, and stays away while it is retyped wrong', async () => {
+      const { form } = await mount();
+      typeNumber(field(form, 'cfg'), '.r2m-settings-form__number', '99');
+      leave(form);
+      await form.rendered();
+      expect(error(form)).not.toBeNull();
+
+      typeNumber(field(form, 'cfg'), '.r2m-settings-form__number', '4');
+      await form.rendered();
+      expect(error(form)).toBeNull();
+      expect(number(form).getAttribute('aria-invalid')).toBe('false');
+      expect(number(form).hasAttribute('aria-describedby')).toBe(false);
+
+      typeNumber(field(form, 'cfg'), '.r2m-settings-form__number', '-');
+      await form.rendered();
+      expect(error(form)).toBeNull();
+    });
+
+    it('is read after a Blocked reason while both show', async () => {
+      const { form } = await mount();
+      typeNumber(field(form, 'cfg'), '.r2m-settings-form__number', '99');
+      leave(form);
+      form.block = { reason: 'Viewing a past step' };
+      await form.rendered();
+      expect(description(number(form))?.replace(/\s+/g, ' ').trim()).toBe(
+        'Viewing a past step Must be a number ≥ 0 ≤ 5.',
+      );
+    });
   });
 
   const CONTROLS = 'input, select, textarea, button';

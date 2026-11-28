@@ -1,9 +1,13 @@
-/** The text an element's `aria-describedby` resolves to in its tree, mounted in the document or not. */
+/**
+ * The text an element's `aria-describedby` resolves to in its tree, mounted in the document or not:
+ * each id's text in order, joined by a space, as a screen reader reads them.
+ */
 export function description(el: Element): string | undefined {
-  const id = el.getAttribute('aria-describedby');
-  if (!id) return undefined;
+  const ids = el.getAttribute('aria-describedby')?.split(/\s+/).filter(Boolean) ?? [];
+  if (ids.length === 0) return undefined;
   const root = el.getRootNode() as Element | Document;
-  return root.querySelector(`#${id}`)?.textContent ?? undefined;
+  const texts = ids.flatMap((id) => root.querySelector(`#${id}`)?.textContent ?? []);
+  return texts.length ? texts.join(' ') : undefined;
 }
 
 /** Whether anything under `host` carries a description, or the hidden element that would hold one. */
