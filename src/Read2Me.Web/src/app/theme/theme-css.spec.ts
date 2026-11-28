@@ -3,6 +3,7 @@ import type { AppTheme } from '@app/api';
 import { PALETTE_DEFAULTS } from '../../testing/themes';
 import {
   buildThemeStylesheet,
+  contrastRatio,
   contrastText,
   normalizeHex,
   resolveEffectiveTheme,
@@ -57,6 +58,32 @@ describe('theme-css helpers', () => {
     expect(contrastText('#FFFFFF')).toBe('#000000');
     expect(contrastText('#010101')).toBe('#ffffff');
   });
+
+  it('picks black on mid-tones where black has the higher contrast ratio (#510)', () => {
+    for (const hex of ['#e67e22', '#4a90e2', '#43a047', '#1e88e5', '#00897b']) {
+      expect(contrastText(hex)).toBe('#000000');
+    }
+  });
+
+  it('keeps white on dark colours and on the built-in azure', () => {
+    for (const hex of ['#005cbb', '#000000', '#1a1a1a', '#3949ab']) {
+      expect(contrastText(hex)).toBe('#ffffff');
+    }
+  });
+
+  it('keeps black on near-white colours', () => {
+    for (const hex of ['#ffffff', '#fafafa', '#eeeeee']) {
+      expect(contrastText(hex)).toBe('#000000');
+    }
+  });
+
+  it('computes the WCAG contrast ratio between two colours, in either order', () => {
+    expect(contrastRatio('#000000', '#ffffff')).toBeCloseTo(21, 5);
+    expect(contrastRatio('#ffffff', '#000000')).toBeCloseTo(21, 5);
+    expect(contrastRatio('#777777', '#777777')).toBeCloseTo(1, 5);
+    expect(contrastRatio('#e67e22', '#ffffff')).toBeCloseTo(2.85, 2);
+    expect(contrastRatio('#e67e22', '#000000')).toBeCloseTo(7.37, 2);
+  });
 });
 
 describe('themeCssVars (spec §5.1 token mapping)', () => {
@@ -66,7 +93,7 @@ describe('themeCssVars (spec §5.1 token mapping)', () => {
     expect(vars['--r2m-on-accent']).toBe('#ffffff');
     expect(vars['--r2m-accent-container']).toContain('color-mix(in srgb, #594ae2 20%');
     expect(vars['--r2m-secondary']).toBe('#ff4081');
-    expect(vars['--r2m-on-secondary']).toBe('#ffffff');
+    expect(vars['--r2m-on-secondary']).toBe('#000000'); // pink: black 6.3:1 beats white 3.3:1
   });
 
   it('writes only --r2m-* variables, never Material system tokens', () => {
@@ -91,7 +118,7 @@ describe('themeCssVars (spec §5.1 token mapping)', () => {
     expect(vars['--r2m-surface-high']).toContain('#ffffff 90%');
     expect(vars['--r2m-surface-highest']).toContain('#ffffff 82%');
     expect(vars['--r2m-appbar-bg']).toBe('#ff6f61');
-    expect(vars['--r2m-appbar-fg']).toBe('#ffffff'); // coral is below the luminance cut-off
+    expect(vars['--r2m-appbar-fg']).toBe('#000000'); // coral: black 6.7:1 beats white 2.7:1
     expect(vars['--r2m-text']).toBe('#4a4a4a');
   });
 

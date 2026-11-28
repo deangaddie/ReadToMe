@@ -32,9 +32,16 @@ export function luminance(hex: string): number {
   return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
 }
 
-/** Black or white, whichever contrasts better with `hex`. */
+/** WCAG contrast ratio between two hex colours, 1 (none) to 21 (black on white), in either order. */
+export function contrastRatio(a: string, b: string): number {
+  const la = luminance(a);
+  const lb = luminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+/** Black or white, whichever has the higher contrast ratio with `hex` (white on a tie). */
 export function contrastText(hex: string): '#000000' | '#ffffff' {
-  return luminance(hex) > 0.36 ? '#000000' : '#ffffff';
+  return contrastRatio(hex, '#000000') > contrastRatio(hex, '#ffffff') ? '#000000' : '#ffffff';
 }
 
 function mix(colour: string, pct: number, withColour: string): string {
