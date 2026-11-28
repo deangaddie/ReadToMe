@@ -97,15 +97,16 @@ export function itemRow(
     <div class="r2m-item__line">
       ${
         ctx.itemSelectable
-          ? html`<input
-              type="checkbox"
-              class="r2m-item__select"
-              aria-label="Select item"
-              .checked=${selected}
-              ?disabled=${!voiced}
-              data-tooltip=${voiced ? nothing : 'Assign a speaker before generating audio'}
-              @change=${toggle}
-            />`
+          ? html`<label class="r2m-hit r2m-item__hit"
+              ><input
+                type="checkbox"
+                class="r2m-item__select"
+                aria-label="Select item"
+                .checked=${selected}
+                ?disabled=${!voiced}
+                data-tooltip=${voiced ? nothing : 'Assign a speaker before generating audio'}
+                @change=${toggle}
+            /></label>`
           : nothing
       }
       ${gated(

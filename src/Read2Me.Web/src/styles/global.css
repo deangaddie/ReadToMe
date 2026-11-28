@@ -84,6 +84,8 @@
   --r2m-rail-expanded: 240px;
   --r2m-activity-bar-height: 40px;
   --r2m-activity-drawer-width: 420px;
+  /* The smallest hit area a control gets (WCAG 2.5.8): .r2m-hit draws it on a smaller box. */
+  --r2m-target-min: 24px;
   --r2m-activity-bg: var(--r2m-surface-container);
 
   --r2m-status-ok: light-dark(#1b7f3b, #6fd58a);
@@ -305,6 +307,29 @@ a {
   }
   & :focus-visible {
     outline: none;
+  }
+}
+/*
+ * A target smaller than --r2m-target-min (WCAG 2.5.8) keeps its box and grows its hit area: the
+ * ::after reaches out to 24 × 24, takes no layout space and is hit-tested as the host (a label passes
+ * the click to its checkbox). A side already that long gets no inset. Where a neighbour or a clipping
+ * edge is closer than half the growth on the inline start, --r2m-hit-reach-start caps the reach there
+ * and the rest goes to the end side, so the area stays 24 px wide.
+ */
+.r2m-hit {
+  position: relative;
+  /* The area sits under the host's own content (the checkbox itself takes a click on the box). */
+  isolation: isolate;
+
+  &::after {
+    /* Percentages resolve where these are used: the height for inset-block, the width for inline. */
+    --_grow: max(0px, var(--r2m-target-min) - 100%);
+    --_before: min(var(--_grow) / 2, var(--r2m-hit-reach-start, var(--r2m-target-min)));
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset-block: calc(var(--_grow) / -2);
+    inset-inline: calc(-1 * var(--_before)) calc(var(--_before) - var(--_grow));
   }
 }
 .r2m-checkbox {

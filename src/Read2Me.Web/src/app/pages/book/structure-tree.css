@@ -45,9 +45,19 @@
   .tree__toggle .r2m-icon {
     font-size: 1.25rem;
   }
-  .tree__select {
+  /*
+   * The label draws the checkbox's 24 px hit area (.r2m-hit). The chevron is one row gap to its left,
+   * too close for a centred area, so the area stops at the chevron and reaches further right, into the
+   * title: that is the row's own target, which the checkbox sits in anyway.
+   */
+  .tree__hit {
+    --r2m-hit-reach-start: var(--r2m-space-1);
     flex: 0 0 auto;
+    display: flex;
     margin: 0 2px 0 0;
+  }
+  .tree__select {
+    margin: 0;
     width: 13px;
     height: 13px;
     accent-color: var(--r2m-accent);
@@ -70,8 +80,8 @@
     gap: 3px;
     padding-left: var(--tree-title-start);
   }
-  /* Under the title also means past the checkbox: 13px, its 2px margin and the row gap. */
-  .tree__node:has(> .tree__select) > .tree__status {
+  /* Under the title also means past the checkbox: its 13px label, the label's 2px margin and the row gap. */
+  .tree__node:has(> .tree__hit) > .tree__status {
     padding-left: calc(var(--tree-title-start) + 15px + var(--r2m-space-1));
   }
   .tree__loading {

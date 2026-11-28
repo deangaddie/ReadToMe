@@ -118,7 +118,7 @@ export class SpeakerChip extends R2mElement {
     return html`
       <button
         type="button"
-        class="r2m-speaker-chip__body"
+        class="r2m-speaker-chip__body r2m-hit"
         popovertarget=${roster ? this.#menuId : nothing}
         aria-haspopup=${roster ? 'listbox' : nothing}
         ${gate?.attrs()}
