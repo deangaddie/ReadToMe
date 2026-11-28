@@ -931,7 +931,7 @@ dialog.r2m-dialog--fullscreen {
   /* The input drops its own outline, so the row carries the focus ring, as the Config list search does. */
   &:focus-within {
     outline: 2px solid var(--r2m-accent);
-    outline-offset: -2px;
+    outline-offset: -1px;
   }
 }
 .r2m-speaker-menu__input {
