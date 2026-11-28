@@ -4,7 +4,7 @@ import { R2mElement, define } from '@app/core/element';
 import { computed, signal } from '@app/core/signals';
 import type { AudioGenEvent } from '@app/live/hub-events';
 import { type AudioCard, type AudioPhaseState, foldAudioCards } from './audio-cards';
-import { Autoscroll } from './autoscroll';
+import { Autoscroll, scrollControl } from './autoscroll';
 import type { IconName } from './icons';
 import { icon, spinner, statusChip } from './partials';
 
@@ -33,8 +33,8 @@ function cardChip(card: AudioCard) {
 
 /**
  * Audio pipeline cards (design §7): one card per item attempt with the five phase steps,
- * autoscroll that pauses when the user scrolls up. An element for the same reason as
- * `r2m-stream-llm`: the pause state and the after-render scroll.
+ * autoscroll that pauses when the user scrolls up or presses the header control. An element for
+ * the same reason as `r2m-stream-llm`: the pause state and the after-render scroll.
  */
 export class StreamAudio extends R2mElement {
   #events = signal<readonly AudioGenEvent[]>([]);
@@ -70,7 +70,13 @@ export class StreamAudio extends R2mElement {
   protected template() {
     const cards = this.#cards();
     return html`
-      <div class="r2m-stream-audio__scroll" @scroll=${this.#scroll.onScroll}>
+      ${cards.length === 0 ? nothing : scrollControl(this.#scroll, 'r2m-stream-audio')}
+      <div
+        class="r2m-stream-audio__scroll"
+        ?data-following=${!this.paused()}
+        @scroll=${this.#scroll.onScroll}
+        @contentvisibilityautostatechange=${this.#scroll.onContentVisibilityChange}
+      >
         ${
           cards.length === 0
             ? html`<p class="r2m-stream-audio__empty">No audio generation yet.</p>`
@@ -111,17 +117,6 @@ export class StreamAudio extends R2mElement {
             </article>`,
         )}
       </div>
-      ${
-        this.paused()
-          ? html`<button
-              type="button"
-              class="r2m-button r2m-button--stroked r2m-stream-audio__jump"
-              @click=${this.#scroll.jumpToLatest}
-            >
-              ${icon('arrow_downward')}Jump to latest
-            </button>`
-          : nothing
-      }
     `;
   }
 }

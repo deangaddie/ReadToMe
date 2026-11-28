@@ -3,7 +3,7 @@ import { repeat } from 'lit-html/directives/repeat.js';
 import { R2mElement, define } from '@app/core/element';
 import { computed, signal, untracked } from '@app/core/signals';
 import type { LlmStreamEvent } from '@app/live/hub-events';
-import { Autoscroll } from './autoscroll';
+import { Autoscroll, scrollControl } from './autoscroll';
 import { type LlmTurn, foldLlmTurns } from './llm-turns';
 import { type StatusKind, icon, statusChip } from './partials';
 
@@ -25,8 +25,8 @@ export function turnStats(turn: LlmTurn): string | null {
 
 /**
  * LLM turn list (design §7): one expandable card per request with prompt, thinking and response,
- * escalation/run markers inline, autoscroll that pauses when the user scrolls up. An element
- * because it owns the pause state and the after-render scroll.
+ * escalation/run markers inline, autoscroll that pauses when the user scrolls up or presses the
+ * header control. An element because it owns the pause state and the after-render scroll.
  */
 export class StreamLlm extends R2mElement {
   #events = signal<readonly LlmStreamEvent[]>([]);
@@ -65,7 +65,7 @@ export class StreamLlm extends R2mElement {
   readonly #scroll = new Autoscroll(() =>
     this.shown ? this.querySelector<HTMLElement>('.r2m-stream-llm__scroll') : null,
   );
-  /** True once the user scrolled up; autoscroll resumes after Jump or reaching the bottom. */
+  /** True while held; resumes through the control or when the user returns to the bottom. */
   readonly paused = this.#scroll.paused;
 
   protected override connected(): void {
@@ -79,7 +79,13 @@ export class StreamLlm extends R2mElement {
   protected template() {
     const rows = this.#rows();
     return html`
-      <div class="r2m-stream-llm__scroll" @scroll=${this.#scroll.onScroll}>
+      ${rows.length === 0 ? nothing : scrollControl(this.#scroll, 'r2m-stream-llm')}
+      <div
+        class="r2m-stream-llm__scroll"
+        ?data-following=${!this.paused()}
+        @scroll=${this.#scroll.onScroll}
+        @contentvisibilityautostatechange=${this.#scroll.onContentVisibilityChange}
+      >
         ${rows.length === 0 ? html`<p class="r2m-stream-llm__empty">No LLM traffic yet.</p>` : nothing}
         ${repeat(
           rows,
@@ -125,17 +131,6 @@ export class StreamLlm extends R2mElement {
                 </details>`,
         )}
       </div>
-      ${
-        this.paused()
-          ? html`<button
-              type="button"
-              class="r2m-button r2m-button--stroked r2m-stream-llm__jump"
-              @click=${this.#scroll.jumpToLatest}
-            >
-              ${icon('arrow_downward')}Jump to latest
-            </button>`
-          : nothing
-      }
     `;
   }
 }

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import type { AudioGenEvent } from '@app/live/hub-events';
+import { fakeScroller } from '../../testing/fake-scroller';
 import './stream-audio';
 import type { StreamAudio } from './stream-audio';
 
@@ -13,6 +14,17 @@ async function mount(events: AudioGenEvent[] = []) {
 }
 
 afterEach(() => document.body.replaceChildren());
+
+const control = (el: StreamAudio) =>
+  el.querySelector<HTMLButtonElement>('.r2m-stream-audio__follow');
+
+/** One more card, which makes the content 500 px taller (the first call: 1000 px). */
+async function grow(el: StreamAudio, view: ReturnType<typeof fakeScroller>) {
+  view.height += view.height ? 500 : 1000;
+  const id = `i${el.events.length + 1}`;
+  el.events = [...el.events, { kind: 'itemStarted', id, attempt: 1 }];
+  await el.rendered();
+}
 
 describe('r2m-stream-audio', () => {
   it('renders a card per attempt with five phases and their lines', async () => {
@@ -50,18 +62,57 @@ describe('r2m-stream-audio', () => {
     expect(second.querySelector('.r2m-stream-audio__reason')?.textContent).toBe('TTS 500');
   });
 
-  it('pauses autoscroll when scrolled up and resumes on Jump to latest', async () => {
+  it('offers one scrolling control once there is an entry', async () => {
     const el = await mount();
-    const scroll = el.querySelector('.r2m-stream-audio__scroll') as HTMLElement;
-    Object.defineProperty(scroll, 'scrollHeight', { value: 1000, configurable: true });
-    Object.defineProperty(scroll, 'clientHeight', { value: 200, configurable: true });
-    scroll.scrollTop = 0;
-    scroll.dispatchEvent(new Event('scroll'));
+    expect(el.querySelector('button')).toBeNull();
+
+    el.events = [{ kind: 'itemStarted', id: 'i1', attempt: 1 }];
     await el.rendered();
 
+    expect(el.querySelectorAll('button').length).toBe(1);
+    expect(control(el)?.textContent).toContain('Pause scrolling');
+    expect(control(el)?.hasAttribute('aria-pressed')).toBe(false);
+  });
+
+  it('holds still while paused by the control and resumes at the bottom', async () => {
+    const el = await mount([{ kind: 'itemStarted', id: 'i1', attempt: 1 }]);
+    const view = fakeScroller(el.querySelector<HTMLElement>('.r2m-stream-audio__scroll')!);
+    await grow(el, view);
+
+    control(el)!.click();
+    await el.rendered();
+    expect(control(el)?.textContent).toContain('Jump to latest');
+    await grow(el, view);
+    expect(view.el.scrollTop).toBe(800);
+
+    control(el)!.click();
+    await el.rendered();
+    expect(view.el.scrollTop).toBe(1300);
+    expect(control(el)?.textContent).toContain('Pause scrolling');
+  });
+
+  it('pauses when the user scrolls up and resumes when they return to the bottom', async () => {
+    const el = await mount([{ kind: 'itemStarted', id: 'i1', attempt: 1 }]);
+    const view = fakeScroller(el.querySelector<HTMLElement>('.r2m-stream-audio__scroll')!);
+    await grow(el, view);
+
+    view.userScrollsTo(300);
+    await el.rendered();
     expect(el.paused()).toBe(true);
-    el.querySelector<HTMLButtonElement>('.r2m-stream-audio__jump')!.click();
+    expect(control(el)?.textContent).toContain('Jump to latest');
+
+    view.userScrollsTo(800);
     await el.rendered();
     expect(el.paused()).toBe(false);
+  });
+
+  it('keeps following when cards take their real size', async () => {
+    const el = await mount([{ kind: 'itemStarted', id: 'i1', attempt: 1 }]);
+    const view = fakeScroller(el.querySelector<HTMLElement>('.r2m-stream-audio__scroll')!);
+    await grow(el, view);
+
+    view.height = 1400;
+    view.el.firstElementChild!.dispatchEvent(new Event('contentvisibilityautostatechange'));
+    expect(view.el.scrollTop).toBe(1200);
   });
 });
