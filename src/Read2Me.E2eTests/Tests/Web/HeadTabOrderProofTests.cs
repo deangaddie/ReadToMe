@@ -21,6 +21,7 @@ public class HeadTabOrderProofTests(E2eAppFixture app, PlaywrightFixture pw) : E
         var head = Page.Locator(".r2m-pipeline__step[data-step='Structure'] .r2m-pipeline__head");
         await Expect(head.GetByRole(AriaRole.Button, new() { Name = "Confirm" })).ToBeVisibleAsync();
         var mainWidth = await Page.Locator(".shell__main").EvaluateAsync<double>("e => { const s = getComputedStyle(e); return e.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight); }");
+        var basis = await head.Locator(".r2m-pipeline__checkpoint").EvaluateAsync<string>("e => getComputedStyle(e).flexBasis");
 
         // Focus the head's first tabbable control, then Tab until focus leaves the head.
         var first = await head.EvaluateAsync<bool>("""
@@ -44,7 +45,7 @@ public class HeadTabOrderProofTests(E2eAppFixture app, PlaywrightFixture pw) : E
             await Page.Keyboard.PressAsync("Tab");
         }
 
-        var log = new List<string> { $"[{Engine} {width}px, page container {mainWidth:0}px] head Tab stops:" };
+        var log = new List<string> { $"[{Engine} {width}px, page container {mainWidth:0}px, checkpoint flex-basis {basis}] head Tab stops:" };
         log.AddRange(stops.Select(s => $"  {s.Name,-24} x={s.X:0.0} y={s.Y:0.0} h={s.H:0.0}"));
         foreach (var line in log) Console.WriteLine(line);
         File.AppendAllLines(Path.Combine(Path.GetTempPath(), "r2m-497-stops.txt"), log);
