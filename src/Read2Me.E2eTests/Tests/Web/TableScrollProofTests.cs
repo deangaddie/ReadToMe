@@ -48,7 +48,7 @@ public class TableScrollProofTests(E2eAppFixture app, PlaywrightFixture pw) : E2
     }
 
     [Fact]
-    public async Task At_700_px_the_Setup_check_table_scrolls_inside_a_named_region()
+    public async Task The_Setup_check_table_is_a_named_region_and_scrolls_in_it_not_the_page()
     {
         (await Http.PostAsync($"{App.BaseUrl}/api/setup-check/quick", null)).EnsureSuccessStatusCode();
         await Page.SetViewportSizeAsync(700, 900);
@@ -59,8 +59,11 @@ public class TableScrollProofTests(E2eAppFixture app, PlaywrightFixture pw) : E2
         await Expect(table).ToBeVisibleAsync();
         Assert.Equal("table", await table.EvaluateAsync<string>("t => getComputedStyle(t).display"));
         Assert.Equal("auto", await region.EvaluateAsync<string>("r => getComputedStyle(r).overflowX"));
+        await Page.SetViewportSizeAsync(360, 900);
+        await Expect(table).ToBeVisibleAsync();
+        Assert.True(await region.EvaluateAsync<bool>("r => r.scrollWidth > r.clientWidth"), "the table should overflow its region at 360 px: " + await region.EvaluateAsync<string>("r => r.scrollWidth + '/' + r.clientWidth"));
         var regionBox = (await region.BoundingBoxAsync())!;
-        Assert.True(regionBox.X + regionBox.Width <= 700, $"the region (right={regionBox.X + regionBox.Width}) should fit the page");
+        Assert.True(regionBox.X + regionBox.Width <= 360, $"the region (right={regionBox.X + regionBox.Width}) should fit the page");
         Assert.False(await Page.EvaluateAsync<bool>("() => document.scrollingElement.scrollWidth > innerWidth"), "the page should not scroll sideways");
     }
 
