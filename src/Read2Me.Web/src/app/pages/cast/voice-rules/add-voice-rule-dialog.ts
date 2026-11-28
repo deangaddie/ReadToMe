@@ -11,6 +11,7 @@ import { openDialog } from '@app/core/dialog';
 import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
+import { announceError } from '@app/ui/field';
 import { icon } from '@app/ui/partials';
 import {
   type AnchorPick,
@@ -86,7 +87,7 @@ export class AddVoiceRuleDialog extends R2mElement {
             <select
               data-field="voice"
               autofocus
-              aria-invalid=${voiceError ? 'true' : nothing}
+              aria-invalid=${voiceError ? 'true' : 'false'}
               aria-describedby=${voiceError ? 'add-rule-voice-error' : nothing}
               .value=${this.voiceId() ?? ''}
               @change=${(e: Event) => {
@@ -103,7 +104,10 @@ export class AddVoiceRuleDialog extends R2mElement {
             </select>
             ${
               voiceError
-                ? html`<span class="r2m-field__error" id="add-rule-voice-error"
+                ? html`<span
+                    class="r2m-field__error"
+                    id="add-rule-voice-error"
+                    ${announceError('Voice')}
                     >${voiceError}</span
                   >`
                 : nothing
@@ -220,7 +224,7 @@ export class AddVoiceRuleDialog extends R2mElement {
         <select
           id=${`add-rule-${pick}`}
           data-field=${pick}
-          aria-invalid=${errorId ? 'true' : nothing}
+          aria-invalid=${errorId ? 'true' : 'false'}
           aria-describedby=${errorId ?? nothing}
           .value=${value ?? ''}
           @change=${(e: Event) => void this.pick(pick, (e.target as HTMLSelectElement).value || null)}
@@ -243,7 +247,7 @@ export class AddVoiceRuleDialog extends R2mElement {
             : nothing
         }
       </div>
-      ${errorId ? html`<span class="r2m-field__error" id=${errorId}>${error}</span>` : nothing}
+      ${errorId ? html`<span class="r2m-field__error" id=${errorId} ${announceError(label)}>${error}</span>` : nothing}
     </div>`;
   }
 

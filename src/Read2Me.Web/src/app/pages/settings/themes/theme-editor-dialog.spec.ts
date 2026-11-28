@@ -4,6 +4,8 @@ import { PALETTE_DEFAULTS } from '../../../../testing/themes';
 import { override, resetServices } from '@app/core/services';
 import { ConfirmService, type ConfirmOptions } from '@app/ui/dialogs';
 import { settle } from '../../../../testing/fake-navigation';
+import { FakeTimers } from '../../../../testing/fake-timers';
+import { ERROR_ANNOUNCE_DELAY_MS } from '@app/ui/field';
 import {
   type ThemeEditorDialog,
   type ThemeEditorResult,
@@ -29,7 +31,20 @@ beforeEach(() => {
   resetServices();
   closed = [];
 });
-afterEach(() => document.body.replaceChildren());
+let timers: FakeTimers | undefined;
+afterEach(() => {
+  timers?.restore();
+  timers = undefined;
+  delete document.ariaNotify;
+  document.body.replaceChildren();
+});
+
+// happy-dom has no ariaNotify: record what the announcer says.
+function spyAnnouncer(): string[] {
+  const said: string[] = [];
+  document.ariaNotify = (text: string) => void said.push(text);
+  return said;
+}
 
 async function mount(theme?: AppTheme) {
   const el = document.createElement('r2m-theme-editor-dialog') as ThemeEditorDialog;
@@ -96,11 +111,13 @@ describe('r2m-theme-editor-dialog', () => {
     expect(closed).toEqual([]);
   });
 
-  it('a hex error waits for blur, then describes the input and marks it invalid', async () => {
+  it('a hex error waits for blur, then describes the input, marks it invalid and is announced once', async () => {
+    const said = spyAnnouncer();
+    timers = new FakeTimers().install();
     const el = await mount(orange);
     await type(el, hex(el, 'Primary'), '#1');
     expect(el.querySelector('[data-colour="primary"] .editor__error')).toBeNull();
-    expect(hex(el, 'Primary').hasAttribute('aria-invalid')).toBe(false);
+    expect(hex(el, 'Primary').getAttribute('aria-invalid')).toBe('false');
 
     hex(el, 'Primary').dispatchEvent(new Event('blur'));
     await el.rendered();
@@ -109,10 +126,16 @@ describe('r2m-theme-editor-dialog', () => {
     expect(error.getAttribute('role')).toBeNull();
     expect(hex(el, 'Primary').getAttribute('aria-invalid')).toBe('true');
     expect(hex(el, 'Primary').getAttribute('aria-describedby')).toBe(error.id);
+    await timers.advance(ERROR_ANNOUNCE_DELAY_MS);
+    expect(said).toEqual(['Primary: Use #rgb or #rrggbb']);
+
+    await type(el, hex(el, 'Primary'), '#12');
+    await timers.advance(ERROR_ANNOUNCE_DELAY_MS);
+    expect(said).toHaveLength(1);
 
     await type(el, hex(el, 'Primary'), '#123');
     expect(el.querySelector('[data-colour="primary"] .editor__error')).toBeNull();
-    expect(hex(el, 'Primary').hasAttribute('aria-invalid')).toBe(false);
+    expect(hex(el, 'Primary').getAttribute('aria-invalid')).toBe('false');
   });
 
   it('a custom theme edits in place with its advanced colours shown; a bad hex stops Save at that field', async () => {

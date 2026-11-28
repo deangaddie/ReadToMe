@@ -8,7 +8,7 @@ import { computed, signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
 import { contrastText, isHexColour, normalizeHex } from '@app/theme/theme-css';
 import { ConfirmService } from '@app/ui/dialogs';
-import { controlValue, field } from '@app/ui/field';
+import { announceError, controlValue, field } from '@app/ui/field';
 import { icon } from '@app/ui/partials';
 import {
   DEFAULT_DRAFT,
@@ -257,7 +257,7 @@ export class ThemeEditorDialog extends R2mElement implements ClosableContent {
         spellcheck="false"
         placeholder=${optional ? 'default' : nothing}
         aria-label="${label} hex"
-        aria-invalid=${errorId ? 'true' : nothing}
+        aria-invalid=${errorId ? 'true' : 'false'}
         aria-describedby=${errorId ?? hintId ?? nothing}
         .value=${value}
         @input=${(e: Event) => this.setColour(key, controlValue(e))}
@@ -279,7 +279,7 @@ export class ThemeEditorDialog extends R2mElement implements ClosableContent {
       }
       ${
         errorId
-          ? html`<span class="editor__error" id=${errorId}>${error}</span>`
+          ? html`<span class="editor__error" id=${errorId} ${announceError(label)}>${error}</span>`
           : hintId
             ? html`<span class="editor__hint" id=${hintId}>${hint}</span>`
             : nothing

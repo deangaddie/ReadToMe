@@ -3,6 +3,7 @@ import { R2mElement, define } from '@app/core/element';
 import { openDialog } from '@app/core/dialog';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
+import { announceError } from './field';
 import { icon } from './partials';
 
 export interface ConfirmOptions {
@@ -131,7 +132,8 @@ export class TextPromptDialog extends R2mElement {
     const onBlur = () => this.#touched.set(true);
     const error = this.#touched() ? this.#error() : null;
     const describedBy = error ? PROMPT_ERROR_ID : d.hint ? PROMPT_HINT_ID : nothing;
-    const invalid = error ? 'true' : nothing;
+    const invalid = error ? 'true' : 'false';
+    const announced = announceError(d.label ?? d.title);
     return html`
       <h2 class="r2m-dialog__title">${d.title}</h2>
       <form novalidate @submit=${(e: SubmitEvent) => this.#submit(e)}>
@@ -166,7 +168,7 @@ export class TextPromptDialog extends R2mElement {
           </label>
           ${
             error
-              ? html`<p class="r2m-field__error" id=${PROMPT_ERROR_ID}>${error}</p>`
+              ? html`<p class="r2m-field__error" id=${PROMPT_ERROR_ID} ${announced}>${error}</p>`
               : d.hint
                 ? html`<p class="r2m-field__hint" id=${PROMPT_HINT_ID}>${d.hint}</p>`
                 : nothing

@@ -5,6 +5,7 @@ import { R2mElement, define } from '@app/core/element';
 import { use } from '@app/core/services';
 import { computed, signal } from '@app/core/signals';
 import { adoptStyles } from '@app/core/styles';
+import { controlValue, field } from '@app/ui/field';
 import type { RejectedFile } from '@app/ui/file-drop';
 import { icon, statusChip } from '@app/ui/partials';
 import {
@@ -145,33 +146,28 @@ export class NewProjectDialog extends R2mElement implements ClosableContent {
     autofocus = false,
     hint?: string,
   ) {
-    const error = this.#error(name);
-    const describedBy = `new-project-${name}-help`;
-    const help = error ?? (hint || null);
-    return html`<label class="r2m-field new-project__field">
-      <span class="r2m-field__label">${label}</span>
-      <input
-        type="text"
-        name=${name}
-        required
-        ?autofocus=${autofocus}
-        .value=${value}
-        aria-invalid=${error ? 'true' : nothing}
-        aria-describedby=${help ? describedBy : nothing}
-        @input=${(e: Event) => onInput((e.target as HTMLInputElement).value)}
-        @blur=${() => this.#touch(name)}
-      />
-      ${
-        help
-          ? html`<span
-              id=${describedBy}
-              class=${error ? 'r2m-field__error' : 'r2m-field__hint'}
-              role=${error ? 'alert' : nothing}
-              >${help}</span
-            >`
-          : nothing
-      }
-    </label>`;
+    return field(
+      {
+        id: `new-project-${name}`,
+        label,
+        hint,
+        error: this.#error(name),
+        cls: 'new-project__field',
+      },
+      (a) =>
+        html`<input
+          id=${a.id}
+          type="text"
+          name=${name}
+          required
+          ?autofocus=${autofocus}
+          .value=${value}
+          aria-invalid=${a.invalid}
+          aria-describedby=${a.describedBy}
+          @input=${(e: Event) => onInput(controlValue(e))}
+          @blur=${() => this.#touch(name)}
+        />`,
+    );
   }
 
   #error(key: DraftField): string | null {
