@@ -93,6 +93,7 @@ export class GeneratePromptDialog extends R2mElement {
                 }`
         }
         ${streamDisclosure({
+          id: 'generate-prompt-activity',
           feed: this.feed,
           open: showStream,
           onToggle: () => this.showStream.set(!showStream),

@@ -1,7 +1,7 @@
 import { html, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
 import { R2mElement, define } from '@app/core/element';
-import { computed, signal } from '@app/core/signals';
+import { computed, signal, untracked } from '@app/core/signals';
 import type { LlmStreamEvent } from '@app/live/hub-events';
 import { Autoscroll } from './autoscroll';
 import { type LlmTurn, foldLlmTurns } from './llm-turns';
@@ -45,9 +45,25 @@ export class StreamLlm extends R2mElement {
     this.#maxTurns.set(value);
   }
 
+  #shown = signal(true);
+  get shown() {
+    return this.#shown();
+  }
+  /**
+   * False while a host hides the list: it is then not scrolled, its size is not read (that would
+   * lay out the hidden content) and its scroll events don't pause it. Showing it again lands at the
+   * latest entry, unless the user had paused.
+   */
+  set shown(value: boolean) {
+    const reopened = value && !untracked(this.#shown);
+    this.#shown.set(value);
+    if (reopened) this.#scroll.afterRender();
+  }
+
   readonly #rows = computed(() => foldLlmTurns(this.#events(), this.#maxTurns()));
+  /** A hidden list has no scroller, so autoscroll leaves it alone. */
   readonly #scroll = new Autoscroll(() =>
-    this.querySelector<HTMLElement>('.r2m-stream-llm__scroll'),
+    this.shown ? this.querySelector<HTMLElement>('.r2m-stream-llm__scroll') : null,
   );
   /** True once the user scrolled up; autoscroll resumes after Jump or reaching the bottom. */
   readonly paused = this.#scroll.paused;

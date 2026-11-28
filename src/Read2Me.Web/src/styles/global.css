@@ -2292,10 +2292,20 @@ progress {
 .r2m-stream-disclosure__body {
   height: 0;
   overflow: hidden;
-  transition: height 0.15s ease;
+  /* Closed, the stream stays mounted but is out of the tab order, the accessibility tree and
+     layout. Zero height alone hides it only from the eye. */
+  content-visibility: hidden;
+
+  @media (prefers-reduced-motion: no-preference) {
+    /* content-visibility flips at the end of a closing slide, so the box doesn't shrink empty. */
+    transition:
+      height 0.15s ease,
+      content-visibility 0.15s allow-discrete;
+  }
 }
 .r2m-stream-disclosure__body--open {
   height: 32vh;
+  content-visibility: visible;
 }
 
 /* ---- expansion panel (mat-expansion-panel): details/summary with a chevron ------------------- */
