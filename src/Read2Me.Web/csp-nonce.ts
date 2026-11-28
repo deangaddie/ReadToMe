@@ -1,6 +1,6 @@
 /**
  * The token the built `index.html` carries as the `nonce` of every `<script>` and
- * `<link rel="modulepreload">`. The host replaces it with a fresh nonce on each response and sends
+ * `<link rel="modulepreload">`. The host (`AppPage.NoncePlaceholder`) replaces it with a fresh nonce on each response and sends
  * the matching Content-Security-Policy (docs/agents/api/README.md, "Request isolation and security
  * headers"). Bun's HTML bundler writes those tags itself and drops a `nonce` from the source, so
  * `build.ts` stamps them after bundling. The dev server serves the source page with no CSP.

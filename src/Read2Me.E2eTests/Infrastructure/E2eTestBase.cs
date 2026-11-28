@@ -112,8 +112,11 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : ICl
             Directory.Delete(_artifactsDir, recursive: true);
         }
 
+        // A test that already failed keeps its own failure; its violations go to the output.
         var violations = TakeCspViolations();
-        if (violations.Count > 0)
+        if (violations.Count > 0 && failed)
+            Console.WriteLine("CSP or Trusted Types violations:\n" + string.Join('\n', violations));
+        else if (violations.Count > 0)
             Assert.Fail($"The page reported {violations.Count} CSP or Trusted Types violation(s):\n" + string.Join('\n', violations));
     }
 

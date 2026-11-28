@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.RegularExpressions;
+using Read2Me.App.Api;
 using Read2Me.E2eTests.Infrastructure;
 
 namespace Read2Me.E2eTests.Tests;
@@ -15,8 +16,6 @@ public class WebHostingTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     private const string IndexMarker = "<!-- web-stub-index -->";
     // Bun's content hashes are lowercase.
     private const string HashedAsset = "index-kdddnwpm.js";
-    // What the web build stamps on every script and modulepreload (src/Read2Me.Web/csp-nonce.ts).
-    private const string Placeholder = "__CSP_NONCE__";
     private static readonly HttpClient Http = new();
 
     [Theory]
@@ -128,7 +127,7 @@ public class WebHostingTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
             "connect-src 'self'; require-trusted-types-for 'script'; trusted-types lit-html",
             policy);
 
-        Assert.DoesNotContain(Placeholder, html);
+        Assert.DoesNotContain(AppPage.NoncePlaceholder, html);
         var stamped = Regex.Matches(html, "<(?:script|link rel=\"modulepreload\")[^>]*>");
         Assert.Equal(3, stamped.Count);
         Assert.All(stamped, tag => Assert.Contains($"nonce=\"{nonce}\"", tag.Value));
@@ -158,9 +157,9 @@ public class WebHostingTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "index.html"),
             "<!doctype html><html><head><base href=\"/app/\">" +
-            $"<script type=\"module\" src=\"/app/{HashedAsset}\" nonce=\"{Placeholder}\"></script>" +
-            $"<link rel=\"modulepreload\" href=\"/app/a.js\" nonce=\"{Placeholder}\">" +
-            $"<link rel=\"modulepreload\" href=\"/app/b.js\" nonce=\"{Placeholder}\">" +
+            $"<script type=\"module\" src=\"/app/{HashedAsset}\" nonce=\"{AppPage.NoncePlaceholder}\"></script>" +
+            $"<link rel=\"modulepreload\" href=\"/app/a.js\" nonce=\"{AppPage.NoncePlaceholder}\">" +
+            $"<link rel=\"modulepreload\" href=\"/app/b.js\" nonce=\"{AppPage.NoncePlaceholder}\">" +
             $"</head><body>{IndexMarker}<app-root></app-root></body></html>");
         File.WriteAllText(Path.Combine(dir, HashedAsset), "console.log('stub');");
     }
