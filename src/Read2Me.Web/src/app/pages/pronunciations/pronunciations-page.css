@@ -87,7 +87,7 @@
     background: var(--r2m-surface-low);
   }
   /* Narrow: the list is the page, and an open editor replaces it. */
-  @media (max-width: 899.98px) {
+  @container page (width < 56.25em) {
     .pron {
       grid-template-columns: minmax(0, 1fr);
     }
