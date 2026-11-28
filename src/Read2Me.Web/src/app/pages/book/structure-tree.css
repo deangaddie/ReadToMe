@@ -80,7 +80,7 @@
     gap: 3px;
     padding-left: var(--tree-title-start);
   }
-  /* Under the title also means past the checkbox: 13px, its 2px margin and the row gap. */
+  /* Under the title also means past the checkbox: its 13px label, the label's 2px margin and the row gap. */
   .tree__node:has(> .tree__hit) > .tree__status {
     padding-left: calc(var(--tree-title-start) + 15px + var(--r2m-space-1));
   }
