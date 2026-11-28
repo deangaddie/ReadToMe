@@ -71,7 +71,7 @@ namespace Read2Me.App.Api
 
             var nonce = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16));
             var html = await File.ReadAllTextAsync(index, context.RequestAborted);
-            response.Headers["Content-Security-Policy-Report-Only"] = Policy(nonce); // PROOF-REPORT-ONLY
+            response.Headers.ContentSecurityPolicy = Policy(nonce);
             await response.WriteAsync(html.Replace(NoncePlaceholder, nonce, StringComparison.Ordinal), context.RequestAborted);
         }
     }
