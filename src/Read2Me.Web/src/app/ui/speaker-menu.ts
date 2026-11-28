@@ -5,6 +5,7 @@ import { computed, signal } from '@app/core/signals';
 import { speakerHue } from '@app/shared/speaker-color';
 import { icon } from './partials';
 import { isComposing } from './keys';
+import { revealTip } from './tooltip';
 
 export interface SpeakerRosterEntry {
   id: string;
@@ -214,7 +215,11 @@ export class SpeakerMenu extends R2mElement {
             : matches.length - 1
           : (from + step + matches.length) % matches.length;
       this.#active.set(next);
-      this.querySelector(`#${this.#uid}-${next}`)?.scrollIntoView({ block: 'nearest' });
+      const row = this.querySelector(`#${this.#uid}-${next}`);
+      row?.scrollIntoView({ block: 'nearest' });
+      // Focus stays in the search field, so the active option shows its cut name the way focus would.
+      const name = row?.querySelector<HTMLElement>('.r2m-speaker-menu__name');
+      if (name) revealTip(name);
     }
   };
 }

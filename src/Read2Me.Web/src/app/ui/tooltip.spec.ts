@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { html, render } from 'lit-html';
-import { installTooltips, withTip } from './tooltip';
+import { installTooltips, revealTip, withTip } from './tooltip';
 import { description, hasDescription } from '../../testing/description';
 
 // happy-dom has no popover methods or anchor positioning; where the tip lands is covered in E2E.
@@ -347,6 +347,25 @@ describe('installTooltips', () => {
       item.dispatchEvent(new Event('focusin', { bubbles: true }));
       elapse();
       expect(tip.textContent).toBe('Assign a speaker first');
+    });
+  });
+
+  describe('revealTip (a highlight that does not move focus: aria-activedescendant)', () => {
+    it('shows the element\x27s tip after the delay, keeping the overflow gate', () => {
+      const cut = document.body.appendChild(
+        overflowText('Don Quixote of La Mancha Knight of the Sorrowful Countenance', {
+          content: 300,
+          box: 120,
+        }),
+      );
+      revealTip(cut);
+      elapse();
+      expect(open).toBe(true);
+      expect(tip.textContent).toBe('Don Quixote of La Mancha Knight of the Sorrowful Countenance');
+
+      revealTip(document.body.appendChild(overflowText('Sancho', { content: 50, box: 120 })));
+      elapse();
+      expect(open).toBe(false);
     });
   });
 

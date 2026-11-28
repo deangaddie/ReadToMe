@@ -108,6 +108,36 @@ public class TruncatedTooltipProofTests(E2eAppFixture app, PlaywrightFixture pw)
     }
 
     [Fact]
+    public async Task The_speaker_menu_shows_a_cut_name_on_hover_and_on_the_arrow_key()
+    {
+        var book = await App.SeedProjectAsync("menu-long", "Don Quixote", "Miguel de Cervantes", LongName);
+        await GotoAppAsync("projects/menu-long/book?mode=speakers");
+        await SettleAsync(Page);
+        var item = Page.Locator($"[data-item-id='{book.ItemId("line1")}']");
+        await item.Locator("r2m-speaker-chip button[aria-haspopup='listbox']").ClickAsync();
+        var menu = Page.Locator("r2m-speaker-menu");
+        var name = menu.Locator(".r2m-speaker-menu__name").Filter(new() { HasText = "Don Quixote" });
+        await AssertCutAsync(name);
+
+        await name.HoverAsync();
+        await Expect(OpenTip(Page)).ToHaveTextAsync(LongName);
+        await Page.Mouse.MoveAsync(1, 790);
+        await Expect(OpenTip(Page)).ToHaveCountAsync(0);
+
+        // Focus stays in the search field; arrowing makes an option active.
+        await menu.Locator(".r2m-speaker-menu__input").FocusAsync();
+        for (var i = 0; i < 5 && !await menu.Locator(".r2m-speaker-menu__row--active").Filter(new() { HasText = "Don Quixote" }).IsVisibleAsync(); i++)
+            await Page.Keyboard.PressAsync("ArrowDown");
+        await Expect(OpenTip(Page)).ToHaveTextAsync(LongName);
+
+        // Picking it closes the menu, and the tip with it.
+        await Page.Keyboard.PressAsync("Enter");
+        await Expect(menu).ToHaveCountAsync(0);
+        await Page.WaitForTimeoutAsync(800);
+        await Expect(OpenTip(Page)).ToHaveCountAsync(0);
+    }
+
+    [Fact]
     public async Task A_tap_on_a_cut_label_shows_its_full_text()
     {
         await SeedAsync("tap-long", LongName);

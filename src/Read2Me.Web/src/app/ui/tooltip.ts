@@ -23,6 +23,9 @@
  *   descendant (a tree row whose title carries the tip, the Download link of an export row). On an
  *   element with a tip of its own, the descendant goes first and, fitting, hands back to it.
  *
+ * `revealTip(el)` shows an element's tip as focus would, for a highlight that leaves focus where
+ * it is (a listbox option made active through `aria-activedescendant`).
+ *
  * The shared hint is the visual cue only: no trigger points at it, since it holds a trigger's text
  * only while open. A tip that says more than the trigger's name goes through `withTip`, which
  * renders it a second time as the trigger's accessible description.
@@ -65,6 +68,13 @@ class TipDirective extends Directive {
  * empty one adds nothing.
  */
 export const withTip = directive(TipDirective);
+
+const REVEAL_EVENT = 'r2m-tooltip-reveal';
+
+/** Shows `el`'s tip as if it took focus, overflow gate included; focus stays where it is. */
+export function revealTip(el: HTMLElement): void {
+  el.dispatchEvent(new Event(REVEAL_EVENT, { bubbles: true }));
+}
 
 const SHOW_DELAY_MS = 400;
 /** Time to move the pointer from the trigger onto the tip before it closes. */
@@ -161,4 +171,5 @@ export function installTooltips(root: Document = document): void {
     hide();
   });
   root.addEventListener('keydown', (e) => e.key === 'Escape' && hide());
+  root.addEventListener(REVEAL_EVENT, (e) => e.target instanceof HTMLElement && show(e.target));
 }

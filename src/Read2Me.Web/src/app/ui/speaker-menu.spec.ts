@@ -80,6 +80,24 @@ describe('r2m-speaker-menu', () => {
     expect(events.picked).toEqual(['c-bingley']);
   });
 
+  it('arrowing to an option reveals its name tip (focus stays in the search field)', async () => {
+    const { menu, press } = await mount();
+    const revealed: Element[] = [];
+    const onReveal = (e: Event) => revealed.push(e.target as Element);
+    document.addEventListener('r2m-tooltip-reveal', onReveal);
+    try {
+      press('ArrowDown', menu);
+      press('ArrowDown', menu);
+    } finally {
+      document.removeEventListener('r2m-tooltip-reveal', onReveal);
+    }
+    expect(revealed.map((el) => el.className)).toEqual([
+      'r2m-speaker-menu__name',
+      'r2m-speaker-menu__name',
+    ]);
+    expect(revealed[1]?.textContent).toContain('Bingley');
+  });
+
   it('typing highlights the first match, and Enter picks it', async () => {
     const { menu, events, type, press } = await mount();
     await type('eli');
