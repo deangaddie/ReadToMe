@@ -504,4 +504,13 @@
     font-style: italic;
     color: var(--r2m-text-muted);
   }
+
+  /* Forced colours drop the selected rows' tint: outline them in the system highlight. */
+  @media (forced-colors: active) {
+    .r2m-paragraph--selected,
+    .r2m-item--selected {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
 }

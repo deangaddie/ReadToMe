@@ -116,4 +116,12 @@
       opacity: 1;
     }
   }
+  /* Forced colours drop the current row's background: outline it in the system highlight. The
+     focus ring, more specific, still wins on a focused row. */
+  @media (forced-colors: active) {
+    .tree__node--current {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
 }

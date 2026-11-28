@@ -32,6 +32,12 @@
     color: var(--r2m-text);
     font-weight: 600;
   }
+  /* Forced colours paint every step's border in CanvasText: the current one takes the highlight. */
+  @media (forced-colors: active) {
+    .edit__step--current {
+      border-color: Highlight;
+    }
+  }
   .edit__step--done {
     color: var(--r2m-text);
   }

@@ -2657,3 +2657,100 @@ textarea.r2m-settings-form__text {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ---- forced colours (Windows High Contrast) ------------------------------------------------- */
+/* Forced colours repaint every background in `Canvas`, every edge in `CanvasText` and drop
+   shadows and gradients, so state and edges drawn only that way vanish. Each primitive below
+   redraws its state in system colours, which forced colours keep (modern-web-guidance
+   `visual-design/color`, Forced Colors Mode). A selected list row takes a `Highlight` outline,
+   not a `Highlight` fill: its muted subtitles and icons are forced to `CanvasText`, which a
+   `Highlight` fill would not carry. */
+@media (forced-colors: active) {
+  /* The knob sits 1px in so it clears the border the track gains. */
+  .r2m-switch input {
+    border: 1px solid CanvasText;
+    background: Canvas;
+
+    &::before {
+      top: 1px;
+      left: 1px;
+      background: CanvasText;
+    }
+    &:checked {
+      border-color: Highlight;
+      background: Highlight;
+    }
+    &:checked::before {
+      background: HighlightText;
+    }
+    &:is(:disabled, [aria-disabled='true']) {
+      border-color: GrayText;
+    }
+    &:is(:disabled, [aria-disabled='true'])::before {
+      background: GrayText;
+    }
+    &:is(:disabled, [aria-disabled='true']):checked {
+      background: GrayText;
+    }
+    &:is(:disabled, [aria-disabled='true']):checked::before {
+      background: Canvas;
+    }
+  }
+  /* A Highlight fill with HighlightText takes `forced-color-adjust: none`: Chromium otherwise
+     paints a Canvas backplate behind the text, which hides HighlightText. The checked segment's
+     focus ring sits inside the fill, so it turns HighlightText too. */
+  .r2m-segmented label:has(input:checked) {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+  .r2m-segmented label:has(input:checked:focus-visible) {
+    outline-color: HighlightText;
+  }
+  .r2m-audio-player__ab-btn--active {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+  @supports (appearance: base-select) {
+    option:checked {
+      forced-color-adjust: none;
+      background: Highlight;
+      color: HighlightText;
+    }
+  }
+  /* Forced colours paint a transparent border, so the unselected tabs would all be underlined. */
+  .r2m-tabs__tab {
+    border-bottom-color: Canvas;
+  }
+  .r2m-tabs__tab--selected {
+    border-bottom-color: Highlight;
+  }
+  .r2m-config-list__row--selected {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  dialog.r2m-dialog,
+  .r2m-tooltip,
+  .r2m-toast {
+    border: 1px solid CanvasText;
+  }
+
+  /* A faint track under a solid arc, as in normal colours: a ring all one colour shows no spin. */
+  .r2m-spinner {
+    border-color: GrayText;
+    border-top-color: CanvasText;
+  }
+  progress {
+    --r2m-progress-fill: Highlight;
+    outline: 1px solid CanvasText;
+  }
+  /* The project card's bar is two backgrounds, both repainted in Canvas. */
+  .r2m-project-card__bar {
+    outline: 1px solid CanvasText;
+  }
+  .r2m-project-card__fill {
+    background: Highlight;
+  }
+}
