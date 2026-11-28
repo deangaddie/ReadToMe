@@ -38,7 +38,7 @@
     opacity: 0.85;
   }
   .themes__lock .r2m-icon {
-    font-size: 18px;
+    font-size: 1.125rem;
   }
   .themes__body {
     padding: var(--r2m-space-3) var(--r2m-space-4) var(--r2m-space-2);

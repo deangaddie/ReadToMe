@@ -30,8 +30,8 @@
   .shell__appbar {
     display: flex;
     align-items: center;
-    flex: 0 0 var(--r2m-appbar-height);
-    height: var(--r2m-appbar-height);
+    flex: 0 0 auto;
+    min-block-size: var(--r2m-appbar-height);
     padding: 0 var(--r2m-space-2);
     gap: var(--r2m-space-1);
     background: var(--r2m-appbar-bg);
@@ -151,7 +151,7 @@
   }
   .shell__next-main {
     min-width: 0;
-    height: 32px;
+    min-height: 32px;
     color: var(--_fg);
     background: var(--_bg);
     white-space: nowrap;
@@ -174,7 +174,7 @@
     text-overflow: ellipsis;
   }
   .shell__next-pill {
-    height: 28px;
+    min-height: 28px;
     padding: 0 var(--r2m-space-3);
     font-size: var(--r2m-text-sm);
     color: inherit;
@@ -266,13 +266,13 @@
     top: 2px;
     right: 2px;
     min-width: 16px;
-    height: 16px;
+    min-height: 16px;
     padding: 0 4px;
     border-radius: 8px;
     background: var(--r2m-status-error);
     color: var(--r2m-surface);
-    font-size: 11px;
-    line-height: 16px;
+    font-size: var(--r2m-text-xs);
+    line-height: 1.45; /* unitless, so it scales: 16 px at the default size */
     text-align: center;
   }
   .shell__main--viewing {
@@ -328,7 +328,7 @@
     display: flex;
     align-items: center;
     gap: var(--r2m-space-3);
-    height: 40px;
+    min-height: 40px;
     padding: 0 var(--r2m-space-3);
     border-radius: var(--r2m-radius-md);
     color: inherit;
@@ -399,7 +399,8 @@
 
   /* ---- activity bar ------------------------------------------------------------------------- */
   .shell__activity {
-    flex: 0 0 var(--r2m-activity-bar-height);
+    flex: 0 0 auto;
+    min-block-size: var(--r2m-activity-bar-height);
     display: flex;
     align-items: center;
     gap: var(--r2m-space-2);
@@ -412,7 +413,7 @@
   }
 
   /* ---- narrow: the rail and the drawer float over the content ------------------------------- */
-  @media (max-width: 899.98px) {
+  @media (width < 56.25em) {
     .shell__rail {
       position: absolute;
       inset: 0 auto 0 0;

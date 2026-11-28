@@ -39,7 +39,7 @@
     white-space: nowrap;
 
     & .r2m-icon {
-      font-size: 18px;
+      font-size: 1.125rem;
       vertical-align: middle;
     }
   }
@@ -53,7 +53,7 @@
     gap: 4px;
 
     & .r2m-icon {
-      font-size: 16px;
+      font-size: 1rem;
     }
   }
   .series-cast__differs {

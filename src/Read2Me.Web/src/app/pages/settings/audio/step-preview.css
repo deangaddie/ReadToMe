@@ -53,6 +53,6 @@
     color: var(--r2m-status-warn);
   }
   .step-preview__reason .r2m-icon {
-    font-size: 18px;
+    font-size: 1.125rem;
   }
 }

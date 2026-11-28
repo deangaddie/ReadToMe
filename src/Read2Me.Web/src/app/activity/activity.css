@@ -15,7 +15,7 @@
     gap: var(--r2m-space-1);
 
     & .r2m-icon {
-      font-size: 18px;
+      font-size: 1.125rem;
     }
   }
   .activity-bar__pills {
@@ -42,7 +42,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    flex: 0 0 var(--r2m-appbar-height);
+    flex: 0 0 auto;
+    min-block-size: var(--r2m-appbar-height);
     padding: 0 var(--r2m-space-2) 0 var(--r2m-space-4);
     border-bottom: 1px solid var(--r2m-outline);
   }

@@ -62,7 +62,7 @@
   }
   .cast__icon {
     flex: 0 0 auto;
-    font-size: 20px;
+    font-size: 1.25rem;
     color: var(--r2m-text-muted);
   }
   .cast__icon--book {
@@ -80,7 +80,7 @@
     color: var(--r2m-accent);
   }
   .cast__series .r2m-icon {
-    font-size: 18px;
+    font-size: 1.125rem;
   }
   .cast__series--differs {
     color: var(--r2m-status-busy);
@@ -255,7 +255,7 @@
     color: inherit;
   }
   .character-detail__alias-remove .r2m-icon {
-    font-size: 16px;
+    font-size: 1rem;
   }
   .character-detail__alias-input {
     font: inherit;
@@ -665,7 +665,7 @@
     color: var(--r2m-status-warn);
   }
   .voice-rules__warning .r2m-icon {
-    font-size: 18px;
+    font-size: 1.125rem;
   }
   .voice-rules__delete {
     color: var(--r2m-status-error);
@@ -890,7 +890,7 @@
     color: inherit;
   }
   .discover__alias-remove .r2m-icon {
-    font-size: 16px;
+    font-size: 1rem;
   }
   .discover__cancel {
     color: var(--r2m-status-error);

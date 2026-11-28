@@ -139,7 +139,7 @@ a {
   font-family: 'Material Symbols Rounded';
   font-weight: normal;
   font-style: normal;
-  font-size: 20px;
+  font-size: 1.25rem;
   line-height: 1;
   display: inline-block;
   white-space: nowrap;
@@ -182,7 +182,7 @@ a {
   display: inline-flex;
   align-items: center;
   gap: var(--r2m-space-2);
-  height: 36px;
+  min-height: 36px;
   padding: 0 var(--r2m-space-4);
   border: 1px solid transparent;
   border-radius: var(--r2m-radius-pill);
@@ -220,13 +220,14 @@ a {
   background: var(--r2m-status-error);
   color: var(--r2m-surface);
 }
-/* Icon button: a 40px round hit area around one icon; colour inherits from its bar. */
+/* Icon button: a round hit area twice its icon's size (40 px at the default text size, growing with it)
+   around one icon; colour inherits from its bar. */
 .r2m-icon-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 2.5rem;
+  height: 2.5rem;
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -313,8 +314,8 @@ a {
 
   & input {
     accent-color: var(--r2m-accent);
-    width: 18px;
-    height: 18px;
+    width: 1.125rem;
+    height: 1.125rem;
   }
 }
 
@@ -404,7 +405,7 @@ a {
     position: relative;
     display: inline-flex;
     align-items: center;
-    height: 32px;
+    min-height: 32px;
     padding: 0 var(--r2m-space-4);
     font: 500 var(--r2m-text-sm) var(--r2m-font-sans);
     color: var(--r2m-text);
@@ -678,7 +679,7 @@ dialog.r2m-dialog--fullscreen {
   display: inline-flex;
   align-items: center;
   gap: var(--r2m-space-1);
-  height: 24px;
+  min-height: 24px;
   padding: 0 var(--r2m-space-2);
   border-radius: var(--r2m-radius-pill);
   font-size: var(--r2m-text-sm);
@@ -686,11 +687,11 @@ dialog.r2m-dialog--fullscreen {
   background: var(--_bg);
 
   & .r2m-icon {
-    font-size: 16px;
+    font-size: 1rem;
   }
 }
 .r2m-status-chip--compact {
-  height: 20px;
+  min-height: 20px;
   font-size: var(--r2m-text-xs);
 }
 .r2m-status-chip--ok {
@@ -735,7 +736,7 @@ dialog.r2m-dialog--fullscreen {
   padding: var(--r2m-space-4);
 }
 .r2m-empty-state__icon {
-  font-size: 40px;
+  font-size: 2.5rem;
 }
 .r2m-empty-state__headline {
   color: var(--r2m-text);
@@ -886,7 +887,7 @@ dialog.r2m-dialog--fullscreen {
   background: var(--r2m-speaker-fg);
 }
 .r2m-speaker-chip__icon {
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .r2m-speaker-menu {
@@ -1084,7 +1085,7 @@ dialog.r2m-dialog--fullscreen {
   --_fg: var(--r2m-status-busy);
 }
 .r2m-count-badge__icon {
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 /* ---- spinner + progress --------------------------------------------------------------------- */
@@ -1201,7 +1202,7 @@ progress {
     outline-offset: -2px;
   }
   & .r2m-icon {
-    font-size: 18px;
+    font-size: 1.125rem;
   }
 }
 .r2m-tabs__tab--selected {
@@ -1268,7 +1269,7 @@ progress {
 }
 .r2m-job-pill__icon,
 .r2m-job-pill__cancel .r2m-icon {
-  font-size: 16px;
+  font-size: 1rem;
 }
 .r2m-job-pill__cancel {
   padding: 0 var(--r2m-space-1);
@@ -1344,7 +1345,7 @@ progress {
   font-size: var(--r2m-text-sm);
 
   & .r2m-icon {
-    font-size: 18px;
+    font-size: 1.125rem;
   }
 }
 .r2m-job-card__actions {
@@ -1463,7 +1464,7 @@ progress {
   color: var(--r2m-status-info);
 
   & .r2m-icon {
-    font-size: 16px;
+    font-size: 1rem;
   }
 }
 .r2m-stream-llm__turn {
@@ -1564,7 +1565,7 @@ progress {
   color: var(--r2m-text-muted);
 
   & .r2m-icon {
-    font-size: 18px;
+    font-size: 1.125rem;
   }
   &[data-state='ok'] {
     color: var(--r2m-status-ok);
@@ -1711,7 +1712,7 @@ progress {
   color: var(--r2m-text-muted);
 }
 .r2m-file-drop__icon {
-  font-size: 36px;
+  font-size: 2.25rem;
 }
 .r2m-file-drop__label {
   margin: 0;
@@ -1769,7 +1770,7 @@ progress {
   white-space: nowrap;
 }
 .r2m-inline-edit__pencil {
-  font-size: 16px;
+  font-size: 1rem;
   color: var(--r2m-text-muted);
   opacity: 0;
   transition: opacity 100ms;
@@ -2026,7 +2027,7 @@ progress {
   color: var(--r2m-accent);
 
   & .r2m-icon {
-    font-size: 14px;
+    font-size: 0.875rem;
   }
   & span {
     white-space: nowrap;
@@ -2077,7 +2078,7 @@ progress {
   font-weight: 600;
 
   & .r2m-icon {
-    font-size: 16px;
+    font-size: 1rem;
   }
 }
 .r2m-pipeline__step--done .r2m-pipeline__marker {
@@ -2151,7 +2152,7 @@ progress {
   gap: var(--r2m-space-1);
 }
 .r2m-pipeline__pill {
-  height: 24px;
+  min-height: 24px;
   padding: 0 var(--r2m-space-2);
   gap: var(--r2m-space-1);
   font-size: var(--r2m-text-sm);
@@ -2168,7 +2169,7 @@ progress {
   color: var(--r2m-text-muted);
 
   & .r2m-icon {
-    font-size: 18px;
+    font-size: 1.125rem;
   }
 }
 .r2m-pipeline__help-toggle--on {
@@ -2271,7 +2272,7 @@ progress {
       /* The empty alternative text keeps the ligature's name out of the summary's own. */
       content: 'expand_more' / '';
       font-family: 'Material Symbols Rounded';
-      font-size: 20px;
+      font-size: 1.25rem;
       line-height: 1;
       margin-left: auto;
       color: var(--r2m-text-muted);
@@ -2334,7 +2335,7 @@ progress {
   height: 28px;
 
   & .r2m-icon {
-    font-size: 18px;
+    font-size: 1.125rem;
   }
 }
 .r2m-settings-form__slider-row {
@@ -2437,7 +2438,7 @@ textarea.r2m-settings-form__text {
     outline: none;
   }
   & .r2m-icon {
-    font-size: 18px;
+    font-size: 1.125rem;
   }
   &:focus-within {
     outline: 2px solid var(--r2m-accent);

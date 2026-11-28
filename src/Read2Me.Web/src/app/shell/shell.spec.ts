@@ -872,7 +872,7 @@ describe('app-root narrow rail drawer', () => {
     listeners = [];
     window.matchMedia = ((query: string) =>
       ({
-        matches: query.includes('max-width') ? narrow : false,
+        matches: query === '(width < 56.25em)' ? narrow : false,
         addEventListener: (_: string, cb: (e: MediaQueryListEvent) => void) => listeners.push(cb),
         removeEventListener: () => {},
       }) as unknown as MediaQueryList) as typeof matchMedia;

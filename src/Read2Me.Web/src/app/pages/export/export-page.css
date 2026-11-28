@@ -68,7 +68,7 @@
     border-radius: 50%;
   }
   .export__marker .r2m-icon {
-    font-size: 16px;
+    font-size: 1rem;
   }
   .export__percent {
     font-variant-numeric: tabular-nums;
