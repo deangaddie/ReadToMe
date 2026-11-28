@@ -61,7 +61,31 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : ICl
             Snapshots = true,
             Sources = true,
         });
+        // The app's page runs under a nonce CSP that enforces Trusted Types (Api/AppPage.cs). Any
+        // violation fails the test, even one the screen survives, such as a sink lit-html swallowed.
+        // The page event fires in both engines and under a report-only policy too.
+        await _context.ExposeFunctionAsync("__r2mCspViolation", (string violation) => { lock (_cspViolations) _cspViolations.Add(violation); });
+        await _context.AddInitScriptAsync("""
+            document.addEventListener('securitypolicyviolation', (e) =>
+              window.__r2mCspViolation(`${e.effectiveDirective} blocked ${e.blockedURI || '(inline)'} at ${e.sourceFile}:${e.lineNumber} ${e.sample}`));
+            """);
         Page = await _context.NewPageAsync();
+    }
+
+    private readonly List<string> _cspViolations = [];
+
+    /// <summary>
+    /// The CSP and Trusted Types violations the pages reported so far, taken out so they no longer
+    /// fail the test: for a test that provokes one on purpose.
+    /// </summary>
+    protected IReadOnlyList<string> TakeCspViolations()
+    {
+        lock (_cspViolations)
+        {
+            var taken = _cspViolations.ToList();
+            _cspViolations.Clear();
+            return taken;
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -87,6 +111,10 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : ICl
             await _context.CloseAsync();
             Directory.Delete(_artifactsDir, recursive: true);
         }
+
+        var violations = TakeCspViolations();
+        if (violations.Count > 0)
+            Assert.Fail($"The page reported {violations.Count} CSP or Trusted Types violation(s):\n" + string.Join('\n', violations));
     }
 
     /// <summary>

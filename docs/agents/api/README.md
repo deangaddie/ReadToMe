@@ -82,6 +82,28 @@ handler's `Response.Clear()` keeps them):
 Not sent: `Referrer-Policy` (the browser default, `strict-origin-when-cross-origin`, already holds)
 and `Permissions-Policy` (Chromium only). `frame-ancestors` belongs to the Content-Security-Policy.
 
+The app's page (`/app` and every path under it, `/app/index.html` by name included) carries an
+enforcing Content-Security-Policy with a fresh nonce on every response (`Api/AppPage.cs`):
+
+```
+script-src 'nonce-<n>' 'strict-dynamic'; object-src 'none'; base-uri 'self'; frame-ancestors 'none';
+connect-src 'self'; require-trusted-types-for 'script'; trusted-types lit-html
+```
+
+- **Nonce**: 128 random bits, base64. The web build stamps `nonce="__CSP_NONCE__"` on every
+  `<script>` and `<link rel="modulepreload">` of the built `index.html` (`src/Read2Me.Web/csp-nonce.ts`,
+  since Bun's bundler writes those tags itself), and the host replaces that token. The host never
+  finds tags by pattern. A new inline script in `index.html` gets the stamp too, so it needs no hash.
+- **Trusted Types**: only lit-html's own policy may exist, so every HTML sink goes through a lit
+  template (`unsafeHTML` included). A raw `innerHTML`, in app code or a dependency, throws.
+- **`base-uri 'self'`**, not `'none'`: the page declares `<base href="/app/">` and the router
+  resolves paths against `document.baseURI`. **`style-src` stays open**: lit templates carry
+  `<style>` and `style=` bindings, and the theme injects a sheet.
+- No `report-uri` or `Reporting-Endpoints`: nothing collects reports. The E2E base
+  (`E2eTestBase`) fails any browser test whose page reports a CSP or Trusted Types violation.
+- The not-built page has no policy (its one style is inline), and `bun run dev` serves the source
+  page with none.
+
 ## Parts
 
 Read the part for the area you are calling or changing:

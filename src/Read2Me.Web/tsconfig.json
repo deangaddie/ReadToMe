@@ -13,5 +13,14 @@
     "useDefineForClassFields": true,
     "paths": { "@app/*": ["./src/app/*"] }
   },
-  "include": ["src", "scripts", "base.ts", "base.spec.ts", "build.ts", "dev.ts"]
+  "include": [
+    "src",
+    "scripts",
+    "base.ts",
+    "base.spec.ts",
+    "csp-nonce.ts",
+    "csp-nonce.spec.ts",
+    "build.ts",
+    "dev.ts"
+  ]
 }

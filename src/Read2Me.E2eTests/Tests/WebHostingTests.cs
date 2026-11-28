@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.RegularExpressions;
 using Read2Me.E2eTests.Infrastructure;
 
 namespace Read2Me.E2eTests.Tests;
@@ -14,6 +15,8 @@ public class WebHostingTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
     private const string IndexMarker = "<!-- web-stub-index -->";
     // Bun's content hashes are lowercase.
     private const string HashedAsset = "index-kdddnwpm.js";
+    // What the web build stamps on every script and modulepreload (src/Read2Me.Web/csp-nonce.ts).
+    private const string Placeholder = "__CSP_NONCE__";
     private static readonly HttpClient Http = new();
 
     [Theory]
@@ -78,6 +81,60 @@ public class WebHostingTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         }
     }
 
+    [Theory]
+    [InlineData("/app")]
+    [InlineData("/app/")]
+    [InlineData("/app/projects/pride-and-prejudice")]
+    [InlineData("/app/index.html")]  // the static file mount must not serve the placeholder raw
+    public async Task The_index_carries_an_enforcing_csp_whose_fresh_nonce_matches_every_script(string path)
+    {
+        StageBundle();
+        try
+        {
+            var first = await Http.GetAsync(app.BaseUrl + path);
+            var second = await Http.GetAsync(app.BaseUrl + path);
+
+            var nonce = AssertNonceMatches(first, await first.Content.ReadAsStringAsync());
+            var again = AssertNonceMatches(second, await second.Content.ReadAsStringAsync());
+            Assert.NotEqual(nonce, again);
+            Assert.True(Convert.FromBase64String(nonce).Length >= 16, "the nonce carries at least 128 bits");
+            Assert.False(first.Headers.Contains("Content-Security-Policy-Report-Only"));
+        }
+        finally
+        {
+            RemoveBundle();
+        }
+    }
+
+    [Fact]
+    public async Task The_not_built_page_has_no_csp()
+    {
+        RemoveBundle();
+
+        var response = await Http.GetAsync(app.BaseUrl + "/app/");
+
+        Assert.False(response.Headers.Contains("Content-Security-Policy"));
+    }
+
+    private static string AssertNonceMatches(HttpResponseMessage response, string html)
+    {
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var policy = Assert.Single(response.Headers.GetValues("Content-Security-Policy"));
+        var match = Regex.Match(policy, "^script-src 'nonce-([A-Za-z0-9+/=]+)' 'strict-dynamic'; ");
+        Assert.True(match.Success, policy);
+        var nonce = match.Groups[1].Value;
+        Assert.Equal(
+            $"script-src 'nonce-{nonce}' 'strict-dynamic'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; " +
+            "connect-src 'self'; require-trusted-types-for 'script'; trusted-types lit-html",
+            policy);
+
+        Assert.DoesNotContain(Placeholder, html);
+        var stamped = Regex.Matches(html, "<(?:script|link rel=\"modulepreload\")[^>]*>");
+        Assert.Equal(3, stamped.Count);
+        Assert.All(stamped, tag => Assert.Contains($"nonce=\"{nonce}\"", tag.Value));
+        return nonce;
+    }
+
     [Fact]
     public async Task Api_is_untouched_by_the_app_fallback()
     {
@@ -100,7 +157,11 @@ public class WebHostingTests(E2eAppFixture app) : IClassFixture<E2eAppFixture>
         var dir = Path.Combine(app.WebRootDir, "app");
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "index.html"),
-            $"<!doctype html><html><head><base href=\"/app/\"></head><body>{IndexMarker}<app-root></app-root></body></html>");
+            "<!doctype html><html><head><base href=\"/app/\">" +
+            $"<script type=\"module\" src=\"/app/{HashedAsset}\" nonce=\"{Placeholder}\"></script>" +
+            $"<link rel=\"modulepreload\" href=\"/app/a.js\" nonce=\"{Placeholder}\">" +
+            $"<link rel=\"modulepreload\" href=\"/app/b.js\" nonce=\"{Placeholder}\">" +
+            $"</head><body>{IndexMarker}<app-root></app-root></body></html>");
         File.WriteAllText(Path.Combine(dir, HashedAsset), "console.log('stub');");
     }
 
