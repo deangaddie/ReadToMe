@@ -192,6 +192,19 @@ describe('r2m-provider-settings-page', () => {
       });
     }
 
+    it('turns text correction off on the base URL and leaves the name alone (forms 3)', async () => {
+      const { page } = await render('transcription', 'LocalWhisper');
+
+      const url = page.querySelector('input[data-field="baseUrl"]')!;
+      expect(url.getAttribute('spellcheck')).toBe('false');
+      expect(url.getAttribute('autocapitalize')).toBe('none');
+      expect(url.getAttribute('autocorrect')).toBe('off');
+      const name = page.querySelector('input[data-field="name"]')!;
+      for (const attr of ['spellcheck', 'autocapitalize', 'autocorrect']) {
+        expect(name.hasAttribute(attr)).toBe(false);
+      }
+    });
+
     it('shows the stored value over the schema default, whatever case its key is stored in', async () => {
       const { page } = await render('semantic-similarity', 'MiniLmL6', { PassThreshold: 0.6 });
 

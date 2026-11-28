@@ -170,6 +170,7 @@ export class LlmConfigEditor extends R2mElement {
       )}
       ${field({ id: 'llm-base-url', label: 'Base URL' }, (a) =>
         this.textInput(a, 'baseUrl', form.baseUrl, {
+          identifier: true,
           required: true,
           placeholder: 'http://localhost:8080',
         }),
@@ -217,7 +218,7 @@ export class LlmConfigEditor extends R2mElement {
                 label: 'Model (optional)',
                 hint: hint ? html`<span data-role="models-hint">${hint}</span>` : null,
               },
-              (a) => this.textInput(a, 'model', form.model),
+              (a) => this.textInput(a, 'model', form.model, { identifier: true }),
             )
       }
       ${field(
@@ -280,11 +281,12 @@ export class LlmConfigEditor extends R2mElement {
     </div>`;
   }
 
+  /** `identifier`: the value is an id (URL, model), not prose, so text correction is off (forms 3). */
   private textInput(
     a: FieldControlAttrs,
     key: TextKey,
     value: string,
-    o: { required?: boolean; placeholder?: string; inputmode?: string } = {},
+    o: { required?: boolean; placeholder?: string; inputmode?: string; identifier?: boolean } = {},
   ) {
     return html`<input
       id=${a.id}
@@ -292,6 +294,9 @@ export class LlmConfigEditor extends R2mElement {
       aria-invalid=${a.invalid}
       type="text"
       autocomplete="off"
+      spellcheck=${o.identifier ? 'false' : nothing}
+      autocapitalize=${o.identifier ? 'none' : nothing}
+      autocorrect=${o.identifier ? 'off' : nothing}
       ?required=${o.required ?? false}
       placeholder=${o.placeholder ?? nothing}
       inputmode=${o.inputmode ?? nothing}

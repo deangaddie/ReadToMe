@@ -241,6 +241,7 @@ export class ProviderConfigEditor extends R2mElement {
       )}
       ${field({ id: 'provider-base-url', label: 'Base URL' }, (a) =>
         this.textInput(a, 'baseUrl', form.baseUrl, {
+          identifier: true,
           required: true,
           placeholder: type?.urlExample ?? '',
         }),
@@ -275,11 +276,12 @@ export class ProviderConfigEditor extends R2mElement {
     </div>`;
   }
 
+  /** `identifier`: the value is an id (the base URL), not prose, so text correction is off (forms 3). */
   private textInput(
     a: FieldControlAttrs,
     key: 'name' | 'baseUrl',
     value: string,
-    o: { required?: boolean; placeholder?: string } = {},
+    o: { required?: boolean; placeholder?: string; identifier?: boolean } = {},
   ) {
     return html`<input
       id=${a.id}
@@ -287,6 +289,9 @@ export class ProviderConfigEditor extends R2mElement {
       aria-invalid=${a.invalid}
       type="text"
       autocomplete="off"
+      spellcheck=${o.identifier ? 'false' : nothing}
+      autocapitalize=${o.identifier ? 'none' : nothing}
+      autocorrect=${o.identifier ? 'off' : nothing}
       ?required=${o.required ?? false}
       placeholder=${o.placeholder ?? nothing}
       data-field=${key}
