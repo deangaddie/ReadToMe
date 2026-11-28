@@ -216,7 +216,7 @@ describe('PromptService', () => {
 
     await type('Wickham');
     expect(dialog.querySelector('.r2m-field__error')).toBeNull();
-    expect(input.hasAttribute('aria-invalid')).toBe(false);
+    expect(input.getAttribute('aria-invalid')).toBe('false');
   });
 
   it('a required prompt shows its error on blur, not while typing', async () => {

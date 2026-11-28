@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { resetServices } from '@app/core/services';
 import { FakeApi, problem } from '../../../testing/fake-api';
 import { settle } from '../../../testing/fake-navigation';
+import { FakeTimers } from '../../../testing/fake-timers';
+import { ERROR_ANNOUNCE_DELAY_MS } from '@app/ui/field';
 import type { NewProjectDialog } from './new-project-dialog';
 import { openNewProjectDialog } from './new-project-dialog';
 import './new-project-dialog';
@@ -14,7 +16,13 @@ beforeEach(() => {
   api.install();
   api.on('GET', '/api/series', []);
 });
-afterEach(() => document.body.replaceChildren());
+let timers: FakeTimers | undefined;
+afterEach(() => {
+  timers?.restore();
+  timers = undefined;
+  delete Element.prototype.ariaNotify;
+  document.body.replaceChildren();
+});
 
 async function open() {
   const result = openNewProjectDialog();
@@ -105,6 +113,37 @@ describe('r2m-new-project-dialog', () => {
 
     await type('author', 'B');
     expect(dialog.querySelector('.r2m-field__error')).toBeNull();
+  });
+
+  it('announces the error a blur brings up once, and none for a failed submit', async () => {
+    const said: string[] = [];
+    // happy-dom has no ariaNotify; the announcer calls it on the open modal.
+    Element.prototype.ariaNotify = (text: string) => void said.push(text);
+    timers = new FakeTimers().install();
+    const { dialog, input, type, createButton } = await open();
+
+    input('author').dispatchEvent(new Event('blur'));
+    await dialog.rendered();
+    const error = dialog.querySelector('.r2m-field__error')!;
+    expect(error.hasAttribute('role')).toBe(false);
+    expect(input('author').getAttribute('aria-invalid')).toBe('true');
+    expect(input('author').getAttribute('aria-describedby')).toBe(error.id);
+    expect(input('bookTitle').getAttribute('aria-invalid')).toBe('false');
+    await timers.advance(ERROR_ANNOUNCE_DELAY_MS);
+    expect(said).toEqual(['Author is required']);
+
+    input('author').focus();
+    await type('author', 'B');
+    await type('author', '');
+    await timers.advance(ERROR_ANNOUNCE_DELAY_MS);
+    expect(said).toHaveLength(1);
+
+    createButton().click();
+    await settle();
+    await dialog.rendered();
+    await timers.advance(ERROR_ANNOUNCE_DELAY_MS);
+    expect(dialog.querySelectorAll('.r2m-field__error')).toHaveLength(3);
+    expect(said).toHaveLength(1);
   });
 
   it('shows the rejection inline and does not send it', async () => {

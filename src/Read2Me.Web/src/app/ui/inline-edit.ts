@@ -7,7 +7,8 @@ import { gated, icon } from './partials';
 /**
  * Click-to-edit text (design §7, §8): Enter saves, Escape cancels, blur saves. Emits `save` only
  * when the value actually changed and is valid (non-empty when `required`, within `maxLength`),
- * `cancelled` otherwise. The input is focused and selected on the render that opens it. A
+ * `cancelled` otherwise. It has no error message to describe an invalid draft with, so it sets no
+ * `aria-invalid` either: an invalid draft just cancels. The input is focused and selected on the render that opens it. A
  * `block` (its Edit gate, such as viewing a History step) keeps it closed, its button off with
  * the gate's Blocked reason.
  */
@@ -92,7 +93,6 @@ export class InlineEdit extends R2mElement {
         .value=${this.#draft()}
         placeholder=${placeholder}
         maxlength=${max ?? nothing}
-        aria-invalid=${this.#valid() ? 'false' : 'true'}
         @input=${(e: Event) => this.#draft.set((e.target as HTMLInputElement).value)}
         @keydown=${this.#onKeydown}
         @blur=${() => this.commit()}
