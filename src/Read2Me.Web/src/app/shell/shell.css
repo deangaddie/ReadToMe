@@ -368,6 +368,7 @@
     min-height: 0;
     padding: 0 var(--r2m-space-6) var(--r2m-space-6);
     overflow: auto;
+    scrollbar-gutter: stable;
     /* Pages query the room they have (`@container page`), not the viewport: the rail, the drawer
        and the History sheet dock beside this at 900 px and wider. */
     container: page / inline-size;
@@ -392,6 +393,7 @@
     border-left: 1px solid var(--r2m-outline);
     box-shadow: var(--r2m-shadow-2);
     overflow: auto;
+    overscroll-behavior: contain;
   }
   .shell__history-toggle--on {
     background: var(--r2m-accent-container);
