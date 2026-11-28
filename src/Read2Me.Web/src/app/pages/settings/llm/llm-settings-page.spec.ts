@@ -138,6 +138,21 @@ describe('r2m-llm-settings-page', () => {
     expect(page.querySelector('r2m-llm-test-console')?.textContent).toContain('Test "small"');
   });
 
+  it('turns text correction off on the base URL and model, and leaves the name alone (forms 3)', async () => {
+    const page = await render();
+
+    for (const key of ['baseUrl', 'model']) {
+      const input = page.querySelector(`input[data-field="${key}"]`)!;
+      expect(input.getAttribute('spellcheck')).toBe('false');
+      expect(input.getAttribute('autocapitalize')).toBe('none');
+      expect(input.getAttribute('autocorrect')).toBe('off');
+    }
+    const name = page.querySelector('input[data-field="name"]')!;
+    for (const attr of ['spellcheck', 'autocapitalize', 'autocorrect']) {
+      expect(name.hasAttribute(attr)).toBe(false);
+    }
+  });
+
   it('Save shows the validation message and sends nothing until the form is valid', async () => {
     const page = await render();
 
