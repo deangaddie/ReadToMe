@@ -79,24 +79,37 @@ export class FileDrop extends R2mElement {
 
   protected override connected(): void {
     this.classList.add('r2m-file-drop');
-    this.effect(() => this.classList.toggle('r2m-file-drop--over', this.#over()));
+    // A gate that closes mid-drag drops the highlight at once, not on the next dragleave.
+    this.effect(() =>
+      this.classList.toggle('r2m-file-drop--over', this.#over() && this.#block() === null),
+    );
     this.effect(() => this.classList.toggle('r2m-file-drop--read-only', this.#block() !== null));
+    // dragenter/dragleave fire for each child the pointer crosses and bubble here, so count them:
+    // the drag has left the zone only once the depth is back to zero (no relatedTarget needed).
+    let depth = 0;
+    const onDragEnter = () => depth++;
     // Blocked: no preventDefault, so the browser shows a no-drop cursor and never fires `drop`.
     const onDragOver = (e: DragEvent) => {
       if (this.#block() !== null) return;
       e.preventDefault();
       this.#over.set(true);
     };
-    const onDragLeave = () => this.#over.set(false);
+    const onDragLeave = () => {
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) this.#over.set(false);
+    };
     const onDrop = (e: DragEvent) => {
       e.preventDefault();
+      depth = 0;
       this.#over.set(false);
       if (this.#block() === null) this.#take(Array.from(e.dataTransfer?.files ?? []));
     };
+    this.addEventListener('dragenter', onDragEnter);
     this.addEventListener('dragover', onDragOver);
     this.addEventListener('dragleave', onDragLeave);
     this.addEventListener('drop', onDrop);
     this.onDisconnect(() => {
+      this.removeEventListener('dragenter', onDragEnter);
       this.removeEventListener('dragover', onDragOver);
       this.removeEventListener('dragleave', onDragLeave);
       this.removeEventListener('drop', onDrop);
