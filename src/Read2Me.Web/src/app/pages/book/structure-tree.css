@@ -22,8 +22,12 @@
     row-gap: 2px;
     padding-block: var(--r2m-space-1);
   }
+  /* Forced colours drop box-shadow but paint a transparent outline in a system colour, so the
+     outline keeps a ring there; inset so the scroll container doesn't clip it. */
   .tree__node:focus-visible {
     box-shadow: inset 0 0 0 2px var(--r2m-accent);
+    outline: 2px solid transparent;
+    outline-offset: -2px;
   }
   .tree__node--current {
     background: var(--r2m-nav-active-bg);
