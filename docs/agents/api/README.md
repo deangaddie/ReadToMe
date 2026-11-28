@@ -68,6 +68,20 @@ cross-origin reads staying refused. The dev server (`src/Read2Me.Web/dev.ts`) fo
 headers on plain HTTP and passes `Origin` and `Sec-Fetch-*` to its upstream hub socket, so the
 host's one check covers dev too; it has no check of its own.
 
+Every response, from any route, file mount, error page, redirect, 403 or 404, carries four headers
+(`Api/SecurityHeaders.cs`, first in the pipeline and written as the response starts, so an exception
+handler's `Response.Clear()` keeps them):
+
+- `X-Frame-Options: DENY`: the app never frames itself, so no page may frame it (clickjacking).
+- `X-Content-Type-Options: nosniff`: `/workspace` serves uploads typed by their extension.
+- `Cross-Origin-Opener-Policy: same-origin`: a page that opened the app keeps no handle on it. A
+  link out to another site must carry `rel="noopener"`, as the help panel's guide links do.
+- `Cross-Origin-Resource-Policy: same-origin`: another page's `<img>`, `<audio>` or `<script>` of a
+  host response fails, with request isolation's 403 or without it.
+
+Not sent: `Referrer-Policy` (the browser default, `strict-origin-when-cross-origin`, already holds)
+and `Permissions-Policy` (Chromium only). `frame-ancestors` belongs to the Content-Security-Policy.
+
 ## Parts
 
 Read the part for the area you are calling or changing:

@@ -56,6 +56,9 @@ namespace Read2Me.App
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env, WorkspaceStart workspaceStart)
         {
+            // First, so error pages, redirects, 403s and 404s carry the headers too.
+            app.UseSecurityHeaders();
+
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
