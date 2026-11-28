@@ -10,6 +10,14 @@ export const CAST_SORT_LABELS: Record<CastSort, string> = {
   readiness: 'Voice readiness',
 };
 
+/** Every text comparison in the roster: case-insensitive, numbers in natural order ("Guard 2" before "Guard 10"). */
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+/** What a sort change announces: the result, not the mechanism ("Sorted by lines, 42 characters"). */
+export function sortAnnouncement(sort: CastSort, visible: number): string {
+  return `Sorted by ${CAST_SORT_LABELS[sort].toLowerCase()}, ${visible} ${visible === 1 ? 'character' : 'characters'}`;
+}
+
 export interface ReadinessChip {
   status: StatusKind;
   label: string;
@@ -62,7 +70,7 @@ export function sortRows(
   sort: CastSort,
 ): CharacterSummaryDto[] {
   const byName = (a: CharacterSummaryDto, b: CharacterSummaryDto) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    collator.compare(a.name, b.name);
   const compare = (a: CharacterSummaryDto, b: CharacterSummaryDto): number => {
     if (a.isNarrator !== b.isNarrator) return a.isNarrator ? -1 : 1;
     switch (sort) {

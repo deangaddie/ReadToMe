@@ -6,6 +6,12 @@ The partials live in `ui/partials.ts`, `ui/menu.ts` and `ui/dialogs.ts`; the wor
 
 Advice comes before the click, never inside a confirm: an out-of-order action shows its one sentence through `adviceLine` (under the action, above a dialog's own button) or a menu entry's `hint`.
 
+## Announcements
+
+What `announce()` says (`ui/announcer.ts`) names the result, not the mechanism, and comes from a pure function in the feature folder with a table spec.
+
+- **A sort change** says `Sorted by <option>, N characters` (`1 character`), where `<option>` is the select's label in lower case and N counts the rows left visible after the search: `sortAnnouncement` in `pages/cast/cast-rows.ts`. It is said once per change, never on a search keystroke.
+
 ## Blocked reasons
 
 Every control that may be off answers one **Edit gate** (context/web.md), and its **blocked reason** and whether it is off both come from that one answer, so they always agree.

@@ -253,6 +253,34 @@ describe('r2m-cast-page', () => {
     expect(names(page)).toEqual(['Narrator', 'Arthur', 'Mina']);
   });
 
+  it('changing the sort announces the result once, counting the rows the search leaves', async () => {
+    const said: string[] = [];
+    // happy-dom has no ariaNotify: record what the announcer says on the document.
+    document.ariaNotify = (text: string) => void said.push(text);
+    try {
+      const { page } = await render();
+      const search = page.querySelector<HTMLInputElement>('input[type=search]')!;
+      search.value = 'a';
+      search.dispatchEvent(new Event('input'));
+      await page.rendered();
+      expect(said).toEqual([]);
+      const sort = page.querySelector<HTMLSelectElement>('.cast__sort select')!;
+      sort.value = 'lines';
+      sort.dispatchEvent(new Event('change'));
+      await page.rendered();
+      expect(names(page)).toEqual(['Narrator', 'Mina', 'Arthur']);
+      expect(said).toEqual(['Sorted by lines, 3 characters']);
+      search.value = 'godalming';
+      search.dispatchEvent(new Event('input'));
+      sort.value = 'name';
+      sort.dispatchEvent(new Event('change'));
+      await page.rendered();
+      expect(said).toEqual(['Sorted by lines, 3 characters', 'Sorted by name, 1 character']);
+    } finally {
+      delete document.ariaNotify;
+    }
+  });
+
   it('the route selects the character and marks its row', async () => {
     const { page } = await render('projects/dracula/cast/arthur');
     expect(page.querySelector('.cast--detail')).not.toBeNull();

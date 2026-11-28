@@ -16,6 +16,7 @@ import { type ReadonlySignal, computed, signal, untracked } from '@app/core/sign
 import { adoptStyles } from '@app/core/styles';
 import { LiveService } from '@app/live/live.service';
 import { Preflight } from '@app/shared/preflight';
+import { announce } from '@app/ui/announcer';
 import { ConfirmService, PromptService } from '@app/ui/dialogs';
 import { emptyState, gated, icon, skeleton, statusChip } from '@app/ui/partials';
 import { ToastService } from '@app/ui/toast';
@@ -28,6 +29,7 @@ import {
   filterRows,
   hasBookIcon,
   readinessChip,
+  sortAnnouncement,
   sortRows,
 } from './cast-rows';
 import { castPath } from './cast-path';
@@ -236,7 +238,7 @@ export class CastPage extends R2mElement {
                 aria-label="Sort"
                 .value=${this.sort()}
                 @change=${(e: Event) =>
-                  this.sort.set((e.target as HTMLSelectElement).value as CastSort)}
+                  this.changeSort((e.target as HTMLSelectElement).value as CastSort)}
               >
                 ${CAST_SORTS.map(
                   (s) =>
@@ -254,6 +256,12 @@ export class CastPage extends R2mElement {
         <section class="cast__detail" aria-label="Character">${this.detail(characterId)}</section>
       </div>
     `;
+  }
+
+  /** Reorders the roster and says the result once (#499): the select alone only reads its new value. */
+  private changeSort(sort: CastSort): void {
+    this.sort.set(sort);
+    announce(sortAnnouncement(sort, this.visibleRows().length));
   }
 
   private roster(
