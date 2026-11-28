@@ -99,7 +99,7 @@
     gap: var(--r2m-space-1);
     max-width: 100%;
     padding: 1px 6px;
-    border: 1px solid var(--r2m-outline-variant);
+    border: 1px solid var(--r2m-outline);
     border-radius: var(--r2m-radius-sm);
     background: var(--r2m-surface-container);
     color: var(--r2m-text);

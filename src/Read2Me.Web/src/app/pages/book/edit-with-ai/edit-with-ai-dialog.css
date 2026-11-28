@@ -23,7 +23,7 @@
   .edit__step {
     padding: var(--r2m-space-1) var(--r2m-space-2);
     border-radius: var(--r2m-radius-pill);
-    border: 1px solid var(--r2m-outline-variant);
+    border: 1px solid var(--r2m-outline);
     font-size: var(--r2m-text-sm);
     color: var(--r2m-text-muted);
   }
