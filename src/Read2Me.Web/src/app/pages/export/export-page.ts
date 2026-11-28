@@ -354,10 +354,17 @@ export class ExportPage extends R2mElement {
   }
 
   private outputTemplate(output: AssemblyOutputDto) {
-    return html`<li class="export__output" data-output=${output.fileName}>
+    // Focus on the Download link (or Delete, while it has no tip) shows a cut file name.
+    return html`<li
+      class="export__output"
+      data-output=${output.fileName}
+      data-tooltip-delegate=".export__output-name"
+    >
       ${icon('audio_file', 'export__output-icon')}
       <div class="export__output-main">
-        <span class="export__output-name">${output.fileName}</span>
+        <span class="export__output-name" data-tooltip=${output.fileName} data-tooltip-overflow
+          >${output.fileName}</span
+        >
         <span class="export__output-meta">
           ${formatBytes(output.sizeBytes)} · ${formatOutputDate(output.createdAt)}
         </span>

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { html, render } from 'lit-html';
-import { installTooltips, withTip } from './tooltip';
+import { installTooltips, revealTip, withTip } from './tooltip';
 import { description, hasDescription } from '../../testing/description';
 
 // happy-dom has no popover methods or anchor positioning; where the tip lands is covered in E2E.
@@ -255,6 +255,33 @@ describe('installTooltips', () => {
       elapse();
       expect(open).toBe(false);
     });
+
+    it('a fitting label inside a trigger with its own tip shows that tip instead', () => {
+      const button = target('Assign a speaker first');
+      const label = overflowText('Generate audio', { content: 90, box: 180 });
+      button.append(label);
+      hover(label);
+      elapse();
+      expect(open).toBe(true);
+      expect(tip.textContent).toBe('Assign a speaker first');
+      expect(button.style.getPropertyValue('anchor-name')).toBe('--r2m-tooltip');
+    });
+
+    it('moving between that label and its trigger leaves the open tip as it is', () => {
+      const button = target('Assign a speaker first');
+      const label = overflowText('Generate audio', { content: 90, box: 180 });
+      button.append(label);
+      hover(label);
+      elapse();
+      hover(button);
+      expect(pending.size).toBe(0);
+      hover(label);
+      let reopened = false;
+      proto['showPopover'] = () => (reopened = true);
+      elapse();
+      expect(open).toBe(true);
+      expect(reopened).toBe(false);
+    });
   });
 
   describe('data-tooltip-delegate (a focusable element whose tip is on a descendant)', () => {
@@ -285,6 +312,124 @@ describe('installTooltips', () => {
       const { row: item } = row({ content: 100, box: 120 });
       item.dispatchEvent(new Event('focusin', { bubbles: true }));
       elapse();
+      expect(open).toBe(false);
+    });
+
+    it('focusing a control inside the element with no tip of its own shows the descendant tip', () => {
+      const { row: item } = row({ content: 300, box: 120 });
+      const link = document.createElement('a');
+      link.href = '#';
+      item.append(link);
+      link.dispatchEvent(new Event('focusin', { bubbles: true }));
+      elapse();
+      expect(open).toBe(true);
+      expect(tip.textContent).toBe('CHAPTER II. THE SCIENCE OF DEDUCTION.');
+    });
+
+    it('a control inside the element with a tip of its own keeps it', () => {
+      const { row: item } = row({ content: 300, box: 120 });
+      const remove = document.createElement('button');
+      remove.dataset['tooltip'] = 'Delete';
+      item.append(remove);
+      remove.dispatchEvent(new Event('focusin', { bubbles: true }));
+      elapse();
+      expect(tip.textContent).toBe('Delete');
+    });
+
+    it('on an element with a tip of its own, a cut descendant wins and a fitting one gives way', () => {
+      const widths = { content: 300, box: 120 };
+      const { row: item } = row(widths);
+      item.dataset['tooltip'] = 'Assign a speaker first';
+      item.dispatchEvent(new Event('focusin', { bubbles: true }));
+      elapse();
+      expect(tip.textContent).toBe('CHAPTER II. THE SCIENCE OF DEDUCTION.');
+      widths.content = 100;
+      item.dispatchEvent(new Event('focusin', { bubbles: true }));
+      elapse();
+      expect(tip.textContent).toBe('Assign a speaker first');
+    });
+  });
+
+  describe('revealTip (a highlight that does not move focus: aria-activedescendant)', () => {
+    it('shows the element\x27s tip after the delay, keeping the overflow gate', () => {
+      const cut = document.body.appendChild(
+        overflowText('Don Quixote of La Mancha Knight of the Sorrowful Countenance', {
+          content: 300,
+          box: 120,
+        }),
+      );
+      revealTip(cut);
+      elapse();
+      expect(open).toBe(true);
+      expect(tip.textContent).toBe('Don Quixote of La Mancha Knight of the Sorrowful Countenance');
+
+      revealTip(document.body.appendChild(overflowText('Sancho', { content: 50, box: 120 })));
+      elapse();
+      expect(open).toBe(false);
+    });
+  });
+
+  describe('touch (a tap is the hover)', () => {
+    const tap = (el: Element) =>
+      el.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'touch' }));
+
+    it('a tip opened by a tap stays when the tap moves focus away (a row link opening its page)', () => {
+      const button = target('Don Quixote of La Mancha Knight of the Sorrowful Countenance');
+      tap(button);
+      button.dispatchEvent(new Event('focusin', { bubbles: true }));
+      button.dispatchEvent(new Event('focusout', { bubbles: true }));
+      elapse();
+      expect(open).toBe(true);
+      button.dispatchEvent(new Event('focusout', { bubbles: true }));
+      expect(open).toBe(true);
+    });
+
+    it('focus moving into a dialog or menu the tap opened still hides it', () => {
+      const button = target('Delete');
+      tap(button);
+      elapse();
+      const menu = document.createElement('div');
+      menu.popover = 'auto';
+      const item = menu.appendChild(document.createElement('button'));
+      document.body.append(menu);
+      button.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: item }));
+      expect(open).toBe(false);
+    });
+
+    it('a tap elsewhere hides it', () => {
+      tap(target('Rocinante'));
+      elapse();
+      tap(document.body);
+      elapse();
+      expect(open).toBe(false);
+    });
+
+    it('focus on another trigger still takes over from it', () => {
+      tap(target('Rocinante'));
+      elapse();
+      const other = target('Dapple');
+      other.dispatchEvent(new Event('focusin', { bubbles: true }));
+      elapse();
+      expect(tip.textContent).toBe('Dapple');
+      other.dispatchEvent(new Event('focusout', { bubbles: true }));
+      expect(open).toBe(false);
+    });
+
+    it('shows nothing for a trigger taken out of the page before the delay ends', () => {
+      const button = target('Sancho Panza');
+      tap(button);
+      button.remove();
+      elapse();
+      expect(open).toBe(false);
+    });
+
+    it('a mouse-opened tip still hides on focus out', () => {
+      const button = target('Rocinante');
+      button.dispatchEvent(
+        new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }),
+      );
+      elapse();
+      button.dispatchEvent(new Event('focusout', { bubbles: true }));
       expect(open).toBe(false);
     });
   });

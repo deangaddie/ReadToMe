@@ -8,13 +8,23 @@
  * `HIDE_DELAY_MS`, and entering either one cancels that, so the pointer can cross onto it. Focus
  * out (with the pointer off the tip) and Escape still hide it at once.
  *
+ * A tap is the hover on touch: a tip a tap opened outlives focus leaving (a tapped row link that
+ * opens its page), unless focus goes into a dialog or popover the tap opened; the next tap
+ * elsewhere or Escape closes it. A trigger gone from the page by
+ * the end of the delay shows nothing.
+ *
  * Two opt-ins:
  * - `data-tooltip-overflow` on the element: show the tip only when, at show time, its content is
  *   wider than its box (`scrollWidth > clientWidth`), i.e. a one-line text cut off by an ellipsis.
- *   Measured once per hover or focus, with no observer.
- * - `data-tooltip-delegate="<selector>"` on a focusable element with no tip of its own: focusing
- *   it shows the tip of the descendant the selector names, anchored to that descendant (a tree row
- *   whose title carries the tip).
+ *   Measured once per hover or focus, with no observer. A label that fits hands over to the
+ *   nearest ancestor with a tip (a button whose own tip gives advice).
+ * - `data-tooltip-delegate="<selector>"` on an element: focusing it, or a control inside it with
+ *   no tip of its own, shows the tip of the descendant the selector names, anchored to that
+ *   descendant (a tree row whose title carries the tip, the Download link of an export row). On an
+ *   element with a tip of its own, the descendant goes first and, fitting, hands back to it.
+ *
+ * `revealTip(el)` shows an element's tip as focus would, for a highlight that leaves focus where
+ * it is (a listbox option made active through `aria-activedescendant`).
  *
  * The shared hint is the visual cue only: no trigger points at it, since it holds a trigger's text
  * only while open. A tip that says more than the trigger's name goes through `withTip`, which
@@ -59,6 +69,13 @@ class TipDirective extends Directive {
  */
 export const withTip = directive(TipDirective);
 
+const REVEAL_EVENT = 'r2m-tooltip-reveal';
+
+/** Shows `el`'s tip as if it took focus, overflow gate included; focus stays where it is. */
+export function revealTip(el: HTMLElement): void {
+  el.dispatchEvent(new Event(REVEAL_EVENT, { bubbles: true }));
+}
+
 const SHOW_DELAY_MS = 400;
 /** Time to move the pointer from the trigger onto the tip before it closes. */
 const HIDE_DELAY_MS = 200;
@@ -71,6 +88,9 @@ export function installTooltips(root: Document = document): void {
   root.body.append(tip);
 
   let anchor: HTMLElement | null = null;
+  /** The trigger of a pending show, and whether a tap opened the pending or open tip. */
+  let pending: HTMLElement | null = null;
+  let tapped = false;
   let showTimer: ReturnType<typeof setTimeout> | undefined;
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
   const isOpen = () => tip.matches(':popover-open');
@@ -80,13 +100,21 @@ export function installTooltips(root: Document = document): void {
     clearTimeout(hideTimer);
   };
 
-  const show = (target: HTMLElement) => {
+  /** The element whose tip shows: a fitting overflow label hands over to the nearest tipped ancestor. */
+  const resolve = (el: HTMLElement | null): HTMLElement | null => {
+    while (el && 'tooltipOverflow' in el.dataset && el.scrollWidth <= el.clientWidth)
+      el = el.parentElement?.closest<HTMLElement>('[data-tooltip]') ?? null;
+    return el;
+  };
+  const show = (trigger: HTMLElement, byTap = false) => {
     cancelTimers();
+    pending = trigger;
+    tapped = byTap;
     showTimer = setTimeout(() => {
-      if ('tooltipOverflow' in target.dataset && target.scrollWidth <= target.clientWidth) {
-        hide();
-        return;
-      }
+      pending = null;
+      const target = trigger.isConnected ? resolve(trigger) : null;
+      if (!target) return hide();
+      if (target === anchor && isOpen()) return; // the pointer moved between a label and its trigger
       anchor?.style.removeProperty('anchor-name');
       anchor = target;
       target.style.setProperty('anchor-name', '--r2m-tooltip');
@@ -97,6 +125,8 @@ export function installTooltips(root: Document = document): void {
   };
   const hide = () => {
     cancelTimers();
+    pending = null;
+    tapped = false;
     anchor?.style.removeProperty('anchor-name');
     anchor = null;
     if (isOpen()) tip.hidePopover();
@@ -109,10 +139,13 @@ export function installTooltips(root: Document = document): void {
   };
   const targetOf = (e: Event) =>
     (e.target instanceof Element ? e.target.closest<HTMLElement>('[data-tooltip]') : null) ?? null;
-  const delegateOf = (e: Event) => {
-    if (!(e.target instanceof HTMLElement)) return null;
-    const selector = e.target.dataset['tooltipDelegate'];
-    return selector ? e.target.querySelector<HTMLElement>(selector) : null;
+  /** On focus: the delegated descendant, unless the focused control inside the host has its own tip. */
+  const focusTargetOf = (e: Event) => {
+    const own = targetOf(e);
+    if (!(e.target instanceof Element)) return own;
+    const host = e.target.closest<HTMLElement>('[data-tooltip-delegate]');
+    const delegated = host?.querySelector<HTMLElement>(host.dataset['tooltipDelegate'] ?? '');
+    return delegated && (!own || own.contains(host!)) ? delegated : own;
   };
 
   root.addEventListener('pointerover', (e) => {
@@ -122,14 +155,21 @@ export function installTooltips(root: Document = document): void {
     }
     const target = targetOf(e);
     if (target && target === anchor) clearTimeout(hideTimer);
-    else if (target) show(target);
+    else if (target) show(target, (e as PointerEvent).pointerType === 'touch');
     else hideSoon();
   });
   root.addEventListener('focusin', (e) => {
-    const target = targetOf(e) ?? delegateOf(e);
-    if (target) show(target);
+    const target = focusTargetOf(e);
+    // The tap that focused its own trigger keeps the tip a tap's.
+    if (target) show(target, tapped && (target === pending || target === anchor));
   });
   // A click on the tip blurs its trigger; the pointer still on the tip keeps it.
-  root.addEventListener('focusout', () => tip.matches(':hover') || hide());
+  root.addEventListener('focusout', (e) => {
+    const into = (e as FocusEvent).relatedTarget;
+    const intoLayer = into instanceof Element && !!into.closest('dialog, [popover]');
+    if ((tapped && !intoLayer) || tip.matches(':hover')) return;
+    hide();
+  });
   root.addEventListener('keydown', (e) => e.key === 'Escape' && hide());
+  root.addEventListener(REVEAL_EVENT, (e) => e.target instanceof HTMLElement && show(e.target));
 }

@@ -373,6 +373,7 @@ export class AppShell extends R2mElement {
             type="button"
             class="r2m-button shell__next-main"
             data-tooltip=${next.tooltip ?? nothing}
+            data-tooltip-delegate=".shell__next-label"
             ?disabled=${disabled}
             @click=${
               next.kind === 'waiting'
@@ -380,7 +381,9 @@ export class AppShell extends R2mElement {
                 : () => void runner.act({ step: next.step, action: next.action })
             }
           >
-            <span class="shell__next-label">${next.label}</span>
+            <span class="shell__next-label" data-tooltip=${next.label} data-tooltip-overflow
+              >${next.label}</span
+            >
           </button>`;
     const pills =
       next.kind !== 'allDone'

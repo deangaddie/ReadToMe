@@ -155,7 +155,7 @@ export class VoiceCard extends R2mElement {
     const bodyId = `voice-body-${voice.id}`;
     return html`
       <div class="r2m-expansion voice-card__panel">
-        <div class="voice-card__header">
+        <div class="voice-card__header" data-tooltip-delegate=".voice-card__description">
           <h4 class="voice-card__heading">
             <button
               type="button"
@@ -203,7 +203,13 @@ export class VoiceCard extends R2mElement {
               ></r2m-inline-edit>
               ${
                 voice.description
-                  ? html`<span class="voice-card__description">${voice.description}</span>`
+                  ? html`<span
+                      class="voice-card__description"
+                      data-tooltip=${voice.description}
+                      data-tooltip-overflow
+                      @click=${this.toggle}
+                      >${voice.description}</span
+                    >`
                   : nothing
               }
             </span>

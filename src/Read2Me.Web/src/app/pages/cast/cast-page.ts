@@ -289,13 +289,19 @@ export class CastPage extends R2mElement {
                     class="cast__row ${selected ? 'cast__row--selected' : ''}"
                     href=${castPath(folder, row.id)}
                     data-character-id=${row.id}
+                    data-tooltip-delegate=".cast__name"
                     aria-current=${selected ? 'page' : nothing}
                   >
                     ${icon(
                       hasBookIcon(row) ? 'menu_book' : 'person',
                       `cast__icon ${hasBookIcon(row) ? 'cast__icon--book' : ''}`,
                     )}
-                    <span class="cast__name">${displayName(row, narrator)}</span>
+                    <span
+                      class="cast__name"
+                      data-tooltip=${displayName(row, narrator)}
+                      data-tooltip-overflow
+                      >${displayName(row, narrator)}</span
+                    >
                     ${
                       row.seriesLink
                         ? html`<span
