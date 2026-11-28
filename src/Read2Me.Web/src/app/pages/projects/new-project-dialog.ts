@@ -28,10 +28,15 @@ adoptStyles(newProjectCss);
 
 type DraftField = keyof NewProjectErrors;
 
+/** The fields in reading order: a failed submit focuses the first one with an error. */
+const FIELD_ORDER: readonly DraftField[] = ['bookTitle', 'title', 'author', 'file'];
+
 /**
  * New project dialog (design §6.1): book title, project title (follows the book title until
- * edited), author and an epub/txt drop. Create stays disabled until every field is valid; the
- * upload runs here so a host rejection (duplicate title, unreadable file) shows inline and the
+ * edited), author and an epub/txt drop. A form: Create stays enabled (disabled only while the
+ * upload runs), and submitting an invalid draft shows every error and focuses the first invalid
+ * field. A field's error shows once it is blurred (the drop: once a file is picked or refused) or
+ * the form submitted, never while typing. The upload runs here so a host rejection (duplicate title, unreadable file) shows inline and the
  * form survives. Closes with the new project's folder name; Cancel and Escape close with
  * nothing, a backdrop click does not (`closedBy: 'closerequest'`: the second click of a double-click
  * in the OS file picker can land on the backdrop). While the upload runs it refuses to close.
@@ -58,76 +63,77 @@ export class NewProjectDialog extends R2mElement implements ClosableContent {
     const fileMissing = this.#error('file');
     return html`
       <h2 class="r2m-dialog__title">New project</h2>
-      <div class="r2m-dialog__content new-project__content">
-        ${this.#field('bookTitle', 'Book title', draft.bookTitle, (v) => this.#setBookTitle(v), true)}
-        ${this.#field(
-          'title',
-          'Project title',
-          draft.title,
-          (v) => this.#setTitle(v),
-          false,
-          'Names the project folder. Follows the book title until you change it.',
-        )}
-        ${this.#field('author', 'Author', draft.author, (v) => this.#setAuthor(v))}
+      <form novalidate @submit=${(e: SubmitEvent) => this.#onSubmit(e)}>
+        <div class="r2m-dialog__content new-project__content">
+          ${this.#field('bookTitle', 'Book title', draft.bookTitle, (v) => this.#setBookTitle(v), true)}
+          ${this.#field(
+            'title',
+            'Project title',
+            draft.title,
+            (v) => this.#setTitle(v),
+            false,
+            'Names the project folder. Follows the book title until you change it.',
+          )}
+          ${this.#field('author', 'Author', draft.author, (v) => this.#setAuthor(v))}
 
-        <r2m-file-drop
-          .accept=${BOOK_ACCEPT}
-          .maxBytes=${BOOK_MAX_BYTES}
-          .label=${'Drop the book here'}
-          .hint=${'epub or txt, up to 100 MB'}
-          @files=${(e: Event) => this.onFiles((e as CustomEvent<File[]>).detail)}
-          @rejected=${(e: Event) => this.onRejected((e as CustomEvent<RejectedFile[]>).detail)}
-        ></r2m-file-drop>
+          <r2m-file-drop
+            .accept=${BOOK_ACCEPT}
+            .maxBytes=${BOOK_MAX_BYTES}
+            .label=${'Drop the book here'}
+            .hint=${'epub or txt, up to 100 MB'}
+            @files=${(e: Event) => this.onFiles((e as CustomEvent<File[]>).detail)}
+            @rejected=${(e: Event) => this.onRejected((e as CustomEvent<RejectedFile[]>).detail)}
+          ></r2m-file-drop>
 
-        <div class="new-project__file">
-          ${
-            draft.file
-              ? statusChip({
-                  status: 'ok',
-                  icon: 'description',
-                  label: draft.file.name,
-                  compact: true,
-                })
-              : nothing
-          }
-          ${
-            fileError
-              ? statusChip({ status: 'error', label: fileError, compact: true })
-              : fileMissing
-                ? statusChip({ status: 'warn', label: fileMissing, compact: true })
+          <div class="new-project__file">
+            ${
+              draft.file
+                ? statusChip({
+                    status: 'ok',
+                    icon: 'description',
+                    label: draft.file.name,
+                    compact: true,
+                  })
                 : nothing
+            }
+            ${
+              fileError
+                ? statusChip({ status: 'error', label: fileError, compact: true })
+                : fileMissing
+                  ? statusChip({ status: 'warn', label: fileMissing, compact: true })
+                  : nothing
+            }
+          </div>
+
+          ${
+            submitError
+              ? html`<div class="new-project__submit-error">
+                  ${statusChip({ status: 'error', label: submitError })}
+                </div>`
+              : nothing
           }
         </div>
 
-        ${
-          submitError
-            ? html`<div class="new-project__submit-error">
-                ${statusChip({ status: 'error', label: submitError })}
-              </div>`
-            : nothing
-        }
-      </div>
+        ${busy ? html`<progress aria-label="Uploading"></progress>` : nothing}
 
-      ${busy ? html`<progress aria-label="Uploading"></progress>` : nothing}
-
-      <div class="r2m-dialog__actions">
-        <button
-          type="button"
-          class="r2m-button new-project__cancel"
-          ?disabled=${busy}
-          @click=${() => this.cancel()}
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          class="r2m-button r2m-button--filled new-project__create"
-          ?disabled=${!this.#valid() || busy}
-          @click=${() => void this.create()}
-        >
-          ${icon('add')} Create
-        </button>
-      </div>
+        <div class="r2m-dialog__actions">
+          <button
+            type="button"
+            class="r2m-button new-project__cancel"
+            ?disabled=${busy}
+            @click=${() => this.cancel()}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="r2m-button r2m-button--filled new-project__create"
+            ?disabled=${busy}
+          >
+            ${icon('add')} Create
+          </button>
+        </div>
+      </form>
     `;
   }
 
@@ -153,6 +159,7 @@ export class NewProjectDialog extends R2mElement implements ClosableContent {
         aria-invalid=${error ? 'true' : nothing}
         aria-describedby=${help ? describedBy : nothing}
         @input=${(e: Event) => onInput((e.target as HTMLInputElement).value)}
+        @blur=${() => this.#touch(name)}
       />
       ${
         help
@@ -173,32 +180,42 @@ export class NewProjectDialog extends R2mElement implements ClosableContent {
 
   #setBookTitle(value: string): void {
     this.#draft.update((d) => setBookTitle(d, value));
-    this.#touch('bookTitle');
   }
 
   #setTitle(value: string): void {
     this.#draft.update((d) => setTitle(d, value));
-    this.#touch('title');
   }
 
   #setAuthor(value: string): void {
     this.#draft.update((d) => setAuthor(d, value));
-    this.#touch('author');
   }
 
   onFiles(files: File[]): void {
     const file = files[0];
     if (file) this.#draft.update((d) => setFile(d, file));
+    this.#touch('file');
   }
 
   onRejected(rejected: RejectedFile[]): void {
     const first = rejected[0];
     if (first) this.#draft.update((d) => rejectFile(d, first));
+    this.#touch('file');
   }
 
+  #onSubmit(e: SubmitEvent): void {
+    e.preventDefault();
+    void this.create();
+  }
+
+  /** Submit: every field touched; an invalid draft focuses its first invalid field and sends nothing. */
   async create(): Promise<void> {
+    if (this.#busy()) return;
     this.#touched.set({ bookTitle: true, title: true, author: true, file: true });
-    if (!this.#valid() || this.#busy()) return;
+    if (!this.#valid()) {
+      await this.rendered();
+      this.#firstInvalid()?.focus();
+      return;
+    }
     this.#busy.set(true);
     this.#submitError.set(null);
     try {
@@ -218,6 +235,16 @@ export class NewProjectDialog extends R2mElement implements ClosableContent {
 
   cancel(): void {
     requestDialogClose(this);
+  }
+
+  /** The control of the first field in reading order with an error; the file's is the drop's Choose file. */
+  #firstInvalid(): HTMLElement | null {
+    const errors = this.#errors();
+    const key = FIELD_ORDER.find((k) => errors[k]);
+    if (!key) return null;
+    return key === 'file'
+      ? this.querySelector<HTMLElement>('r2m-file-drop button')
+      : this.querySelector<HTMLElement>(`input[name="${key}"]`);
   }
 
   #touch(key: DraftField): void {

@@ -133,9 +133,14 @@ export function deepestAnchor(selection: AnchorSelection): Anchor | null {
   return null;
 }
 
-/** Add is enabled once a voice and an anchor are both chosen. */
-export function canSubmitRule(voiceId: Guid | null, selection: AnchorSelection): boolean {
-  return voiceId !== null && deepestAnchor(selection) !== null;
+export type RuleErrors = Partial<Record<'voice' | 'anchor', string>>;
+
+/** What stops the rule being added: it needs a voice and an anchor. Empty once it can be submitted. */
+export function ruleErrors(voiceId: Guid | null, selection: AnchorSelection): RuleErrors {
+  const errors: RuleErrors = {};
+  if (voiceId === null) errors.voice = 'Choose a voice';
+  if (deepestAnchor(selection) === null) errors.anchor = 'Choose an anchor: at least a volume';
+  return errors;
 }
 
 /**

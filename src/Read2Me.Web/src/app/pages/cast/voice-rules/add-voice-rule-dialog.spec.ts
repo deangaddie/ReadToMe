@@ -77,19 +77,64 @@ const labels = (dialog: Element, field: string) =>
   );
 
 describe('r2m-add-voice-rule-dialog', () => {
-  it('preselects the first voice, lists the volumes and keeps Add off until an anchor is chosen', async () => {
+  it('preselects the first voice, lists the volumes, and Add is an enabled submit', async () => {
     const { dialog } = await open();
     expect(select(dialog, 'voice')?.value).toBe('va');
     expect(labels(dialog, 'volume')).toEqual(['v1']);
     expect(select(dialog, 'part')).toBeNull();
-    expect(add(dialog).disabled).toBe(true);
+    expect(add(dialog).type).toBe('submit');
+    expect(add(dialog).closest('form')).not.toBeNull();
+    expect(add(dialog).disabled).toBe(false);
+    expect(dialog.querySelector('.r2m-field__error')).toBeNull();
+  });
+
+  it('Add with no anchor shows the error on Volume, focuses it and closes with nothing', async () => {
+    const { result, dialog } = await open();
+    let answered = false;
+    void result.then(() => (answered = true));
+    add(dialog).click();
+    await settle();
+    await dialog.rendered();
+
+    const error = dialog.querySelector('.r2m-field__error')!;
+    expect(error.textContent).toBe('Choose an anchor: at least a volume');
+    expect(select(dialog, 'volume')!.getAttribute('aria-invalid')).toBe('true');
+    expect(select(dialog, 'volume')!.getAttribute('aria-describedby')).toBe(error.id);
+    expect(document.activeElement).toBe(select(dialog, 'volume'));
+    expect(answered).toBe(false);
+
+    await choose(dialog, 'volume', 'v1');
+    expect(dialog.querySelector('.r2m-field__error')).toBeNull();
+  });
+
+  it('Add with no voice to choose focuses the voice select first', async () => {
+    const { dialog } = await open([]);
+    add(dialog).click();
+    await settle();
+    await dialog.rendered();
+    expect(Array.from(dialog.querySelectorAll('.r2m-field__error'), (e) => e.textContent)).toEqual([
+      'Choose a voice',
+      'Choose an anchor: at least a volume',
+    ]);
+    expect(document.activeElement).toBe(select(dialog, 'voice'));
+  });
+
+  it('the anchor is touched on change: clearing the volume shows its error', async () => {
+    const { dialog } = await open();
+    await choose(dialog, 'volume', 'v1');
+    expect(dialog.querySelector('.r2m-field__error')).toBeNull();
+    dialog.querySelector<HTMLButtonElement>('[aria-label="Clear volume"]')!.click();
+    await settle();
+    await dialog.rendered();
+    expect(dialog.querySelector('.r2m-field__error')?.textContent).toBe(
+      'Choose an anchor: at least a volume',
+    );
   });
 
   it('cascades volume → part → chapter → paragraph → line, each level fetched on pick', async () => {
     const { result, dialog } = await open();
     await choose(dialog, 'voice', 'vb');
     await choose(dialog, 'volume', 'v1');
-    expect(add(dialog).disabled).toBe(false);
     expect(labels(dialog, 'part')).toEqual(['Untitled']);
     await choose(dialog, 'part', 'p1');
     expect(labels(dialog, 'chapter')).toEqual(['Chapter 1', 'Chapter 3']);
