@@ -147,6 +147,20 @@ describe('r2m-audio-player', () => {
     expect(viewport.watched(player)).toBe(false);
   });
 
+  it('watches again when it is moved before nearing the viewport, and not once it has', async () => {
+    const { player } = await mount();
+    player.remove();
+    document.body.append(player);
+    expect(viewport.watched(player)).toBe(true);
+
+    viewport.enter(player);
+    player.remove();
+    document.body.append(player);
+    await player.rendered();
+    expect(viewport.watched(player)).toBe(false);
+    expect(player.querySelector('audio')!.getAttribute('preload')).toBe('metadata');
+  });
+
   it('plays before it has neared the viewport, and is near from then on', async () => {
     const { player, audio } = await mount();
     player.querySelector<HTMLButtonElement>('.r2m-audio-player__toggle')!.click();

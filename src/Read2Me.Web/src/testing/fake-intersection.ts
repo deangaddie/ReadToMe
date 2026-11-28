@@ -44,7 +44,7 @@ export function fakeIntersection() {
       };
     },
     enter(el: Element, isIntersecting = true): void {
-      for (const observer of [...live]) {
+      for (const observer of live) {
         if (!observer.targets.has(el)) continue;
         const entry = { target: el, isIntersecting } as unknown as IntersectionObserverEntry;
         observer.callback([entry], observer as unknown as IntersectionObserver);
