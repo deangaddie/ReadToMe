@@ -36,8 +36,8 @@ const FIELD_ORDER: readonly DraftField[] = ['bookTitle', 'title', 'author', 'fil
  * edited), author and an epub/txt drop. A form: Create stays enabled (disabled only while the
  * upload runs), and submitting an invalid draft shows every error and focuses the first invalid
  * field. A field's error shows once it is blurred (the drop: once a file is picked or refused) or
- * the form submitted, never while typing. The upload runs here so a host rejection (duplicate title, unreadable file) shows inline and the
- * form survives. Closes with the new project's folder name; Cancel and Escape close with
+ * the form submitted, never while typing. The upload runs here so a host rejection (duplicate
+ * title, unreadable file) shows inline and the form survives. Closes with the new project's folder name; Cancel and Escape close with
  * nothing, a backdrop click does not (`closedBy: 'closerequest'`: the second click of a double-click
  * in the OS file picker can land on the backdrop). While the upload runs it refuses to close.
  */
