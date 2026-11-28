@@ -208,20 +208,20 @@ export class StructureTree extends R2mElement {
             }
             ${
               selection
-                ? html`<input
-                    type="checkbox"
-                    class="tree__select"
-                    tabindex="-1"
-                    aria-label="Select ${selection} of ${node.title}"
-                    .checked=${(nodeStates[node.id] ?? 'unchecked') === 'checked'}
-                    .indeterminate=${(nodeStates[node.id] ?? 'unchecked') === 'indeterminate'}
-                    @click=${(e: Event) => e.stopPropagation()}
-                    @change=${(e: Event) =>
-                      this.emit('toggle-node', {
-                        node,
-                        on: (e.target as HTMLInputElement).checked,
-                      })}
-                  />`
+                ? html`<label class="r2m-hit tree__hit" @click=${(e: Event) => e.stopPropagation()}
+                    ><input
+                      type="checkbox"
+                      class="tree__select"
+                      tabindex="-1"
+                      aria-label="Select ${selection} of ${node.title}"
+                      .checked=${(nodeStates[node.id] ?? 'unchecked') === 'checked'}
+                      .indeterminate=${(nodeStates[node.id] ?? 'unchecked') === 'indeterminate'}
+                      @change=${(e: Event) =>
+                        this.emit('toggle-node', {
+                          node,
+                          on: (e.target as HTMLInputElement).checked,
+                        })}
+                  /></label>`
                 : nothing
             }
             <span

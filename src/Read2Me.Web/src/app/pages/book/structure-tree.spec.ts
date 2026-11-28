@@ -435,6 +435,26 @@ describe('r2m-structure-tree', () => {
       ]);
       expect(opened).toEqual([]);
     });
+
+    it('a click on the hit area around the box ticks it and does not open the chapter', async () => {
+      await mount();
+      tree.selection = 'items';
+      await tree.rendered();
+      const toggles: boolean[] = [];
+      const opened: string[] = [];
+      tree.addEventListener('toggle-node', (e) =>
+        toggles.push((e as CustomEvent<{ on: boolean }>).detail.on),
+      );
+      tree.addEventListener('select-chapter', (e) =>
+        opened.push((e as CustomEvent<string>).detail),
+      );
+
+      // The 24 px area is the label's ::after, so a click there lands on the label.
+      const hit = box('Alpha')!.closest<HTMLLabelElement>('label.r2m-hit')!;
+      hit.click();
+      expect(toggles).toEqual([true]);
+      expect(opened).toEqual([]);
+    });
   });
 
   describe('node menu', () => {

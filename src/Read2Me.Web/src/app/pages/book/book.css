@@ -265,14 +265,22 @@
     gap: var(--r2m-space-2);
     padding-top: 4px;
   }
+  /* The label draws the 24 px hit area (.r2m-hit) and holds the box's place in the gutter. The reader
+     list clips at the row's edge, one padding to the left, so the area reaches no further that way. */
+  .r2m-paragraph__hit {
+    --r2m-hit-reach-start: var(--r2m-space-1);
+    display: flex;
+    margin-top: 2px;
+  }
   .r2m-paragraph__select {
-    margin: 2px 0 0;
+    margin: 0;
     width: 13px;
     height: 13px;
     accent-color: var(--r2m-accent);
   }
   .r2m-paragraph__select--none {
     display: inline-block;
+    margin-top: 2px;
   }
   .r2m-paragraph__rail {
     width: 3px;
@@ -312,13 +320,16 @@
     outline-offset: 1px;
     border-radius: var(--r2m-radius-pill);
   }
-  .r2m-item__select {
+  .r2m-item__hit {
     flex: 0 0 auto;
+    display: flex;
+    align-self: center;
+  }
+  .r2m-item__select {
     margin: 0;
     width: 13px;
     height: 13px;
     accent-color: var(--r2m-accent);
-    align-self: center;
   }
   .r2m-paragraph__lock,
   .r2m-item__lock {

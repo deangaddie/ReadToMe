@@ -97,13 +97,14 @@ export function paragraphRow(
     <div class="r2m-paragraph__gutter">
       ${
         selectable
-          ? html`<input
-              type="checkbox"
-              class="r2m-paragraph__select"
-              aria-label="Select paragraph"
-              .checked=${selected}
-              @change=${toggle}
-            />`
+          ? html`<label class="r2m-hit r2m-paragraph__hit"
+              ><input
+                type="checkbox"
+                class="r2m-paragraph__select"
+                aria-label="Select paragraph"
+                .checked=${selected}
+                @change=${toggle}
+            /></label>`
           : html`<span
               class="r2m-paragraph__select r2m-paragraph__select--none"
               aria-hidden="true"
