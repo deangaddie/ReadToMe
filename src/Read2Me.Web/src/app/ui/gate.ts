@@ -23,9 +23,10 @@ export interface Gate {
   /**
    * The element binding that puts the gate on a control: `<button ${gate.attrs()}>`. It is the
    * control's only source of `disabled`, and of its tooltip: pass the control's own as `tip`, and
-   * the reason takes its place.
+   * the reason takes its place. It is the control's only source of `aria-describedby` too: pass
+   * the id of its own description (an error on screen) as `describedBy`, read after the reason.
    */
-  attrs(tip?: string): DirectiveResult;
+  attrs(tip?: string, describedBy?: string): DirectiveResult;
   /** The binding for what surrounds a control (its label), so hovering that shows the reason too. */
   hover(): DirectiveResult;
 }
@@ -48,21 +49,25 @@ class GateBinding extends Directive {
   /** The attributes the gate put on the element: it removes no others. */
   readonly #added = new Set<string>();
 
-  render(_gate: Rendering, _on: 'control' | 'surround', _tip?: string) {
+  render(_gate: Rendering, _on: 'control' | 'surround', _tip?: string, _describedBy?: string) {
     return nothing;
   }
 
-  override update(part: ElementPart, [gate, on, tip]: Parameters<GateBinding['render']>) {
+  override update(
+    part: ElementPart,
+    [gate, on, tip, describedBy]: Parameters<GateBinding['render']>,
+  ) {
     const el = part.element;
     const reason = gate.block?.reason ?? null;
     const reasoned = reason !== null;
+    const describedByIds = [reasoned ? gate.id : null, describedBy].filter(Boolean).join(' ');
     const wanted: Record<string, string | undefined> =
       on === 'surround'
         ? { 'data-tooltip': reason ?? undefined }
         : {
             disabled: gate.block !== null && !reasoned ? '' : undefined,
             'aria-disabled': reasoned ? 'true' : undefined,
-            'aria-describedby': reasoned ? gate.id : undefined,
+            'aria-describedby': describedByIds || undefined,
             'data-tooltip': reason ?? tip,
             readonly: reasoned && isTextField(el) ? '' : undefined,
             tabindex:
@@ -128,7 +133,7 @@ export function gated(
     control({
       blocked: block !== null,
       reason: block?.reason ?? null,
-      attrs: (tip) => gateBinding(rendering, 'control', tip),
+      attrs: (tip, describedBy) => gateBinding(rendering, 'control', tip, describedBy),
       hover: () => gateBinding(rendering, 'surround'),
     }),
   );

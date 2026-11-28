@@ -2,6 +2,7 @@ import { type Block, withLocal } from '@app/api';
 import { html, nothing } from 'lit-html';
 import { R2mElement, define } from '@app/core/element';
 import { computed, signal, untracked } from '@app/core/signals';
+import { announceError } from './field';
 import { type Gate, gated, icon } from './partials';
 
 export type SettingsFieldKind = 'number' | 'boolean' | 'enum' | 'string' | 'text';
@@ -58,6 +59,8 @@ export function isFieldValid(field: SettingsField, value: unknown): boolean {
 
 const EMPTY_SCHEMA: SettingsSchema = { type: '', fields: [] };
 
+let nextFormId = 0;
+
 const valueOf = (event: Event): string =>
   (event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value;
 
@@ -74,8 +77,9 @@ function asText(value: unknown): string {
  * on native controls — a range + number pair for a bounded number, a `role=switch` checkbox, a
  * `<select>`, an input or a textarea. `defaults` mode edits the full value set; `override` mode
  * edits a sparse patch over the schema defaults with an "overridden" dot and a per-field reset.
- * Emits `values-change` with the values (full set or sparse patch) and `valid-change` when the
- * form's validity flips.
+ * Each control is named by its field's `<label for>`. A number's error waits for the field to be
+ * left, then describes the number box and is announced once. Emits `values-change` with the values
+ * (full set or sparse patch) and `valid-change` when the form's validity flips, on every input.
  */
 export class SettingsForm extends R2mElement {
   readonly #schema = signal<SettingsSchema>(EMPTY_SCHEMA);
@@ -123,8 +127,18 @@ export class SettingsForm extends R2mElement {
     this.#block.set(value);
   }
 
+  /** Prefixes every control's id, so two forms on a page never share one. */
+  readonly #uid = `r2m-settings-form-${nextFormId++}`;
+
   /** Local working copy; re-seeded whenever the host hands in new values. */
   readonly #working = signal<SettingsValues>({});
+
+  /**
+   * The fields whose error may show: each joins when it is left (blur) holding an invalid value, and
+   * leaves once its value is valid, so a value retyped wrong waits for the next blur. Only a number
+   * can be invalid, so a switch or a select never joins.
+   */
+  readonly #revealed = signal<ReadonlySet<string>>(new Set());
 
   readonly valid = computed(() =>
     this.#schema().fields.every((f) => isFieldValid(f, effectiveValue(f, this.#working()))),
@@ -158,13 +172,14 @@ export class SettingsForm extends R2mElement {
 
   #field(field: SettingsField, override: boolean, gate: Gate) {
     const overridden = this.isOverridden(field);
-    const valid = this.fieldValid(field);
+    const errorId = this.errorShown(field) ? `${this.controlId(field)}-error` : null;
     return html`<div
       class="r2m-settings-form__field ${overridden ? 'r2m-settings-form__field--overridden' : ''} ${
-        valid ? '' : 'r2m-settings-form__field--invalid'
+        errorId ? 'r2m-settings-form__field--invalid' : ''
       }"
       data-key=${field.key}
       ${gate.hover()}
+      @focusout=${() => this.reveal(field)}
     >
       <div class="r2m-settings-form__label-row">
         ${
@@ -176,7 +191,7 @@ export class SettingsForm extends R2mElement {
               ></span>`
             : nothing
         }
-        <span class="r2m-settings-form__label">${field.label}</span>
+        <label class="r2m-settings-form__label" for=${this.controlId(field)}>${field.label}</label>
         ${
           override && overridden
             ? html`<button
@@ -191,13 +206,13 @@ export class SettingsForm extends R2mElement {
             : nothing
         }
       </div>
-      ${this.control(field, gate)}
+      ${this.control(field, gate, errorId)}
       ${
-        valid
+        !errorId
           ? field.help
             ? html`<p class="r2m-settings-form__help">${field.help}</p>`
             : nothing
-          : html`<p class="r2m-settings-form__error" role="alert">
+          : html`<p class="r2m-settings-form__error" id=${errorId} ${announceError(field.label)}>
               Must be a
               number${field.min !== undefined ? ` ≥ ${field.min}` : ''}${
                 field.max !== undefined ? ` ≤ ${field.max}` : ''
@@ -207,18 +222,20 @@ export class SettingsForm extends R2mElement {
     </div>`;
   }
 
-  private control(field: SettingsField, gate: Gate) {
+  /** `errorId` names the error on screen, which describes the number box; null while none shows. */
+  private control(field: SettingsField, gate: Gate, errorId: string | null) {
     switch (field.kind) {
       case 'number': {
         const number = html`<input
           class="r2m-settings-form__number"
           type="number"
-          aria-label=${field.label}
+          id=${this.controlId(field)}
           min=${field.min ?? nothing}
           max=${field.max ?? nothing}
           step=${field.step ?? 'any'}
+          aria-invalid=${errorId ? 'true' : 'false'}
           .value=${String(this.numberValue(field))}
-          ${gate.attrs()}
+          ${gate.attrs(undefined, errorId ?? undefined)}
           @input=${(e: Event) => this.setValue(field, this.parseNumber(field, valueOf(e)))}
         />`;
         if (field.min !== undefined && field.max !== undefined) {
@@ -244,7 +261,7 @@ export class SettingsForm extends R2mElement {
           <input
             type="checkbox"
             role="switch"
-            aria-label=${field.label}
+            id=${this.controlId(field)}
             .checked=${!!this.value(field)}
             ${gate.attrs()}
             @change=${(e: Event) => this.setValue(field, (e.target as HTMLInputElement).checked)}
@@ -254,7 +271,7 @@ export class SettingsForm extends R2mElement {
         const current = this.value(field);
         return html`<select
           class="r2m-settings-form__select"
-          aria-label=${field.label}
+          id=${this.controlId(field)}
           .value=${asText(current)}
           ${gate.attrs()}
           @change=${(e: Event) => this.setValue(field, valueOf(e))}
@@ -270,7 +287,7 @@ export class SettingsForm extends R2mElement {
       case 'text':
         return html`<textarea
           class="r2m-settings-form__text"
-          aria-label=${field.label}
+          id=${this.controlId(field)}
           .value=${this.stringValue(field)}
           ${gate.attrs()}
           @input=${(e: Event) => this.setValue(field, valueOf(e))}
@@ -280,12 +297,20 @@ export class SettingsForm extends R2mElement {
           class="r2m-settings-form__text"
           type=${field.secret ? 'password' : 'text'}
           autocomplete=${field.secret ? 'new-password' : 'off'}
-          aria-label=${field.label}
+          id=${this.controlId(field)}
+          spellcheck="false"
+          autocapitalize="none"
+          autocorrect="off"
           .value=${this.stringValue(field)}
           ${gate.attrs()}
           @input=${(e: Event) => this.setValue(field, valueOf(e))}
         />`;
     }
+  }
+
+  /** The id of a field's control (its number box, for a bounded number): its label's `for`. */
+  private controlId(field: SettingsField): string {
+    return `${this.#uid}-${field.key}`;
   }
 
   private value(field: SettingsField): unknown {
@@ -313,8 +338,18 @@ export class SettingsForm extends R2mElement {
     return Object.prototype.hasOwnProperty.call(this.#working(), field.key);
   }
 
-  private fieldValid(field: SettingsField): boolean {
-    return isFieldValid(field, this.value(field));
+  private errorShown(field: SettingsField): boolean {
+    return this.#revealed().has(field.key) && !isFieldValid(field, this.value(field));
+  }
+
+  private reveal(field: SettingsField): void {
+    if (this.#revealed().has(field.key) || isFieldValid(field, this.value(field))) return;
+    this.#revealed.update((r) => new Set(r).add(field.key));
+  }
+
+  private conceal(field: SettingsField): void {
+    if (!this.#revealed().has(field.key)) return;
+    this.#revealed.update((r) => new Set([...r].filter((key) => key !== field.key)));
   }
 
   /** Blank means null on a nullable field and "not a number" (invalid) on any other. */
@@ -325,6 +360,7 @@ export class SettingsForm extends R2mElement {
 
   private setValue(field: SettingsField, value: unknown): void {
     this.#working.update((w) => ({ ...w, [field.key]: value }));
+    if (isFieldValid(field, value)) this.conceal(field);
     this.emitValues();
   }
 
