@@ -5,6 +5,7 @@ import './audio-player';
 import { type AbSide, type AudioPlayer, formatClock } from './audio-player';
 import { gated } from './partials';
 import { blockedWith } from '../../testing/description';
+import { fakeIntersection } from '../../testing/fake-intersection';
 
 /** Ported from the Angular TestBed spec; happy-dom's media element plays nothing, so play/pause are stubbed. */
 const proto = HTMLMediaElement.prototype as unknown as {
@@ -14,10 +15,13 @@ const proto = HTMLMediaElement.prototype as unknown as {
 const original = { play: proto.play, pause: proto.pause };
 let played = 0;
 let paused = 0;
+const viewport = fakeIntersection();
+let restoreViewport = () => {};
 
 beforeEach(() => {
   played = 0;
   paused = 0;
+  restoreViewport = viewport.install();
   proto.play = () => {
     played++;
     return Promise.resolve();
@@ -27,6 +31,7 @@ beforeEach(() => {
 afterEach(() => {
   proto.play = original.play;
   proto.pause = original.pause;
+  restoreViewport();
   document.body.replaceChildren();
 });
 
@@ -117,6 +122,61 @@ describe('r2m-audio-player', () => {
       await host.querySelector('r2m-audio-player')!.rendered();
     }
     expect(host.querySelector<HTMLButtonElement>('.r2m-audio-player__toggle')!.disabled).toBe(true);
+  });
+
+  it('reads no metadata until it nears the viewport, then stops watching', async () => {
+    const { player, audio } = await mount();
+    expect(audio.getAttribute('preload')).toBe('none');
+    expect(audio.getAttribute('src')).toBe('/workspace/pride-and-prejudice/item-1.wav');
+    expect(viewport.options).toEqual({ rootMargin: '200px', scrollMargin: '200px' });
+
+    viewport.enter(player, false);
+    await player.rendered();
+    expect(audio.getAttribute('preload')).toBe('none');
+
+    viewport.enter(player);
+    await player.rendered();
+    expect(audio.getAttribute('preload')).toBe('metadata');
+    expect(viewport.watched(player)).toBe(false);
+  });
+
+  it('stops watching when it leaves the page before nearing the viewport', async () => {
+    const { player } = await mount();
+    expect(viewport.watched(player)).toBe(true);
+    player.remove();
+    expect(viewport.watched(player)).toBe(false);
+  });
+
+  it('watches again when it is moved before nearing the viewport, and not once it has', async () => {
+    const { player } = await mount();
+    player.remove();
+    document.body.append(player);
+    expect(viewport.watched(player)).toBe(true);
+
+    viewport.enter(player);
+    player.remove();
+    document.body.append(player);
+    await player.rendered();
+    expect(viewport.watched(player)).toBe(false);
+    expect(player.querySelector('audio')!.getAttribute('preload')).toBe('metadata');
+  });
+
+  it('plays before it has neared the viewport, and is near from then on', async () => {
+    const { player, audio } = await mount();
+    player.querySelector<HTMLButtonElement>('.r2m-audio-player__toggle')!.click();
+    expect(played).toBe(1);
+    await player.rendered();
+    expect(audio.getAttribute('preload')).toBe('metadata');
+    expect(viewport.watched(player)).toBe(false);
+  });
+
+  it("reads the other side's metadata when A/B is switched before it neared the viewport", async () => {
+    const { player, audio } = await mount({
+      srcB: '/workspace/pride-and-prejudice/item-1.source.wav',
+    });
+    player.switchSide('b');
+    await player.rendered();
+    expect(audio.getAttribute('preload')).toBe('metadata');
   });
 
   it('formats the clock', () => {

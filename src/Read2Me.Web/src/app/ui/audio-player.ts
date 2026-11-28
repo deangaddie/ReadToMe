@@ -25,7 +25,9 @@ export function formatClock(seconds: number | null): string {
  * busts the browser cache for files regenerated in place. Set `srcB` for the A/B variant: a
  * two-segment toggle swaps sources while keeping position and play state. Emits
  * `playback-ended` and `ab` (the side picked). Behind an Edit gate (`gate`, from `gated`) the
- * gate decides whether the play button is off while blocked.
+ * gate decides whether the play button is off while blocked. The `<audio>` reads no metadata
+ * (`preload="none"`) until the player first comes within 200 px of the viewport; Play loads it
+ * before then.
  */
 export class AudioPlayer extends R2mElement {
   #src = signal<string | null>(null);
@@ -98,6 +100,13 @@ export class AudioPlayer extends R2mElement {
   readonly error = signal(false);
   readonly side = signal<AbSide>('a');
 
+  /**
+   * Set once the host first nears the viewport, or the player is used first; until then the
+   * `<audio>` preloads nothing.
+   */
+  readonly #near = signal(false);
+  #viewport: IntersectionObserver | null = null;
+
   /** Position/play state to restore after an A/B source swap. */
   #restore: { time: number; play: boolean } | null = null;
 
@@ -116,6 +125,30 @@ export class AudioPlayer extends R2mElement {
       this.classList.toggle('r2m-audio-player--compact', this.#compact());
       this.classList.toggle('r2m-audio-player--error', this.error());
     });
+    if (!this.#near()) this.#watchViewport();
+  }
+
+  #watchViewport(): void {
+    this.#viewport = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) this.#markNear();
+      },
+      // scrollMargin carries the margin through the scrollers between (the reader's list, the
+      // main column): rootMargin alone grows only the viewport, and Chromium clips at a scroller.
+      { rootMargin: '200px', scrollMargin: '200px' },
+    );
+    this.#viewport.observe(this);
+    this.onDisconnect(() => this.#stopWatching());
+  }
+
+  #markNear(): void {
+    this.#stopWatching();
+    this.#near.set(true);
+  }
+
+  #stopWatching(): void {
+    this.#viewport?.disconnect();
+    this.#viewport = null;
   }
 
   get #audio(): HTMLAudioElement | null {
@@ -125,6 +158,7 @@ export class AudioPlayer extends R2mElement {
   toggle(): void {
     const audio = this.#audio;
     if (!audio) return;
+    this.#markNear();
     if (this.playing()) audio.pause();
     else void audio.play().catch(() => this.error.set(true));
   }
@@ -138,6 +172,7 @@ export class AudioPlayer extends R2mElement {
 
   switchSide(side: AbSide): void {
     if (side === this.side()) return;
+    this.#markNear();
     const audio = this.#audio;
     this.#restore = { time: audio?.currentTime ?? 0, play: this.playing() };
     this.error.set(false);
@@ -156,7 +191,7 @@ export class AudioPlayer extends R2mElement {
     const glyph: IconName = error ? 'warning' : playing ? 'pause' : 'play_arrow';
     return html`
       <audio
-        preload="metadata"
+        preload=${this.#near() ? 'metadata' : 'none'}
         src=${src ?? nothing}
         @loadedmetadata=${this.#onLoadedMetadata}
         @timeupdate=${this.#onTimeUpdate}
