@@ -2171,10 +2171,7 @@ progress {
 .r2m-pipeline__action--destructive {
   color: var(--r2m-status-error);
 }
-/* Variant B head row: checkpoint pills + hint beside the chip, the `?` pinned right by the spacer. */
-.r2m-pipeline__spacer {
-  flex: 1 1 auto;
-}
+/* Variant B head row: the `?` right after the chip, then the checkpoint pills + hint. */
 .r2m-pipeline__checkpoint {
   display: inline-flex;
   align-items: center;

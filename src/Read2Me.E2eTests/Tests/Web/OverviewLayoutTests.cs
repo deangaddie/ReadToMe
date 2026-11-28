@@ -33,16 +33,19 @@ public class OverviewLayoutTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
 
         var row = Page.Locator(".r2m-pipeline__step[data-step='Structure']");
         var title = row.Locator(".r2m-pipeline__title");
+        var chip = row.Locator(".r2m-pipeline__chip");
         var help = row.Locator(".r2m-pipeline__help-toggle");
         var pills = row.Locator(".r2m-pipeline__checkpoint");
         await Expect(pills.GetByRole(AriaRole.Button, new() { Name = "Confirm" })).ToBeVisibleAsync();
         var titleBox = (await title.BoundingBoxAsync())!;
+        var chipBox = (await chip.BoundingBoxAsync())!;
         var helpBox = (await help.BoundingBoxAsync())!;
         var pillsBox = (await pills.BoundingBoxAsync())!;
-        // `?` on line one: it overlaps the title vertically and sits at the row's right edge.
+        // `?` on line one: it overlaps the title vertically, right after the chip.
         Assert.True(helpBox.Y < titleBox.Y + titleBox.Height && helpBox.Y + helpBox.Height > titleBox.Y,
             $"? (y={helpBox.Y}) should share the title line (y={titleBox.Y})");
-        Assert.True(helpBox.X > titleBox.X + titleBox.Width, "? should be right of the title");
+        Assert.True(helpBox.X >= chipBox.X + chipBox.Width && helpBox.X < chipBox.X + chipBox.Width + 24,
+            $"? (x={helpBox.X}) should follow the chip (right={chipBox.X + chipBox.Width})");
         // Pills on line two: below the title line.
         Assert.True(pillsBox.Y >= titleBox.Y + titleBox.Height - 1,
             $"pills (y={pillsBox.Y}) should sit under the title line (bottom={titleBox.Y + titleBox.Height})");

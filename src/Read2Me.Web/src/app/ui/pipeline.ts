@@ -72,7 +72,7 @@ function laterDoneHint(n: number): string {
 /**
  * Production pipeline stepper (design §6.2, guidance-primitives spec §3 "variant B"): one row per
  * step with a numbered marker (a check once done) and a body of head row (title · chip ·
- * checkpoint pills · later-done hint · spacer · `?`), optional inline help, detail line, callout
+ * `?` · checkpoint pills · later-done hint), optional inline help, detail line, callout
  * slot, the step's actions each rendered through `gated`, and the advice line. Presentational: the
  * overview derives the steps and handles `onAct`, `onCheckpoint` and `onHelp`. `helpOpen` names
  * the one step whose `?` is on; its `renderHelp` result sits after the head row (the page's CSS
@@ -179,9 +179,7 @@ export function pipeline<S extends PipelineStepView>(options: {
             <div class="r2m-pipeline__head">
               <h3 class="r2m-pipeline__title">${step.title}</h3>
               <span class="r2m-pipeline__chip">${statusChip({ ...step.chip, compact: true })}</span>
-              ${checkpointGroup(step)}
-              <span class="r2m-pipeline__spacer"></span>
-              ${helpToggle(step, open)}
+              ${helpToggle(step, open)} ${checkpointGroup(step)}
             </div>
             ${
               open && renderHelp

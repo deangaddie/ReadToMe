@@ -135,6 +135,14 @@ describe('pipeline()', () => {
     );
     pill.click();
     expect(checkpoints).toEqual([{ step: 'speakers', pill: 'confirm' }]);
+    // `?` follows the chip, so DOM (Tab) order matches the wide one-line and the narrow split row.
+    expect([...head.children].map((c) => c.className.split(' ')[0])).toEqual([
+      'r2m-pipeline__title',
+      'r2m-pipeline__chip',
+      'r2m-icon-button',
+      'r2m-pipeline__checkpoint',
+    ]);
+    expect(head.children[2]!.classList.contains('r2m-pipeline__help-toggle')).toBe(true);
 
     const body = speakers.querySelector('.r2m-pipeline__body')!;
     const order = [...body.children].map((c) => c.className.split(' ')[0]);
