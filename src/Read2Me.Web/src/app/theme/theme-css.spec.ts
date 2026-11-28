@@ -118,7 +118,7 @@ describe('themeCssVars (spec §5.1 token mapping)', () => {
     expect(vars['--r2m-surface-high']).toContain('#ffffff 90%');
     expect(vars['--r2m-surface-highest']).toContain('#ffffff 82%');
     expect(vars['--r2m-appbar-bg']).toBe('#ff6f61');
-    expect(vars['--r2m-appbar-fg']).toBe('#000000'); // coral: black 6.7:1 beats white 2.7:1
+    expect(vars['--r2m-appbar-fg']).toBe('#000000'); // coral: black 7.7:1 beats white 2.7:1
     expect(vars['--r2m-text']).toBe('#4a4a4a');
   });
 
