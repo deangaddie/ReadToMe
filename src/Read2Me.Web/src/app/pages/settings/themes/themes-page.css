@@ -81,4 +81,12 @@
   .themes__delete {
     color: var(--r2m-status-error);
   }
+  /* Forced colours paint every card's border in CanvasText and drop the selected card's ring
+     shadow: the selected one takes the highlight. */
+  @media (forced-colors: active) {
+    .themes__card--selected {
+      border-color: Highlight;
+      outline: 1px solid Highlight;
+    }
+  }
 }

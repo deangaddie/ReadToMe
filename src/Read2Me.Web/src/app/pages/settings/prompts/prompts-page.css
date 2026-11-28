@@ -40,6 +40,13 @@
     background: var(--r2m-surface-high);
     font-weight: 600;
   }
+  /* Forced colours drop the selected row's background: outline it in the system highlight. */
+  @media (forced-colors: active) {
+    .prompts__row--selected .prompts__main:not(:focus-visible) {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
   .prompts__meta {
     display: inline-flex;
     align-items: center;

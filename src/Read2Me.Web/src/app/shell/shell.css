@@ -461,4 +461,22 @@
       margin-right: var(--r2m-space-1);
     }
   }
+  /* Forced colours repaint the active item's background in Canvas: draw it in the system highlight.
+     `forced-color-adjust: none` stops Chromium painting a Canvas backplate behind the label, which
+     hides HighlightText; its focus ring sits inside the fill, so it turns HighlightText too. */
+  @media (forced-colors: active) {
+    .shell__nav-item--active {
+      forced-color-adjust: none;
+      background: Highlight;
+      color: HighlightText;
+
+      /* The hover tint would replace the fill. */
+      &:hover {
+        background: Highlight;
+      }
+      &:focus-visible {
+        outline-color: HighlightText;
+      }
+    }
+  }
 }

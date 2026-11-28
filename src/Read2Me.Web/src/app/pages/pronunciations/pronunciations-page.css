@@ -96,4 +96,11 @@
       display: none;
     }
   }
+  /* Forced colours drop the selected row's background: outline it in the system highlight. */
+  @media (forced-colors: active) {
+    .pron__row--selected {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
 }

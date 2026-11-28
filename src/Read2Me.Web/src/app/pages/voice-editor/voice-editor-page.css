@@ -69,4 +69,13 @@
     flex-direction: column;
     gap: var(--r2m-space-2);
   }
+  /* Forced colours paint every step's border in CanvasText: the selected one takes the highlight. */
+  @media (forced-colors: active) {
+    .voice-editor__step--selected {
+      border-color: Highlight;
+    }
+    .voice-editor__step--selected:not(:focus-visible) {
+      outline: 1px solid Highlight;
+    }
+  }
 }
