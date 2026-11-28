@@ -107,4 +107,50 @@ describe('r2m-config-list', () => {
     );
     expect(list.querySelector<HTMLButtonElement>('.r2m-config-list__more')?.disabled).toBe(true);
   });
+
+  /** happy-dom has no layout, so the spec says how tall the rows and their content are. */
+  function size(el: Element, scrollHeight: number, clientHeight: number) {
+    Object.defineProperties(el, {
+      scrollHeight: { value: scrollHeight, configurable: true },
+      clientHeight: { value: clientHeight, configurable: true },
+    });
+  }
+
+  it('marks its rows as overflowing only while a render leaves more than they show', async () => {
+    const { list } = await mount();
+    const scroller = list.querySelector('.r2m-config-list__rows')!;
+    expect(scroller.hasAttribute('data-overflows')).toBe(false);
+
+    size(scroller, 500, 300);
+    list.selectedId = 'a';
+    await list.rendered();
+    expect(scroller.hasAttribute('data-overflows')).toBe(true);
+
+    size(scroller, 300, 300);
+    list.selectedId = 'b';
+    await list.rendered();
+    expect(scroller.hasAttribute('data-overflows')).toBe(false);
+  });
+
+  it('marks the overflow again when the list is resized', async () => {
+    const resized: (() => void)[] = [];
+    const Native = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) {
+        resized.push(() => callback([], this));
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+    try {
+      const { list } = await mount();
+      const scroller = list.querySelector('.r2m-config-list__rows')!;
+      size(scroller, 500, 300);
+      for (const resize of resized) resize();
+      expect(scroller.hasAttribute('data-overflows')).toBe(true);
+    } finally {
+      globalThis.ResizeObserver = Native;
+    }
+  });
 });

@@ -20,7 +20,8 @@ let instances = 0;
  * Active marker and a per-row `role=menu` popover (Make active / Duplicate / Delete), plus New.
  * An element because it owns the search text. Outputs: `pick` (not `select`, which a text
  * selection in the search box would also fire), `create`, `make-active`, `duplicate`, `delete`,
- * each with the item id as detail.
+ * each with the item id as detail. The rows carry `data-overflows` while they have something to
+ * scroll, the only time they may hold the wheel back from the page.
  */
 export class ConfigList extends R2mElement {
   readonly #uid = ++instances;
@@ -70,6 +71,20 @@ export class ConfigList extends R2mElement {
 
   protected override connected(): void {
     this.classList.add('r2m-config-list');
+    // A render changes what the rows hold; a resize changes how much of it shows.
+    const resize = new ResizeObserver(() => this.markOverflow());
+    resize.observe(this);
+    this.onDisconnect(() => resize.disconnect());
+  }
+
+  protected override updated(): void {
+    this.markOverflow();
+  }
+
+  /** CSS can't say "only while it scrolls": `overscroll-behavior` also holds a list with nothing to scroll. */
+  private markOverflow(): void {
+    const rows = this.querySelector('.r2m-config-list__rows');
+    rows?.toggleAttribute('data-overflows', rows.scrollHeight > rows.clientHeight);
   }
 
   protected template() {

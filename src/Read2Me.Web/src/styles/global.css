@@ -2505,6 +2505,11 @@ textarea.r2m-settings-form__text {
   margin: 0;
   padding: 0;
   overflow: auto;
+
+  /* Only while they scroll (config-list.ts): `contain` on a short list would hold the page's wheel. */
+  &[data-overflows] {
+    overscroll-behavior: contain;
+  }
 }
 .r2m-config-list__row {
   display: flex;
@@ -2589,6 +2594,8 @@ textarea.r2m-settings-form__text {
 .r2m-config-editor-frame__body {
   flex: 1;
   min-height: 0;
+  /* No `overscroll-behavior`: nothing bounds this height, so it never scrolls, and `contain`
+     would hold the page's wheel over the whole editor. */
   overflow: auto;
   padding: var(--r2m-space-4);
 }
