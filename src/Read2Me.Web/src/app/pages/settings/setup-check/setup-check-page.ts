@@ -113,27 +113,38 @@ export class SetupCheckPage extends R2mElement {
   }
 
   private table(rows: SetupCheckRow[]) {
-    return html`<table class="setup-check__table">
-      <thead>
-        <tr>
-          <th scope="col">Check</th>
-          <th scope="col">Result</th>
-          <th scope="col">Expected</th>
-          <th scope="col">Found</th>
-          <th scope="col">Fix</th>
-          <th scope="col">Re-run</th>
-        </tr>
-      </thead>
-      ${groupedRows(rows).map(
-        (g) =>
-          html`<tbody>
-            <tr class="setup-check__group">
-              <th colspan="6" scope="colgroup">${g.label}</th>
-            </tr>
-            ${g.rows.map((row) => this.row(row))}
-          </tbody>`,
-      )}
-    </table>`;
+    // A Table scroll region: at phone width the table scrolls inside it, not across the page.
+    return html`<div
+      class="r2m-table-scroll"
+      role="region"
+      tabindex="0"
+      aria-labelledby="setup-check-caption"
+    >
+      <table class="setup-check__table">
+        <caption class="visually-hidden" id="setup-check-caption">
+          Setup checks
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Check</th>
+            <th scope="col">Result</th>
+            <th scope="col">Expected</th>
+            <th scope="col">Found</th>
+            <th scope="col">Fix</th>
+            <th scope="col">Re-run</th>
+          </tr>
+        </thead>
+        ${groupedRows(rows).map(
+          (g) =>
+            html`<tbody>
+              <tr class="setup-check__group">
+                <th colspan="6" scope="colgroup">${g.label}</th>
+              </tr>
+              ${g.rows.map((row) => this.row(row))}
+            </tbody>`,
+        )}
+      </table>
+    </div>`;
   }
 
   private row(row: SetupCheckRow) {

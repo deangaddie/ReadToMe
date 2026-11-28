@@ -19,6 +19,13 @@ import boardCss from './series-cast-board.css' with { type: 'text' };
 
 adoptStyles(boardCss);
 
+let nextId = 0;
+
+/** The board table's caption, which also names its scroll region: "Holmes: series cast". */
+function castCaption(seriesName: string | undefined): string {
+  return seriesName ? `${seriesName}: series cast` : 'Series cast';
+}
+
 /** `cast-read`: the board read its series again; the panel's Characters tab shows the count (#223). */
 export interface CastRead {
   seriesId: string;
@@ -50,6 +57,8 @@ export class SeriesCastBoard extends R2mElement {
   /** The rows whose inline series Voice editor is open (#221), by Series character. */
   readonly open = signal<ReadonlySet<string>>(new Set());
   private seq = 0;
+  /** Names the board's Table scroll region and its table. */
+  readonly #captionId = `r2m-series-cast-caption-${nextId++}`;
 
   /** Opens these rows' Voice editors on arrival (the Cast page's "Edit on the series cast board"). */
   get openRows(): readonly string[] {
@@ -133,8 +142,11 @@ export class SeriesCastBoard extends R2mElement {
             </p>`
           : nothing
       }
-      <div class="series-cast__scroll">
+      <div class="r2m-table-scroll" role="region" tabindex="0" aria-labelledby=${this.#captionId}>
         <table class="series-cast__table" aria-busy=${busy ? 'true' : 'false'}>
+          <caption class="visually-hidden" id=${this.#captionId}>
+            ${castCaption(this._series()?.name)}
+          </caption>
           <thead>
             <tr>
               <th scope="col">Series character</th>

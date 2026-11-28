@@ -90,5 +90,6 @@ describe('throughput()', () => {
       ['small', '3', '900', '30.0 s', '30.0'],
       ['big', '1', '–', '–', '–'],
     ]);
+    expect(el.querySelector('table')?.getAttribute('aria-label')).toBe('Throughput per config');
   });
 });

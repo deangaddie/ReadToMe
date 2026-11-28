@@ -776,6 +776,16 @@ describe('r2m-projects-page series cast board', () => {
     await flush();
   }
 
+  it('the board scrolls in a keyboard-reachable region named by its table caption', async () => {
+    const { el } = await openBoard();
+
+    const region = el.querySelector('.r2m-table-scroll[role=region]')!;
+    expect(region.getAttribute('tabindex')).toBe('0');
+    const caption = el.querySelector('table > caption')!;
+    expect(region.getAttribute('aria-labelledby')).toBe(caption.id);
+    expect(text(caption)).toBe('Sherlock Holmes: series cast');
+  });
+
   it('shows a row per Series character and a column per book, the Narrator a row too', async () => {
     const { el } = await openBoard();
 

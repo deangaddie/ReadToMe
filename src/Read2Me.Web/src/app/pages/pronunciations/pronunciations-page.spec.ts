@@ -183,6 +183,7 @@ describe('r2m-pronunciations-page', () => {
       ['Holmes', 'holmes', '3', '–'],
     ]);
     expect(page.querySelector('.pron__hint')?.textContent).toContain('Pick a pronunciation');
+    expect(page.querySelector('table')?.getAttribute('aria-label')).toBe('Pronunciations');
   });
 
   it('says so when the book has none yet, offering Add pronunciation', async () => {

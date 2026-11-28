@@ -176,6 +176,12 @@ describe('r2m-setup-check-page', () => {
     expect(
       Array.from(page.querySelectorAll('thead th')).map((th) => th.textContent?.trim()),
     ).toEqual(['Check', 'Result', 'Expected', 'Found', 'Fix', 'Re-run']);
+    // A Table scroll region named by the caption, so the table scrolls inside it at phone width.
+    const region = page.querySelector('.r2m-table-scroll[role=region]')!;
+    expect(region.getAttribute('tabindex')).toBe('0');
+    const caption = region.querySelector('table > caption')!;
+    expect(region.getAttribute('aria-labelledby')).toBe(caption.id);
+    expect(caption.textContent?.trim()).toBe('Setup checks');
     expect(
       Array.from(page.querySelectorAll('.setup-check__group')).map((g) => g.textContent?.trim()),
     ).toEqual(['Workspace and tools', 'AI configs', 'Docker services']);

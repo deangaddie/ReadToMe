@@ -8,9 +8,6 @@
     margin: 0 0 var(--r2m-space-3);
     color: var(--r2m-text-muted);
   }
-  .series-cast__scroll {
-    overflow-x: auto;
-  }
   .series-cast__table {
     width: 100%;
     border-collapse: collapse;
