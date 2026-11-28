@@ -134,8 +134,9 @@ export class SettingsForm extends R2mElement {
   readonly #working = signal<SettingsValues>({});
 
   /**
-   * The fields whose error may show: each joins when it is left (blur), or changed for a switch or
-   * a select, and leaves once its value is valid, so a value retyped wrong waits for the next blur.
+   * The fields whose error may show: each joins when it is left (blur) holding an invalid value, and
+   * leaves once its value is valid, so a value retyped wrong waits for the next blur. Only a number
+   * can be invalid, so a switch or a select never joins.
    */
   readonly #revealed = signal<ReadonlySet<string>>(new Set());
 
@@ -179,7 +180,6 @@ export class SettingsForm extends R2mElement {
       data-key=${field.key}
       ${gate.hover()}
       @focusout=${() => this.reveal(field)}
-      @change=${() => (field.kind === 'boolean' || field.kind === 'enum') && this.reveal(field)}
     >
       <div class="r2m-settings-form__label-row">
         ${
@@ -347,6 +347,11 @@ export class SettingsForm extends R2mElement {
     this.#revealed.update((r) => new Set(r).add(field.key));
   }
 
+  private conceal(field: SettingsField): void {
+    if (!this.#revealed().has(field.key)) return;
+    this.#revealed.update((r) => new Set([...r].filter((key) => key !== field.key)));
+  }
+
   /** Blank means null on a nullable field and "not a number" (invalid) on any other. */
   private parseNumber(field: SettingsField, raw: string): number | null {
     if (raw.trim() === '') return field.nullable ? null : Number.NaN;
@@ -355,13 +360,7 @@ export class SettingsForm extends R2mElement {
 
   private setValue(field: SettingsField, value: unknown): void {
     this.#working.update((w) => ({ ...w, [field.key]: value }));
-    if (isFieldValid(field, value) && this.#revealed().has(field.key)) {
-      this.#revealed.update((r) => {
-        const next = new Set(r);
-        next.delete(field.key);
-        return next;
-      });
-    }
+    if (isFieldValid(field, value)) this.conceal(field);
     this.emitValues();
   }
 

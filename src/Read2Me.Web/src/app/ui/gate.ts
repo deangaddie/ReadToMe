@@ -60,14 +60,14 @@ class GateBinding extends Directive {
     const el = part.element;
     const reason = gate.block?.reason ?? null;
     const reasoned = reason !== null;
-    const description = [reasoned ? gate.id : null, describedBy].filter(Boolean).join(' ');
+    const describedByIds = [reasoned ? gate.id : null, describedBy].filter(Boolean).join(' ');
     const wanted: Record<string, string | undefined> =
       on === 'surround'
         ? { 'data-tooltip': reason ?? undefined }
         : {
             disabled: gate.block !== null && !reasoned ? '' : undefined,
             'aria-disabled': reasoned ? 'true' : undefined,
-            'aria-describedby': description || undefined,
+            'aria-describedby': describedByIds || undefined,
             'data-tooltip': reason ?? tip,
             readonly: reasoned && isTextField(el) ? '' : undefined,
             tabindex:
