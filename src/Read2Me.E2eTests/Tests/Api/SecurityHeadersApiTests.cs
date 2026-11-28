@@ -44,7 +44,7 @@ public class SecurityHeadersApiTests(E2eAppFixture app) : IClassFixture<E2eAppFi
     [InlineData("/workspace/no-such-file.wav", HttpStatusCode.NotFound)]
     public async Task Every_response_carries_the_four_headers(string path, HttpStatusCode status)
     {
-        var response = await Http.GetAsync(app.BaseUrl + path);
+        var response = await Http.GetAsync(app.BaseUrl + path, TestContext.Current.CancellationToken);
 
         Assert.Equal(status, response.StatusCode);
         AssertHeaders(response);
@@ -58,7 +58,7 @@ public class SecurityHeadersApiTests(E2eAppFixture app) : IClassFixture<E2eAppFi
         request.Headers.Add("Sec-Fetch-Mode", "no-cors");
         request.Headers.Add("Sec-Fetch-Dest", "image");
 
-        var response = await Http.SendAsync(request);
+        var response = await Http.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         AssertHeaders(response);
