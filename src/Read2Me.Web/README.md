@@ -41,6 +41,8 @@ bundler does not see it until then.
 
 - `base.ts` — `BASE`, the path the app is served under. `build.ts` and `dev.ts` both read it, and
   `base.spec.ts` holds `index.html`'s `<base href>` to it.
+- `csp-nonce.ts` — the placeholder nonce `build.ts` stamps on every `<script>` and modulepreload of
+  the built `index.html`; the host swaps in a fresh one per response under its CSP.
 - `src/app/core/` — the "framework": the signals adapter, the `R2mElement` base class and
   `define()`, `use`/`provide`/`token` services, the Navigation-API router and `<r2m-outlet>`,
   `openDialog`, `adoptStyles`, `Emitter`.

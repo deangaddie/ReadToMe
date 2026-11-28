@@ -80,6 +80,9 @@ namespace Read2Me.App
             // Ahead of the Workspace mount and routing: another page's request is refused before anything runs.
             app.UseRequestIsolation(env.IsDevelopment());
 
+            // Ahead of the static files: the index asked for by name gets its nonce and policy too.
+            app.UseAppIndexByName(env);
+
             app.UseStaticFiles(new StaticFileOptions
             {
                 OnPrepareResponse = ApplySpaBundleCaching
@@ -115,20 +118,14 @@ namespace Read2Me.App
                 // The web app is the UI (ADR 0014); the root sends a browser to it.
                 endpoints.MapGet("/", ctx =>
                 {
-                    ctx.Response.Redirect(AppPrefix + "/");
+                    ctx.Response.Redirect(AppPage.Prefix + "/");
                     return Task.CompletedTask;
                 });
                 // The web app owns its prefix; any other unmatched URL is a plain 404.
-                endpoints.MapFallback(AppPrefix, ctx => ServeAppAsync(ctx, env));
-                endpoints.MapFallback(AppPrefix + "/{**path}", ctx => ServeAppAsync(ctx, env));
+                endpoints.MapFallback(AppPage.Prefix, ctx => AppPage.ServeAsync(ctx, env));
+                endpoints.MapFallback(AppPage.Prefix + "/{**path}", ctx => AppPage.ServeAsync(ctx, env));
             });
         }
-
-        // The web app's URL prefix, its built bundle's index under the web root, and the checked-in
-        // page shown there while the bundle has not been built.
-        private const string AppPrefix = "/app";
-        private const string AppBundleIndex = "app/index.html";
-        private const string AppMissingPage = "app-missing.html";
 
         // Bun emits content-hashed file names in lowercase (index-kdddnwpm.js). Anything under the
         // app prefix carrying a hash is immutable; everything else there (index.html, favicon,
@@ -157,32 +154,12 @@ namespace Read2Me.App
         private static void ApplySpaBundleCaching(StaticFileResponseContext ctx)
         {
             var path = ctx.Context.Request.Path.Value;
-            if (path is null || !path.StartsWith(AppPrefix + "/", StringComparison.OrdinalIgnoreCase))
+            if (path is null || !path.StartsWith(AppPage.Prefix + "/", StringComparison.OrdinalIgnoreCase))
                 return;
 
             ctx.Context.Response.Headers.CacheControl = HashedAssetName.IsMatch(path)
                 ? "public, max-age=31536000, immutable"
                 : "no-cache";
-        }
-
-        /// SPA fallback: every unmatched URL under the app prefix gets the bundle's index.html so
-        /// client-side routes deep-link. When the bundle has not been built the same URLs get a
-        /// static "how to build it" page instead.
-        ///
-        /// The bundle is looked up on the physical web root (one stat per request) rather than the
-        /// WebRootFileProvider: in Development that provider is a composite over the static-web-assets
-        /// manifest, which would surface a developer's local build inside a test host that meant
-        /// to run without one. The not-built page is a checked-in asset, so it goes through the provider.
-        private static Task ServeAppAsync(HttpContext context, IWebHostEnvironment env)
-        {
-            context.Response.StatusCode = StatusCodes.Status200OK;
-            context.Response.ContentType = "text/html; charset=utf-8";
-            context.Response.Headers.CacheControl = "no-cache";
-
-            var index = Path.Combine(env.WebRootPath, AppBundleIndex);
-            return File.Exists(index)
-                ? context.Response.SendFileAsync(index, context.RequestAborted)
-                : context.Response.SendFileAsync(env.WebRootFileProvider.GetFileInfo(AppMissingPage), context.RequestAborted);
         }
 
         /// Serves an item's Preview Source — the unprocessed side of the A/B preview. It lives in a

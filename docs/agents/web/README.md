@@ -18,7 +18,7 @@ Read the part for what you are changing:
 | Want | Do |
 |---|---|
 | App on the host | `pwsh scripts/build-web.ps1` then `dotnet run --project src/Read2Me.App` → web app at `/app` (`/` redirects there) |
-| Dev loop with HMR | host running on `:5000`, then `bun run dev` in `src/Read2Me.Web` → `http://localhost:4300/app/` (proxies `/api`, `/hubs`, `/workspace`, `/openapi`, `/audio-preview`, `/preview-source`). Restart it after adding a file reached through `@app/*` |
+| Dev loop with HMR | host running on `:5000`, then `bun run dev` in `src/Read2Me.Web` → `http://localhost:4300/app/` (proxies `/api`, `/hubs`, `/workspace`, `/openapi`, `/audio-preview`, `/preview-source`). Restart it after adding a file reached through `@app/*`. It runs with no Content-Security-Policy (Bun's HMR injects its own scripts), so a CSP or Trusted Types break shows only on the host: the browser tests run there ([../api/README.md](../api/README.md), "Request isolation and security headers") |
 | PR gate for the web project | `bun run check` (`format:check` + lint + typecheck + `icons:check` + `help:check` + `bun test` + build) or `pwsh scripts/build-web.ps1 -Check` |
 | One spec | `bun test src/app/core/router.spec.ts` |
 | Browser tests | build the bundle, then `dotnet test src/Read2Me.E2eTests --filter-namespace 'Read2Me.E2eTests.Tests.Web*'`; without a bundle every browser test skips with the command to run |

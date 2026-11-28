@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { BASE } from './base';
+import { stampNonce } from './csp-nonce';
 
 // Two Bun 1.4.2 Windows bugs: rmSync throws EINVAL for a relative path through `..`, whether or not
 // it exists (so the path is made absolute), and Bun.build does not create its outdir.
@@ -33,6 +34,13 @@ if (!BASE_TAG.test(html)) {
   console.error(`build: ${indexPath} has no <base href> to set`);
   process.exit(1);
 }
-await Bun.write(indexPath, html.replace(BASE_TAG, `<base href="${BASE}">`));
+// The host swaps the placeholder for a fresh nonce on each response; a page with nothing stamped
+// would boot nothing under its CSP.
+const stamp = stampNonce(html.replace(BASE_TAG, `<base href="${BASE}">`));
+if (stamp.stamped === 0) {
+  console.error(`build: ${indexPath} has no <script> to carry the CSP nonce`);
+  process.exit(1);
+}
+await Bun.write(indexPath, stamp.html);
 
 for (const o of result.outputs) console.log(o.kind.padEnd(12), o.path);
