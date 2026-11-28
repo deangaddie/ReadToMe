@@ -39,7 +39,7 @@ public class OverviewLayoutTests(E2eAppFixture app, PlaywrightFixture pw) : E2eT
         var titleBox = (await title.BoundingBoxAsync())!;
         var helpBox = (await help.BoundingBoxAsync())!;
         var pillsBox = (await pills.BoundingBoxAsync())!;
-        // `?` on line one: it overlaps the title vertically and sits at the row's right edge.
+        // `?` on line one: it overlaps the title vertically, right after the chip.
         Assert.True(helpBox.Y < titleBox.Y + titleBox.Height && helpBox.Y + helpBox.Height > titleBox.Y,
             $"? (y={helpBox.Y}) should share the title line (y={titleBox.Y})");
         Assert.True(helpBox.X > titleBox.X + titleBox.Width, "? should be right of the title");

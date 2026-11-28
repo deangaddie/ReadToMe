@@ -69,9 +69,8 @@
     .overview__body--help-open .overview__card {
       display: block;
     }
-    /* Head row splits: line one is title · chip · spacer · `?`; line two the pills + hint. */
+    /* Head row splits: line one is title · chip · `?`; the pills + hint wrap onto line two. */
     .r2m-pipeline__checkpoint {
-      order: 1;
       flex-basis: 100%;
     }
   }
