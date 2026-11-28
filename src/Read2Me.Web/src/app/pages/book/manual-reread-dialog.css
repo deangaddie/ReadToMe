@@ -2,7 +2,7 @@
 @scope (r2m-manual-reread-dialog) {
   :scope {
     display: block;
-    min-width: 420px;
+    min-width: min(420px, 100%);
     max-width: 560px;
   }
   .manual__content {

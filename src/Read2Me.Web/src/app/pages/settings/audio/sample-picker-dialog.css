@@ -2,7 +2,7 @@
 @scope (r2m-sample-picker-dialog) to (.r2m-spinner > *) {
   :scope {
     display: block;
-    min-width: min(420px, 90vw);
+    min-width: min(420px, var(--r2m-dialog-content-max));
     max-width: 640px;
   }
   .sample-picker__list {
