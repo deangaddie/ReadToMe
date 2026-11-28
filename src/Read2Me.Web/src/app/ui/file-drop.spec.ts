@@ -76,4 +76,88 @@ describe('r2m-file-drop', () => {
     drop(zone, [new File(['x'], 'book.epub')]);
     expect(files.map((f) => f.name)).toEqual(['book.epub']);
   });
+
+  describe('drag highlight', () => {
+    /** happy-dom has no DragEvent; a plain bubbling Event stands in, as `drop` above. */
+    function drag(el: Element, type: 'dragenter' | 'dragover' | 'dragleave') {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      el.dispatchEvent(event);
+      return event;
+    }
+    const over = (zone: Element) => zone.classList.contains('r2m-file-drop--over');
+
+    it('entering the zone highlights it', async () => {
+      const { zone } = await mount();
+      drag(zone, 'dragenter');
+      expect(drag(zone, 'dragover').defaultPrevented).toBe(true);
+      expect(over(zone)).toBe(true);
+    });
+
+    it('holds while the pointer moves onto a child and back', async () => {
+      const { zone } = await mount();
+      const label = zone.querySelector('.r2m-file-drop__label')!;
+      drag(zone, 'dragenter');
+      drag(zone, 'dragover');
+
+      // Zone → label: the browser fires dragenter on the label, then dragleave on the zone.
+      drag(label, 'dragenter');
+      drag(zone, 'dragleave');
+      expect(over(zone)).toBe(true);
+      drag(label, 'dragover');
+
+      // Label → zone: dragenter on the zone, then dragleave on the label (bubbles to the zone).
+      drag(zone, 'dragenter');
+      drag(label, 'dragleave');
+      expect(over(zone)).toBe(true);
+    });
+
+    it('leaving the zone clears it, even from a child', async () => {
+      const { zone } = await mount();
+      const button = zone.querySelector('button')!;
+      drag(zone, 'dragenter');
+      drag(zone, 'dragover');
+      drag(button, 'dragenter');
+      drag(zone, 'dragleave');
+      expect(over(zone)).toBe(true);
+
+      drag(button, 'dragleave');
+      expect(over(zone)).toBe(false);
+    });
+
+    it('a drop clears it and the next drag starts afresh', async () => {
+      const { zone } = await mount();
+      const label = zone.querySelector('.r2m-file-drop__label')!;
+      drag(zone, 'dragenter');
+      drag(label, 'dragenter');
+      drag(zone, 'dragleave');
+      drag(label, 'dragover');
+      drop(label, [new File(['x'], 'book.epub')]);
+      expect(over(zone)).toBe(false);
+
+      drag(zone, 'dragenter');
+      drag(zone, 'dragover');
+      drag(zone, 'dragleave');
+      expect(over(zone)).toBe(false);
+    });
+
+    it('a blocked zone never takes the highlight', async () => {
+      const { zone } = await mount();
+      zone.block = { reason: 'Viewing a past step' };
+      await zone.rendered();
+      drag(zone, 'dragenter');
+      expect(drag(zone, 'dragover').defaultPrevented).toBe(false);
+      expect(over(zone)).toBe(false);
+    });
+
+    it('a gate that closes mid-drag drops the highlight', async () => {
+      const { zone } = await mount();
+      drag(zone, 'dragenter');
+      drag(zone, 'dragover');
+      expect(over(zone)).toBe(true);
+
+      zone.block = { reason: 'Viewing a past step' };
+      await zone.rendered();
+      expect(over(zone)).toBe(false);
+    });
+  });
 });
