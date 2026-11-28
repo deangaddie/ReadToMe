@@ -8,6 +8,11 @@
  * `HIDE_DELAY_MS`, and entering either one cancels that, so the pointer can cross onto it. Focus
  * out (with the pointer off the tip) and Escape still hide it at once.
  *
+ * A tap is the hover on touch: a tip a tap opened outlives focus leaving (a tapped row link that
+ * opens its page), unless focus goes into a dialog or popover the tap opened; the next tap
+ * elsewhere or Escape closes it. A trigger gone from the page by
+ * the end of the delay shows nothing.
+ *
  * Two opt-ins:
  * - `data-tooltip-overflow` on the element: show the tip only when, at show time, its content is
  *   wider than its box (`scrollWidth > clientWidth`), i.e. a one-line text cut off by an ellipsis.
@@ -73,6 +78,9 @@ export function installTooltips(root: Document = document): void {
   root.body.append(tip);
 
   let anchor: HTMLElement | null = null;
+  /** The trigger of a pending show, and whether a tap opened the pending or open tip. */
+  let pending: HTMLElement | null = null;
+  let tapped = false;
   let showTimer: ReturnType<typeof setTimeout> | undefined;
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
   const isOpen = () => tip.matches(':popover-open');
@@ -88,10 +96,13 @@ export function installTooltips(root: Document = document): void {
       el = el.parentElement?.closest<HTMLElement>('[data-tooltip]') ?? null;
     return el;
   };
-  const show = (trigger: HTMLElement) => {
+  const show = (trigger: HTMLElement, byTap = false) => {
     cancelTimers();
+    pending = trigger;
+    tapped = byTap;
     showTimer = setTimeout(() => {
-      const target = resolve(trigger);
+      pending = null;
+      const target = trigger.isConnected ? resolve(trigger) : null;
       if (!target) return hide();
       if (target === anchor && isOpen()) return; // the pointer moved between a label and its trigger
       anchor?.style.removeProperty('anchor-name');
@@ -104,6 +115,8 @@ export function installTooltips(root: Document = document): void {
   };
   const hide = () => {
     cancelTimers();
+    pending = null;
+    tapped = false;
     anchor?.style.removeProperty('anchor-name');
     anchor = null;
     if (isOpen()) tip.hidePopover();
@@ -132,14 +145,20 @@ export function installTooltips(root: Document = document): void {
     }
     const target = targetOf(e);
     if (target && target === anchor) clearTimeout(hideTimer);
-    else if (target) show(target);
+    else if (target) show(target, (e as PointerEvent).pointerType === 'touch');
     else hideSoon();
   });
   root.addEventListener('focusin', (e) => {
     const target = focusTargetOf(e);
-    if (target) show(target);
+    // The tap that focused its own trigger keeps the tip a tap's.
+    if (target) show(target, tapped && (target === pending || target === anchor));
   });
   // A click on the tip blurs its trigger; the pointer still on the tip keeps it.
-  root.addEventListener('focusout', () => tip.matches(':hover') || hide());
+  root.addEventListener('focusout', (e) => {
+    const into = (e as FocusEvent).relatedTarget;
+    const intoLayer = into instanceof Element && !!into.closest('dialog, [popover]');
+    if ((tapped && !intoLayer) || tip.matches(':hover')) return;
+    hide();
+  });
   root.addEventListener('keydown', (e) => e.key === 'Escape' && hide());
 }

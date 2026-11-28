@@ -350,6 +350,71 @@ describe('installTooltips', () => {
     });
   });
 
+  describe('touch (a tap is the hover)', () => {
+    const tap = (el: Element) =>
+      el.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'touch' }));
+
+    it('a tip opened by a tap stays when the tap moves focus away (a row link opening its page)', () => {
+      const button = target('Don Quixote of La Mancha Knight of the Sorrowful Countenance');
+      tap(button);
+      button.dispatchEvent(new Event('focusin', { bubbles: true }));
+      button.dispatchEvent(new Event('focusout', { bubbles: true }));
+      elapse();
+      expect(open).toBe(true);
+      button.dispatchEvent(new Event('focusout', { bubbles: true }));
+      expect(open).toBe(true);
+    });
+
+    it('focus moving into a dialog or menu the tap opened still hides it', () => {
+      const button = target('Delete');
+      tap(button);
+      elapse();
+      const menu = document.createElement('div');
+      menu.popover = 'auto';
+      const item = menu.appendChild(document.createElement('button'));
+      document.body.append(menu);
+      button.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: item }));
+      expect(open).toBe(false);
+    });
+
+    it('a tap elsewhere hides it', () => {
+      tap(target('Rocinante'));
+      elapse();
+      tap(document.body);
+      elapse();
+      expect(open).toBe(false);
+    });
+
+    it('focus on another trigger still takes over from it', () => {
+      tap(target('Rocinante'));
+      elapse();
+      const other = target('Dapple');
+      other.dispatchEvent(new Event('focusin', { bubbles: true }));
+      elapse();
+      expect(tip.textContent).toBe('Dapple');
+      other.dispatchEvent(new Event('focusout', { bubbles: true }));
+      expect(open).toBe(false);
+    });
+
+    it('shows nothing for a trigger taken out of the page before the delay ends', () => {
+      const button = target('Sancho Panza');
+      tap(button);
+      button.remove();
+      elapse();
+      expect(open).toBe(false);
+    });
+
+    it('a mouse-opened tip still hides on focus out', () => {
+      const button = target('Rocinante');
+      button.dispatchEvent(
+        new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }),
+      );
+      elapse();
+      button.dispatchEvent(new Event('focusout', { bubbles: true }));
+      expect(open).toBe(false);
+    });
+  });
+
   it('Escape hides it', () => {
     hover(target('Hint'));
     elapse();

@@ -3,8 +3,11 @@
   :scope {
     display: block;
   }
+  /* minmax(0, …): an auto column grows to its widest line, so a long file name would widen the card
+     past the page instead of truncating. */
   .export__cards {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--r2m-space-4);
     max-width: 880px;
     margin-top: var(--r2m-space-3);
