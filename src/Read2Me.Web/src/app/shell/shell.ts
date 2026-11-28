@@ -234,12 +234,12 @@ export class AppShell extends R2mElement {
 
           <span
             class="shell__conn shell__conn--${connection}"
-            role="status"
+            role="img"
             aria-label=${connectionLabel}
             data-tooltip=${connectionLabel}
           >
             <span class="shell__conn-dot" aria-hidden="true"></span>
-            <span class="shell__conn-text">live</span>
+            <span class="shell__conn-text" aria-hidden="true">live</span>
           </span>
 
           <button

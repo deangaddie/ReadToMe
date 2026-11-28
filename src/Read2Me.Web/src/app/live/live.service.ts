@@ -12,6 +12,7 @@ import { computed, signal, untracked } from '@app/core/signals';
 import { use } from '@app/core/services';
 import { Emitter } from '@app/core/emitter';
 import { ORIGIN_ID } from '@app/api';
+import { announce } from '@app/ui/announcer';
 import { ToastService } from '@app/ui/toast';
 import { folderKey, sameFolder } from './folders';
 import {
@@ -45,6 +46,9 @@ export type LiveConnectionState = 'connecting' | 'connected' | 'reconnecting' | 
 /** How long the hub may be unreachable before the user is told (spec "Error handling"). */
 export const DISCONNECT_TOAST_AFTER_MS = 5000;
 
+const LOST_MESSAGE = 'Live updates disconnected — retrying';
+const BACK_MESSAGE = 'Live updates reconnected';
+
 type FamilySubjects = { [K in LiveFamily]: Emitter<LiveMessageMap[K]> };
 
 /** Unsubscribe function returned by every stream (the RxJS `Subscription` stand-in). */
@@ -72,6 +76,8 @@ export class LiveService {
   private connectLoopRunning = false;
   private disconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private disconnectToasted = false;
+  /** A drop from connected was announced, so its toasts stay silent and its return is announced. */
+  private lostAnnounced = false;
 
   private readonly subjects = Object.fromEntries(
     LIVE_FAMILIES.map((family) => [family, new Emitter()]),
@@ -298,9 +304,12 @@ export class LiveService {
     this._state.set('connected');
     this._attempt.set(0);
     this.clearDisconnectToast();
+    const announced = this.lostAnnounced;
+    this.lostAnnounced = false;
+    if (announced) announce(BACK_MESSAGE, 'polite');
     if (this.disconnectToasted) {
       this.disconnectToasted = false;
-      this.toast.success('Live updates reconnected');
+      this.toast.success(BACK_MESSAGE, { silent: announced });
     }
     for (const folder of this.joinedProjects()) await this.invokeJoinProject(folder);
     for (const kind of this.joinedStreams())
@@ -308,7 +317,15 @@ export class LiveService {
     await this.refreshSnapshot();
   }
 
+  /**
+   * A drop from connected is said at once, assertively (a lost connection). A failing startup, or a
+   * reconnect that gives up and closes, was never connected or was already said, so says nothing.
+   */
   private onLost(state: 'reconnecting' | 'disconnected'): void {
+    if (this._state() === 'connected') {
+      this.lostAnnounced = true;
+      announce(LOST_MESSAGE, 'assertive');
+    }
     this._state.set(state);
     if (state === 'reconnecting' && this._attempt() === 0) this._attempt.set(1);
     this.armDisconnectToast();
@@ -320,7 +337,7 @@ export class LiveService {
       this.disconnectTimer = null;
       if (this._state() === 'connected' || this.stopped) return;
       this.disconnectToasted = true;
-      this.toast.warn('Live updates disconnected — retrying');
+      this.toast.warn(LOST_MESSAGE, { silent: this.lostAnnounced });
     }, DISCONNECT_TOAST_AFTER_MS);
   }
 

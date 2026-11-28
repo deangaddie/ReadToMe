@@ -12,6 +12,11 @@ export interface ProblemLike {
   status?: number;
 }
 
+/** `silent` shows the toast without announcing it: for a caller that has already said it. */
+export interface ToastOptions {
+  silent?: boolean;
+}
+
 /** A button on a toast; clicking it runs `run` and dismisses the toast. */
 export interface ToastAction {
   label: string;
@@ -109,8 +114,8 @@ export class ToastService {
   #focusFrom: HTMLElement | null = null;
   readonly #countdowns = new WeakMap<Element, Countdown>();
 
-  success(message: string): void {
-    this.show('success', message);
+  success(message: string, options?: ToastOptions): void {
+    this.show('success', message, [], options);
   }
 
   /** With `actions`, the toast offers them as buttons and stays up longer. */
@@ -118,12 +123,12 @@ export class ToastService {
     this.show('info', message, actions);
   }
 
-  warn(message: string): void {
-    this.show('warn', message);
+  warn(message: string, options?: ToastOptions): void {
+    this.show('warn', message, [], options);
   }
 
-  error(message: string): void {
-    this.show('error', message);
+  error(message: string, options?: ToastOptions): void {
+    this.show('error', message, [], options);
   }
 
   /** Error toast for a ProblemDetails body: `detail`, else `title`, else a generic message. */
@@ -132,7 +137,12 @@ export class ToastService {
     this.show('error', message);
   }
 
-  private show(severity: ToastSeverity, message: string, actions: ToastAction[] = []): void {
+  private show(
+    severity: ToastSeverity,
+    message: string,
+    actions: ToastAction[] = [],
+    { silent = false }: ToastOptions = {},
+  ): void {
     const stack = this.stack();
     const toast = document.createElement('div');
     toast.className = `r2m-toast r2m-toast--${severity}`;
@@ -178,10 +188,11 @@ export class ToastService {
     }
     stack.append(toast);
     this.raise(stack);
-    announce(
-      actions.length ? `${message} Actions available` : message,
-      severity === 'error' ? 'assertive' : 'polite',
-    );
+    if (!silent)
+      announce(
+        actions.length ? `${message} Actions available` : message,
+        severity === 'error' ? 'assertive' : 'polite',
+      );
     const ms = actions.length ? WITH_ACTIONS_MS : DURATION_MS[severity];
     const count = countdown(toast, ms, dismiss);
     this.#countdowns.set(toast, count);
