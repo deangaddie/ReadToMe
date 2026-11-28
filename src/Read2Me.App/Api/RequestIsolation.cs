@@ -13,15 +13,19 @@ namespace Read2Me.App.Api
     /// </summary>
     public static class RequestIsolation
     {
-        /// <summary>Every route that isn't a page: the API, the live hub (negotiate and the WebSocket upgrade) and files.</summary>
+        /// <summary>
+        /// Every route that isn't a page: the API, the live hub (negotiate and the WebSocket upgrade) and
+        /// files. NoWorkspaceGuard lists the same routes but /hubs: a new one belongs in both.
+        /// </summary>
         private static readonly PathString[] Covered = ["/api", "/hubs", "/workspace", "/audio-preview", "/preview-source"];
 
         private const string Vary = "Sec-Fetch-Dest, Sec-Fetch-Mode, Sec-Fetch-Site";
 
         /// <summary>
         /// Refuses another page's request to a covered route with 403, ahead of every route and file
-        /// mount (security guide §3.7). The host has no CORS policy, so a page that gets through
-        /// still can't read a response; this stops the requests that need no read to do harm.
+        /// mount (modern-web-guidance security/security §3.7). The host has no CORS policy, so a page
+        /// that gets through still can't read a response; this stops the requests that need no read to
+        /// do harm.
         /// </summary>
         public static IApplicationBuilder UseRequestIsolation(this IApplicationBuilder app, bool development)
         {
@@ -73,8 +77,8 @@ namespace Read2Me.App.Api
             return true;
         }
 
-        /// <summary>The web dev server (<c>src/Read2Me.Web/dev.ts</c>), whose proxy forwards the browser's headers.</summary>
-        public static readonly string[] DevServerOrigins = ["http://localhost:4300", "http://127.0.0.1:4300"];
+        // The web dev server (src/Read2Me.Web/dev.ts), whose proxy forwards the browser's headers.
+        private static readonly string[] DevServerOrigins = ["http://localhost:4300", "http://127.0.0.1:4300"];
 
         private static readonly string[] LoopbackNames = ["localhost", "127.0.0.1", "[::1]"];
         private static readonly string[] AnyAddress = ["+", "*", "0.0.0.0", "[::]"];

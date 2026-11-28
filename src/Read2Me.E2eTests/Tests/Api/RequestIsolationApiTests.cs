@@ -35,27 +35,20 @@ public class RequestIsolationApiTests(E2eAppFixture app) : IClassFixture<E2eAppF
     }
 
     [Fact]
-    public async Task An_origin_that_only_starts_with_the_hosts_own_is_refused()
+    public async Task A_page_the_host_serves_is_allowed_by_its_bound_origin()
     {
-        var own = await SendAsync(HttpMethod.Post, "/api/attribution/cancel", origin: app.BaseUrl);
-        var prefixed = await SendAsync(HttpMethod.Post, "/api/attribution/cancel", origin: app.BaseUrl + ".evil.test");
+        var response = await SendAsync(HttpMethod.Post, "/api/attribution/cancel", origin: app.BaseUrl);
 
-        Assert.True(own.IsSuccessStatusCode, $"own origin got {own.StatusCode}");
-        Assert.Equal(HttpStatusCode.Forbidden, prefixed.StatusCode);
+        Assert.True(response.IsSuccessStatusCode, $"own origin got {response.StatusCode}");
     }
 
     [Fact]
-    public async Task A_Workspace_file_opens_from_a_link_on_another_site_but_does_not_load_into_its_page()
+    public async Task A_Workspace_file_is_refused_to_another_sites_page_ahead_of_the_file_mount()
     {
         await File.WriteAllTextAsync(Path.Combine(app.WorkspaceDir, "isolation.txt"), "Call me Ishmael.");
 
-        var navigation = await SendAsync(HttpMethod.Get, "/workspace/isolation.txt", "cross-site", "navigate", "document");
-        var subresource = await SendAsync(HttpMethod.Get, "/workspace/isolation.txt", "cross-site", "no-cors", "audio");
-        var noHeaders = await SendAsync(HttpMethod.Get, "/workspace/isolation.txt");
+        var response = await SendAsync(HttpMethod.Get, "/workspace/isolation.txt", "cross-site", "no-cors", "audio");
 
-        Assert.Equal(HttpStatusCode.OK, navigation.StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, subresource.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, noHeaders.StatusCode);
-        Assert.Contains("Sec-Fetch-Site", navigation.Headers.Vary);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 }

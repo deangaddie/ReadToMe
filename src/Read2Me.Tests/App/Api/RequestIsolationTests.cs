@@ -4,8 +4,9 @@ using Xunit;
 namespace Read2Me.Tests.App.Api;
 
 /// <summary>
-/// The host's request isolation rule (security guide §3.7): Fetch Metadata first, an exact
-/// <c>Origin</c> match when a browser sends none, and callers with no browser headers left alone.
+/// The host's request isolation rule (modern-web-guidance security/security §3.7): Fetch Metadata
+/// first, an exact <c>Origin</c> match when a browser sends none, and callers with no browser
+/// headers left alone.
 /// </summary>
 public sealed class RequestIsolationTests
 {
