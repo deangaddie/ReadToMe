@@ -221,6 +221,14 @@ describe('r2m-cast-page', () => {
     );
   });
 
+  it('the search and sort sit in one named search landmark', async () => {
+    const { page } = await render();
+    const landmark = page.querySelector('search[aria-label="Filter characters"]');
+    expect(landmark?.querySelector('input[type=search]')).not.toBeNull();
+    expect(landmark?.querySelector('.cast__sort select')).not.toBeNull();
+    expect(page.querySelectorAll('search').length).toBe(1);
+  });
+
   it('search filters by name or alias and sort reorders', async () => {
     const { page } = await render();
     const search = page.querySelector<HTMLInputElement>('input[type=search]')!;

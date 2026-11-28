@@ -148,15 +148,17 @@ export class PronunciationsPage extends R2mElement {
                   ${icon('add')} Add pronunciation
                 </button>`,
             )}
-            <label class="r2m-field pron__search">
-              <input
-                type="search"
-                placeholder="Search"
-                aria-label="Search pronunciations"
-                .value=${this.query()}
-                @input=${(e: Event) => this.query.set((e.target as HTMLInputElement).value)}
-              />
-            </label>
+            <search class="pron__search" aria-label="Filter pronunciations">
+              <label class="r2m-field">
+                <input
+                  type="search"
+                  placeholder="Search"
+                  aria-label="Search pronunciations"
+                  .value=${this.query()}
+                  @input=${(e: Event) => this.query.set((e.target as HTMLInputElement).value)}
+                />
+              </label>
+            </search>
           </div>
           ${
             this.loading() && entries.length === 0
