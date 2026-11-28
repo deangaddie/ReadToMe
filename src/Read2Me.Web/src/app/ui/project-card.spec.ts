@@ -52,6 +52,7 @@ describe('projectCard()', () => {
     });
     const img = el.querySelector<HTMLImageElement>('.r2m-project-card__image')!;
     expect(img.getAttribute('src')).toBe('/workspace/pride-and-prejudice/cover.png');
+    expect(img.getAttribute('loading')).toBe('lazy');
     const bar = el.querySelector('.r2m-project-card__progress')!;
     expect(bar.getAttribute('aria-valuenow')).toBe('25');
     expect(el.querySelector<HTMLElement>('.r2m-project-card__fill')!.style.width).toBe('25%');
