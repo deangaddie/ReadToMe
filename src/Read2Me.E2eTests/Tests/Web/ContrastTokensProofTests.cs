@@ -14,12 +14,25 @@ public class ContrastTokensProofTests(E2eAppFixture app, PlaywrightFixture pw) :
 {
     private static readonly HttpClient Http = new();
 
+    // Needs a real browser: the ratios come from computed colours after the cascade, light-dark() and the theme stylesheet.
     [Theory]
     [InlineData("Light")]
     [InlineData("Dark")]
     public async Task Control_edges_reach_3_to_1_and_the_ok_chip_reaches_4_5_to_1(string themeName)
     {
         await SelectThemeAsync(themeName);
+        try
+        {
+            await MeasureAsync(themeName);
+        }
+        finally
+        {
+            await SelectThemeAsync("Light"); // the fresh host's effective theme, for the class's next test
+        }
+    }
+
+    private async Task MeasureAsync(string themeName)
+    {
         if (Environment.GetEnvironmentVariable("R2M_PROOF_SHOTS") is { Length: > 0 } shots)
         {
             await GotoAppAsync("settings/audio");
