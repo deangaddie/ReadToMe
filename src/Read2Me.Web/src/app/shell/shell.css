@@ -294,8 +294,11 @@
     background: var(--r2m-nav-bg);
     color: var(--r2m-nav-fg);
     border-right: 1px solid var(--r2m-outline);
-    transition: width 150ms ease;
     overflow: hidden;
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition: width 150ms ease;
+    }
 
     &.shell__rail--expanded {
       flex-basis: var(--r2m-rail-expanded);

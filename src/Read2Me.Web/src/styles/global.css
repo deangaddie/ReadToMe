@@ -384,7 +384,10 @@ a {
       height: 16px;
       border-radius: 50%;
       background: var(--r2m-surface);
-      transition: translate 120ms;
+
+      @media (prefers-reduced-motion: no-preference) {
+        transition: translate 120ms;
+      }
     }
     &:checked {
       background: var(--r2m-accent);
@@ -2335,7 +2338,10 @@ progress {
       line-height: 1;
       margin-left: auto;
       color: var(--r2m-text-muted);
-      transition: rotate 120ms;
+
+      @media (prefers-reduced-motion: no-preference) {
+        transition: rotate 120ms;
+      }
     }
     &:hover {
       background: color-mix(in srgb, var(--r2m-text) 4%, transparent);
