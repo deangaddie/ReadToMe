@@ -230,9 +230,11 @@ describe('app-root', () => {
     expect(new RailState().expanded()).toBe(false);
   });
 
-  it('shows the live connection state as a dot with a label', async () => {
+  it('shows the live connection state as an image named by it, not a live region', async () => {
     const { shell } = await mount('projects');
     const conn = shell.querySelector('.shell__conn');
+    expect(conn?.getAttribute('role')).toBe('img');
+    expect(conn?.hasAttribute('aria-live')).toBe(false);
     expect(conn?.classList.contains('shell__conn--connected')).toBe(true);
     expect(conn?.getAttribute('aria-label')).toBe('Live updates connected');
     live.state.set('reconnecting');

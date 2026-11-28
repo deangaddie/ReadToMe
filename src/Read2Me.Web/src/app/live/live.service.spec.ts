@@ -396,11 +396,13 @@ describe('LiveService', () => {
     await timers.advance(DISCONNECT_TOAST_AFTER_MS - 1);
     expect(toast.warn).not.toHaveBeenCalled();
     await timers.advance(1);
-    expect(toast.warn).toHaveBeenCalledWith('Live updates disconnected — retrying');
+    expect(toast.warn).toHaveBeenCalledWith('Live updates disconnected — retrying', {
+      silent: true,
+    });
 
     current().recover();
     await settle();
-    expect(toast.success).toHaveBeenCalledWith('Live updates reconnected');
+    expect(toast.success).toHaveBeenCalledWith('Live updates reconnected', { silent: true });
     expect(toast.warn).toHaveBeenCalledTimes(1);
   });
 
@@ -414,6 +416,97 @@ describe('LiveService', () => {
     await timers.advance(DISCONNECT_TOAST_AFTER_MS);
     expect(toast.warn).not.toHaveBeenCalled();
     expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  describe('announcements', () => {
+    let heard: { text: string; priority: string | undefined }[];
+
+    beforeEach(() => {
+      heard = [];
+      // happy-dom has no ariaNotify: record what the announcer says on the document.
+      document.ariaNotify = (text: string, options?: AriaNotificationOptions) =>
+        heard.push({ text, priority: options?.priority });
+    });
+
+    afterEach(() => {
+      delete document.ariaNotify;
+    });
+
+    it('says nothing on the first connect at startup', async () => {
+      service.start();
+      await settle();
+      expect(heard).toEqual([]);
+    });
+
+    it('says nothing while a failing startup retries, the drop it never had', async () => {
+      startFailures = 2;
+      service.start();
+      await settle();
+      await timers.advance(reconnectDelayMs(0));
+      await settle();
+      await timers.advance(reconnectDelayMs(1));
+      await settle();
+      expect(service.state()).toBe('connected');
+      expect(heard).toEqual([]);
+    });
+
+    it('says a drop assertively and the return politely, once each', async () => {
+      service.start();
+      await settle();
+      current().drop();
+      expect(heard).toEqual([{ text: 'Live updates disconnected — retrying', priority: 'high' }]);
+      current().retry(2);
+      current().recover();
+      await settle();
+      expect(heard).toEqual([
+        { text: 'Live updates disconnected — retrying', priority: 'high' },
+        { text: 'Live updates reconnected', priority: 'normal' },
+      ]);
+    });
+
+    it('keeps the toasts silent for a drop already said, so it is heard once', async () => {
+      service.start();
+      await settle();
+      current().drop();
+      await timers.advance(DISCONNECT_TOAST_AFTER_MS);
+      expect(toast.warn).toHaveBeenCalledWith('Live updates disconnected — retrying', {
+        silent: true,
+      });
+      current().recover();
+      await settle();
+      expect(toast.success).toHaveBeenCalledWith('Live updates reconnected', { silent: true });
+      expect(heard).toHaveLength(2);
+    });
+
+    it('says a drop that ends in a close once, then its return', async () => {
+      service.start();
+      await settle();
+      current().drop();
+      current().close();
+      expect(heard).toHaveLength(1);
+      await settle();
+      expect(heard.map((h) => h.text)).toEqual([
+        'Live updates disconnected — retrying',
+        'Live updates reconnected',
+      ]);
+    });
+
+    it('says no return for a drop the app stopped, after a fresh start', async () => {
+      service.start();
+      await settle();
+      current().drop();
+      await service.stop();
+      service.start();
+      await settle();
+      expect(heard.map((h) => h.text)).toEqual(['Live updates disconnected — retrying']);
+    });
+
+    it('says nothing when the app stops the connection itself', async () => {
+      service.start();
+      await settle();
+      await service.stop();
+      expect(heard).toEqual([]);
+    });
   });
 
   it('stop() ends the loop and reports disconnected without retrying', async () => {

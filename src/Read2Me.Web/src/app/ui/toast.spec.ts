@@ -55,6 +55,14 @@ describe('ToastService', () => {
     expect(document.querySelector('[role="status"], [role="alert"], [aria-live]')).toBeNull();
   });
 
+  it('shows a silent toast without announcing it, for a caller that already did', () => {
+    const service = new ToastService();
+    service.success('Back', { silent: true });
+    service.warn('Lost', { silent: true });
+    expect(messages()).toEqual(['Back', 'Lost']);
+    expect(announced).toEqual([]);
+  });
+
   it('says that a toast with actions has them', () => {
     new ToastService().info('Restored.', [{ label: 'Show in Book', run: () => {} }]);
     expect(announced.map((a) => a.text)).toEqual(['Restored. Actions available']);
