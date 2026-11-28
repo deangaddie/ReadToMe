@@ -74,11 +74,8 @@ public abstract class E2eTestBase(E2eAppFixture app, PlaywrightFixture pw) : ICl
 
     private readonly List<string> _cspViolations = [];
 
-    /// <summary>
-    /// The CSP and Trusted Types violations the pages reported so far, taken out so they no longer
-    /// fail the test: for a test that provokes one on purpose.
-    /// </summary>
-    protected IReadOnlyList<string> TakeCspViolations()
+    /// <summary>The CSP and Trusted Types violations the pages reported so far, taken out.</summary>
+    private IReadOnlyList<string> TakeCspViolations()
     {
         lock (_cspViolations)
         {
