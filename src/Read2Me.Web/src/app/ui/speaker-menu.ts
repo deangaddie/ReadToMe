@@ -4,6 +4,7 @@ import { R2mElement, define } from '@app/core/element';
 import { computed, signal } from '@app/core/signals';
 import { speakerHue } from '@app/shared/speaker-color';
 import { icon } from './partials';
+import { isComposing } from './keys';
 
 export interface SpeakerRosterEntry {
   id: string;
@@ -183,6 +184,8 @@ export class SpeakerMenu extends R2mElement {
     const matches = this.#filtered();
     // Enter on a footer button is that button's own click.
     if (event.key === 'Enter' && !(event.target instanceof HTMLButtonElement)) {
+      // Mid-composition Enter confirms the conversion, not the search.
+      if (isComposing(event)) return;
       const target = matches[this.#active()];
       const query = this.#query().trim();
       if (target) {

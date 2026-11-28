@@ -2,6 +2,7 @@ import type { Block } from '@app/api';
 import { html, nothing } from 'lit-html';
 import { R2mElement, define } from '@app/core/element';
 import { computed, signal } from '@app/core/signals';
+import { isComposing } from './keys';
 import { gated, icon } from './partials';
 
 /**
@@ -118,9 +119,8 @@ export class InlineEdit extends R2mElement {
 
   readonly #onKeydown = (e: KeyboardEvent): void => {
     if (e.key !== 'Enter' && e.key !== 'Escape') return;
-    // Mid-composition both keys belong to the IME. Safari ends it before the confirming keydown,
-    // where only the key code 229 still tells.
-    if (e.isComposing || e.keyCode === 229) return;
+    // Mid-composition both keys belong to the IME.
+    if (isComposing(e)) return;
     e.preventDefault();
     this.#focusTarget = 'display';
     if (e.key === 'Enter') this.commit();

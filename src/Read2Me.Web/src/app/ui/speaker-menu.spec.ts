@@ -145,4 +145,16 @@ describe('r2m-speaker-menu', () => {
     expect(events.picked).toEqual([]);
     expect(events.created).toEqual([]);
   });
+
+  it.each([
+    { search: 'eli', outcome: 'pick a match' },
+    { search: 'にほん', outcome: 'create a character' },
+  ])('Enter while an IME composes does not $outcome', async ({ search }) => {
+    const { input, events, type } = await mount();
+    await type(search);
+    const init = { key: 'Enter', isComposing: true, bubbles: true, cancelable: true };
+    input.dispatchEvent(new KeyboardEvent('keydown', init));
+    expect(events.picked).toEqual([]);
+    expect(events.created).toEqual([]);
+  });
 });

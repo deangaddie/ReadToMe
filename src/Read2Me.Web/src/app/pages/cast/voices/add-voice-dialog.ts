@@ -2,6 +2,7 @@ import { html } from 'lit-html';
 import { openDialog } from '@app/core/dialog';
 import { R2mElement, define } from '@app/core/element';
 import { signal } from '@app/core/signals';
+import { isComposing } from '@app/ui/keys';
 
 export interface AddVoiceDialogData {
   /** The name the voice takes when the field is left blank: the character's name. */
@@ -33,7 +34,7 @@ export class AddVoiceDialog extends R2mElement {
             .value=${this.name()}
             @input=${(e: Event) => this.name.set((e.target as HTMLInputElement).value)}
             @keydown=${(e: KeyboardEvent) => {
-              if (e.key === 'Enter') {
+              if (e.key === 'Enter' && !isComposing(e)) {
                 e.preventDefault();
                 this.submit();
               }
