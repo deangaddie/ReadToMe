@@ -2683,20 +2683,16 @@ textarea.r2m-settings-form__text {
     &:checked::before {
       background: HighlightText;
     }
-    &:disabled,
-    &[aria-disabled='true'] {
+    &:is(:disabled, [aria-disabled='true']) {
       border-color: GrayText;
     }
-    &:disabled::before,
-    &[aria-disabled='true']::before {
+    &:is(:disabled, [aria-disabled='true'])::before {
       background: GrayText;
     }
-    &:disabled:checked,
-    &[aria-disabled='true']:checked {
+    &:is(:disabled, [aria-disabled='true']):checked {
       background: GrayText;
     }
-    &:disabled:checked::before,
-    &[aria-disabled='true']:checked::before {
+    &:is(:disabled, [aria-disabled='true']):checked::before {
       background: Canvas;
     }
   }
@@ -2749,5 +2745,12 @@ textarea.r2m-settings-form__text {
   progress {
     --r2m-progress-fill: Highlight;
     outline: 1px solid CanvasText;
+  }
+  /* The project card's bar is two backgrounds, both repainted in Canvas. */
+  .r2m-project-card__bar {
+    outline: 1px solid CanvasText;
+  }
+  .r2m-project-card__fill {
+    background: Highlight;
   }
 }
